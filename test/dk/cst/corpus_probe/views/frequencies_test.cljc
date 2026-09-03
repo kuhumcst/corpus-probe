@@ -30,6 +30,11 @@
   (testing "only the corpora that could be counted are counted"
     (is (= "31 hits in 2 corpora by lemma · 2 values"
            (freq/frequency-summary sample-result 2))))
+  (testing "a metadata filter qualifies the corpora"
+    (is (= "31 hits in 2 corpora within text_year 1591 by lemma · 2 values"
+           (freq/frequency-summary (assoc sample-result
+                                          :filter {:text_year #{"1591"}})
+                                   2))))
   (testing "a cut table says so"
     (is (re-find #"the 1 most frequent shown"
                  (freq/frequency-summary sample-result 1))))

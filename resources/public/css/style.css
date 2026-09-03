@@ -31,8 +31,9 @@ header nav ul { list-style: none; display: flex; gap: 1em; padding: 0; }
 .frequencies th, .frequencies td { padding: 0 0.5em; text-align: left; }
 .attributes .n, .counts .n, .frequencies .n { text-align: right; }
 
-/* the corpus tree (index and chooser): indent by nesting, no bullets */
-.corpora ul { list-style: none; padding-left: 1em; }
+/* the corpus tree (index and chooser) and the metadata filter's value
+   lists: indent by nesting, no bullets */
+.corpora ul, .filters ul { list-style: none; padding-left: 1em; }
 
 /* a concordance's corpus header row reads left to right like its hits */
 .kwic .corpus th { text-align: left; }

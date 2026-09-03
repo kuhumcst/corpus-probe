@@ -81,6 +81,15 @@
                       {:message (str "CQP Error:\n\tCorpus ``NOSUCH'' is "
                                      "undefined\n"
                                      (str/join "\n" api/follow-on-errors))})))))
+  (testing "a failed filter leaves only its own error"
+    (is (= "CQP Error:\n\tStructural attribute X.text_author does not exist."
+           (:message (api/public-error
+                      {:message (str "CQP Error:\n\tStructural attribute "
+                                     "X.text_author does not exist.\n"
+                                     "CQP Error:\n\tCorpus ``Last'' is "
+                                     "undefined\n"
+                                     "CQP Error:\n\tCorpus ``Filter'' is "
+                                     "undefined")})))))
   (testing "a message of nothing but follow-on errors is kept"
     (let [message (first api/follow-on-errors)]
       (is (= message (:message (api/public-error {:message message})))))))
@@ -154,12 +163,37 @@
     (is (= "hund · 2 corpora · corpus-probe"
            (api/search-title {:q "hund" :corpus ["PROBE" "VISER"]}))))
   (testing "no corpora are not counted"
-    (is (= "hund · corpus-probe" (api/search-title {:q "hund" :corpus []})))))
+    (is (= "hund · corpus-probe" (api/search-title {:q "hund" :corpus []}))))
+  (testing "a metadata filter is named"
+    (is (= "hund · PROBE · text_year 1591 · corpus-probe"
+           (api/search-title {:q "hund" :corpus ["PROBE"]
+                              :f.text_year ["1591"]})))))
 
 (deftest scalar-params-test
   (testing "a repeated scalar param keeps its first value, corpus its vector"
     (is (= {:q "a" :page "1" :corpus ["A" "B"]}
-           (api/scalar-params {:q ["a" "b"] :page "1" :corpus ["A" "B"]})))))
+           (api/scalar-params {:q ["a" "b"] :page "1" :corpus ["A" "B"]}))))
+  (testing "metadata filter params keep their vectors too"
+    (is (= {:f.text_year ["1591" "1583"]}
+           (api/scalar-params {:f.text_year ["1591" "1583"]})))))
+
+(deftest filter-params-test
+  (testing "f. params become the filter map, one value or several"
+    (is (= {:text_year #{"1591" "1583"} :text_author #{"ukendt"}}
+           (api/filter-params {:q             "hund"
+                               :f.text_year   ["1591" "1583"]
+                               :f.text_author "ukendt"}))))
+  (testing "blank values are dropped, and with them empty attributes"
+    (is (= {} (api/filter-params {:f.text_year ["" " "]}))))
+  (testing "a param naming no attribute is dropped"
+    (is (= {} (api/filter-params {:f. "x"}))))
+  (is (= {} (api/filter-params {:q "hund" :corpus ["A"]}))))
+
+(deftest search-params-test
+  (testing "the filter params identify a search along with the query"
+    (is (= {:q "hund" :corpus ["A"] :f.text_year ["1591"]}
+           (api/search-params {:q "hund" :corpus ["A"] :page "2" :sort "word"
+                               :f.text_year ["1591"]})))))
 
 (deftest page-param-test
   (is (= 0 (api/page-param nil)))
@@ -175,9 +209,10 @@
 
 (deftest search-outcome-test
   (testing "nothing selected at all is the no-corpus error"
-    (is (= {:error {:type :no-corpus}} (api/search-outcome! {} [] [] "x" 0 nil))))
+    (is (= {:error {:type :no-corpus}}
+           (api/search-outcome! {} [] [] "x" {:page 0}))))
   (testing "only unknown corpora yields an empty result reporting them"
-    (let [{:keys [result]} (api/search-outcome! {} [] ["NOPE"] "x" 0 nil)]
+    (let [{:keys [result]} (api/search-outcome! {} [] ["NOPE"] "x" {:page 0})]
       (is (= [{:corpus "NOPE" :error {:type :unknown-corpus}}]
              (:counts result)))
       (is (= 0 (:size result)))

@@ -83,6 +83,16 @@
       (is (= 32 (count freqs)))
       (is (apply >= (map :freq freqs))))))
 
+(deftest s-decode->freqs-test
+  (testing "values come out sorted by value with their region counts"
+    (is (= [{:values ["Hverdag"] :freq 1}
+            {:values ["Samtale"] :freq 1}
+            {:values ["Vejret"] :freq 1}]
+           (parse/s-decode->freqs (golden-lines "s-decode.txt")))))
+  (testing "repeated values are counted and blank lines skipped"
+    (is (= [{:values ["S"] :freq 2} {:values ["V"] :freq 1}]
+           (parse/s-decode->freqs ["S" "V" "S" ""])))))
+
 (deftest describe->map-test
   (let [stats (parse/describe->map (golden-lines "describe.txt"))]
     (is (= "PROBE" (:name stats)))

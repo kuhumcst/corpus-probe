@@ -37,6 +37,7 @@ group B match lemma by match pos;'                           > "$OUT/group-pairw
 
 cwb-describe-corpus -r "$REG" -s PROBE                       > "$OUT/describe.txt"
 cwb-lexdecode -r "$REG" -fb -P lemma PROBE                   > "$OUT/lexdecode.tsv"
+cwb-s-decode -r "$REG" -n PROBE -S text_title                > "$OUT/s-decode.txt"
 
 # A full child-mode session with .EOL. markers and one failing command, for
 # testing the driver's section splitting: stdout and stderr captured separately.

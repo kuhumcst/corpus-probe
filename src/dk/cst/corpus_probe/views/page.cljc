@@ -26,46 +26,131 @@
     (for [[value label] sort-modes]
       [:option {:value value :selected (= value sort)} label])]])
 
+(def filter-prefix
+  "The query param prefix naming a metadata filter: the prefix followed by
+  the attribute name, as in `f.text_year`, one param per chosen value."
+  "f.")
+
+(defn filter-phrase
+  "The metadata `filter` (a map of attribute to the set of values
+  accepted) in words: each attribute with its values, sorted; empty
+  without a filter.
+
+  (filter-phrase {:text_year #{\"1591\" \"1583\"} :text_author #{\"ukendt\"}})
+  ;; => \"text_author ukendt; text_year 1583, 1591\""
+  [filter]
+  (str/join "; " (for [[attr values] (sort-by key filter)]
+                   (str (name attr) " " (str/join ", " (sort values))))))
+
+(defn within-phrase
+  "The metadata `filter` as the qualifier of a result summary, or nil
+  without a filter: \" within text_year 1591\"."
+  [filter]
+  (when (seq filter)
+    (str " within " (filter-phrase filter))))
+
+(declare attribute-value)
+
+(defn filter-item
+  "One value `m` ({:value :total}) of metadata attribute `attr` in the
+  filter fieldset: a checkbox submitting the value under the attribute's
+  filter param, checked when the value is in the set `chosen`.
+
+  The label shows the value as the sidebar does (see `attribute-value`)
+  and how many regions carry it, when known: a chosen value the corpora
+  no longer offer has no count."
+  [attr chosen {:keys [value total] :as m}]
+  [:li
+   [:label
+    [:input {:type    "checkbox"
+             :name    (str filter-prefix (name attr))
+             :value   value
+             :checked (contains? chosen value)}]
+    " " (attribute-value attr value)
+    (when total
+      (list " " [:data {:value (str total)}
+                 (str total " " (if (= 1 total) "region" "regions"))]))]])
+
+(defn filter-details
+  "The disclosure of metadata attribute `attr` in the filter fieldset:
+  its value `rows` (see `filter-item`) plus the `chosen` values missing
+  from them, so a selection is never lost on resubmit.
+
+  Open, and counting the selection in its summary, when any value is
+  chosen."
+  [attr rows chosen]
+  (let [listed (set (map :value rows))
+        rows   (into rows (for [value (sort chosen) :when (not (listed value))]
+                            {:value value}))]
+    [:details {:open (boolean (seq chosen))}
+     [:summary [:code (name attr)]
+      (when (seq chosen) (str " · " (count chosen) " selected"))]
+     [:ul (map (partial filter-item attr chosen) rows)]]))
+
+(defn filter-fieldset
+  "The metadata filter fieldset of the search form from `filters` (see
+  dk.cst.corpus-probe.search/filter-options!); nil without metadata.
+
+  A disclosure per listed attribute (`:attrs`) holds a checkbox per value
+  (see `filter-details`), followed by one per `:selected` attribute the
+  list lacks, then a note naming the `:unlisted` attributes. `:selected`
+  maps each attribute to the set of chosen values."
+  [{:keys [attrs unlisted selected] :as filters}]
+  (when (or (seq attrs) (seq unlisted) (seq selected))
+    (let [listed (set (map :name attrs))]
+      [:fieldset.filters
+       [:legend "Metadata"]
+       (for [{attr :name :keys [rows]} attrs]
+         (filter-details attr rows (get selected attr)))
+       (for [[attr chosen] (sort-by key selected) :when (not (listed attr))]
+         (filter-details attr [] chosen))
+       (when (seq unlisted)
+         [:p "Too many values to list: "
+          (interpose ", " (map (fn [attr] [:code (name attr)]) unlisted))])])))
+
 (defn search-form
-  "The search form over the `folders` tree of corpus overviews, prefilled
-  from `params` (:corpus, a vector of selected names, :q :mode :ci :prefix
+  "The search form of `state`: over its `:folders` tree of corpus
+  overviews and its metadata `:filter-controls`, prefilled from its
+  `:params` (:corpus, a vector of selected names, :q :mode :ci :prefix
   :suffix), submitted as GET to `action`, with the page's own `controls`
   (hiccup) after the query.
 
   Wrapped in a <search> landmark; GET, so every search has a shareable URL
   and works without JavaScript. The controls are the sort of the
   concordance or the grouping attribute of the frequency table. The corpus
-  chooser, the mode radios and the simple-search option checkboxes are
-  separate <fieldset> groups."
-  [folders {:keys [corpus q mode ci prefix suffix]} action controls]
-  [:search
-   [:form.search {:method "get" :action action}
-    (corpus-views/chooser folders (set corpus))
-    [:p
-     [:label {:for "q"} "Query"]
-     [:input {:id           "q"
-              :name         "q"
-              :type         "search"
-              :value        (or q "")
-              :placeholder  "[lemma = \"hund\"] or plain words"
-              :autocomplete "off"
-              :spellcheck   "false"}]]
-    controls
-    [:fieldset.mode
-     [:legend "Query mode"]
-     [:label [:input {:type "radio" :name "mode" :value "cqp"
-                      :checked (not= mode "simple")}] "CQP"]
-     [:label [:input {:type "radio" :name "mode" :value "simple"
-                      :checked (= mode "simple")}] "Simple"]]
-    [:fieldset.options
-     [:legend "Simple-search options"]
-     [:label [:input {:type "checkbox" :name "ci" :value "on"
-                      :checked (some? ci)}] "ignore case"]
-     [:label [:input {:type "checkbox" :name "prefix" :value "on"
-                      :checked (some? prefix)}] "starts with"]
-     [:label [:input {:type "checkbox" :name "suffix" :value "on"
-                      :checked (some? suffix)}] "ends with"]]
-    [:button {:type "submit"} "Search"]]])
+  chooser, the metadata filter, the mode radios and the simple-search
+  option checkboxes are separate <fieldset> groups."
+  [{:keys [folders filter-controls params] :as state} action controls]
+  (let [{:keys [corpus q mode ci prefix suffix]} params]
+    [:search
+     [:form.search {:method "get" :action action}
+      (corpus-views/chooser folders (set corpus))
+      (filter-fieldset filter-controls)
+      [:p
+       [:label {:for "q"} "Query"]
+       [:input {:id           "q"
+                :name         "q"
+                :type         "search"
+                :value        (or q "")
+                :placeholder  "[lemma = \"hund\"] or plain words"
+                :autocomplete "off"
+                :spellcheck   "false"}]]
+      controls
+      [:fieldset.mode
+       [:legend "Query mode"]
+       [:label [:input {:type "radio" :name "mode" :value "cqp"
+                        :checked (not= mode "simple")}] "CQP"]
+       [:label [:input {:type "radio" :name "mode" :value "simple"
+                        :checked (= mode "simple")}] "Simple"]]
+      [:fieldset.options
+       [:legend "Simple-search options"]
+       [:label [:input {:type "checkbox" :name "ci" :value "on"
+                        :checked (some? ci)}] "ignore case"]
+       [:label [:input {:type "checkbox" :name "prefix" :value "on"
+                        :checked (some? prefix)}] "starts with"]
+       [:label [:input {:type "checkbox" :name "suffix" :value "on"
+                        :checked (some? suffix)}] "ends with"]]
+      [:button {:type "submit"} "Search"]]]))
 
 (defn corpora-phrase
   "The corpus `names` in words: the one name, or how many there were."
@@ -81,11 +166,12 @@
 
 (defn result-summary
   "The summary text of a concordance `result` page (`:size` hits over
-  `:pages`, in the corpora that could be searched), used as the
-  concordance table's caption."
-  [{:keys [size counts page pages]}]
+  `:pages`, in the corpora that could be searched, within its metadata
+  `:filter`), used as the concordance table's caption."
+  [{:keys [size counts page pages] :as result}]
   (str (hits-phrase size) " in "
        (corpora-phrase (map :corpus (filter :size counts)))
+       (within-phrase (:filter result))
        " · page " (inc page) " of " pages))
 
 (defn counts-table
@@ -246,12 +332,12 @@
 
 (defn app-view
   "The search page's main content from application `state`: the search
-  form over the `:folders` corpus tree with the `:sort-modes` control,
-  then either the `:error`, the concordance `:result` (see
-  `result-section`) or nothing, plus the inspection `:selected` sidebar."
-  [{:keys [folders sort-modes params result error selected] :as state}]
+  form (see `search-form`) with the `:sort-modes` control, then either
+  the `:error`, the concordance `:result` (see `result-section`) or
+  nothing, plus the inspection `:selected` sidebar."
+  [{:keys [sort-modes params result error selected] :as state}]
   [:main
-   (search-form folders params "/" (sort-control sort-modes (:sort params)))
+   (search-form state "/" (sort-control sort-modes (:sort params)))
    (cond
      error  (error-section error nil)
      result (result-section state)

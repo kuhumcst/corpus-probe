@@ -42,15 +42,16 @@
 
 (defn frequency-summary
   "The caption of the table of frequency `result` showing `shown` of its
-  rows: what was counted, in the corpora that could be counted, by what,
-  and how many values there are."
-  [{:keys [query attr counts rows]} shown]
+  rows: what was counted, in the corpora that could be counted and within
+  the metadata filter, by what, and how many values there are."
+  [{:keys [query attr counts rows] :as result} shown]
   (let [n        (count rows)
         readable (filter :tokens counts)]
     (str (if (str/blank? query)
            "All tokens"
            (page/hits-phrase (reduce + (keep :size readable))))
          " in " (page/corpora-phrase (map :corpus readable))
+         (page/within-phrase (:filter result))
          " by " (name attr)
          " · " n " " (if (= 1 n) "value" "values")
          (when (< shown n)
@@ -118,13 +119,13 @@
       (frequency-table result)))])
 
 (defn frequencies-view
-  "The frequency page's main content from `state`: the search form over
-  the `:folders` tree with the grouping control over `:attrs`, then either
-  the `:error`, the frequency `:result` (see `frequency-section`) or
-  nothing."
-  [{:keys [folders params attrs result error] :as state}]
+  "The frequency page's main content from `state`: the search form (see
+  dk.cst.corpus-probe.views.page/search-form) with the grouping control
+  over `:attrs`, then either the `:error`, the frequency `:result` (see
+  `frequency-section`) or nothing."
+  [{:keys [params attrs result error] :as state}]
   [:main
-   (page/search-form folders params "/frequencies"
+   (page/search-form state "/frequencies"
                      (attr-control attrs (:attr params)))
    (cond
      error  (page/error-section error nil)

@@ -34,6 +34,36 @@
   (is (not (query/corpus-name? "PROBE; exit")))
   (is (not (query/corpus-name? ""))))
 
+(deftest filter-query-test
+  (testing "one attribute anchors and expands to its own region"
+    (is (= "<text_year = \"1591\"> [] expand to text_year"
+           (query/filter-query [[:text_year #{"1591"}]]))))
+  (testing "several values are an alternation, sorted, matched literally"
+    (is (= "<text_title = \"a\\.b|c\"> [] expand to text_title"
+           (query/filter-query [[:text_title #{"c" "a.b"}]]))))
+  (testing "a TAB in a value becomes the regex escape"
+    (is (= "<text_title = \"a\\tb\"> [] expand to text_title"
+           (query/filter-query [[:text_title #{"a\tb"}]]))))
+  (testing "several attributes must all hold, anchored on the first"
+    (is (= (str "<s_id = \"2\"> [_.text_year = \"1583|1591\"]"
+                " expand to s_id")
+           (query/filter-query [[:s_id #{"2"}]
+                                [:text_year #{"1591" "1583"}]])))))
+
+(deftest restricted-query-test
+  (testing "no filter is the plain locked query"
+    (is (re-matches #"(?s)set QueryLock \d+;\n\"hund\"\n;\nunlock \d+;"
+                    (query/restricted-query "\"hund\"" nil))))
+  (testing "a filter runs under its own lock, then is activated"
+    (let [restricted (query/restricted-query "\"hund\""
+                                             [[:text_year #{"1591"}]])]
+      (is (re-matches
+           (re-pattern (str "(?s)set QueryLock (\\d+);\n"
+                            "<text_year = \"1591\"> \\[\\] expand to text_year"
+                            "\n;\nunlock \\1;\nFilter = Last;\nFilter;\n"
+                            "set QueryLock (\\d+);\n\"hund\"\n;\nunlock \\2;"))
+           restricted)))))
+
 (deftest locked-query-test
   (let [locked (query/locked-query "\"hund\";")]
     (testing "the query is wrapped in a QueryLock sandbox"

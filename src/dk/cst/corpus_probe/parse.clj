@@ -161,6 +161,27 @@
        (sort-by :freq >)
        (vec)))
 
+(defn s-decode->freqs
+  "Parse `lines` from `cwb-s-decode -n` (one annotation value per region,
+  in corpus order) into frequency maps: how many regions carry each
+  value; nil once there are more than `limit` distinct values.
+
+  Returns [{:values [<s>] :freq <n>} ...] sorted by value, the shape of
+  `group->freqs`, so the value lists of several corpora merge like
+  frequency tables. Blank lines (the trailing one, and regions with a
+  blank value) are skipped. The count stops as soon as the limit is
+  passed, so an attribute with a value per region costs little."
+  ([lines]
+   (s-decode->freqs lines Long/MAX_VALUE))
+  ([lines limit]
+   (some->> (reduce (fn [m value]
+                      (let [m (update m value (fnil inc 0))]
+                        (if (> (count m) limit) (reduced nil) m)))
+                    {}
+                    (remove str/blank? lines))
+            (sort-by key)
+            (mapv (fn [[value n]] {:values [value] :freq n})))))
+
 (defn describe->map
   "Parse `lines` from `cwb-describe-corpus -s` (one corpus) into corpus
   facts with per-attribute statistics.

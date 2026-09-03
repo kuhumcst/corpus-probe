@@ -58,15 +58,6 @@
   [& parts]
   (str/join " · " (concat (remove str/blank? parts) ["corpus-probe"])))
 
-(defn search-title
-  "The document title of the search page for `params`: the query and the
-  selected corpora (`:corpus`, a vector of names, when any) when a search
-  was made, else just the app name."
-  [{:keys [q corpus]}]
-  (if (str/blank? q)
-    (page-title)
-    (page-title q (when (seq corpus) (page/corpora-phrase corpus)))))
-
 (defn document
   "The complete HTML document titled `title`: the site header, then the
   rendered `body` hiccup (the page's <main>) in #app; a transit `payload`,
@@ -120,14 +111,41 @@
                    (str (name k) "=" (URLEncoder/encode (str v) "UTF-8")))))
        (str/join "&")))
 
+(defn filter-key?
+  "True when query param key `k` names a metadata filter: the filter
+  prefix followed by the attribute name, as in `f.text_year` (see
+  dk.cst.corpus-probe.views.page/filter-prefix)."
+  [k]
+  (str/starts-with? (name k) page/filter-prefix))
+
+(defn multi-param?
+  "True when query param key `k` may repeat: the corpus selection and the
+  metadata filters, one param per selected value."
+  [k]
+  (or (= k :corpus) (filter-key? k)))
+
 (defn scalar-params
-  "The query `params` with every value but `corpus` reduced to one string:
-  a repeated scalar param arrives as a vector, of which the first value
-  counts, so a stray duplicate cannot fail the request."
+  "The query `params` with every value but the `multi-param?` ones reduced
+  to one string: a repeated scalar param arrives as a vector, of which the
+  first value counts, so a stray duplicate cannot fail the request."
   [params]
   (into {} (map (fn [[k v]]
-                  [k (if (and (vector? v) (not= k :corpus)) (first v) v)]))
+                  [k (if (or (multi-param? k) (not (vector? v))) v (first v))]))
         params))
+
+(defn filter-params
+  "The metadata filter selected by `params`: a map of attribute name to
+  the set of non-blank values of its `f.<attribute>` params (see
+  `filter-key?`), as dk.cst.corpus-probe.search/concordance! takes it;
+  empty when nothing is selected. A param naming no attribute is dropped
+  like a blank value."
+  [params]
+  (into {} (for [[k v] params
+                 :when (filter-key? k)
+                 :let  [attr   (subs (name k) (count page/filter-prefix))
+                        values (set (remove str/blank? (if (vector? v) v [v])))]
+                 :when (and (seq attr) (seq values))]
+             [(keyword attr) values])))
 
 (defn page-param
   "The page number named by the `page` query param value `v`: the first
@@ -149,6 +167,17 @@
        (distinct)
        (vec)))
 
+(defn search-title
+  "The document title of the search page for `params`: the query, the
+  selected corpora (`:corpus`, a vector of names, when any) and the
+  metadata filter when a search was made, else just the app name."
+  [{:keys [q corpus] :as params}]
+  (if (str/blank? q)
+    (page-title)
+    (page-title q
+                (when (seq corpus) (page/corpora-phrase corpus))
+                (page/filter-phrase (filter-params params)))))
+
 (defn page-href
   "The URL of page `page` of the search described by `params`.
 
@@ -158,10 +187,13 @@
   (str "/?" (query-string (assoc (dissoc params :expand) :page page))))
 
 (defn search-params
-  "The `params` that identify a search (its corpora and query), for
-  linking the concordance and frequency views of the same hits."
+  "The `params` that identify a search (its corpora, query and metadata
+  filter), for linking the concordance and frequency views of the same
+  hits."
   [params]
-  (select-keys params [:corpus :q :mode :ci :prefix :suffix]))
+  (into (select-keys params [:corpus :q :mode :ci :prefix :suffix])
+        (filter (comp filter-key? key))
+        params))
 
 (defn export-hrefs
   "The URLs of the TSV and CSV exports at `path` of the search described
@@ -191,9 +223,10 @@
 (def follow-on-errors
   "The errors CQP adds for the later commands of a batch once an earlier
   one has failed: a query without an activated corpus, and every command
-  on the then undefined `Last`."
+  on the then undefined `Last` or the metadata filter's subcorpus."
   ["CQP Error:\n\tNo corpus activated"
-   "CQP Error:\n\tCorpus ``Last'' is undefined"])
+   "CQP Error:\n\tCorpus ``Last'' is undefined"
+   "CQP Error:\n\tCorpus ``Filter'' is undefined"])
 
 (defn drop-follow-on-errors
   "Remove the `follow-on-errors` from CQP stderr text `message` when it
@@ -307,17 +340,26 @@
           (partial mapv #(cond-> % (:error %) (update :error public-error)))))
 
 (defn search-outcome!
-  "Search the `known` corpora for `cqp` via `ctx`, page `page` in `sort`
-  order: {:result <concordance with its :pages>}, the `unknown` corpus
-  names reported among its counts, or {:error ...} when no corpus was
-  selected at all. Per-corpus errors travel inside the result."
-  [ctx known unknown cqp page sort]
+  "Search the `known` corpora for `cqp` via `ctx` with `opts` (the :page,
+  :sort and :filter of dk.cst.corpus-probe.search/concordance!): {:result
+  <concordance with its :pages>}, the `unknown` corpus names reported
+  among its counts, or {:error ...} when no corpus was selected at all.
+  Per-corpus errors travel inside the result."
+  [ctx known unknown cqp opts]
   (if (and (empty? known) (empty? unknown))
     {:error {:type :no-corpus}}
-    (let [result (-> (search/concordance! ctx known cqp {:page page
-                                                          :sort sort})
+    (let [result (-> (search/concordance! ctx known cqp opts)
                      (update :counts into (unknown-counts unknown)))]
       {:result (assoc (public-counts result) :pages (page-count result))})))
+
+(defn filter-controls!
+  "The metadata filter controls of the search form over the `known`
+  corpora via `ctx`: the filters they offer (see
+  dk.cst.corpus-probe.search/filter-options!) plus the `:selected`
+  values of `params` (see `filter-params`)."
+  [ctx known params]
+  (assoc (search/filter-options! ctx known)
+         :selected (filter-params params)))
 
 (defn search-page
   "Handle a search-page `request` against `ctx`: render the form, and when
@@ -331,14 +373,17 @@
         cqp     (->cqp params)
         page-n  (page-param (:page params))
         outcome (when cqp
-                  (search-outcome! ctx known unknown cqp page-n
-                                   (:sort params)))
+                  (search-outcome! ctx known unknown cqp
+                                   {:page   page-n
+                                    :sort   (:sort params)
+                                    :filter (filter-params params)}))
         pages   (some-> outcome :result :pages)
         ;; the page (and the embedded payload) exposes only corpus overviews;
         ;; the full registry maps carry absolute server paths and stay
         ;; server-side
         params* (assoc params :corpus selected)
         view-data {:folders    (corpus-tree! ctx corpora)
+                   :filter-controls (filter-controls! ctx known params)
                    :sort-modes (mapv (fn [[value label _]] [value label])
                                      query/sort-modes)
                    :params     params*
@@ -389,13 +434,15 @@
 
 (defn frequency-outcome!
   "Table the `known` corpora for `cqp` (nil for the whole corpora) by
-  `attr` via `ctx`: {:result ...}, the `unknown` corpus names reported
-  among its counts, or {:error ...} when no corpus was selected at all.
-  Per-corpus errors travel inside the result."
-  [ctx known unknown cqp attr]
+  `attr` via `ctx` with `opts` (the :filter of
+  dk.cst.corpus-probe.search/frequency-table!): {:result ...}, the
+  `unknown` corpus names reported among its counts, or {:error ...} when
+  no corpus was selected at all. Per-corpus errors travel inside the
+  result."
+  [ctx known unknown cqp attr opts]
   (if (and (empty? known) (empty? unknown))
     {:error {:type :no-corpus}}
-    {:result (-> (search/frequency-table! ctx known (or cqp "") attr)
+    {:result (-> (search/frequency-table! ctx known (or cqp "") attr opts)
                  (update :counts into (unknown-counts unknown))
                  (public-counts))}))
 
@@ -413,9 +460,11 @@
         attr      (attr-param (:attr params))
         submitted (contains? params :attr)
         outcome   (when submitted
-                    (frequency-outcome! ctx known unknown cqp attr))
+                    (frequency-outcome! ctx known unknown cqp attr
+                                        {:filter (filter-params params)}))
         params*   (assoc params :corpus selected :attr attr)
         view-data {:folders   (corpus-tree! ctx corpora)
+                   :filter-controls (filter-controls! ctx known params)
                    :params    params*
                    :attrs     (attr-options! ctx known)
                    :result    (:result outcome)
@@ -431,6 +480,7 @@
      (document (if submitted
                  (page-title (if cqp (:q params) "all tokens")
                              (page/corpora-phrase selected)
+                             (page/filter-phrase (filter-params params))
                              (str "by " attr)
                              "frequencies")
                  (page-title "Frequencies"))
@@ -485,7 +535,8 @@
       (let [result (search/concordance! ctx known cqp
                                         {:page      0
                                          :page-size export/hit-limit
-                                         :sort      (:sort params)})]
+                                         :sort      (:sort params)
+                                         :filter    (filter-params params)})]
         (export-response format "kwic" :size result
                          (export/kwic-table result))))))
 
@@ -503,7 +554,8 @@
     (if-not (and (seq known) (export/formats format))
       {:status 400 :body "bad request"}
       (let [table (search/frequency-table! ctx known (or cqp "")
-                                           (attr-param (:attr params)))]
+                                           (attr-param (:attr params))
+                                           {:filter (filter-params params)})]
         (export-response format "frequencies" :tokens table
                          (export/frequency-table table))))))
 

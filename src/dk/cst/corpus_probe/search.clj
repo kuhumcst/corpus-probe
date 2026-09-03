@@ -4,9 +4,12 @@
   Composes query generation (dk.cst.corpus-probe.query), the child-process
   driver (dk.cst.corpus-probe.cqp) and the output parsers
   (dk.cst.corpus-probe.parse) into complete round trips: a KWIC page or a
-  match count for one corpus, a concordance over several corpora, and the
+  match count for one corpus, a concordance over several corpora, the
   frequency breakdown of a query (or, from the lexicon, of whole corpora)
-  merged over several corpora into one table.
+  merged over several corpora into one table, and the metadata filters
+  those corpora offer. Every search takes a :filter option, a metadata
+  filter (see dk.cst.corpus-probe.query/filter-query) restricting it to
+  the matching regions of each corpus.
 
   These functions are the trust boundary for the web layer: only the CQP
   query itself is protected by the QueryLock sandbox, so every other
@@ -78,6 +81,27 @@
   [{:keys [type values?] :as m}]
   (and (= :structural type) values?))
 
+(defn corpus-filter!
+  "Metadata `filter` (a map of attribute to the set of values accepted)
+  as dk.cst.corpus-probe.query/filter-query takes it for `corpus` via
+  `ctx`: [attr values] pairs, the attribute with the most regions first,
+  that being the innermost one the filter query must anchor on.
+
+  Every attribute must be an annotated s-attribute of the corpus, by the
+  cached describe statistics that also count its regions; anything else
+  is rejected, since the names are spliced into a command, sandboxed
+  though the filter query is."
+  [ctx corpus filter]
+  (when (seq filter)
+    (let [regions (into {}
+                        (keep (fn [{:keys [name regions values?]}]
+                                (when values? [name regions])))
+                        (:s-attrs (tools/describe-corpus! ctx corpus)))]
+      (when-let [bad (seq (remove regions (keys filter)))]
+        (throw (ex-info "Not an annotated structural attribute of this corpus"
+                        {:corpus corpus :attrs bad})))
+      (vec (sort-by (juxt (comp - regions key) key) filter)))))
+
 (defn kwic!
   "Run CQP `query` against `corpus` (an uppercase CQP corpus name) through
   the installation described by `ctx` (see dk.cst.corpus-probe.cqp) and
@@ -88,9 +112,9 @@
   :match :right), its anchors from `dump` (:anchors) and its structural
   metadata (:structs). `opts` accepts :rows (the [from to] row range, see
   dk.cst.corpus-probe.query/page-rows; default the first page), :context
-  (tokens), :sort (a sort mode) and :struct-attrs (defaults to every
-  annotated s-attribute of the corpus; anything not in that inventory is
-  rejected).
+  (tokens), :sort (a sort mode), :filter (a metadata filter) and
+  :struct-attrs (defaults to every annotated s-attribute of the corpus;
+  anything not in that inventory is rejected).
 
   Throws ex-info when CQP reports an error, times out or dies."
   ([ctx corpus query]
@@ -107,7 +131,9 @@
          opts       (merge query/kwic-defaults
                            opts
                            {:p-attrs      p-attrs
-                            :struct-attrs (or requested annotated)})
+                            :struct-attrs (or requested annotated)
+                            :filter       (corpus-filter! ctx corpus
+                                                          (:filter opts))})
          commands   (query/kwic-commands corpus query opts)
          {:keys [results error]} (cqp/run-batch! ctx commands)]
      (when error
@@ -142,38 +168,43 @@
                       hits anchors (or structs (repeat nil)))}))))
 
 (defn size!
-  "The number of matches of CQP `query` in `corpus` via `ctx`. Throws
-  ex-info when CQP reports an error, times out or dies."
-  [ctx corpus query]
-  (let [ctx (corpus-ctx ctx corpus)
-        {:keys [results error]} (cqp/run-batch! ctx [(str corpus ";")
-                                                     (query/locked-query query)
-                                                     "size Last;"])]
-    (when error
-      (throw (ex-info "Size query failed"
-                      {:corpus corpus :query query :error error})))
-    (parse-long (first (last results)))))
+  "The number of matches of CQP `query` in `corpus` via `ctx`, within the
+  :filter of `opts` when there is one. Throws ex-info when CQP reports an
+  error, times out or dies."
+  ([ctx corpus query]
+   (size! ctx corpus query {}))
+  ([ctx corpus query {:keys [filter]}]
+   (let [ctx (corpus-ctx ctx corpus)
+         {:keys [results error]}
+         (cqp/run-batch! ctx [(str corpus ";")
+                              (query/restricted-query
+                               query (corpus-filter! ctx corpus filter))
+                              "size Last;"])]
+     (when error
+       (throw (ex-info "Size query failed"
+                       {:corpus corpus :query query :error error})))
+     (parse-long (first (last results))))))
 
 (defn corpus-size!
-  "The size of `query`'s result in `corpus` via `ctx` without failing:
-  {:corpus ... :size <n>}, or {:corpus ... :error <error map>} when the
-  query cannot run there."
-  [ctx corpus query]
-  (try {:corpus corpus :size (size! ctx corpus query)}
+  "The size of `query`'s result in `corpus` via `ctx` (`opts` as for
+  `size!`) without failing: {:corpus ... :size <n>}, or {:corpus ...
+  :error <error map>} when the query cannot run there."
+  [ctx corpus query opts]
+  (try {:corpus corpus :size (size! ctx corpus query opts)}
        (catch Exception e
          {:corpus corpus :error (error-map e)})))
 
 (defn corpus-sizes!
-  "The sizes of `query`'s result in each of `corpora` via `ctx`, queried
-  in parallel (see `parallelism`) until `deadline` passes, after which the
-  rest are reported as timed out. Returns one `corpus-size!` map per
-  corpus in the given order."
-  [ctx corpora query deadline]
+  "The sizes of `query`'s result in each of `corpora` via `ctx` (`opts`
+  as for `size!`), queried in parallel (see `parallelism`) until `deadline`
+  passes, after which the rest are reported as timed out. Returns one
+  `corpus-size!` map per corpus in the given order."
+  [ctx corpora query deadline opts]
   (vec (pmap-n (parallelism ctx)
                (fn [corpus]
                  (if (overdue? deadline)
                    {:corpus corpus :error {:type :timeout}}
-                   (corpus-size! ctx corpus query)))
+                   (corpus-size! ctx corpus query opts)))
                corpora)))
 
 (defn fill-page!
@@ -216,19 +247,24 @@
 
   `opts` accepts :page and :page-size (see
   dk.cst.corpus-probe.query/page-defaults) plus the display options of
-  `kwic!` (:context, :sort). Returns {:query ... :page ... :page-size ...
-  :counts [{:corpus ... :size ...} ...] :size <hits in all readable
-  corpora> :hits [hit ...]}, each hit tagged with its :corpus."
+  `kwic!` (:context, :sort, :filter). Returns {:query ... :filter ...
+  :page ... :page-size ... :counts [{:corpus ... :size ...} ...] :size
+  <hits in all readable corpora> :hits [hit ...]}, each hit tagged with
+  its :corpus."
   ([ctx corpora query]
    (concordance! ctx corpora query {}))
   ([ctx corpora query opts]
-   (let [{:keys [page page-size] :as opts} (merge query/page-defaults opts)
+   (let [{:keys [page page-size filter] :as opts} (merge query/page-defaults
+                                                         opts)
+         kwic-opts (dissoc opts :page :page-size)
          deadline  (deadline ctx)
          {:keys [counts hits remaining]}
          (fill-page! ctx corpora query (query/page-rows page page-size)
-                     deadline (dissoc opts :page :page-size))
-         counts    (into counts (corpus-sizes! ctx remaining query deadline))]
+                     deadline kwic-opts)
+         counts    (into counts (corpus-sizes! ctx remaining query deadline
+                                              kwic-opts))]
      {:query     query
+      :filter    filter
       :page      page
       :page-size page-size
       :counts    counts
@@ -245,43 +281,54 @@
 
 (defn frequencies!
   "Group the matches of CQP `query` in `corpus` by `attr` at the match
-  position via the installation described by `ctx`, returning
-  [{:values [...] :freq <n>} ...] sorted by frequency.
+  position via the installation described by `ctx`, within the :filter of
+  `opts` when there is one, returning [{:values [...] :freq <n>} ...]
+  sorted by frequency.
 
   A thin wrapper over CQP's `group`; `attr` must name one of the corpus's
   `groupable-attrs!`. Anything else is rejected, since attribute names are
   spliced into the command outside the QueryLock sandbox."
-  [ctx corpus query attr]
-  (let [ctx (corpus-ctx ctx corpus)]
-    (when-not (some #(= (keyword attr) (:name %))
-                    (groupable-attrs! ctx corpus))
-      (throw (ex-info "Not a groupable attribute of this corpus"
-                      {:corpus corpus :attr attr})))
-    (let [commands [(str corpus ";")
-                    (query/locked-query query)
-                    (str "group Last match " (name attr) ";")]
-          {:keys [results error]} (cqp/run-batch! ctx commands)]
-      (when error
-        (throw (ex-info "Frequency query failed"
-                        {:corpus corpus :query query :error error})))
-      (parse/group->freqs (last results)))))
+  ([ctx corpus query attr]
+   (frequencies! ctx corpus query attr {}))
+  ([ctx corpus query attr {:keys [filter]}]
+   (let [ctx (corpus-ctx ctx corpus)]
+     (when-not (some #(= (keyword attr) (:name %))
+                     (groupable-attrs! ctx corpus))
+       (throw (ex-info "Not a groupable attribute of this corpus"
+                       {:corpus corpus :attr attr})))
+     (let [commands [(str corpus ";")
+                     (query/restricted-query
+                      query (corpus-filter! ctx corpus filter))
+                     (str "group Last match " (name attr) ";")]
+           {:keys [results error]} (cqp/run-batch! ctx commands)]
+       (when error
+         (throw (ex-info "Frequency query failed"
+                         {:corpus corpus :query query :error error})))
+       (parse/group->freqs (last results))))))
 
 (defn corpus-frequencies!
   "Break the matches of CQP `query` in `corpus` down by `attr` via `ctx`
-  without failing: {:corpus ... :tokens <corpus size> :size <matches>
-  :freqs [...]} (the maps of `frequencies!`), or {:corpus ... :error ...}
-  when the breakdown cannot be made there.
+  (`opts` as for `frequencies!`) without failing: {:corpus ... :tokens
+  <corpus size> :size <matches> :freqs [...]} (the maps of
+  `frequencies!`), or {:corpus ... :error ...} when the breakdown cannot
+  be made there.
 
   A blank `query` breaks the whole corpus down, read from its lexicon
   (dk.cst.corpus-probe.tools/lexicon!, positional attributes only) rather
-  than by matching every token."
-  [ctx corpus query attr]
+  than by matching every token. Under a :filter it breaks down every
+  token of the filtered regions instead, and the :tokens are theirs, so
+  the rates per million stay relative to what was counted."
+  [ctx corpus query attr {:keys [filter] :as opts}]
   (try
-    (let [freqs (if (str/blank? query)
-                  (tools/lexicon! ctx corpus attr)
-                  (frequencies! ctx corpus query attr))]
+    (let [blank? (str/blank? query)
+          freqs  (if (and blank? (empty? filter))
+                   (tools/lexicon! ctx corpus attr)
+                   (frequencies! ctx corpus (if blank? "[]" query) attr opts))
+          tokens (if (empty? filter)
+                   (:size (corpus/info! ctx corpus))
+                   (size! ctx corpus "[]" opts))]
       {:corpus corpus
-       :tokens (:size (corpus/info! ctx corpus))
+       :tokens tokens
        :size   (reduce + (map :freq freqs))
        :freqs  freqs})
     (catch Exception e
@@ -312,12 +359,63 @@
   ...} ...] :rows [{:value ... :freqs {corpus <n>} :total ...} ...]}; a
   corpus whose breakdown fails carries its :error instead of its counts
   and contributes no rows, like a failing corpus of `concordance!`. A blank
-  `query` tables the whole corpora."
-  [ctx corpora query attr]
-  (let [results (vec (pmap-n (parallelism ctx)
-                             #(corpus-frequencies! ctx % query attr)
-                             corpora))]
-    {:query  query
-     :attr   (keyword attr)
-     :counts (mapv #(dissoc % :freqs) results)
-     :rows   (merge-frequencies (remove :error results))}))
+  `query` tables the whole corpora, or their filtered regions under the
+  :filter of `opts`."
+  ([ctx corpora query attr]
+   (frequency-table! ctx corpora query attr {}))
+  ([ctx corpora query attr opts]
+   (let [results (vec (pmap-n (parallelism ctx)
+                              #(corpus-frequencies! ctx % query attr opts)
+                              corpora))]
+     {:query  query
+      :filter (:filter opts)
+      :attr   (keyword attr)
+      :counts (mapv #(dissoc % :freqs) results)
+      :rows   (merge-frequencies (remove :error results))})))
+
+(defn corpus-filters!
+  "The metadata filters `corpus` offers via `ctx` without failing: one
+  {:corpus ... :attr ... :freqs ...} per annotated s-attribute, in
+  registry order, with the value list of
+  dk.cst.corpus-probe.tools/annotation-values! (nil for an attribute with
+  too many values to list); nothing, logged, when the corpus cannot be
+  read."
+  [ctx corpus]
+  (try
+    (vec (for [{attr :name} (filter annotated-s-attr?
+                                    (corpus/attributes! ctx corpus))]
+           {:corpus corpus
+            :attr   attr
+            :freqs  (tools/annotation-values! ctx corpus attr)}))
+    (catch Exception e
+      (log/warn :msg "metadata filters unavailable" :corpus corpus
+                :exception e)
+      nil)))
+
+(defn filter-rows
+  "The values of metadata attribute `attr` among the `entries` of
+  `corpus-filters!`, merged over their corpora like a frequency table
+  (the counts are regions) and sorted by value."
+  [attr entries]
+  (->> (filter #(= attr (:attr %)) entries)
+       (merge-frequencies)
+       (sort-by :value)
+       (vec)))
+
+(defn filter-options!
+  "The metadata filters available over `corpora` via `ctx`, read in
+  parallel (see `parallelism`): {:attrs [{:name <kw> :rows [{:value <s>
+  :freqs {corpus <n>} :total <n>} ...]} ...] :unlisted [<kw> ...]}.
+
+  The attributes keep the registry order of the first corpus reporting
+  each, with the values of `filter-rows`; an attribute with too many
+  values to list in any of the corpora is named under :unlisted instead."
+  [ctx corpora]
+  (let [entries  (->> (pmap-n (parallelism ctx) #(corpus-filters! ctx %)
+                              corpora)
+                      (apply concat))
+        attrs    (distinct (map :attr entries))
+        unlisted (set (map :attr (remove :freqs entries)))]
+    {:attrs    (vec (for [attr (remove unlisted attrs)]
+                      {:name attr :rows (filter-rows attr entries)}))
+     :unlisted (vec (filter unlisted attrs))}))

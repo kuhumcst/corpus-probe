@@ -4,9 +4,10 @@
             [dk.cst.corpus-probe.views.page :as page]))
 
 (deftest search-form-test
-  (let [html (page/search-form [{:label nil :folders []
-                                 :corpora [{:id "PROBE" :size 47}]}]
-                               {:corpus ["PROBE"] :q "hund" :sort "word"}
+  (let [html (page/search-form {:folders [{:label nil :folders []
+                                           :corpora [{:id "PROBE" :size 47}]}]
+                                :params  {:corpus ["PROBE"] :q "hund"
+                                          :sort "word"}}
                                "/"
                                (page/sort-control [["corpus" "corpus order"]
                                                    ["word" "match"]]
@@ -25,6 +26,48 @@
     (testing "the sort control offers the given modes"
       (is (some #{"corpus order"} (deep html)))
       (is (some #{"match"} (deep html))))))
+
+(deftest filter-phrase-test
+  (is (= "" (page/filter-phrase {})))
+  (is (= "text_author ukendt; text_year 1583, 1591"
+         (page/filter-phrase {:text_year   #{"1591" "1583"}
+                              :text_author #{"ukendt"}})))
+  (is (nil? (page/within-phrase nil)))
+  (is (= " within text_year 1591" (page/within-phrase {:text_year #{"1591"}}))))
+
+(deftest filter-fieldset-test
+  (testing "no metadata renders nothing"
+    (is (nil? (page/filter-fieldset nil)))
+    (is (nil? (page/filter-fieldset {:attrs [] :unlisted [] :selected {}}))))
+  (let [html (page/filter-fieldset
+              {:attrs    [{:name :text_year
+                           :rows [{:value "1583" :total 1}
+                                  {:value "1591" :total 2}]}
+                          {:name :text_party
+                           :rows [{:value "S" :total 2}]}]
+               :unlisted [:text_title]
+               :selected {:text_year  #{"1591" "1600"}
+                          :text_title #{"Havfruens sang"}}})
+        inputs (filter #(and (map? %) (= "checkbox" (:type %))) (deep html))]
+    (testing "each value is a checkbox under the attribute's filter param"
+      (is (= ["f.text_year" "f.text_year" "f.text_year" "f.text_party"
+              "f.text_title"]
+             (map :name inputs)))
+      (is (= ["1583" "1591" "1600" "S" "Havfruens sang"] (map :value inputs))))
+    (testing "chosen values are checked, whether the corpora offer them or not"
+      (is (= [false true true false true] (map :checked inputs))))
+    (testing "an attribute with a selection starts open and counts it"
+      (is (= [true false true]
+             (keep #(when (and (map? %) (contains? % :open)) (:open %))
+                   (deep html))))
+      (is (some #{" · 2 selected"} (deep html))))
+    (testing "the region counts are machine-readable, with their unit"
+      (is (some #{[:data {:value "2"} "2 regions"]} (deep html)))
+      (is (some #{[:data {:value "1"} "1 region"]} (deep html))))
+    (testing "values render as the sidebar shows them"
+      (is (some #{[:time "1591"]} (deep html))))
+    (testing "unlisted attributes are named"
+      (is (some #{[:code "text_title"]} (deep html))))))
 
 (deftest pagination-test
   (testing "no links renders nothing"
@@ -77,7 +120,12 @@
            (page/result-summary sample-result))))
   (is (= "5 hits in PROBE · page 1 of 1"
          (page/result-summary {:size 5 :page 0 :pages 1
-                               :counts [{:corpus "PROBE" :size 5}]}))))
+                               :counts [{:corpus "PROBE" :size 5}]})))
+  (testing "a metadata filter qualifies the corpora"
+    (is (= "5 hits in PROBE within text_year 1591 · page 1 of 1"
+           (page/result-summary {:size 5 :page 0 :pages 1
+                                 :filter {:text_year #{"1591"}}
+                                 :counts [{:corpus "PROBE" :size 5}]})))))
 
 (deftest download-links-test
   (is (nil? (page/download-links nil nil)))

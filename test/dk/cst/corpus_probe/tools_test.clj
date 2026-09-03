@@ -4,6 +4,7 @@
   (:require [babashka.fs :as fs]
             [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]
+            [dk.cst.corpus-probe.corpus :as corpus]
             [dk.cst.corpus-probe.cqp-test :refer [ctx when-cwb]]
             [dk.cst.corpus-probe.tools :as tools]))
 
@@ -62,3 +63,36 @@
    (testing "the lexicon comes sorted by frequency in the group shape"
      (is (= {:values ["."] :freq 6} (first (tools/lexicon! ctx "TALER" :word))))
      (is (= 33 (count (tools/lexicon! ctx "TALER" :word)))))))
+
+(defmacro with-value-limit
+  "Run `body` with dk.cst.corpus-probe.tools/value-limit bound to `n`
+  and the facts cache emptied before and after: the value lists decoded
+  under one limit are cached, and would be served under another."
+  [n & body]
+  `(with-redefs [tools/value-limit ~n]
+     (reset! corpus/facts-cache {})
+     (try ~@body (finally (reset! corpus/facts-cache {})))))
+
+(deftest annotation-values-test
+  (testing "a hostile corpus name is rejected before any command is built"
+    (is (thrown-with-msg? Exception #"Invalid corpus name"
+                          (tools/annotation-values! ctx "PROBE; exit"
+                                                    :text_year))))
+  (when-cwb
+   (testing "only annotated s-attributes of the corpus can be decoded"
+     (is (thrown-with-msg? Exception #"Not an annotated structural attribute"
+                           (tools/annotation-values! ctx "TALER" :text_author)))
+     (is (thrown-with-msg? Exception #"Not an annotated structural attribute"
+                           (tools/annotation-values! ctx "TALER" "text")))
+     (is (thrown-with-msg? Exception #"Not an annotated structural attribute"
+                           (tools/annotation-values! ctx "TALER" "word"))))
+   (testing "the values come sorted with their region counts"
+     (is (= [{:values ["2014"] :freq 1}
+             {:values ["2015"] :freq 1}
+             {:values ["2016"] :freq 1}]
+            (tools/annotation-values! ctx "TALER" :text_year)))
+     (is (= [{:values ["S"] :freq 2} {:values ["V"] :freq 1}]
+            (tools/annotation-values! ctx "TALER" "text_party"))))
+   (testing "an attribute with too many values to list is nil"
+     (with-value-limit 1
+       (is (nil? (tools/annotation-values! ctx "VISER" :text_year)))))))

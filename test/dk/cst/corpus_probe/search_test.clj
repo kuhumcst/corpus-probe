@@ -5,7 +5,8 @@
             [clojure.test :refer [deftest is testing]]
             [dk.cst.corpus-probe.cqp-test :refer [ctx when-cwb]]
             [dk.cst.corpus-probe.query :as query]
-            [dk.cst.corpus-probe.search :as search]))
+            [dk.cst.corpus-probe.search :as search]
+            [dk.cst.corpus-probe.tools-test :refer [with-value-limit]]))
 
 (deftest kwic-test
   (when-cwb
@@ -80,16 +81,94 @@
   (when-cwb
    (is (= 5 (search/size! ctx "PROBE" "\"hund.*\" %c")))
    (testing "corpus-size! reports a failing corpus instead of throwing"
-     (is (= 5 (:size (search/corpus-size! ctx "PROBE" "\"hund.*\" %c"))))
-     (is (= :cqp (-> (search/corpus-size! ctx "TALER" "[lemma = \"x\"]")
+     (is (= 5 (:size (search/corpus-size! ctx "PROBE" "\"hund.*\" %c" {}))))
+     (is (= :cqp (-> (search/corpus-size! ctx "TALER" "[lemma = \"x\"]" {})
                      :error :type))))
    (testing "corpus-sizes! keeps the order and stops at the deadline"
      (is (= ["VISER" "PROBE"]
             (map :corpus (search/corpus-sizes! ctx ["VISER" "PROBE"] "[]"
-                                               (search/deadline ctx)))))
+                                               (search/deadline ctx) {}))))
      (is (= [:timeout :timeout]
             (map (comp :type :error)
-                 (search/corpus-sizes! ctx ["VISER" "PROBE"] "[]" 0)))))))
+                 (search/corpus-sizes! ctx ["VISER" "PROBE"] "[]" 0 {})))))))
+
+(deftest filter-test
+  (when-cwb
+   (let [q "[lemma = \"hund\"]"]
+     (testing "a filter restricts the hits to the matching regions"
+       (is (= 1 (search/size! ctx "VISER" q {:filter {:text_year #{"1591"}}})))
+       (is (= 0 (search/size! ctx "VISER" q {:filter {:text_year #{"1583"}}})))
+       (is (= [13] (->> (search/kwic! ctx "VISER" q
+                                      {:filter {:text_year #{"1591"}}})
+                        :hits
+                        (map :cpos)))))
+     (testing "several attributes must all hold"
+       (is (= 1 (search/size! ctx "VISER" q
+                              {:filter {:text_year   #{"1591" "1583"}
+                                        :text_author #{"ukendt"}}})))
+       (is (= 0 (search/size! ctx "VISER" q
+                              {:filter {:text_year   #{"1591"}
+                                        :text_author #{"nobody"}}}))))
+     (testing "attributes from two levels anchor on the innermost"
+       (is (= [[:s_id #{"2"}] [:text_year #{"1591"}]]
+              (search/corpus-filter! ctx "VISER" {:text_year #{"1591"}
+                                                  :s_id      #{"2"}})))
+       (is (nil? (search/corpus-filter! ctx "VISER" {})))
+       (is (= 6 (search/size! ctx "VISER" "[]"
+                              {:filter {:text_year #{"1591"} :s_id #{"2"}}}))))
+     (testing "a corpus lacking the attribute is rejected before any command"
+       (let [{:keys [error]} (search/corpus-size! ctx "TALER" "[]"
+                                                  {:filter {:text_author
+                                                            #{"x"}}})]
+         (is (= :rejected (:type error)))
+         (is (re-find #"Not an annotated structural attribute"
+                      (:message error))))
+       (is (thrown-with-msg? Exception #"Not an annotated structural attribute"
+                             (search/kwic! ctx "VISER" "[]"
+                                           {:filter {:text #{"x"}}}))))
+     (testing "a concordance filters every corpus, counted ones included"
+       (let [page (search/concordance! ctx ["VISER" "PROBE"] "[]"
+                                       {:page-size 1
+                                        :filter    {:text_year #{"1591"
+                                                                 "2023"}}})]
+         (is (= [{:corpus "VISER" :size 19} {:corpus "PROBE" :size 20}]
+                (:counts page)))))
+     (testing "a frequency table counts within the filter, tokens included"
+       (let [table (search/frequency-table! ctx ["VISER"] q :text_year
+                                            {:filter {:text_year #{"1591"}}})]
+         (is (= [{:corpus "VISER" :tokens 19 :size 1}] (:counts table)))
+         (is (= [{:value "1591" :freqs {"VISER" 1} :total 1}] (:rows table)))))
+     (testing "a blank query under a filter tables the filtered tokens"
+       (let [table (search/frequency-table! ctx ["VISER"] "" :lemma
+                                            {:filter {:text_year #{"1591"}}})]
+         (is (= [{:corpus "VISER" :tokens 19 :size 19}] (:counts table))))))))
+
+(deftest filter-options-test
+  (when-cwb
+   (let [{:keys [attrs unlisted]} (search/filter-options! ctx ["VISER"
+                                                               "TALER"])]
+     (testing "attributes keep registry order, values merge over corpora"
+       (is (= [:s_id :text_id :text_title :text_year :text_author :text_speaker
+               :text_party]
+              (map :name attrs)))
+       (is (= [{:value "1583" :freqs {"VISER" 1} :total 1}
+               {:value "1591" :freqs {"VISER" 1} :total 1}
+               {:value "2014" :freqs {"TALER" 1} :total 1}
+               {:value "2015" :freqs {"TALER" 1} :total 1}
+               {:value "2016" :freqs {"TALER" 1} :total 1}]
+              (:rows (nth attrs 3)))))
+     (is (= [] unlisted)))
+   (testing "an attribute with too many values in one corpus is unlisted"
+     ;; text_year has two values in VISER but three in TALER
+     (with-value-limit 2
+       (let [{:keys [attrs unlisted]} (search/filter-options! ctx ["VISER"
+                                                                   "TALER"])]
+         (is (= [:text_title :text_author :text_speaker :text_party]
+                (map :name attrs)))
+         (is (= [:s_id :text_id :text_year] unlisted)))))
+   (testing "a corpus that cannot be read offers nothing"
+     (is (= {:attrs [] :unlisted []}
+            (search/filter-options! ctx ["NOSUCH"]))))))
 
 (deftest error-map-test
   (testing "a CQP error travels as it is"

@@ -2,9 +2,9 @@
   "Read-only wrappers for the cwb-* command-line tools, complementing the
   CQP driver with corpus facts CQP itself does not report.
 
-  `cwb-describe-corpus` gives the corpus info pages their statistics and
-  `cwb-lexdecode` gives whole-corpus frequency lists; cwb-scan-corpus and
-  cwb-s-decode follow with the metadata features (PLAN.md §3)."
+  `cwb-describe-corpus` gives the corpus info pages their statistics,
+  `cwb-lexdecode` gives whole-corpus frequency lists and `cwb-s-decode`
+  gives the metadata filters their value lists."
   (:require [clojure.string :as str]
             [dk.cst.corpus-probe.corpus :as corpus]
             [dk.cst.corpus-probe.cqp :as cqp]
@@ -82,3 +82,46 @@
     (parse/lexicon->freqs
      (run-tool! ctx corpus ["cwb-lexdecode" "-r" (:registry ctx)
                             "-fb" "-P" (name attr) (str corpus)]))))
+
+(def value-limit
+  "The most distinct values an annotated s-attribute may have and still be
+  offered as a metadata filter: a longer list of checkboxes is no longer a
+  usable control, and a text ID or title has one value per region anyway."
+  500)
+
+(def region-limit
+  "The most regions an s-attribute may have before its values are not
+  even decoded: an attribute with millions of regions (sentence IDs, say)
+  all but always exceeds `value-limit`, and decoding it costs seconds."
+  1000000)
+
+(defn annotation-values!
+  "The values of annotated s-attribute `attr` of `corpus` (an uppercase
+  CQP corpus name) with the number of regions carrying each, via
+  `cwb-s-decode` against the `ctx` registry, cached until the corpus's
+  registry file changes.
+
+  Returns [{:values [<s>] :freq <n>} ...] sorted by value (see
+  dk.cst.corpus-probe.parse/s-decode->freqs), or nil when the attribute
+  has too many values to list (see `value-limit` and `region-limit`).
+  Both names are spliced into the command: the corpus name is validated,
+  and `attr` must be one of the corpus's annotated s-attributes, checked
+  against the describe statistics that also give its region count."
+  [ctx corpus attr]
+  (query/valid-corpus-name corpus)
+  (let [attr  (keyword attr)
+        stats (some #(when (= attr (:name %)) %)
+                    (:s-attrs (describe-corpus! ctx corpus)))]
+    (when-not (:values? stats)
+      (throw (ex-info "Not an annotated structural attribute of this corpus"
+                      {:corpus corpus :attr attr})))
+    (corpus/with-facts-cache!
+      ctx corpus (str "cwb-s-decode " (name attr))
+      (fn []
+        (when (<= (:regions stats) region-limit)
+          (parse/s-decode->freqs
+           (run-tool! ctx corpus ["cwb-s-decode"
+                                  "-r" (:registry ctx)
+                                  "-n" (str corpus)
+                                  "-S" (name attr)])
+           value-limit))))))

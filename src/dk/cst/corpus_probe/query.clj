@@ -128,6 +128,56 @@
                   (str/replace #";+\s*$" ""))]
     (str "set QueryLock " key ";\n" query "\n;\nunlock " key ";")))
 
+(defn filter-query
+  "The CQP query matching every region accepted by `filter`: pairs of
+  annotated s-attribute name and the values accepted, finest regions first.
+
+  [[:text_year #{\"1591\" \"1583\"}]] matches the texts of either year;
+  several attributes must all hold. The values are escaped and matched
+  literally, those of one attribute as an alternation. The match is
+  anchored at a region start of the first attribute, tests the others at
+  that token (their regions containing it, hence the first attribute must
+  have the finest regions) and expands to the first attribute's region, so
+  that the result activated as a subcorpus restricts later queries to
+  those regions: the CQP tutorial's metadata subcorpus idiom.
+
+  (filter-query [[:s_id #{\"2\"}] [:text_year #{\"1591\"}]])
+  ;; => <s_id = \"2\"> [_.text_year = \"1591\"] expand to s_id"
+  [filter]
+  (let [[[attr values] & more] filter
+        ;; a TAB in a value would be flattened with the rest of the
+        ;; command, so it goes in as the regex escape instead
+        escape   (fn [value] (str/replace (escape-literal value) "\t" "\\t"))
+        accepted (fn [values]
+                   (str "\"" (str/join "|" (map escape (sort values))) "\""))]
+    (str "<" (name attr) " = " (accepted values) "> "
+         (if (seq more)
+           (str "[" (str/join " & " (for [[attr values] more]
+                                      (str "_." (name attr) " = "
+                                           (accepted values))))
+                "]")
+           "[]")
+         " expand to " (name attr))))
+
+(defn restricted-query
+  "The command string running user-supplied CQP `query` under QueryLock
+  (see `locked-query`), within the regions of `filter` when there is one.
+
+  The filter query (see `filter-query`) runs under its own lock, its
+  result is activated as the subcorpus Filter, and the query then runs
+  within it. One string, so it fills one section of a batch just as
+  `locked-query` alone does. The activation sits outside the locks, being
+  no query, and splices in nothing from the request. A filter matching no
+  region makes an empty subcorpus, within which the query finds nothing;
+  an attribute the corpus lacks fails the filter query, and CQP's own
+  error reaches the caller."
+  [query filter]
+  (if (empty? filter)
+    (locked-query query)
+    (str (locked-query (filter-query filter))
+         "\nFilter = Last;\nFilter;\n"
+         (locked-query query))))
+
 (defn position-query
   "A CQP query matching exactly the span from corpus position `cpos` to
   `matchend`, for re-fetching a known hit with wider context.
@@ -179,8 +229,9 @@
   in tokens; `rows` is the [from to] row range (see `page-rows`) of the hits
   to fetch, which `cat` clamps to the result silently. `sort` is a sort mode
   (see `sort-modes`); the `cat`, `dump` and `tabulate` rows then follow the
-  sorted order."
-  [corpus query {:keys [p-attrs struct-attrs context rows sort]
+  sorted order. `filter` restricts the query to the regions of a metadata
+  filter (see `restricted-query`)."
+  [corpus query {:keys [p-attrs struct-attrs context rows sort filter]
                  :or   {context (:context kwic-defaults)
                         rows    (:rows kwic-defaults)}}]
   (let [[from to]  rows
@@ -190,7 +241,7 @@
                                                      (rest p-attrs))) "; "))]
     (into [(str hardened-profile " set Context " (long context) " words;")
            (str corpus ";")
-           (locked-query query)
+           (restricted-query query filter)
            "size Last;"
            (sort-command sort)
            (str show "cat " page-range ";")

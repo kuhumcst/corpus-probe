@@ -10,14 +10,21 @@ See [PLAN.md](PLAN.md) for the full implementation plan and
 
 ## Status
 
-Milestone 1 (of 5): the `cqp` child-process driver and output parsers.
-One function call in, plain data out:
+Milestones 1 to 4 of 5 are built: the `cqp` child-process driver and
+output parsers, the KWIC concordance with paging, sorting and context
+expansion, the ClojureScript client, and the breadth features (the corpus
+chooser and multi-corpus search, simple search, frequency tables, corpus
+info pages, TSV/CSV export). Milestone 5, the cutover, is in progress:
+metadata filtering is done; the Danish UI, the registry vetting and the
+deployment next to KORP remain (see PLAN.md section 12).
+
+At the REPL, one function call in, plain data out:
 
 ```clojure
 (require '[dk.cst.corpus-probe.search :as search])
 
 (search/kwic! {:registry "/path/to/registry"} "PROBE" "\"hund.*\" %c")
-;; => {:corpus "PROBE" :size 5 :page 0 ...
+;; => {:corpus "PROBE" :query "\"hund.*\" %c" :size 5 :rows [0 24]
 ;;     :hits [{:cpos 9
 ;;             :left  [{:word "Katten" :pos "NCSD" :lemma "kat"} ...]
 ;;             :match [{:word "hund" :pos "NCSI" :lemma "hund"}]
@@ -35,6 +42,8 @@ Requires [Clojure](https://clojure.org/guides/install_clojure) and CWB
 dev/encode.sh          # encode the dev corpus (PROBE) once
 clojure -M:dev:nrepl   # start a REPL; see dev/user.clj for entry points
 clojure -X:test        # run the tests
+clojure -M:cljs -m shadow.cljs.devtools.cli compile app   # build the client
+clojure -M -m dk.cst.corpus-probe.server                  # serve (config.edn)
 ```
 
 The parsers are developed against byte-exact golden files in
