@@ -1,7 +1,10 @@
 {:paths ["src" "resources"]
 
- :deps {org.clojure/clojure {:mvn/version "1.12.0"}
-        babashka/process    {:mvn/version "0.6.25"}}
+ :deps {org.clojure/clojure          {:mvn/version "1.12.0"}
+        babashka/process             {:mvn/version "0.6.25"}
+        io.pedestal/pedestal.service {:mvn/version "0.8.1"}
+        io.pedestal/pedestal.http-kit {:mvn/version "0.8.1"}
+        no.cjohansen/replicant         {:mvn/version "2026.07.1"}}
 
  :aliases
  {:dev  {:extra-paths ["dev" "test"]}

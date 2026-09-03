@@ -7,8 +7,8 @@
 
   These functions are the trust boundary for the coming web layer: only the
   CQP query itself is protected by the QueryLock sandbox, so every other
-  parameter spliced into a command -- corpus names and attribute names --
-  is validated here against the corpus's own inventory first."
+  parameter spliced into a command (corpus names and attribute names) is
+  validated here against the corpus's own inventory first."
   (:require [dk.cst.corpus-probe.corpus :as corpus]
             [dk.cst.corpus-probe.cqp :as cqp]
             [dk.cst.corpus-probe.parse :as parse]
@@ -94,7 +94,7 @@
   [{:values [...] :freq <n>} ...] sorted by frequency.
 
   A thin wrapper over CQP's `group`; `attr` must name one of the corpus's
-  positional attributes or annotated s-attributes -- anything else is
+  positional attributes or annotated s-attributes. Anything else is
   rejected, since attribute names are spliced into the command outside the
   QueryLock sandbox."
   [ctx corpus query attr]

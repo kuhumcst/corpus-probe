@@ -11,8 +11,8 @@
   "Display settings making KWIC output unambiguously parseable: every
   separator becomes a TAB-framed marker letter, and TAB can never occur
   inside a positional-attribute value. Inline annotation values are never
-  shown (ShowTagAttributes off) -- they are unescaped, may contain TAB, and
-  can crash CQP (docs/research/gap-kwic-parsing.md)."
+  shown (ShowTagAttributes off), since they are unescaped, may contain TAB,
+  and can crash CQP (docs/research/gap-kwic-parsing.md)."
   (str "set AttributeSeparator \"\tA\t\"; "
        "set TokenSeparator \"\tT\t\"; "
        "set LeftKWICDelim \"\tL\t\"; "
@@ -108,7 +108,7 @@
   `p-attrs` are the corpus's positional attributes (registry order) to show;
   `struct-attrs` the annotated s-attributes to fetch per hit. Each gets its
   own single-column `tabulate` command so that a whole output line is one
-  annotation value -- annotation values may legally contain TAB, so packing
+  annotation value. Annotation values may legally contain TAB, so packing
   them into one TAB-separated row would misalign the columns. `context` is
   in tokens; `page`/`page-size` select the hits and are clamped to sane
   values, since CQP treats negative range bounds as the entire result."

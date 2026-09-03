@@ -7,7 +7,7 @@
   stdout is split into per-command sections on the `-::-EOL-::-` marker line
   CQP prints in response; the marker arrives even after errors, so sections
   always align with commands. Any stderr output means some command in the
-  batch failed -- the exit code is meaningless. See PLAN.md §5 and
+  batch failed; the exit code is meaningless. See PLAN.md §5 and
   docs/research/cqp-integration.md for the verified protocol."
   (:require [clojure.java.io :as io]
             [clojure.string :as str]
@@ -39,8 +39,8 @@
   output sections.
 
   Returns {:banner <line or nil> :sections [[line ...] ...]} with one section
-  per `eol-marker` encountered. Splits on newline only -- corpus data may
-  legally contain every other control character -- and filters progress
+  per `eol-marker` encountered. Splits on newline only, since corpus data
+  may legally contain every other control character, and filters progress
   lines. Output after the final marker (normally just the trailing newline)
   is discarded."
   [s]
@@ -71,7 +71,7 @@
   `:error` is nil on success, or a map with :type :timeout (process killed),
   :type :cqp (:message holds the stderr text) or :type :misaligned (section
   count differs from command count: the process died early, or output data
-  collided with the section marker -- either way positional alignment is
+  collided with the section marker; either way positional alignment is
   lost and the results must not be trusted)."
   [{:keys [registry cqp timeout-ms charset]
     :or   {cqp "cqp" timeout-ms 30000 charset "UTF-8"}}

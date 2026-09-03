@@ -35,9 +35,9 @@
   Returns {:cpos <n> :left [token ...] :match [...] :right [...]} where each
   token is a map of attribute keyword to value, plus :open/:close vectors of
   structure-tag keywords when tags are shown. Empty fields adjacent to the
-  T/L/R/S frame markers are separator glue and are dropped; a genuinely
-  empty attribute value survives because it neighbours an A marker. Throws
-  when `line` lacks the corpus-position prefix of a KWIC line."
+  T/L/R/S frame markers are separator glue and are dropped; an empty
+  attribute value survives because it neighbours an A marker. Throws when
+  `line` lacks the corpus-position prefix of a KWIC line."
   [attrs line]
   (let [[_ cpos content] (re-matches #"(?s)\s*(\d+): (.*)" line)
         _      (when-not cpos

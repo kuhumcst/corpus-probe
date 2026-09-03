@@ -30,7 +30,7 @@
 
   Returns {:id <s> :name <s> :home <s> :info <s> :charset <s> :language <s>
   :p-attrs [<kw> ...] :s-attrs [<kw> ...] :aligned [<kw> ...]} with
-  attributes in declaration order -- the order CQP displays them in."
+  attributes in declaration order, which is the order CQP displays them in."
   [f]
   (->> (str/split (slurp f) #"\n")
        (keep registry-line)
@@ -70,7 +70,7 @@
    "latin9"   "ISO-8859-15"})
 
 (defn registry-file
-  "The registry file of `corpus` in `ctx` -- the filename is the lowercase
+  "The registry file of `corpus` in `ctx`. The filename is the lowercase
   corpus ID."
   ^java.io.File [{:keys [registry] :as ctx} corpus]
   (io/file registry (str/lower-case (str corpus))))
@@ -88,7 +88,7 @@
         "UTF-8")))
 
 (defonce ^{:doc "Cache of `show cd;` attribute descriptions, keyed by
-  [registry corpus registry-file-mtime] -- the mtime keys stale entries out
+  [registry corpus registry-file-mtime]. The mtime keys stale entries out
   when a corpus is re-encoded under a running JVM."}
   attribute-cache
   (atom {}))

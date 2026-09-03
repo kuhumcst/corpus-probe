@@ -1,0 +1,13 @@
+/* Barebones structural CSS only: enough for the KWIC columns to line up and
+   the match to be visible. No palette, no theming; styling proper comes
+   later, once the app's shape is settled. */
+
+.kwic {
+  border-collapse: collapse;
+  font-family: monospace;
+  white-space: nowrap;
+}
+
+.kwic .left  { text-align: right; }
+.kwic .match { text-align: center; }
+.kwic .right { text-align: left; }
