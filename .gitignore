@@ -1,0 +1,10 @@
+.cpcache/
+.nrepl-port
+.clj-kondo/.cache/
+.lsp/
+target/
+dev/corpus/data/
+dev/corpus/registry/
+.shadow-cljs/
+node_modules/
+.DS_Store

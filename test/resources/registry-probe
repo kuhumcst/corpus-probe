@@ -1,0 +1,45 @@
+##
+## registry entry for corpus PROBE
+##
+
+# long descriptive name for the corpus
+NAME ""
+# corpus ID (must be lowercase in registry!)
+ID   probe
+# path to binary data files
+HOME /corpora/data/probe
+# optional info file (displayed by "info;" command in CQP)
+INFO /corpora/data/probe/.info
+
+# corpus properties provide additional information about the corpus:
+##:: charset  = "utf8" # character encoding of corpus data
+##:: language = "??"     # insert ISO code for language (de, en, fr, ...)
+
+
+##
+## p-attributes (token annotations)
+##
+
+ATTRIBUTE word
+ATTRIBUTE pos
+ATTRIBUTE lemma
+
+
+##
+## s-attributes (structural markup)
+##
+
+# <s id=".."> ... </s>
+# (no recursive embedding allowed)
+STRUCTURE s
+STRUCTURE s_id                 # [annotations]
+
+# <text id=".." title=".." year=".."> ... </text>
+# (no recursive embedding allowed)
+STRUCTURE text
+STRUCTURE text_id              # [annotations]
+STRUCTURE text_title           # [annotations]
+STRUCTURE text_year            # [annotations]
+
+
+# Yours sincerely, the Encode tool.

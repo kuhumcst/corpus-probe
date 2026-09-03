@@ -1,0 +1,5 @@
+        0: 	T		L	Hunden	A	NCSD	A	hund	R		T	sover	A	VPRA	A	sove	T	under	A	PP	A	under	T	bordet	A	NCSD	A	bord	T	.	A	PUN	A	.	T	Katten	A	NCSD	A	kat
+        9: 	T	.	A	PUN	A	.	T	Katten	A	NCSD	A	kat	T	jagter	A	VPRA	A	jagte	T	en	A	D	A	en	T	lille	A	AN	A	lille	T		L	hund	A	NCSI	A	hund	R		T	i	A	PP	A	i	T	haven	A	NCSD	A	have	T	.	A	PUN	A	.	T	Hunde	A	NCPI	A	hund	T	og	A	CC	A	og
+       13: 	T	lille	A	AN	A	lille	T	hund	A	NCSI	A	hund	T	i	A	PP	A	i	T	haven	A	NCSD	A	have	T	.	A	PUN	A	.	T		L	Hunde	A	NCPI	A	hund	R		T	og	A	CC	A	og	T	katte	A	NCPI	A	kat	T	er	A	VPRA	A	være	T	gode	A	AN	A	god	T	venner	A	NCPI	A	ven
+       34: 	T	over	A	PP	A	over	T	havet	A	NCSD	A	hav	T	,	A	PUN	A	,	T	og	A	CC	A	og	T	en	A	D	A	en	T		L	hund	A	NCSI	A	hund	R		T	løber	A	VPRA	A	løbe	T	på	A	PP	A	på	T	stranden	A	NCSD	A	strand	T	.	A	PUN	A	.	T	Har	A	VPRA	A	have
+       43: 	T	.	A	PUN	A	.	T	Har	A	VPRA	A	have	T	du	A	PP2	A	du	T	set	A	VPTC	A	se	T	min	A	PO	A	min	T		L	hund	A	NCSI	A	hund	R		T	spørger	A	VPRA	A	spørge	T	hun	A	PP3	A	hun	T	.	A	PUN	A	.

@@ -1,0 +1,9 @@
+p-Att	word		*
+p-Att	pos		
+p-Att	lemma		
+s-Att	s		
+s-Att	s_id	-V	
+s-Att	text		
+s-Att	text_id	-V	
+s-Att	text_title	-V	
+s-Att	text_year	-V	

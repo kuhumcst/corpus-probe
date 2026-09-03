@@ -1,0 +1,65 @@
+<text id="t1" title="Hverdag" year="2023">
+<s id="1">
+Hunden	NCSD	hund
+sover	VPRA	sove
+under	PP	under
+bordet	NCSD	bord
+.	PUN	.
+</s>
+<s id="2">
+Katten	NCSD	kat
+jagter	VPRA	jagte
+en	D	en
+lille	AN	lille
+hund	NCSI	hund
+i	PP	i
+haven	NCSD	have
+.	PUN	.
+</s>
+<s id="3">
+Hunde	NCPI	hund
+og	CC	og
+katte	NCPI	kat
+er	VPRA	være
+gode	AN	god
+venner	NCPI	ven
+.	PUN	.
+</s>
+</text>
+<text id="t2" title="Vejret" year="2024">
+<s id="4">
+Det	PD	det
+regner	VPRA	regne
+i	PP	i
+København	NP	København
+i	PP	i
+dag	NCSI	dag
+.	PUN	.
+</s>
+<s id="5">
+Solen	NCSD	sol
+skinner	VPRA	skinne
+over	PP	over
+havet	NCSD	hav
+,	PUN	,
+og	CC	og
+en	D	en
+hund	NCSI	hund
+løber	VPRA	løbe
+på	PP	på
+stranden	NCSD	strand
+.	PUN	.
+</s>
+</text>
+<text id="t3" title="Samtale" year="2024">
+<s id="6">
+Har	VPRA	have
+du	PP2	du
+set	VPTC	se
+min	PO	min
+hund	NCSI	hund
+spørger	VPRA	spørge
+hun	PP3	hun
+.	PUN	.
+</s>
+</text>

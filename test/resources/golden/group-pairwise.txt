@@ -1,0 +1,13 @@
+NCSI	hund	3
+NCPI	hund	1
+NCPI	kat	1
+NCPI	ven	1
+NCSD	bord	1
+NCSD	hav	1
+NCSD	have	1
+NCSD	hund	1
+NCSD	kat	1
+NCSD	sol	1
+NCSD	strand	1
+NCSI	dag	1
+NP	København	1

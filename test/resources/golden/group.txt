@@ -1,0 +1,10 @@
+hund	5
+kat	2
+København	1
+bord	1
+dag	1
+hav	1
+have	1
+sol	1
+strand	1
+ven	1
