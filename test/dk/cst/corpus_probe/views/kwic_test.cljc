@@ -54,7 +54,7 @@
    :structs {:text_title "Hverdag"}})
 
 (deftest hit-row-test
-  (let [row (kwic/hit-row sample-hit false)]
+  (let [row (kwic/hit-row "en" sample-hit false)]
     (testing "the row carries its corpus position as data"
       (is (= "9" (:data-cpos (second row)))))
     (testing "the corpus-position cell is a disclosure button showing the cpos"
@@ -65,19 +65,24 @@
         (is (= [:toggle-context {:corpus "PROBE" :cpos 9 :matchend 9}]
                (get-in button [1 :on :click])))))
     (testing "aria-expanded tracks the expanded flag"
-      (is (= "true" (get-in (kwic/hit-row sample-hit true)
+      (is (= "true" (get-in (kwic/hit-row "en" sample-hit true)
                             [2 1 1 :aria-expanded]))))
+    (testing "the disclosure button is labelled in the given language"
+      (is (= "Toggle wider context" (get-in row [2 1 1 :title])))
+      (is (= "Vis eller skjul bredere kontekst"
+             (get-in (kwic/hit-row "da" sample-hit false) [2 1 1 :title]))))
     (testing "the match is wrapped in a mark element"
       (is (= :mark (get-in row [5 1 0]))))))
 
 (deftest hit-rows-test
   (testing "a hit with no expansion is a single row"
-    (is (= 1 (count (kwic/hit-rows {} sample-hit)))))
+    (is (= 1 (count (kwic/hit-rows {:lang "en"} sample-hit)))))
   (testing "an expanded hit adds a full-width context row after it"
     (let [ex   {:left  [{:word "en"}]
                 :match [{:word "hund"}]
                 :right [{:word "i"}]}
-          rows (kwic/hit-rows {["PROBE" 9] ex} sample-hit)]
+          rows (kwic/hit-rows {:lang "en" :expanded {["PROBE" 9] ex}}
+                              sample-hit)]
       (is (= 2 (count rows)))
       (is (= :tr.expanded (first (second rows))))
       (is (= 5 (get-in (second rows) [1 1 :colspan])))
@@ -86,26 +91,31 @@
                         (= {:text_title "Hverdag"} (:structs %)))
                   (tree-seq coll? seq (second rows)))))))
   (testing "the same position in another corpus is not expanded"
-    (is (= 1 (count (kwic/hit-rows {["VISER" 9] {}} sample-hit)))))
+    (is (= 1 (count (kwic/hit-rows {:lang     "en"
+                                    :expanded {["VISER" 9] {}}}
+                                   sample-hit)))))
   (testing "a pending (non-map) placeholder shows a loading row"
-    (let [rows (kwic/hit-rows {["PROBE" 9] :loading} sample-hit)]
+    (let [rows (kwic/hit-rows {:lang "en" :expanded {["PROBE" 9] :loading}}
+                              sample-hit)]
       (is (= 2 (count rows)))
       (is (= "…" (get-in (second rows) [1 2]))))))
 
 (deftest concordance-test
   (let [hits   [sample-hit (assoc sample-hit :corpus "VISER" :cpos 3)]
-        groups (nth (kwic/concordance hits {:langs {"VISER" "da"}}) 2)]
+        groups (nth (kwic/concordance hits {:lang  "en"
+                                            :langs {"VISER" "da"}})
+                    2)]
     (testing "hits are grouped by corpus, each group headed by its name"
       (is (= 2 (count groups)))
       (is (= [:th {:scope "rowgroup" :colspan 5}
-              [:a {:href "/corpus/probe"} [:code "PROBE"]]]
+              [:a {:href "/corpus/probe?lang=en"} [:code "PROBE"]]]
              (get-in (first groups) [2 1]))))
     (testing "a group carries its corpus's language when known"
       (is (nil? (:lang (second (first groups)))))
       (is (= "da" (:lang (second (second groups))))))
     (testing "hits without a corpus form one plain group without a header"
       (let [group (first (nth (kwic/concordance [(dissoc sample-hit :corpus)]
-                                                {})
+                                                {:lang "en"})
                               2))]
         (is (= :tbody (first group)))
         (is (nil? (nth group 2)))))))

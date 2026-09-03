@@ -192,14 +192,15 @@
          (when (pos? n) (str " []{" n "}")))))
 
 (def sort-modes
-  "The KWIC sort modes, in display order: each maps to a label and the CQP
+  "The KWIC sort modes, in display order: each maps to the dictionary key
+  labelling it (see dk.cst.corpus-probe.i18n/dictionary) and the CQP
   command that reorders the result `Last`. The context sorts order by the
   words nearest the match (up to five tokens either side)."
-  [["corpus" "corpus order"  "sort Last;"]
-   ["word"   "match"         "set ExternalSort on; sort Last by word;"]
-   ["left"   "left context"  "set ExternalSort on; sort Last by word on match[-1] .. match[-5];"]
-   ["right"  "right context" "set ExternalSort on; sort Last by word on matchend[1] .. matchend[5];"]
-   ["random" "random"        "sort Last randomize 1;"]])
+  [["corpus" :sort-corpus "sort Last;"]
+   ["word"   :sort-word   "set ExternalSort on; sort Last by word;"]
+   ["left"   :sort-left   "set ExternalSort on; sort Last by word on match[-1] .. match[-5];"]
+   ["right"  :sort-right  "set ExternalSort on; sort Last by word on matchend[1] .. matchend[5];"]
+   ["random" :sort-random "sort Last randomize 1;"]])
 
 (defn sort-command
   "The CQP command that sorts `Last` for sort mode `mode` (see `sort-modes`);

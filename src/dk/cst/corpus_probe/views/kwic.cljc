@@ -12,6 +12,7 @@
   The server-side string renderer drops `:on`, so the same views render as
   plain HTML for first paint and become interactive once the client mounts."
   (:require [clojure.string :as str]
+            [dk.cst.corpus-probe.i18n :as i18n]
             [dk.cst.corpus-probe.views.corpus :as corpus-views]))
 
 (defn hit-key
@@ -85,12 +86,14 @@
 (defn hit-row
   "One KWIC `hit` as a table row, the row carrying its corpus positions. The
   corpus-position cell is a disclosure button toggling the hit's wider
-  context; `expanded?` sets its `aria-expanded` state."
-  [{:keys [corpus cpos left match right structs anchors] :as hit} expanded?]
+  context, labelled in language `lang`; `expanded?` sets its
+  `aria-expanded` state."
+  [lang {:keys [corpus cpos left match right structs anchors] :as hit}
+   expanded?]
   (let [source (hit-source hit)]
     [:tr.hit (position-data cpos anchors)
      [:td.cpos [:button {:type          "button"
-                         :title         "Toggle wider context"
+                         :title         (i18n/tr lang :wider-context)
                          :aria-expanded (str (boolean expanded?))
                          :on            {:click [:toggle-context
                                                  {:corpus   corpus
@@ -121,42 +124,47 @@
   [:tr.expanded [:td {:colspan 5} "…"]])
 
 (defn hit-rows
-  "The row(s) for `hit`: the KWIC row, followed by its expanded-context row
-  when `expanded` holds a fetched hit under its `hit-key`, or a loading
-  row while a placeholder is pending."
-  [expanded hit]
+  "The row(s) for `hit` under the concordance `opts` (see `concordance`),
+  in its UI language `:lang`: the KWIC row, followed by its
+  expanded-context row when `:expanded`
+  holds a fetched hit under its `hit-key`, or a loading row while a
+  placeholder is pending."
+  [{:keys [lang expanded] :as opts} hit]
   (let [ex  (get expanded (hit-key hit))
-        row (hit-row hit (some? ex))]
+        row (hit-row lang hit (some? ex))]
     (cond
       (nil? ex) [row]
       (map? ex) [row (expanded-row (hit-source hit) ex)]
       :else     [row (loading-row)])))
 
 (defn corpus-group
-  "The rows of `hits`, all from one corpus, as a row group: a header row
-  naming the corpus (linking to its info page), then the hit rows with
-  their expansions from `expanded`. The group carries the corpus's
-  language from `langs` when known, since the corpus text is in its own
-  language while the surrounding UI is not."
-  [expanded langs [{:keys [corpus]} :as hits]]
-  (let [lang (get langs corpus)]
+  "The rows of `hits`, all from one corpus, as a row group under the
+  concordance `opts` (see `concordance`): a header row naming the corpus
+  (linking to its info page in the UI language `:lang`), then the hit rows
+  with their expansions. The
+  group carries the corpus's own language from `:langs` when known, since
+  the corpus text is in its own language while the surrounding UI is not."
+  [{:keys [lang langs] :as opts} [{:keys [corpus]} :as hits]]
+  (let [corpus-lang (get langs corpus)]
     [:tbody (cond-> {}
-              corpus (assoc :data-corpus corpus)
-              lang   (assoc :lang lang))
+              corpus      (assoc :data-corpus corpus)
+              corpus-lang (assoc :lang corpus-lang))
      (when corpus
        [:tr.corpus
         [:th {:scope "rowgroup" :colspan 5}
-         [:a {:href (corpus-views/corpus-href corpus)} [:code corpus]]]])
-     (mapcat #(hit-rows expanded %) hits)]))
+         [:a {:href (corpus-views/corpus-href lang corpus)}
+          [:code corpus]]]])
+     (mapcat #(hit-rows opts %) hits)]))
 
 (defn concordance
   "The KWIC `hits` of one result page as a table, one row group per corpus
   in the order the hits arrive.
 
   `opts` may carry a `:caption` (hiccup or string describing the result),
-  `:langs` (corpus name to language code) and `:expanded`, a map of
-  `hit-key` to a wider-context hit to render beneath its row."
-  [hits {:keys [caption langs expanded]}]
+  `:lang` (the UI language of the row controls), `:langs` (corpus name to
+  the language of its own text) and `:expanded`, a map of `hit-key` to a
+  wider-context hit to render beneath its row."
+  [hits {:keys [caption] :as opts}]
   [:table.kwic
    (when caption [:caption caption])
-   (map #(corpus-group expanded langs %) (partition-by :corpus hits))])
+   (map #(corpus-group opts %) (partition-by :corpus hits))])

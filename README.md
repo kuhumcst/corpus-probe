@@ -15,8 +15,13 @@ output parsers, the KWIC concordance with paging, sorting and context
 expansion, the ClojureScript client, and the breadth features (the corpus
 chooser and multi-corpus search, simple search, frequency tables, corpus
 info pages, TSV/CSV export). Milestone 5, the cutover, is in progress:
-metadata filtering is done; the Danish UI, the registry vetting and the
-deployment next to KORP remain (see PLAN.md section 12).
+metadata filtering and the Danish and English UI are done; the registry
+vetting and the deployment next to KORP remain (see PLAN.md section 12).
+
+The interface is served in Danish or English, chosen by the `lang` query
+parameter, then by the request's `Accept-Language`, then Danish. What CWB
+itself says (query errors, attribute names, corpus titles and corpus text)
+is always shown verbatim.
 
 At the REPL, one function call in, plain data out:
 

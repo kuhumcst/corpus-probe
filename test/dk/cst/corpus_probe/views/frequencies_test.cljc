@@ -4,7 +4,8 @@
             [dk.cst.corpus-probe.views.frequencies :as freq]))
 
 (deftest attr-control-test
-  (let [html (freq/attr-control [{:type :positional :name :word}
+  (let [html (freq/attr-control "en"
+                                [{:type :positional :name :word}
                                  {:type :positional :name :lemma}
                                  {:type :structural :name :text_year}]
                                 "lemma")]
@@ -29,26 +30,33 @@
 (deftest frequency-summary-test
   (testing "only the corpora that could be counted are counted"
     (is (= "31 hits in 2 corpora by lemma · 2 values"
-           (freq/frequency-summary sample-result 2))))
+           (freq/frequency-summary "en" sample-result 2))))
   (testing "a metadata filter qualifies the corpora"
     (is (= "31 hits in 2 corpora within text_year 1591 by lemma · 2 values"
-           (freq/frequency-summary (assoc sample-result
+           (freq/frequency-summary "en"
+                                   (assoc sample-result
                                           :filter {:text_year #{"1591"}})
                                    2))))
   (testing "a cut table says so"
     (is (re-find #"the 1 most frequent shown"
-                 (freq/frequency-summary sample-result 1))))
+                 (freq/frequency-summary "en" sample-result 1))))
   (testing "a whole-corpus table counts all tokens"
     (is (= "All tokens in PROBE by word · 0 values"
-           (freq/frequency-summary {:query  ""
+           (freq/frequency-summary "en"
+                                   {:query  ""
                                     :attr   :word
                                     :counts [{:corpus "PROBE" :tokens 47
                                               :size 47}]
                                     :rows   []}
-                                   0)))))
+                                   0))))
+  (testing "the same caption in Danish, the attribute name untranslated"
+    (is (= "31 træf i 2 korpusser efter lemma · 2 værdier"
+           (freq/frequency-summary "da" sample-result 2)))
+    (is (re-find #", de 1 hyppigste vises"
+                 (freq/frequency-summary "da" sample-result 1)))))
 
 (deftest frequency-table-test
-  (let [table (freq/frequency-table sample-result)
+  (let [table (freq/frequency-table "en" sample-result)
         [_ _ _ colgroups thead tbody] table
         row   (first (nth tbody 1))]
     (testing "a column group per readable corpus and one for the total"
@@ -68,5 +76,10 @@
       (is (= [:th {:scope "row"} "hund"] (nth row 1))))
     (testing "one corpus gets no total columns"
       (let [single (freq/frequency-table
-                    (update sample-result :counts (partial take 1)))]
-        (is (not (some #{"total"} (deep single))))))))
+                    "en" (update sample-result :counts (partial take 1)))]
+        (is (not (some #{"total"} (deep single))))))
+    (testing "the headings are translated, the attribute name is not"
+      (let [da (deep (freq/frequency-table "da" sample-result))]
+        (is (some #{"frekvens"} da))
+        (is (some #{"i alt"} da))
+        (is (some #{[:code "lemma"]} da))))))

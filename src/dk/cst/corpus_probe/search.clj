@@ -21,7 +21,9 @@
             [dk.cst.corpus-probe.parse :as parse]
             [dk.cst.corpus-probe.query :as query]
             [dk.cst.corpus-probe.tools :as tools]
-            [io.pedestal.log :as log]))
+            [io.pedestal.log :as log])
+  (:import [java.text Collator]
+           [java.util Comparator Locale]))
 
 (defn corpus-ctx
   "Return `ctx` configured for `corpus`: validates the corpus name (it is
@@ -334,10 +336,45 @@
     (catch Exception e
       {:corpus corpus :error (error-map e)})))
 
-(defn merge-frequencies
+(defn locale
+  "The java.util.Locale named by LC_ALL value `s` (\"da_DK.UTF-8\"), or the
+  root locale when it names none.
+
+  A POSIX locale name is its BCP 47 tag with an underscore for the hyphen
+  and a charset or modifier suffix, so dropping the suffix and putting the
+  hyphen back is the whole conversion."
+  [s]
+  (-> (str s)
+      (str/replace #"[.@].*$" "")
+      (str/replace "_" "-")
+      (Locale/forLanguageTag)))
+
+(defn ->collator
+  "A collator over annotation values in the locale `ctx` sorts in (its
+  :sort-locale, see `locale`).
+
+  The values come out of the corpora, and this is the locale CQP itself
+  collates them in when it sorts a concordance, so a value list and a
+  concordance agree on where æ, ø and å belong. Collators are stateful,
+  so each caller gets its own."
+  [ctx]
+  (Collator/getInstance (locale (:sort-locale ctx))))
+
+(defn row-order
+  "A comparator putting merged frequency rows in display order: the
+  largest total first, ties broken by value in the collation of
+  `collator`."
+  [^Comparator collator]
+  (fn [a b]
+    (let [c (compare (:total b) (:total a))]
+      (if (zero? c)
+        (.compare collator (:value a) (:value b))
+        c))))
+
+(defn frequency-rows
   "Merge the per-corpus breakdowns `results` (as from `corpus-frequencies!`,
-  failures excluded) into one table: [{:value <s> :freqs {corpus <n>}
-  :total <n>} ...] sorted by descending total, then by value."
+  failures excluded) into the rows of one table, in no order: [{:value <s>
+  :freqs {corpus <n>} :total <n>} ...]."
   [results]
   (->> (for [{:keys [corpus freqs]} results
              {:keys [values freq]}  freqs]
@@ -346,9 +383,13 @@
                  (assoc-in acc [value corpus] freq))
                {})
        (map (fn [[value freqs]]
-              {:value value :freqs freqs :total (reduce + (vals freqs))}))
-       (sort-by (juxt (comp - :total) :value))
-       (vec)))
+              {:value value :freqs freqs :total (reduce + (vals freqs))}))))
+
+(defn merge-frequencies
+  "The `frequency-rows` of `results` in display order (see `row-order`,
+  which orders by descending total and breaks ties with `collator`)."
+  [collator results]
+  (vec (sort (row-order collator) (frequency-rows results))))
 
 (defn frequency-table!
   "Break the matches of CQP `query` in each of `corpora` (uppercase names,
@@ -371,7 +412,7 @@
       :filter (:filter opts)
       :attr   (keyword attr)
       :counts (mapv #(dissoc % :freqs) results)
-      :rows   (merge-frequencies (remove :error results))})))
+      :rows   (merge-frequencies (->collator ctx) (remove :error results))})))
 
 (defn corpus-filters!
   "The metadata filters `corpus` offers via `ctx` without failing: one
@@ -395,11 +436,12 @@
 (defn filter-rows
   "The values of metadata attribute `attr` among the `entries` of
   `corpus-filters!`, merged over their corpora like a frequency table
-  (the counts are regions) and sorted by value."
-  [attr entries]
+  (the counts are regions) and sorted by value in the collation of
+  `collator` (see `->collator`)."
+  [collator attr entries]
   (->> (filter #(= attr (:attr %)) entries)
-       (merge-frequencies)
-       (sort-by :value)
+       (frequency-rows)
+       (sort-by :value collator)
        (vec)))
 
 (defn filter-options!
@@ -415,7 +457,8 @@
                               corpora)
                       (apply concat))
         attrs    (distinct (map :attr entries))
-        unlisted (set (map :attr (remove :freqs entries)))]
+        unlisted (set (map :attr (remove :freqs entries)))
+        collator (->collator ctx)]
     {:attrs    (vec (for [attr (remove unlisted attrs)]
-                      {:name attr :rows (filter-rows attr entries)}))
+                      {:name attr :rows (filter-rows collator attr entries)}))
      :unlisted (vec (filter unlisted attrs))}))

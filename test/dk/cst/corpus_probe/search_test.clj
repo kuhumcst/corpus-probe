@@ -244,17 +244,48 @@
      (is (= [:word :s_id :text_id :text_speaker :text_party :text_year]
             (map :name (search/groupable-attrs! ctx "TALER")))))))
 
+(def da-collator
+  "The collator of a Danish installation, as the handlers build it."
+  (delay (search/->collator {:sort-locale "da_DK.UTF-8"})))
+
+(deftest locale-test
+  (testing "an LC_ALL value names its language and territory"
+    (is (= "da" (.getLanguage (search/locale "da_DK.UTF-8"))))
+    (is (= "DK" (.getCountry (search/locale "da_DK.UTF-8"))))
+    (is (= "en" (.getLanguage (search/locale "en_US")))))
+  (testing "a value naming no locale is the root one"
+    (is (= java.util.Locale/ROOT (search/locale "C")))
+    (is (= java.util.Locale/ROOT (search/locale "")))
+    (is (= java.util.Locale/ROOT (search/locale nil)))))
+
+(deftest collator-test
+  (testing "Danish sorts æ, ø and å after z, not among the vowels"
+    (is (= ["and" "brød" "zoo" "ægte" "øl" "århus"]
+           (sort @da-collator
+                 ["øl" "ægte" "zoo" "århus" "and" "brød"]))))
+  (testing "an installation with no sort locale still sorts"
+    (is (= ["a" "z"] (sort (search/->collator {}) ["z" "a"])))))
+
 (deftest merge-frequencies-test
   (testing "values are merged across corpora and sorted by total, then value"
     (is (= [{:value "hund" :freqs {"A" 5 "B" 1} :total 6}
             {:value "borg" :freqs {"B" 2} :total 2}
             {:value "kat" :freqs {"A" 2} :total 2}]
            (search/merge-frequencies
+            @da-collator
             [{:corpus "A" :freqs [{:values ["hund"] :freq 5}
                                   {:values ["kat"] :freq 2}]}
              {:corpus "B" :freqs [{:values ["borg"] :freq 2}
                                   {:values ["hund"] :freq 1}]}]))))
-  (is (= [] (search/merge-frequencies []))))
+  (testing "ties in the total are broken by the collation, not by code point"
+    (is (= ["and" "ægte" "øl"]
+           (map :value
+                (search/merge-frequencies
+                 @da-collator
+                 [{:corpus "A" :freqs [{:values ["øl"] :freq 1}
+                                       {:values ["ægte"] :freq 1}
+                                       {:values ["and"] :freq 1}]}])))))
+  (is (= [] (search/merge-frequencies @da-collator []))))
 
 (deftest frequency-table-test
   (when-cwb

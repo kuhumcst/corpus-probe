@@ -21,8 +21,9 @@
 /* the expanded-context row spans all columns and wraps */
 .kwic .expanded td { white-space: normal; text-align: left; }
 
-/* the site nav is a horizontal link list */
+/* the site nav is a horizontal link list; the page you are on is marked */
 header nav ul { list-style: none; display: flex; gap: 1em; padding: 0; }
+header nav [aria-current] { font-weight: bold; }
 
 /* statistics tables (attributes, hit counts, frequencies): separated
    columns, aligned numbers */

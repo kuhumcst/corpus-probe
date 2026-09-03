@@ -3,27 +3,36 @@
             [dk.cst.corpus-probe.views.hiccup :refer [deep]]
             [dk.cst.corpus-probe.views.corpus :as corpus]))
 
-(deftest group-digits-test
-  (is (= "0" (corpus/group-digits 0)))
-  (is (= "999" (corpus/group-digits 999)))
-  (is (= "1,000" (corpus/group-digits 1000)))
-  (is (= "64,600,000" (corpus/group-digits 64600000))))
-
 (deftest corpus-item-test
   (testing "a titled corpus links its title and shows its ID"
-    (let [item (corpus/corpus-item {:id "VISER" :title "Folkeviser" :size 48})]
-      (is (= [:a {:href "/corpus/viser"} "Folkeviser"] (second item)))
+    (let [item (corpus/corpus-item "en" {:id    "VISER"
+                                         :title "Folkeviser"
+                                         :size  48})]
+      (is (= [:a {:href "/corpus/viser?lang=en"} "Folkeviser"] (second item)))
       (is (some #{[:code "VISER"]} (deep item)))))
   (testing "an untitled corpus links its ID"
-    (is (= [:a {:href "/corpus/probe"} "PROBE"]
-           (second (corpus/corpus-item {:id "PROBE" :size 47})))))
-  (testing "an unreadable corpus is marked unavailable"
+    (is (= [:a {:href "/corpus/probe?lang=en"} "PROBE"]
+           (second (corpus/corpus-item "en" {:id "PROBE" :size 47})))))
+  (testing "the info link keeps the language"
+    (is (= [:a {:href "/corpus/probe?lang=da"} "PROBE"]
+           (second (corpus/corpus-item "da" {:id "PROBE" :size 47})))))
+  (testing "an unreadable corpus is marked unavailable in either language"
     (is (some #{[:em "unavailable"]}
-              (deep (corpus/corpus-item {:id "GONE" :size nil}))))))
+              (deep (corpus/corpus-item "en" {:id "GONE" :size nil}))))
+    (is (some #{[:em "utilgængelig"]}
+              (deep (corpus/corpus-item "da" {:id "GONE" :size nil}))))))
+
+(deftest token-count-test
+  (testing "the digits are grouped as the language groups them"
+    (is (= [:data.size {:value "64600000"} "64,600,000 tokens"]
+           (corpus/token-count "en" 64600000)))
+    (is (= [:data.size {:value "64600000"} "64.600.000 tokens"]
+           (corpus/token-count "da" 64600000)))))
 
 (deftest chooser-item-test
   (let [checkbox (fn [selected m]
-                   (second (get-in (corpus/chooser-item selected m) [1 1])))]
+                   (second (get-in (corpus/chooser-item "en" selected m)
+                                   [1 1])))]
     (testing "a corpus is a checkbox named corpus, checked when selected"
       (is (= {:type "checkbox" :name "corpus" :value "VISER"
               :checked true :disabled false}
@@ -35,19 +44,20 @@
 (deftest folder-view-test
   (let [litteratur {:label   "Litteratur"
                     :corpora [{:id "VISER" :size 48}]
-                    :folders []}]
+                    :folders []}
+        item       (partial corpus/corpus-item "en")]
     (testing "a labelled folder is a disclosure, open as told"
-      (let [[tag attrs summary] (corpus/folder-view corpus/corpus-item
+      (let [[tag attrs summary] (corpus/folder-view item
                                                     (constantly true)
                                                     litteratur)]
         (is (= :details tag))
         (is (:open attrs))
         (is (= [:summary "Litteratur"] summary)))
-      (is (not (:open (second (corpus/folder-view corpus/corpus-item
+      (is (not (:open (second (corpus/folder-view item
                                                   (constantly false)
                                                   litteratur))))))
     (testing "the label-less tail folder is a bare list"
-      (is (= :ul (first (corpus/folder-view corpus/corpus-item
+      (is (= :ul (first (corpus/folder-view item
                                             (constantly true)
                                             {:label   nil
                                              :corpora [{:id "PROBE" :size 1}]
@@ -62,25 +72,34 @@
                  {:label "Folketinget" :corpora [{:id "TALER" :size 42}]
                   :folders []}]
         open    (fn [selected]
-                  (->> (deep (corpus/chooser folders selected))
+                  (->> (deep (corpus/chooser "en" folders selected))
                        (filter #(and (map? %) (contains? % :open)))
                        (map :open)))]
     (testing "folders holding a selected corpus start open, others closed"
       (is (= [true true false] (open #{"VISER"})))
-      (is (= [false false false] (open #{}))))))
+      (is (= [false false false] (open #{}))))
+    (testing "the legend is in the chosen language"
+      (is (some #{[:legend "Korpusser"]}
+                (deep (corpus/chooser "da" folders #{})))))))
 
 (deftest labelled-folders-test
   (testing "a lone label-less folder stays as it is"
-    (is (= [{:label nil}] (corpus/labelled-folders [{:label nil}]))))
-  (testing "among labelled siblings the tail is labelled Other"
+    (is (= [{:label nil}] (corpus/labelled-folders "en" [{:label nil}]))))
+  (testing "among labelled siblings the tail is labelled in the language"
     (is (= ["A" "Other"]
            (map :label
-                (corpus/labelled-folders [{:label "A"} {:label nil}]))))))
+                (corpus/labelled-folders "en" [{:label "A"} {:label nil}]))))
+    (is (= ["A" "Andre"]
+           (map :label
+                (corpus/labelled-folders "da"
+                                         [{:label "A"} {:label nil}]))))))
 
 (deftest count-cell-test
-  (is (= [:td.n "1,000"] (corpus/count-cell 1000)))
+  (is (= [:td.n "1,000"] (corpus/count-cell "en" 1000)))
+  (is (= [:td.n "1.000"] (corpus/count-cell "da" 1000)))
   (testing "a missing count is the tool's own NO DATA"
-    (is (= [:td.n [:em "no data"]] (corpus/count-cell nil)))))
+    (is (= [:td.n [:em "no data"]] (corpus/count-cell "en" nil)))
+    (is (= [:td.n [:em "ingen data"]] (corpus/count-cell "da" nil)))))
 
 (deftest info-view-test
   (let [data {:corpus "VISER"
@@ -94,7 +113,7 @@
                        :a-attrs []}
               :info   {:properties {:language "da" :charset "utf8"}
                        :info       "Om korpusset."}}
-        html (pr-str (corpus/info-view data))]
+        html (pr-str (corpus/info-view "en" data))]
     (testing "the title is the registry name, the ID its subtitle"
       (is (re-find #":h2 .*\"Folkeviser\"" html))
       (is (re-find #":code \"VISER\"" html)))
@@ -106,9 +125,16 @@
       (is (= 1 (count (re-seq #"\"utf8\"" html)))))
     (testing "an attribute without data is marked as such"
       (is (re-find #"no data" html)))
+    (testing "the page is otherwise in the UI language, not the corpus's"
+      (let [da (pr-str (corpus/info-view "da" data))]
+        (is (re-find #"Positionelle attributter" da))
+        (is (re-find #"Søg i" da))
+        (testing "and its own links keep it"
+          (is (re-find #"/\?corpus=VISER&lang=da" da)))))
     (testing "an error becomes a fixed alert leaking nothing of its message"
-      (let [html (pr-str (corpus/info-view {:corpus "GONE"
-                                            :error  {:message "/srv/secret"}}))]
+      (let [html (pr-str (corpus/info-view "en" {:corpus "GONE"
+                                                 :error  {:message
+                                                          "/srv/secret"}}))]
         (is (re-find #"Could not read corpus" html))
         (is (not (re-find #"/srv/secret" html)))
         (is (not (re-find #":table" html)))))))

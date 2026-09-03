@@ -1,6 +1,7 @@
 (ns dk.cst.corpus-probe.query-test
   (:require [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]
+            [dk.cst.corpus-probe.i18n :as i18n]
             [dk.cst.corpus-probe.query :as query]))
 
 (deftest escape-literal-test
@@ -94,6 +95,11 @@
     (is (str/includes? (query/sort-command "word") "ExternalSort")))
   (testing "random sort uses a fixed seed"
     (is (str/includes? (query/sort-command "random") "randomize 1"))))
+
+(deftest sort-modes-test
+  (testing "every sort mode is labelled by a key the dictionary defines"
+    ;; `tr` renders an unknown key as its own name rather than failing
+    (is (empty? (remove i18n/dictionary (map second query/sort-modes))))))
 
 (deftest page-rows-test
   (is (= [0 24] (query/page-rows 0 25)))

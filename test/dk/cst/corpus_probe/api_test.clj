@@ -132,7 +132,8 @@
 
 (deftest corpus-page-test
   (let [ctx  {:registry "test/resources"}
-        page (fn [id] (api/corpus-page ctx {:path-params {:id id}}))]
+        page (fn [id] (api/corpus-page ctx {:path-params {:id id}
+                                            :query-params {:lang "en"}}))]
     (testing "a hostile corpus name is rejected before touching anything"
       (is (= 404 (:status (page "bad; exit"))))
       (is (= 404 (:status (page "../resources/registry-probe")))))
@@ -155,19 +156,80 @@
 
 (deftest search-title-test
   (testing "no query is just the app name"
-    (is (= "corpus-probe" (api/search-title {}))))
+    (is (= "corpus-probe" (api/search-title "en" {}))))
   (testing "a search names the query and corpus"
     (is (= "hund · PROBE · corpus-probe"
-           (api/search-title {:q "hund" :corpus ["PROBE"]}))))
+           (api/search-title "en" {:q "hund" :corpus ["PROBE"]}))))
   (testing "several corpora are counted"
     (is (= "hund · 2 corpora · corpus-probe"
-           (api/search-title {:q "hund" :corpus ["PROBE" "VISER"]}))))
+           (api/search-title "en" {:q "hund" :corpus ["PROBE" "VISER"]})))
+    (is (= "hund · 2 korpusser · corpus-probe"
+           (api/search-title "da" {:q "hund" :corpus ["PROBE" "VISER"]}))))
   (testing "no corpora are not counted"
-    (is (= "hund · corpus-probe" (api/search-title {:q "hund" :corpus []}))))
+    (is (= "hund · corpus-probe"
+           (api/search-title "en" {:q "hund" :corpus []}))))
   (testing "a metadata filter is named"
     (is (= "hund · PROBE · text_year 1591 · corpus-probe"
-           (api/search-title {:q "hund" :corpus ["PROBE"]
-                              :f.text_year ["1591"]})))))
+           (api/search-title "en" {:q "hund" :corpus ["PROBE"]
+                                   :f.text_year ["1591"]})))))
+
+(deftest accept-language-test
+  (testing "the first language we have wins, by quality"
+    (is (= "da" (api/accept-language "da-DK,da;q=0.9,en;q=0.8")))
+    (is (= "en" (api/accept-language "en-GB,en;q=0.9")))
+    (is (= "en" (api/accept-language "de,en;q=0.7,fr;q=0.9"))))
+  (testing "the quality parameter is case-insensitive and may carry spaces"
+    (is (= "da" (api/accept-language "da;Q=1")))
+    (is (= "en" (api/accept-language "de , en ; q=0.9"))))
+  (testing "a language offered at quality 0 is refused, not preferred"
+    (is (nil? (api/accept-language "en;q=0")))
+    (is (= "da" (api/accept-language "en;q=0,da;q=0.1"))))
+  (testing "a language we do not have yields nothing"
+    (is (nil? (api/accept-language "de-DE,fr;q=0.8")))
+    (is (nil? (api/accept-language "")))
+    (is (nil? (api/accept-language nil)))))
+
+(deftest request-language-test
+  (testing "the lang param wins when we have the language"
+    (is (= "en" (api/request-language {:query-params {:lang "en"}
+                                     :headers {"accept-language" "da"}}))))
+  (testing "a language we do not have falls back to the header"
+    (is (= "en" (api/request-language {:query-params {:lang "de"}
+                                     :headers {"accept-language" "en"}}))))
+  (testing "without either, Danish"
+    (is (= "da" (api/request-language {})))
+    (is (= "da" (api/request-language {:headers {"accept-language" "de"}}))))
+  (testing "a repeated param counts by its first value"
+    (is (= "en" (api/request-language {:query-params {:lang ["en" "da"]}})))))
+
+(deftest valueless-param-test
+  (testing "a query param written without a value names nothing"
+    ;; Pedestal parses `?foo` into {nil "foo"}, and a nil key names no
+    ;; param and no metadata filter
+    (is (not (api/filter-key? nil)))
+    (is (= "a=1" (api/query-string {nil "foo" :a 1})))
+    (is (= {} (api/filter-params {nil "foo"}))))
+  (testing "so it does not fail the page it was appended to"
+    (let [ctx {:registry "test/resources"}]
+      (is (= 200 (:status (api/corpora-page ctx {:uri "/corpora"
+                                                 :query-params {nil "foo"}}))))
+      (is (= 200 (:status (api/search-page ctx {:uri "/"
+                                                :query-params
+                                                {nil "foo"}})))))))
+
+(deftest language-hrefs-test
+  (let [hrefs (api/language-hrefs {:uri "/frequencies"
+                                   :query-params {:corpus ["A" "B"]
+                                                  :attr "word"
+                                                  :lang "da"}})]
+    (testing "each language is the same page in that language"
+      (is (= #{"da" "en"} (set (keys hrefs))))
+      (is (str/starts-with? (hrefs "en") "/frequencies?"))
+      (is (str/includes? (hrefs "en") "lang=en"))
+      (is (not (str/includes? (hrefs "en") "lang=da")))
+      (testing "keeping every other param, repeated ones included"
+        (is (str/includes? (hrefs "en") "corpus=A&corpus=B"))
+        (is (str/includes? (hrefs "en") "attr=word"))))))
 
 (deftest scalar-params-test
   (testing "a repeated scalar param keeps its first value, corpus its vector"
@@ -262,7 +324,10 @@
 
 (deftest frequencies-page-test
   (let [ctx  {:registry "test/resources"}
-        page (fn [params] (api/frequencies-page ctx {:query-params params}))]
+        page (fn [params]
+               (api/frequencies-page ctx
+                                     {:query-params (assoc params
+                                                           :lang "en")}))]
     (testing "a fresh visit is just the form"
       (let [{:keys [status body]} (page {})]
         (is (= 200 status))
@@ -270,7 +335,18 @@
         (is (not (str/includes? body "No corpus selected")))))
     (testing "a submission without a corpus is refused"
       (is (str/includes? (:body (page {:attr "word" :q "hund"}))
-                         "No corpus selected")))))
+                         "No corpus selected")))
+    (testing "the page is served in the language asked for"
+      (let [body (:body (api/frequencies-page
+                         ctx {:query-params {:lang "da"}}))]
+        (is (str/includes? body "<html lang=\"da\">"))
+        (is (str/includes? body "Gruppér efter"))
+        (is (str/includes? body "lang=en"))))
+    (testing "and in the language the browser asks for when none is given"
+      (let [body (:body (api/frequencies-page
+                         ctx {:headers {"accept-language" "en-GB,en;q=0.9"}}))]
+        (is (str/includes? body "<html lang=\"en\">"))
+        (is (str/includes? body "Group by"))))))
 
 (deftest export-validation-test
   (let [ctx    {:registry "test/resources"}

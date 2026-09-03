@@ -18,6 +18,7 @@
             [cognitect.transit :as transit]
             [dk.cst.corpus-probe.corpus :as corpus]
             [dk.cst.corpus-probe.export :as export]
+            [dk.cst.corpus-probe.i18n :as i18n]
             [dk.cst.corpus-probe.query :as query]
             [dk.cst.corpus-probe.search :as search]
             [dk.cst.corpus-probe.tools :as tools]
@@ -58,32 +59,79 @@
   [& parts]
   (str/join " · " (concat (remove str/blank? parts) ["corpus-probe"])))
 
+(defn accept-language
+  "The first language among the `Accept-Language` header value `s` that
+  this app has (see dk.cst.corpus-probe.i18n/languages), by descending
+  quality; nil when it names none.
+
+  Only the primary subtag counts, so `da-DK` counts as Danish. A tag
+  offered at quality 0 is refused rather than preferred (RFC 9110)."
+  [s]
+  (->> (str/split (str s) #",")
+       (keep (fn [item]
+               (let [[tag q] (str/split item #"(?i)\s*;\s*q\s*=")]
+                 (when-let [lang (first (str/split (str/trim tag) #"-"))]
+                   [(str/lower-case lang)
+                    (or (some-> q str/trim parse-double) 1.0)]))))
+       (filter (comp pos? second))
+       (sort-by (comp - second))
+       (some (fn [[lang _]] (when (i18n/supported? lang) lang)))))
+
+(defn request-language
+  "The UI language `request` is served in: its `lang` query param when the
+  app has that language, else the best match for its `Accept-Language`
+  header, else Danish (see dk.cst.corpus-probe.i18n/default-language).
+
+  A repeated `lang` param counts by its first value, as `scalar-params`
+  treats every other scalar param."
+  [request]
+  (let [param (get-in request [:query-params :lang])
+        param (if (vector? param) (first param) param)]
+    (or (when (i18n/supported? param) param)
+        (accept-language (get-in request [:headers "accept-language"]))
+        i18n/default-language)))
+
+(defn alternate-links
+  "The <link rel=alternate> tags naming this page in each language of
+  `switch` (a map of language code to that URL), so a crawler finds the
+  translations of a page it landed on."
+  [switch]
+  (apply str (for [[lang href] (sort switch)]
+               (correct-quote-escaping
+                (replicant/render [:link {:rel      "alternate"
+                                          :hreflang lang
+                                          :href     href}])))))
+
 (defn document
-  "The complete HTML document titled `title`: the site header, then the
-  rendered `body` hiccup (the page's <main>) in #app; a transit `payload`,
-  when given, is embedded as the #bootstrap script along with the client
-  script that takes over from it.
+  "The complete HTML document in UI language `lang` titled `title`: the
+  site header with its language `switch` (see
+  dk.cst.corpus-probe.views.layout/site-header), then the rendered `body`
+  hiccup (the page's <main>) in #app; a transit `payload`, when given, is
+  embedded as the #bootstrap script along with the client script that
+  takes over from it.
 
   The site header sits outside #app, so it is the document's banner rather
   than part of the main content, and the client never re-renders it. The
   document shell and the bootstrap script are emitted as strings rather
   than through Replicant, so the transit payload's double quotes are not
   mangled by the renderer bug (see `correct-quote-escaping`). The document
-  language is the UI language (English); corpus text carries its own
-  `lang`."
-  ([title body]
-   (document title body nil))
-  ([title body payload]
+  language is the UI language; corpus text carries its own `lang`."
+  ([lang switch title body]
+   (document lang switch title body nil))
+  ([lang switch title body payload]
    (str "<!DOCTYPE html>"
-        "<html lang=\"en\"><head>"
+        "<html lang=\"" lang "\"><head>"
         "<meta charset=\"utf-8\">"
         "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
-        "<meta name=\"description\" "
-        "content=\"Search CWB corpora and read KWIC concordances.\">"
+        (correct-quote-escaping
+         (replicant/render [:meta {:name    "description"
+                                   :content (i18n/tr lang :description)}]))
         (correct-quote-escaping (replicant/render [:title title]))
+        (alternate-links switch)
         "<link rel=\"stylesheet\" href=\"/css/style.css\">"
         "</head><body>"
-        (correct-quote-escaping (replicant/render (layout/site-header)))
+        (correct-quote-escaping
+         (replicant/render (layout/site-header lang switch)))
         "<div id=\"app\">"
         (correct-quote-escaping (replicant/render body))
         "</div>"
@@ -95,28 +143,49 @@
         "</body></html>")))
 
 (defn html-response
-  "A complete HTML page response with `html` as its body."
+  "A complete HTML page response with `html` as its body.
+
+  The page is served in the language its request asks for, so it varies by
+  `Accept-Language` and says so; a shared cache would otherwise hand one
+  reader's language to the next."
   [html]
   {:status  200
-   :headers {"Content-Type" "text/html; charset=utf-8"}
+   :headers {"Content-Type" "text/html; charset=utf-8"
+             "Vary"         "Accept-Language"}
    :body    html})
 
 (defn query-string
   "Encode map `m` as a URL query string, skipping nil values and repeating
-  the key of a vector value once per element."
+  the key of a vector value once per element.
+
+  A query param written without a `=` arrives under a nil key, which names
+  nothing and is skipped too."
   [m]
-  (->> (remove (comp nil? val) m)
+  (->> (remove (fn [[k v]] (or (nil? k) (nil? v))) m)
        (mapcat (fn [[k v]]
                  (for [v (if (vector? v) v [v])]
                    (str (name k) "=" (URLEncoder/encode (str v) "UTF-8")))))
        (str/join "&")))
 
+(defn language-hrefs
+  "The URL of the page `request` asks for in each supported language: its
+  own path and params with `lang` set to that language, so the switch in
+  the site header keeps the reader where they are."
+  [request]
+  (into {} (for [lang i18n/languages]
+             [lang (str (:uri request) "?"
+                        (query-string (assoc (:query-params request)
+                                             :lang lang)))])))
+
 (defn filter-key?
   "True when query param key `k` names a metadata filter: the filter
   prefix followed by the attribute name, as in `f.text_year` (see
-  dk.cst.corpus-probe.views.page/filter-prefix)."
+  dk.cst.corpus-probe.views.page/filter-prefix).
+
+  A query param written without a `=` arrives under a nil key, which names
+  no attribute."
   [k]
-  (str/starts-with? (name k) page/filter-prefix))
+  (boolean (and k (str/starts-with? (name k) page/filter-prefix))))
 
 (defn multi-param?
   "True when query param key `k` may repeat: the corpus selection and the
@@ -168,14 +237,14 @@
        (vec)))
 
 (defn search-title
-  "The document title of the search page for `params`: the query, the
-  selected corpora (`:corpus`, a vector of names, when any) and the
-  metadata filter when a search was made, else just the app name."
-  [{:keys [q corpus] :as params}]
+  "The document title of the search page for `params` in language `lang`:
+  the query, the selected corpora (`:corpus`, a vector of names, when any)
+  and the metadata filter when a search was made, else just the app name."
+  [lang {:keys [q corpus] :as params}]
   (if (str/blank? q)
     (page-title)
     (page-title q
-                (when (seq corpus) (page/corpora-phrase corpus))
+                (when (seq corpus) (page/corpora-phrase lang corpus))
                 (page/filter-phrase (filter-params params)))))
 
 (defn page-href
@@ -187,11 +256,11 @@
   (str "/?" (query-string (assoc (dissoc params :expand) :page page))))
 
 (defn search-params
-  "The `params` that identify a search (its corpora, query and metadata
-  filter), for linking the concordance and frequency views of the same
-  hits."
+  "The `params` that identify a search (its corpora, query, metadata
+  filter and UI language), for linking the concordance and frequency views
+  of the same hits."
   [params]
-  (into (select-keys params [:corpus :q :mode :ci :prefix :suffix])
+  (into (select-keys params [:corpus :q :mode :ci :prefix :suffix :lang])
         (filter (comp filter-key? key))
         params))
 
@@ -366,7 +435,8 @@
   the query params describe a search, its concordance or the reason there
   is none."
   [ctx request]
-  (let [params  (scalar-params (:query-params request))
+  (let [lang    (request-language request)
+        params  (scalar-params (:query-params request))
         corpora (corpus/corpora ctx)
         selected (corpora-param (:corpus params))
         [known unknown] (split-known corpora selected)
@@ -381,8 +451,9 @@
         ;; the page (and the embedded payload) exposes only corpus overviews;
         ;; the full registry maps carry absolute server paths and stay
         ;; server-side
-        params* (assoc params :corpus selected)
-        view-data {:folders    (corpus-tree! ctx corpora)
+        params* (assoc params :corpus selected :lang lang)
+        view-data {:lang       lang
+                   :folders    (corpus-tree! ctx corpora)
                    :filter-controls (filter-controls! ctx known params)
                    :sort-modes (mapv (fn [[value label _]] [value label])
                                      query/sort-modes)
@@ -404,11 +475,13 @@
                                                         :sort (:sort params))))
                    :export-limit export/hit-limit
                    :prev-href  (when (pos? page-n)
-                                 (page-href params (dec page-n)))
+                                 (page-href params* (dec page-n)))
                    :next-href  (when (and pages (< (inc page-n) pages))
-                                 (page-href params (inc page-n)))}]
+                                 (page-href params* (inc page-n)))}]
     (html-response
-     (document (search-title (:params view-data))
+     (document lang
+               (language-hrefs request)
+               (search-title lang (:params view-data))
                (page/app-view view-data)
                (->transit view-data)))))
 
@@ -452,7 +525,8 @@
   of the query's hits, or of the whole selected corpora when the query is
   blank, by the chosen attribute."
   [ctx request]
-  (let [params    (scalar-params (:query-params request))
+  (let [lang      (request-language request)
+        params    (scalar-params (:query-params request))
         corpora   (corpus/corpora ctx)
         selected  (corpora-param (:corpus params))
         [known unknown] (split-known corpora selected)
@@ -462,8 +536,9 @@
         outcome   (when submitted
                     (frequency-outcome! ctx known unknown cqp attr
                                         {:filter (filter-params params)}))
-        params*   (assoc params :corpus selected :attr attr)
-        view-data {:folders   (corpus-tree! ctx corpora)
+        params*   (assoc params :corpus selected :attr attr :lang lang)
+        view-data {:lang      lang
+                   :folders   (corpus-tree! ctx corpora)
                    :filter-controls (filter-controls! ctx known params)
                    :params    params*
                    :attrs     (attr-options! ctx known)
@@ -477,13 +552,17 @@
                                                  (assoc (search-params params*)
                                                         :attr attr)))}]
     (html-response
-     (document (if submitted
-                 (page-title (if cqp (:q params) "all tokens")
-                             (page/corpora-phrase selected)
+     (document lang
+               (language-hrefs request)
+               (if submitted
+                 (page-title (if cqp
+                               (:q params)
+                               (i18n/tr lang :all-tokens))
+                             (page/corpora-phrase lang selected)
                              (page/filter-phrase (filter-params params))
-                             (str "by " attr)
-                             "frequencies")
-                 (page-title "Frequencies"))
+                             (str (i18n/tr lang :by) " " attr)
+                             (i18n/tr lang :frequencies))
+                 (page-title (i18n/tr lang :frequencies)))
                (freq-views/frequencies-view view-data)))))
 
 (defn text-response
@@ -562,18 +641,23 @@
 (defn corpora-page
   "Handle the corpus index `request` against `ctx`: every registry corpus,
   summarized and grouped by the configured folder tree."
-  [ctx _request]
-  (html-response
-   (document (page-title "Corpora")
-             (corpus-views/index-view
-              {:folders (corpus-tree! ctx (corpus/corpora ctx))}))))
+  [ctx request]
+  (let [lang (request-language request)]
+    (html-response
+     (document lang
+               (language-hrefs request)
+               (page-title (i18n/tr lang :corpora-heading))
+               (corpus-views/index-view
+                lang
+                {:folders (corpus-tree! ctx (corpus/corpora ctx))})))))
 
 (defn corpus-page
   "Handle a corpus info page `request` against `ctx`, rendering the corpus
   named by the :id path parameter (case-insensitively); 404 when it is not
   a registry corpus."
   [ctx request]
-  (let [corpus (str/upper-case (str (get-in request [:path-params :id])))
+  (let [lang   (request-language request)
+        corpus (str/upper-case (str (get-in request [:path-params :id])))
         file   (when (query/corpus-name? corpus)
                  (corpus/registry-file ctx corpus))]
     (if-not (and file (corpus/registry-file? file))
@@ -584,8 +668,11 @@
                           (catch Exception e
                             {:error (search/error-map e)}))]
         (html-response
-         (document (page-title corpus)
+         (document lang
+                   (language-hrefs request)
+                   (page-title corpus)
                    (corpus-views/info-view
+                    lang
                     (assoc outcome
                            :corpus corpus
                            :title  (not-empty (:name registry))

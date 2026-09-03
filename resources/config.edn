@@ -1,7 +1,8 @@
 {:port        8080
  :registry    "dev/corpus/registry"
- ;; locale for CQP's ExternalSort collation (needs gawk on PATH); all KU
- ;; corpora are Danish, so a single locale suffices for now.
+ ;; locale for CQP's ExternalSort collation (needs gawk on PATH) and for the
+ ;; app's own collation of metadata and frequency values, so the two agree;
+ ;; all KU corpora are Danish, so a single locale suffices for now.
  :sort-locale "da_DK.UTF-8"
  ;; how many cqp processes one request runs at once, and the wall-clock
  ;; budget after which a search stops querying further corpora
