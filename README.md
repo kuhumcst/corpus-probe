@@ -15,8 +15,19 @@ output parsers, the KWIC concordance with paging, sorting and context
 expansion, the ClojureScript client, and the breadth features (the corpus
 chooser and multi-corpus search, simple search, frequency tables, corpus
 info pages, TSV/CSV export). Milestone 5, the cutover, is in progress:
-metadata filtering and the Danish and English UI are done; the registry
-vetting and the deployment next to KORP remain (see PLAN.md section 12).
+metadata filtering, the Danish and English UI and the startup vetting are
+done; the deployment next to KORP remains (see PLAN.md section 12).
+
+Startup vets the installation and logs what it finds. It checks that the
+CWB programs can be launched, and runs CQP's own sort pipeline (`sort ... |
+gawk`) under the configured locale to see whether it collates the way the
+app's own collator does, since when it does not CQP quietly serves corpus
+order instead. It then reads every registry corpus once, in the
+background, and names the ones CWB cannot open. A corpus that cannot be
+read is kept, because the registry says it exists: the chooser shows it
+disabled and its info page says CWB has no data for it. Logging goes
+through [Telemere](https://github.com/taoensso/telemere), which also backs
+SLF4J, so Pedestal's own output lands in the same place.
 
 The interface is served in Danish or English, chosen by the `lang` query
 parameter, then by the request's `Accept-Language`, then Danish. What CWB

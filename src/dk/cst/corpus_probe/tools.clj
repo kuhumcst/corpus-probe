@@ -53,7 +53,7 @@
                                           "-s" (str corpus)]))]
         (when (nil? (:size stats))
           (throw (ex-info "cwb-describe-corpus reported missing corpus data"
-                          {:corpus corpus})))
+                          {:corpus corpus :phantom? true})))
         stats))))
 
 (defn lexicon!

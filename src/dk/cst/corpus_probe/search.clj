@@ -21,7 +21,7 @@
             [dk.cst.corpus-probe.parse :as parse]
             [dk.cst.corpus-probe.query :as query]
             [dk.cst.corpus-probe.tools :as tools]
-            [io.pedestal.log :as log])
+            [taoensso.telemere :as t])
   (:import [java.text Collator]
            [java.util Comparator Locale]))
 
@@ -43,7 +43,7 @@
   (or (:error (ex-data e))
       (if (instance? clojure.lang.ExceptionInfo e)
         {:type :rejected :message (ex-message e)}
-        (do (log/error :msg "search failed" :exception e)
+        (do (t/error! ::search-failed e)
             {:type :internal}))))
 
 (defn pmap-n
@@ -429,8 +429,8 @@
             :attr   attr
             :freqs  (tools/annotation-values! ctx corpus attr)}))
     (catch Exception e
-      (log/warn :msg "metadata filters unavailable" :corpus corpus
-                :exception e)
+      (t/event! ::filters-unavailable
+                {:level :warn :error e :data {:corpus corpus}})
       nil)))
 
 (defn filter-rows

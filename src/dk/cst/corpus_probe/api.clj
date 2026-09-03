@@ -666,7 +666,8 @@
             outcome  (try {:stats (tools/describe-corpus! ctx corpus)
                            :info  (corpus/info! ctx corpus)}
                           (catch Exception e
-                            {:error (search/error-map e)}))]
+                            {:error    (search/error-map e)
+                             :phantom? (corpus/phantom? e)}))]
         (html-response
          (document lang
                    (language-hrefs request)

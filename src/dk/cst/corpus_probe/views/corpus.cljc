@@ -206,24 +206,29 @@
 
 (defn unreadable-section
   "The alert shown in language `lang` in place of the corpus facts when CWB
-  cannot read the corpus's data. Deliberately detail-free: the underlying
-  tool output can name server paths, which never reach a rendered page."
-  [lang]
+  cannot read the corpus's data, saying whether CWB has no data for the
+  registry entry at all (`phantom?`) or reading it failed this time.
+
+  Deliberately detail-free otherwise: the underlying tool output can name
+  server paths, which never reach a rendered page."
+  [lang phantom?]
   [:section.error {:role "alert"}
    [:h3 (i18n/tr lang :unreadable)]
-   [:p (i18n/tr lang :unreadable-why)]])
+   [:p (i18n/tr lang (if phantom? :undefined-why :unreadable-why))]])
 
 (defn info-view
   "The corpus info page body for `data` in UI language `lang`: the corpus
   title and ID, its facts, attribute statistics and .info text, and links
-  searching it and listing its word frequencies.
+  searching it and listing its word frequencies, which a `:phantom?` entry
+  cannot be and so does not get.
 
   `data` holds :corpus (the uppercase name), :title (its registry NAME, when
   set), :lang (its language code, when known: the title and the .info text
   are in the corpus's own language, the rest of the page is not), and
   either :stats (describe) + :info (`info;`) or an :error, which is
-  replaced by a fixed unreadable-corpus alert."
-  [lang {:keys [corpus title stats info error] corpus-lang :lang :as data}]
+  replaced by a fixed alert saying whether the entry is a `:phantom?`."
+  [lang {:keys [corpus title stats info error phantom?]
+         corpus-lang :lang :as data}]
   [:main
    [:article.corpus-info
     [:hgroup
@@ -232,16 +237,19 @@
        [:h2 corpus])
      (when title [:p [:code corpus]])]
     (if error
-      (unreadable-section lang)
+      (unreadable-section lang phantom?)
       (list
        (facts-list lang stats info)
        (p-attr-table lang stats)
        (s-attr-table lang stats)
        (a-attr-table lang stats)
        (info-text lang info corpus-lang)))
-    [:p
-     [:a {:href (str "/?corpus=" corpus "&lang=" lang)}
-      (str (i18n/tr lang :search-in) " " corpus)]
-     " · "
-     [:a {:href (str "/frequencies?corpus=" corpus "&attr=word&lang=" lang)}
-      (str (i18n/tr lang :word-freqs) " " corpus)]]]])
+    ;; a corpus CWB has no data for cannot be searched, so it is not
+    ;; offered, as the chooser does not offer it either
+    (when-not phantom?
+      [:p
+       [:a {:href (str "/?corpus=" corpus "&lang=" lang)}
+        (str (i18n/tr lang :search-in) " " corpus)]
+       " · "
+       [:a {:href (str "/frequencies?corpus=" corpus "&attr=word&lang=" lang)}
+        (str (i18n/tr lang :word-freqs) " " corpus)]])]])

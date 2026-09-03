@@ -112,6 +112,9 @@
                                   :message "CQP Error:\n\tCorpus ``X'' is undefined"}})]
       (is (corpus/phantom? e))
       (is (not (corpus/phantom? (ex-info "x" {:error {:type :timeout}}))))))
+  (testing "a cwb-* tool says it with a flag instead of CQP's wording"
+    (is (corpus/phantom? (ex-info "x" {:phantom? true})))
+    (is (not (corpus/phantom? (ex-info "x" {:corpus "X"})))))
   (testing "any other failure to read the size propagates"
     (is (thrown? Exception
                  (corpus/overview! {:registry (temp-registry fixture {})

@@ -1,11 +1,18 @@
 (ns dk.cst.corpus-probe.server
-  "Server lifecycle: configuration, start/stop and the main entry point."
+  "Server lifecycle: configuration, start/stop and the main entry point.
+
+  Startup vets the installation (see dk.cst.corpus-probe.vet): the CWB
+  programs and the sort collation before the port is bound, the registry
+  once it is open, since reading every corpus can be slow on a large or
+  ailing one. None of it stops the server."
   (:require [clojure.edn :as edn]
             [clojure.java.io :as io]
             [io.pedestal.connector :as conn]
             [io.pedestal.http.http-kit :as http-kit]
             [io.pedestal.interceptor :as interceptor]
-            [dk.cst.corpus-probe.api :as api])
+            [taoensso.telemere :as t]
+            [dk.cst.corpus-probe.api :as api]
+            [dk.cst.corpus-probe.vet :as vet])
   (:gen-class))
 
 (def content-security-policy
@@ -43,18 +50,31 @@
 
 (defn start!
   "Start the web server from `config` (default: config.edn); no-op when
-  already running. Returns the connector."
+  already running. Returns the connector.
+
+  Vets the CWB programs and the sort collation first, so a broken
+  installation is in the log before the port is bound, then vets the
+  registry in the background, since reading every corpus of a large one
+  takes a while and nothing it finds stops the server."
   ([]
    (start! (read-config)))
   ([{:keys [port] :as config}]
    (or @server
-       (reset! server
-               (-> (conn/default-connector-map port)
-                   (conn/with-default-interceptors)
-                   (update :interceptors #(into [csp-interceptor] %))
-                   (conn/with-routes (api/routes config))
-                   (http-kit/create-connector nil)
-                   (conn/start!))))))
+       (do
+         (vet/tools! config)
+         (vet/collation! config)
+         (let [connector (-> (conn/default-connector-map port)
+                             (conn/with-default-interceptors)
+                             (update :interceptors #(into [csp-interceptor] %))
+                             (conn/with-routes (api/routes config))
+                             (http-kit/create-connector nil)
+                             (conn/start!))]
+           ;; nothing waits on the vetting, so its own failure has to be
+           ;; logged where it happens or it is lost
+           (future (t/catch->error! {:id ::registry-vetting-failed
+                                     :catch-val nil}
+                                    (vet/registry! config)))
+           (reset! server connector))))))
 
 (defn stop!
   "Stop the web server when it is running."

@@ -144,6 +144,10 @@
                      :en "Could not read corpus"}
    :unreadable-why  {:da "CWB kunne ikke læse dette korpus' datafiler."
                      :en "CWB could not read this corpus's data files."}
+   :undefined-why   {:da (str "Registret har dette korpus, men CWB har "
+                              "ingen data til det.")
+                     :en (str "The registry lists this corpus, but CWB has "
+                              "no data for it.")}
    :search-in       {:da "Søg i" :en "Search"}
    :word-freqs      {:da "Ordfrekvenser i" :en "Word frequencies of"}
 

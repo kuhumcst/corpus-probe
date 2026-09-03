@@ -20,7 +20,16 @@
        (is (= [:word] (map :name (:p-attrs stats)))))
      (is (= 7 (count (:s-attrs stats)))))
    (testing "an unknown corpus throws instead of returning empty stats"
-     (is (thrown? Exception (tools/describe-corpus! ctx "NOSUCH"))))))
+     (is (thrown? Exception (tools/describe-corpus! ctx "NOSUCH"))))
+   (testing "an entry whose data are gone says so the way CQP's error does"
+     ;; the tool exits 0 for it, printing ERROR in place of the size, so
+     ;; the throw has to carry what a corpus with no entry at all does not
+     (let [phantom (fn [corpus reg]
+                     (corpus/phantom?
+                      (try (tools/describe-corpus! {:registry reg} corpus)
+                           (catch Exception e e))))]
+       (is (phantom "REGISTRY-PROBE" "test/resources"))
+       (is (not (phantom "NOSUCH" (:registry ctx))))))))
 
 (deftest describe-broken-attribute-test
   ;; one attribute whose data files are gone prints NO DATA for that row

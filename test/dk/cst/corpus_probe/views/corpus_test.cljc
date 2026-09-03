@@ -137,4 +137,30 @@
                                                           "/srv/secret"}}))]
         (is (re-find #"Could not read corpus" html))
         (is (not (re-find #"/srv/secret" html)))
-        (is (not (re-find #":table" html)))))))
+        (is (not (re-find #":table" html)))))
+    (testing "an entry CWB has no data for says so, not that reading failed"
+      (let [html (pr-str (corpus/info-view "en" {:corpus   "GONE"
+                                                 :error    {:message "x"}
+                                                 :phantom? true}))]
+        (is (re-find #"The registry lists this corpus" html))
+        (is (not (re-find #"could not read this corpus" html)))
+        (testing "and it is not offered for searching either"
+          (is (not (re-find #"Search GONE" html))))))
+    (testing "one that failed to be read this time is still offered"
+      (is (re-find #"Search GONE"
+                   (pr-str (corpus/info-view
+                            "en" {:corpus "GONE"
+                                  :error  {:message "x"}})))))))
+
+(deftest unreadable-section-test
+  (testing "a phantom entry and a failed read are told apart"
+    (is (some #{"The registry lists this corpus, but CWB has no data for it."}
+              (deep (corpus/unreadable-section "en" true))))
+    (is (some #{"CWB could not read this corpus's data files."}
+              (deep (corpus/unreadable-section "en" false))))
+    (is (some #{"Registret har dette korpus, men CWB har ingen data til det."}
+              (deep (corpus/unreadable-section "da" true)))))
+  (testing "both are one alert under the same heading"
+    (is (some #{[:h3 "Could not read corpus"]}
+              (deep (corpus/unreadable-section "en" true))))
+    (is (some #{"alert"} (deep (corpus/unreadable-section "en" false))))))

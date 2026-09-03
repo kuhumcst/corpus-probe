@@ -193,12 +193,16 @@
    :language (language m)})
 
 (defn phantom?
-  "True when exception `e` is CQP reporting a corpus as undefined: the
-  outcome for a registry entry whose data files are gone, which stays
-  that way until the entry changes."
+  "True when exception `e` says CWB has no data for a registry entry: CQP
+  reporting the corpus as undefined, or a cwb-* tool reporting its data as
+  missing (`:phantom?` in the ex-data).
+
+  The two tools say it differently and mean the same thing, and it stays
+  true until the entry changes."
   [e]
-  (boolean (re-find #"is undefined"
-                    (str (get-in (ex-data e) [:error :message])))))
+  (let [{:keys [error phantom?]} (ex-data e)]
+    (boolean (or phantom?
+                 (re-find #"is undefined" (str (:message error)))))))
 
 (defn overview!
   "The `overview` of registry entry map `m` plus its :size in tokens via
@@ -207,7 +211,10 @@
   The size is nil for a phantom entry (see `phantom?`), an outcome cached
   like any other so a phantom costs one process rather than one per
   request; any other failure to read the size propagates uncached, so a
-  transient one is retried."
+  transient one is retried.
+
+  The cache key follows the registry entry, not the corpus data, so
+  restoring the data of a phantom takes a restart to be noticed."
   [ctx m]
   (let [{:keys [id] :as summary} (overview m)]
     (with-facts-cache!

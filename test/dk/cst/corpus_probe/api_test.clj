@@ -3,7 +3,8 @@
             [clojure.test :refer [deftest is testing]]
             [cognitect.transit :as transit]
             [dk.cst.corpus-probe.api :as api]
-            [dk.cst.corpus-probe.cqp-test :refer [ctx when-cwb]])
+            [dk.cst.corpus-probe.cqp-test :refer [ctx when-cwb]]
+            [taoensso.telemere :as t])
   (:import [java.io ByteArrayInputStream]))
 
 (defn transit->
@@ -368,9 +369,13 @@
 
 (deftest attr-options-test
   (testing "an unreadable corpus contributes nothing, word remains"
+    ;; the corpus is deliberately unreadable; its error, and the stack
+    ;; trace with it, would only look like a failing test
     (is (= [{:type :positional :name :word}]
-           (api/attr-options! {:registry "test/resources" :cqp "no-such-cqp"}
-                              ["REGISTRY-PROBE"]))))
+           (t/with-min-level :fatal
+             (api/attr-options! {:registry "test/resources"
+                                 :cqp      "no-such-cqp"}
+                                ["REGISTRY-PROBE"])))))
   (when-cwb
    (testing "the union over corpora, positional first, keeps registry order"
      (is (= [:word :pos :lemma :s_id :text_id :text_title :text_year
@@ -380,10 +385,11 @@
 (deftest export-failure-test
   (testing "a search that fails everywhere is a 400 with the reasons"
     (let [{:keys [status headers body]}
-          (api/export-kwic {:registry "test/resources" :cqp "no-such-cqp"}
-                           {:query-params {:corpus "REGISTRY-PROBE"
-                                           :q      "hund"
-                                           :format "tsv"}})]
+          (t/with-min-level :fatal
+            (api/export-kwic {:registry "test/resources" :cqp "no-such-cqp"}
+                             {:query-params {:corpus "REGISTRY-PROBE"
+                                             :q      "hund"
+                                             :format "tsv"}}))]
       (is (= 400 status))
       (is (str/starts-with? (get headers "Content-Type") "text/plain"))
       (is (str/starts-with? body "REGISTRY-PROBE: internal")))))

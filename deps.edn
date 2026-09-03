@@ -5,7 +5,12 @@
         io.pedestal/pedestal.service {:mvn/version "0.8.1"}
         io.pedestal/pedestal.http-kit {:mvn/version "0.8.1"}
         no.cjohansen/replicant         {:mvn/version "2026.07.1"}
-        com.cognitect/transit-clj      {:mvn/version "1.0.333"}}
+        com.cognitect/transit-clj      {:mvn/version "1.0.333"}
+        ;; logging. The -slf4j backend routes Pedestal's own SLF4J output
+        ;; into Telemere too, so one library handles all of it; without a
+        ;; backend bound, every log call is silently discarded
+        com.taoensso/telemere          {:mvn/version "1.4.0"}
+        com.taoensso/telemere-slf4j    {:mvn/version "1.4.0"}}
 
  :aliases
  {:dev  {:extra-paths ["dev" "test"]}

@@ -6,6 +6,7 @@
             [dk.cst.corpus-probe.cqp-test :refer [ctx when-cwb]]
             [dk.cst.corpus-probe.query :as query]
             [dk.cst.corpus-probe.search :as search]
+            [taoensso.telemere :as t]
             [dk.cst.corpus-probe.tools-test :refer [with-value-limit]]))
 
 (deftest kwic-test
@@ -168,7 +169,10 @@
          (is (= [:s_id :text_id :text_year] unlisted)))))
    (testing "a corpus that cannot be read offers nothing"
      (is (= {:attrs [] :unlisted []}
-            (search/filter-options! ctx ["NOSUCH"]))))))
+            ;; the corpus is deliberately unreadable; its warning, and
+            ;; the stack trace with it, would only look like a failure
+            (t/with-min-level :fatal
+              (search/filter-options! ctx ["NOSUCH"])))))))
 
 (deftest error-map-test
   (testing "a CQP error travels as it is"
@@ -180,7 +184,8 @@
            (search/error-map (ex-info "Invalid corpus name" {})))))
   (testing "any other exception is internal, its message withheld"
     (is (= {:type :internal}
-           (search/error-map (java.io.IOException. "/srv/secret"))))))
+           (t/with-min-level :fatal
+             (search/error-map (java.io.IOException. "/srv/secret")))))))
 
 (deftest pmap-n-test
   (is (= [1 2 3 4 5] (search/pmap-n 2 inc (range 5))))
