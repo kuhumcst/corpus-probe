@@ -32,10 +32,28 @@
   {:registry (str (System/getProperty "user.dir") "/dev/corpus/registry")})
 
 (def cwb-ready?
-  "True when the cqp binary and the encoded dev corpus are both present;
-  the integration tests below are skipped otherwise."
+  "True when the cqp binary and all encoded dev corpora are present; the
+  integration tests below are skipped otherwise."
   (boolean (and (fs/which "cqp")
-                (.exists (io/file (:registry ctx) "probe")))))
+                (every? #(.exists (io/file (:registry ctx) %))
+                        ["probe" "viser" "taler"]))))
+
+(defn temp-registry
+  "A fresh registry directory (as a path) holding `source` (a registry
+  entry file) as the entry `probe` plus `extras`, a map of filename to
+  content; a test fixture shared by the registry-handling tests."
+  [source extras]
+  (let [reg (fs/create-temp-dir)]
+    (fs/copy source (fs/file reg "probe"))
+    (doseq [[name content] extras]
+      (spit (fs/file reg name) content))
+    (str reg)))
+
+(defn mismatched-entry
+  "The text of registry entry file `source` with its ID field changed, an
+  entry whose ID does not match its filename."
+  [source]
+  (str/replace (slurp source) #"(?m)^ID .*" "ID   mismatch"))
 
 (defmacro when-cwb
   "Run integration test `body` when CWB is available, else pass trivially."
@@ -57,6 +75,33 @@
        (is (= :cqp (:type error)))
        (is (str/includes? (:message error) "bogus"))
        (is (= 0 exit))))))
+
+(deftest stderr->outcome-test
+  (testing "registry diagnostics are warnings, the rest is the error"
+    (is (= {:warnings ["CL warning: ID field 'x' does not match name of y"
+                       "REGISTRY ERROR (/srv/registry/readme): syntax error"]
+            :error    "CQP Error: bad query\n  [pos = <--"}
+           (cqp/stderr->outcome
+            (str "CL warning: ID field 'x' does not match name of y\n"
+                 "CQP Error: bad query\n  [pos = <--\n"
+                 "REGISTRY ERROR (/srv/registry/readme): syntax error\n")))))
+  (testing "nothing but diagnostics is no error"
+    (is (nil? (:error (cqp/stderr->outcome "CL warning: x\n"))))
+    (is (= {:warnings [] :error nil} (cqp/stderr->outcome "")))))
+
+(deftest registry-diagnostics-integration-test
+  ;; a stray file and an entry whose ID field mismatches its filename make
+  ;; every cqp process print diagnostics; the batch must still succeed
+  (when-cwb
+   (let [source (fs/file (:registry ctx) "probe")
+         reg    (temp-registry source {"probe2" (mismatched-entry source)
+                                       "readme" "not a registry entry\n"})]
+     (let [{:keys [results warnings error]}
+           (cqp/run-batch! {:registry reg} ["PROBE;" "size PROBE;"])]
+       (is (nil? error))
+       (is (= ["1"] (second results)))
+       (is (some #(str/starts-with? % "REGISTRY ERROR") warnings))
+       (is (some #(str/starts-with? % "CL warning:") warnings))))))
 
 (deftest timeout-integration-test
   (when-cwb

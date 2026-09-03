@@ -146,6 +146,65 @@
               :freq   (parse-long freq)}))
          lines)))
 
+(defn lexicon->freqs
+  "Parse `lines` from `cwb-lexdecode -fb` (frequency TAB value, one line per
+  lexicon entry, in lexicon order) into frequency maps.
+
+  Returns [{:values [<s>] :freq <n>} ...] sorted by descending frequency,
+  the shape of `group->freqs`, so a whole-corpus lexicon and a grouped
+  query result table alike."
+  [lines]
+  (->> (remove str/blank? lines)
+       (map (fn [line]
+              (let [[freq value] (str/split line #"\t" 2)]
+                {:values [value] :freq (parse-long freq)})))
+       (sort-by :freq >)
+       (vec)))
+
+(defn describe->map
+  "Parse `lines` from `cwb-describe-corpus -s` (one corpus) into corpus
+  facts with per-attribute statistics.
+
+  Returns {:name <s> :description <s> :charset <s> :size <n>
+  :p-attrs [{:name <kw> :tokens <n> :types <n>} ...]
+  :s-attrs [{:name <kw> :regions <n> :values? <bool>} ...]
+  :a-attrs [{:name <kw> :blocks <n>} ...]} with attributes in registry
+  order. An attribute whose data files the tool cannot read (it prints
+  NO DATA for it) keeps its name with nil counts; a corpus with no
+  readable data has no :size. The registry/home/info paths in the output
+  are dropped: they are server filesystem details, not corpus facts."
+  [lines]
+  (reduce (fn [m line]
+            (condp re-matches line
+              #"Corpus:\s+(\S+)" :>> (fn [[_ v]] (assoc m :name v))
+              #"description:\s+(\S.*?)\s*" :>> (fn [[_ v]]
+                                                 (assoc m :description v))
+              #"encoding:\s+(\S+)\s*" :>> (fn [[_ v]] (assoc m :charset v))
+              #"size \(tokens\):\s+(\d+)\s*" :>>
+              (fn [[_ v]] (assoc m :size (parse-long v)))
+
+              #"p-ATT (\S+)\s+(\d+) tokens,\s+(\d+) types\s*" :>>
+              (fn [[_ n tokens types]]
+                (update m :p-attrs conj {:name   (keyword n)
+                                         :tokens (parse-long tokens)
+                                         :types  (parse-long types)}))
+              #"s-ATT (\S+)\s+(\d+) regions( \(with annotations\))?\s*" :>>
+              (fn [[_ n regions values]]
+                (update m :s-attrs conj {:name    (keyword n)
+                                         :regions (parse-long regions)
+                                         :values? (some? values)}))
+              #"a-ATT (\S+)\s+(\d+) .*" :>>
+              (fn [[_ n blocks]]
+                (update m :a-attrs conj {:name   (keyword n)
+                                         :blocks (parse-long blocks)}))
+              #"([psa])-ATT (\S+)\s+NO DATA\s*" :>>
+              (fn [[_ type n]]
+                (update m ({"p" :p-attrs "s" :s-attrs "a" :a-attrs} type)
+                        conj {:name (keyword n)}))
+              m))
+          {:p-attrs [] :s-attrs [] :a-attrs []}
+          lines))
+
 (defn info->map
   "Parse `lines` from `info;` into corpus facts.
 

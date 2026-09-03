@@ -65,18 +65,28 @@
   (testing "random sort uses a fixed seed"
     (is (str/includes? (query/sort-command "random") "randomize 1"))))
 
+(deftest page-rows-test
+  (is (= [0 24] (query/page-rows 0 25)))
+  (is (= [20 29] (query/page-rows 2 10)))
+  (testing "negative or zero paging values are clamped, not passed to CQP"
+    (is (= [0 0] (query/page-rows -1 0))))
+  (testing "a page beyond CQP's int range is clamped below it"
+    (let [[from to] (query/page-rows 100000000 25)]
+      (is (<= to query/max-row))
+      (is (= 24 (- to from))))
+    (is (<= (second (query/page-rows Long/MAX_VALUE 25)) query/max-row))))
+
 (deftest kwic-commands-test
   (let [opts     {:p-attrs      [:word :pos :lemma]
                   :struct-attrs [:text_id :text_title]
-                  :page         2
-                  :page-size    10
+                  :rows         [20 29]
                   :sort         "word"}
         commands (query/kwic-commands "PROBE" "\"hund\"" opts)]
     (is (= 9 (count commands)))
     (is (= "PROBE;" (nth commands 1)))
     (testing "the sort slot precedes the page commands"
       (is (str/includes? (nth commands 4) "ExternalSort")))
-    (testing "paging arithmetic"
+    (testing "the rows select the cat and dump range"
       (is (str/includes? (nth commands 5) "cat Last 20 29;"))
       (is (= "dump Last 20 29;" (nth commands 6))))
     (testing "p-attributes beyond word are shown"
@@ -87,9 +97,7 @@
   (testing "no tabulate commands without struct attributes"
     (is (= 7 (count (query/kwic-commands "PROBE" "\"hund\""
                                          {:p-attrs [:word]})))))
-  (testing "negative or zero paging values are clamped, not passed to CQP"
-    (let [commands (query/kwic-commands "PROBE" "\"hund\""
-                                        {:p-attrs   [:word]
-                                         :page      -1
-                                         :page-size 0})]
-      (is (= "dump Last 0 0;" (nth commands 6))))))
+  (testing "the default rows are the first page"
+    (is (= "dump Last 0 24;"
+           (nth (query/kwic-commands "PROBE" "\"hund\"" {:p-attrs [:word]})
+                6)))))

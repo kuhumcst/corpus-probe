@@ -1,0 +1,26 @@
+
+============================================================
+Corpus: PROBE
+============================================================
+
+description:    
+registry file:  /Users/rqf595/Code/corpus-probe/dev/corpus/registry/probe
+home directory: /Users/rqf595/Code/corpus-probe/dev/corpus/data/probe/
+info file:      /Users/rqf595/Code/corpus-probe/dev/corpus/data/probe/.info
+encoding:       utf8
+size (tokens):  47
+
+  3 positional attributes
+  6 structural attributes
+  0 alignment  attributes
+
+p-ATT word                     47 tokens,       36 types
+p-ATT pos                      47 tokens,       15 types
+p-ATT lemma                    47 tokens,       32 types
+s-ATT s                         6 regions
+s-ATT s_id                      6 regions (with annotations)
+s-ATT text                      3 regions
+s-ATT text_id                   3 regions (with annotations)
+s-ATT text_title                3 regions (with annotations)
+s-ATT text_year                 3 regions (with annotations)
+

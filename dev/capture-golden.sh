@@ -35,6 +35,9 @@ run_cqp 'PROBE; B = [pos = "N.*"]; group B match lemma;'     > "$OUT/group.txt"
 run_cqp 'PROBE; B = [pos = "N.*"];
 group B match lemma by match pos;'                           > "$OUT/group-pairwise.txt"
 
+cwb-describe-corpus -r "$REG" -s PROBE                       > "$OUT/describe.txt"
+cwb-lexdecode -r "$REG" -fb -P lemma PROBE                   > "$OUT/lexdecode.tsv"
+
 # A full child-mode session with .EOL. markers and one failing command, for
 # testing the driver's section splitting: stdout and stderr captured separately.
 printf '%b' 'PROBE;\n.EOL.;\nA = "hund.*" %c;\n.EOL.;\nsize A;\n.EOL.;\nbogus;\n.EOL.;\ncat A 0 1;\n.EOL.;\n' \

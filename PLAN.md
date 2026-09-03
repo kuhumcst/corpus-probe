@@ -415,22 +415,29 @@ practice.
 ```
 corpus-probe/
 ├── deps.edn  shadow-cljs.edn
-├── resources/config.edn            ; registry path, cache dir, folder tree, labels
+├── resources/config.edn            ; registry path, sort locale, folder tree
 ├── src/dk/cst/corpus_probe/
 │   ├── cqp.clj                     ; child-process driver (§5)
 │   ├── parse.clj                   ; output parsers -> data (§6)
 │   ├── query.clj                   ; CQP generation: simple-search compiler,
 │   │                               ;   escaping, QueryLock wrapping (§8)
-│   ├── corpus.clj                  ; registry/describe-corpus/info -> corpus map
-│   ├── cache.clj                   ; NQR save/restore, hashing, reaping (§9)
-│   ├── tools.clj                   ; cwb-lexdecode / cwb-scan-corpus / cwb-s-decode
-│   ├── api.clj                     ; Pedestal routes + interceptors
-│   ├── ssr.clj                     ; server-side rendering entry
-│   └── views/                      ; .cljc — kwic, freq, corpus-info, search-form
-│       └── ...
-├── src/dk/cst/corpus_probe/ui/    ; .cljs — Replicant mount, Nexus actions, routing
+│   ├── corpus.clj                  ; registry, show cd, info -> corpus facts
+│   ├── search.clj                  ; KWIC, concordance, frequency tables
+│   ├── tools.clj                   ; cwb-describe-corpus, cwb-lexdecode
+│   │                               ;   (scan-corpus and s-decode to come)
+│   ├── stats.cljc                  ; relative frequencies
+│   ├── export.clj                  ; TSV/CSV exports of concordances and
+│   │                               ;   frequency tables
+│   ├── api.clj                     ; Pedestal routes + SSR handlers
+│   ├── server.clj                  ; config, start/stop, CSP
+│   ├── ui.cljs                     ; Replicant client
+│   └── views/                      ; .cljc shared hiccup: layout, page
+│       └── ...                     ;   (search), kwic, frequencies, corpus
+│                                   ;   (index, chooser, info)
 ├── test/…                          ; golden-file tests against captured outputs
-│   └── resources/                  ;   incl. hostile-corpus fixtures
+│   └── resources/                  ;   (the captures and a registry entry;
+│                                   ;   hostile cases live inline in the tests)
+├── dev/                            ; encode.sh, capture-golden.sh, user.clj
 └── docs/research/                  ; the evidence base for this plan
 ```
 

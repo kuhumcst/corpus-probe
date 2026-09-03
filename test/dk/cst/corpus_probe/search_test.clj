@@ -10,7 +10,7 @@
 (deftest kwic-test
   (when-cwb
    (let [{:keys [size hits] :as page}
-         (search/kwic! ctx "PROBE" "\"hund.*\" %c" {:page-size 3})]
+         (search/kwic! ctx "PROBE" "\"hund.*\" %c" {:rows [0 2]})]
      (is (= 5 size))
      (is (= 3 (count hits)))
      (testing "hits carry tokens, anchors and structural metadata"
@@ -21,9 +21,8 @@
          (is (= {:s_id "2" :text_id "t1" :text_title "Hverdag"
                  :text_year "2023"}
                 structs))))
-     (testing "paging"
-       (let [page2 (search/kwic! ctx "PROBE" "\"hund.*\" %c"
-                                 {:page-size 3 :page 1})]
+     (testing "a later row range"
+       (let [page2 (search/kwic! ctx "PROBE" "\"hund.*\" %c" {:rows [3 5]})]
          (is (= 2 (count (:hits page2))))
          (is (= 34 (-> page2 :hits first :cpos))))))))
 
@@ -36,9 +35,11 @@
 
 (deftest sort-test
   (when-cwb
-   (let [order   (fn [opts] (mapv :cpos (:hits (search/kwic! ctx "PROBE" "[]"
-                                                             (merge {:page-size 50}
-                                                                    opts)))))
+   (let [order   (fn [opts]
+                   (->> (merge {:rows [0 49]} opts)
+                        (search/kwic! ctx "PROBE" "[]")
+                        :hits
+                        (mapv :cpos)))
          natural (order {})
          sorted  (order {:sort "word"})]
      (is (= 47 (count sorted)))
@@ -54,7 +55,7 @@
   ;; requires gawk + the da_DK.UTF-8 locale for CQP's ExternalSort
   (when-cwb
    (let [words (->> (search/kwic! (assoc ctx :sort-locale "da_DK.UTF-8")
-                                  "PROBE" "[]" {:sort "word" :page-size 50})
+                                  "PROBE" "[]" {:sort "word" :rows [0 49]})
                     :hits
                     (mapv (comp :word first :match)))]
      (testing "collation is case-folded Danish, not byte order"
@@ -69,17 +70,133 @@
      (let [q (query/position-query 9 9)
            {:keys [hits size]} (search/kwic! ctx "PROBE" q
                                              {:context      50
-                                              :page-size    1
+                                              :rows         [0 0]
                                               :struct-attrs []})]
        (is (= 1 size))
        (is (= ["hund"] (map :word (:match (first hits)))))
        (is (pos? (count (:left (first hits)))))))))
+
+(deftest size-test
+  (when-cwb
+   (is (= 5 (search/size! ctx "PROBE" "\"hund.*\" %c")))
+   (testing "corpus-size! reports a failing corpus instead of throwing"
+     (is (= 5 (:size (search/corpus-size! ctx "PROBE" "\"hund.*\" %c"))))
+     (is (= :cqp (-> (search/corpus-size! ctx "TALER" "[lemma = \"x\"]")
+                     :error :type))))
+   (testing "corpus-sizes! keeps the order and stops at the deadline"
+     (is (= ["VISER" "PROBE"]
+            (map :corpus (search/corpus-sizes! ctx ["VISER" "PROBE"] "[]"
+                                               (search/deadline ctx)))))
+     (is (= [:timeout :timeout]
+            (map (comp :type :error)
+                 (search/corpus-sizes! ctx ["VISER" "PROBE"] "[]" 0)))))))
+
+(deftest error-map-test
+  (testing "a CQP error travels as it is"
+    (is (= {:type :cqp :message "x"}
+           (search/error-map (ex-info "failed" {:error {:type :cqp
+                                                        :message "x"}})))))
+  (testing "one of our own guards is a rejection with its message"
+    (is (= {:type :rejected :message "Invalid corpus name"}
+           (search/error-map (ex-info "Invalid corpus name" {})))))
+  (testing "any other exception is internal, its message withheld"
+    (is (= {:type :internal}
+           (search/error-map (java.io.IOException. "/srv/secret"))))))
+
+(deftest pmap-n-test
+  (is (= [1 2 3 4 5] (search/pmap-n 2 inc (range 5))))
+  (testing "at most n calls run at once"
+    (let [running (atom 0) peak (atom 0)]
+      (dorun (search/pmap-n 3 (fn [_]
+                                (swap! peak max (swap! running inc))
+                                (Thread/sleep 20)
+                                (swap! running dec))
+                            (range 40)))
+      (is (<= @peak 3)))))
+
+(deftest concordance-test
+  (when-cwb
+   (let [q      "[word = \".*en\" %c]"
+         sizes  (fn [corpora] (mapv #(search/size! ctx % q) corpora))
+         result (search/concordance! ctx ["PROBE" "VISER" "TALER"] q
+                                     {:page-size 5})]
+     (testing "the counts cover every corpus in order and sum to the size"
+       (is (= ["PROBE" "VISER" "TALER"] (mapv :corpus (:counts result))))
+       (is (= (sizes ["PROBE" "VISER" "TALER"])
+              (mapv :size (:counts result))))
+       (is (= (reduce + (sizes ["PROBE" "VISER" "TALER"])) (:size result))))
+     (testing "the first page fills from the first corpus"
+       (is (= 5 (count (:hits result))))
+       (is (= ["PROBE"] (distinct (map :corpus (:hits result))))))
+     (testing "a page straddling two corpora continues into the next"
+       (let [[n1] (sizes ["PROBE"])
+             page (search/concordance! ctx ["PROBE" "VISER"] q
+                                       {:page 1 :page-size (dec n1)})]
+         (is (= (dec n1) (count (:hits page))))
+         (is (= ["PROBE" "VISER"] (distinct (map :corpus (:hits page)))))
+         (is (= (first (mapv :cpos (:hits (search/kwic! ctx "VISER" q))))
+                (:cpos (second (:hits page)))))))
+     (testing "a page past every corpus has no hits but full counts"
+       (let [page (search/concordance! ctx ["PROBE" "VISER"] q {:page 99})]
+         (is (empty? (:hits page)))
+         (is (= (sizes ["PROBE" "VISER"]) (mapv :size (:counts page))))))
+     (testing "a corpus lacking a queried attribute fails alone"
+       (let [page (search/concordance! ctx ["TALER" "PROBE"]
+                                       "[lemma = \"hund\"]")]
+         (is (= :cqp (-> page :counts first :error :type)))
+         (is (= 5 (-> page :counts second :size)))
+         (is (= 5 (:size page)))
+         (is (= ["PROBE"] (distinct (map :corpus (:hits page)))))))
+     (testing "an exhausted budget stops querying and reports timeouts"
+       (let [page (search/concordance! (assoc ctx :search-budget-ms -1)
+                                       ["PROBE" "VISER"] q)]
+         (is (= [:timeout :timeout] (map (comp :type :error) (:counts page))))
+         (is (empty? (:hits page))))))))
 
 (deftest frequencies-test
   (when-cwb
    (let [freqs (search/frequencies! ctx "PROBE" "[pos = \"N.*\"]" :lemma)]
      (is (= {:values ["hund"] :freq 5} (first freqs)))
      (is (= 10 (count freqs))))))
+
+(deftest groupable-attrs-test
+  (when-cwb
+   (testing "a word-only corpus offers word and its annotated s-attributes"
+     (is (= [:word :s_id :text_id :text_speaker :text_party :text_year]
+            (map :name (search/groupable-attrs! ctx "TALER")))))))
+
+(deftest merge-frequencies-test
+  (testing "values are merged across corpora and sorted by total, then value"
+    (is (= [{:value "hund" :freqs {"A" 5 "B" 1} :total 6}
+            {:value "borg" :freqs {"B" 2} :total 2}
+            {:value "kat" :freqs {"A" 2} :total 2}]
+           (search/merge-frequencies
+            [{:corpus "A" :freqs [{:values ["hund"] :freq 5}
+                                  {:values ["kat"] :freq 2}]}
+             {:corpus "B" :freqs [{:values ["borg"] :freq 2}
+                                  {:values ["hund"] :freq 1}]}]))))
+  (is (= [] (search/merge-frequencies []))))
+
+(deftest frequency-table-test
+  (when-cwb
+   (let [table (search/frequency-table! ctx ["PROBE" "VISER" "TALER"]
+                                        "[pos = \"N.*\"]" "lemma")]
+     (testing "per-corpus counts carry the corpus size for relative rates"
+       (is (= [{:corpus "PROBE" :tokens 47 :size 15}
+               {:corpus "VISER" :tokens 48 :size 16}]
+              (take 2 (:counts table)))))
+     (testing "a corpus without the attribute fails alone"
+       (is (re-find #"groupable" (-> table :counts last :error :message))))
+     (testing "rows merge the corpora"
+       (is (= {:value "hund" :freqs {"PROBE" 5 "VISER" 1} :total 6}
+              (first (:rows table))))))
+   (testing "a blank query tables the whole corpus from its lexicon"
+     (let [table (search/frequency-table! ctx ["PROBE"] "" :lemma)]
+       (is (= [{:corpus "PROBE" :tokens 47 :size 47}] (:counts table)))
+       (is (= {:value "." :freqs {"PROBE" 6} :total 6} (first (:rows table))))))
+   (testing "a whole corpus cannot be tabled by a structural attribute"
+     (is (-> (search/frequency-table! ctx ["VISER"] "" :text_author)
+             :counts first :error)))))
 
 (deftest error-reporting-test
   (when-cwb
@@ -101,8 +218,10 @@
 
 (deftest interpolation-guard-test
   (testing "hostile corpus names are rejected before any command is built"
-    (is (thrown? Exception (search/corpus-ctx {} "PROBE; exit")))
-    (is (thrown? Exception (search/corpus-ctx {} "probe"))))
+    (is (thrown-with-msg? Exception #"Invalid corpus name"
+                          (search/corpus-ctx {} "PROBE; exit")))
+    (is (thrown-with-msg? Exception #"Invalid corpus name"
+                          (search/corpus-ctx {} "probe"))))
   (when-cwb
    (testing "attribute names outside the corpus inventory are rejected"
      (let [canary "/tmp/corpus-probe-pwned-attr"]

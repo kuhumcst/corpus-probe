@@ -1,0 +1,64 @@
+<text id="v1" title="Ridderen og fruen" year="1591" author="ukendt">
+<s id="1">
+Ridderen	NCSD	ridder
+red	VPT	ride
+over	PP	over
+den	D	den
+grønne	AN	grøn
+eng	NCSI	eng
+.	PUN	.
+</s>
+<s id="2">
+Fruen	NCSD	frue
+stod	VPT	stå
+ved	PP	ved
+borgens	NCSG	borg
+port	NCSI	port
+.	PUN	.
+</s>
+<s id="3">
+Hunden	NCSD	hund
+fulgte	VPT	følge
+ridderen	NCSD	ridder
+til	PP	til
+borgen	NCSD	borg
+.	PUN	.
+</s>
+</text>
+<text id="v2" title="Havfruens sang" year="1583" author="ukendt">
+<s id="4">
+Havfruen	NCSD	havfrue
+sang	VPT	synge
+ved	PP	ved
+det	D	den
+dybe	AN	dyb
+vand	NCSI	vand
+.	PUN	.
+</s>
+<s id="5">
+Bølgerne	NCPD	bølge
+slog	VPT	slå
+mod	PP	mod
+den	D	den
+hvide	AN	hvid
+strand	NCSI	strand
+.	PUN	.
+</s>
+<s id="6">
+Månen	NCSD	måne
+skinnede	VPT	skinne
+på	PP	på
+det	D	den
+sorte	AN	sort
+hav	NCSI	hav
+,	PUN	,
+og	CC	og
+ravnen	NCSD	ravn
+fløj	VPT	flyve
+over	PP	over
+den	D	den
+mørke	AN	mørk
+skov	NCSI	skov
+.	PUN	.
+</s>
+</text>

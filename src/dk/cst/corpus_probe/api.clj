@@ -1,20 +1,29 @@
 (ns dk.cst.corpus-probe.api
-  "HTTP routes and handlers: the server-rendered search page, the bootstrap
-  payload the client takes over from, and the compiled client assets.
+  "HTTP routes and handlers: the server-rendered search page (a concordance
+  over the selected corpora), the frequency page, their TSV/CSV exports,
+  the corpus index and info pages, the bootstrap payload the client takes
+  over from, and the compiled client assets.
 
   Responses are rendered from the shared .cljc views with Replicant's string
-  renderer, so the client renders identical markup. The same view data is
-  embedded as transit for the client. Hostile corpus content survives the
-  round trip because each channel is protected: `correct-quote-escaping`
-  fixes the SSR body, transit-JSON escapes true control bytes (a carriage
-  return) in the payload, and `script-safe` escapes `<` (which transit passes
-  through verbatim) so a token containing `</script>` cannot break out."
+  renderer, so the client renders identical markup. On the search page the
+  same view data is embedded as transit for the client; the corpus pages
+  are read-only and ship no payload or script. Hostile corpus content
+  survives the round trip because each channel is protected:
+  `correct-quote-escaping` fixes the SSR body, transit-JSON escapes true
+  control bytes (a carriage return) in the payload, and `script-safe`
+  escapes `<` (which transit passes through verbatim) so a token containing
+  `</script>` cannot break out."
   (:require [clojure.java.io :as io]
             [clojure.string :as str]
             [cognitect.transit :as transit]
             [dk.cst.corpus-probe.corpus :as corpus]
+            [dk.cst.corpus-probe.export :as export]
             [dk.cst.corpus-probe.query :as query]
             [dk.cst.corpus-probe.search :as search]
+            [dk.cst.corpus-probe.tools :as tools]
+            [dk.cst.corpus-probe.views.corpus :as corpus-views]
+            [dk.cst.corpus-probe.views.frequencies :as freq-views]
+            [dk.cst.corpus-probe.views.layout :as layout]
             [dk.cst.corpus-probe.views.page :as page]
             [replicant.string :as replicant])
   (:import [java.io ByteArrayOutputStream]
@@ -43,57 +52,102 @@
   (str/replace s "<" "\\u003c"))
 
 (defn page-title
-  "The document title for `params`: the query and corpus when a search was
-  made, so tabs and bookmarks are meaningful, else the app name."
+  "The document title: the page-specific `parts` (most specific first,
+  blanks skipped) followed by the app name, so tabs and bookmarks are
+  meaningful."
+  [& parts]
+  (str/join " · " (concat (remove str/blank? parts) ["corpus-probe"])))
+
+(defn search-title
+  "The document title of the search page for `params`: the query and the
+  selected corpora (`:corpus`, a vector of names, when any) when a search
+  was made, else just the app name."
   [{:keys [q corpus]}]
   (if (str/blank? q)
-    "corpus-probe"
-    (str q " · " corpus " — corpus-probe")))
+    (page-title)
+    (page-title q (when (seq corpus) (page/corpora-phrase corpus)))))
 
-(defn render-page
-  "The complete HTML document for `view-data`: the server-rendered page body
-  in #app, the same data embedded for the client in the #bootstrap script,
-  and the client script.
+(defn document
+  "The complete HTML document titled `title`: the site header, then the
+  rendered `body` hiccup (the page's <main>) in #app; a transit `payload`,
+  when given, is embedded as the #bootstrap script along with the client
+  script that takes over from it.
 
-  The document shell and the bootstrap script are emitted as strings rather
+  The site header sits outside #app, so it is the document's banner rather
+  than part of the main content, and the client never re-renders it. The
+  document shell and the bootstrap script are emitted as strings rather
   than through Replicant, so the transit payload's double quotes are not
   mangled by the renderer bug (see `correct-quote-escaping`). The document
-  language is the UI language (English); the corpus text carries its own
-  `lang` inside the concordance."
-  [view-data]
-  (str "<!DOCTYPE html>"
-       "<html lang=\"en\"><head>"
-       "<meta charset=\"utf-8\">"
-       "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
-       "<meta name=\"description\" "
-       "content=\"Search CWB corpora and read KWIC concordances.\">"
-       (correct-quote-escaping
-        (replicant/render [:title (page-title (:params view-data))]))
-       "<link rel=\"stylesheet\" href=\"/css/style.css\">"
-       "</head><body>"
-       "<div id=\"app\">"
-       (correct-quote-escaping (replicant/render (page/app-view view-data)))
-       "</div>"
-       "<script type=\"application/transit+json\" id=\"bootstrap\">"
-       (script-safe (->transit view-data))
-       "</script>"
-       "<script defer src=\"/js/main.js\"></script>"
-       "</body></html>"))
+  language is the UI language (English); corpus text carries its own
+  `lang`."
+  ([title body]
+   (document title body nil))
+  ([title body payload]
+   (str "<!DOCTYPE html>"
+        "<html lang=\"en\"><head>"
+        "<meta charset=\"utf-8\">"
+        "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
+        "<meta name=\"description\" "
+        "content=\"Search CWB corpora and read KWIC concordances.\">"
+        (correct-quote-escaping (replicant/render [:title title]))
+        "<link rel=\"stylesheet\" href=\"/css/style.css\">"
+        "</head><body>"
+        (correct-quote-escaping (replicant/render (layout/site-header)))
+        "<div id=\"app\">"
+        (correct-quote-escaping (replicant/render body))
+        "</div>"
+        (when payload
+          (str "<script type=\"application/transit+json\" id=\"bootstrap\">"
+               (script-safe payload)
+               "</script>"
+               "<script defer src=\"/js/main.js\"></script>"))
+        "</body></html>")))
 
 (defn html-response
-  "A complete HTML page response for `view-data`."
-  [view-data]
+  "A complete HTML page response with `html` as its body."
+  [html]
   {:status  200
    :headers {"Content-Type" "text/html; charset=utf-8"}
-   :body    (render-page view-data)})
+   :body    html})
 
 (defn query-string
-  "Encode map `m` as a URL query string, skipping nil values."
+  "Encode map `m` as a URL query string, skipping nil values and repeating
+  the key of a vector value once per element."
   [m]
   (->> (remove (comp nil? val) m)
-       (map (fn [[k v]]
-              (str (name k) "=" (URLEncoder/encode (str v) "UTF-8"))))
+       (mapcat (fn [[k v]]
+                 (for [v (if (vector? v) v [v])]
+                   (str (name k) "=" (URLEncoder/encode (str v) "UTF-8")))))
        (str/join "&")))
+
+(defn scalar-params
+  "The query `params` with every value but `corpus` reduced to one string:
+  a repeated scalar param arrives as a vector, of which the first value
+  counts, so a stray duplicate cannot fail the request."
+  [params]
+  (into {} (map (fn [[k v]]
+                  [k (if (and (vector? v) (not= k :corpus)) (first v) v)]))
+        params))
+
+(defn page-param
+  "The page number named by the `page` query param value `v`: the first
+  page for anything that is not a non-negative integer."
+  [v]
+  (max 0 (or (some-> v parse-long) 0)))
+
+(defn corpora-param
+  "The corpus names selected by the `corpus` query param value `v`: a string
+  (one name, or several joined by commas as in Korp URLs) or a vector of
+  such strings when the param repeats. Names are uppercased and
+  deduplicated; nothing is validated here, an unknown or hostile name is
+  reported by the search as that corpus's error."
+  [v]
+  (->> (if (vector? v) v [v])
+       (mapcat #(str/split (str %) #","))
+       (remove str/blank?)
+       (map str/upper-case)
+       (distinct)
+       (vec)))
 
 (defn page-href
   "The URL of page `page` of the search described by `params`.
@@ -102,6 +156,26 @@
   not carry to another page's hits."
   [params page]
   (str "/?" (query-string (assoc (dissoc params :expand) :page page))))
+
+(defn search-params
+  "The `params` that identify a search (its corpora and query), for
+  linking the concordance and frequency views of the same hits."
+  [params]
+  (select-keys params [:corpus :q :mode :ci :prefix :suffix]))
+
+(defn export-hrefs
+  "The URLs of the TSV and CSV exports at `path` of the search described
+  by `params`."
+  [path params]
+  (into {} (for [format (keys export/formats)]
+             [(keyword format)
+              (str path "?" (query-string (assoc params :format format)))])))
+
+(defn attr-param
+  "The grouping attribute named by the `attr` query param value `v`,
+  defaulting to word, the one attribute every corpus has."
+  [v]
+  (if (str/blank? v) "word" v))
 
 (defn ->cqp
   "The CQP query for `params`, compiling simple-mode input; nil when there
@@ -114,52 +188,356 @@
                             :suffix?           (some? suffix)})
       q)))
 
+(def follow-on-errors
+  "The errors CQP adds for the later commands of a batch once an earlier
+  one has failed: a query without an activated corpus, and every command
+  on the then undefined `Last`."
+  ["CQP Error:\n\tNo corpus activated"
+   "CQP Error:\n\tCorpus ``Last'' is undefined"])
+
+(defn drop-follow-on-errors
+  "Remove the `follow-on-errors` from CQP stderr text `message` when it
+  reports anything else, so the user sees the failing command's own error;
+  a message of nothing but follow-on errors is kept as it is."
+  [message]
+  (let [trimmed (-> (reduce #(str/replace %1 %2 "") message follow-on-errors)
+                    (str/replace #"\n{2,}" "\n")
+                    (str/trim))]
+    (if (str/blank? trimmed) message trimmed)))
+
+(defn public-error
+  "Prepare CQP `error` for display: drop `CL warning:` lines from its
+  message, which concern the server installation rather than the query and
+  may name absolute server paths (never to reach a rendered page), and the
+  follow-on errors our own batch commands add after a failed query. The
+  query error text itself stays verbatim, `<--` pointer included."
+  [error]
+  (if-let [message (:message error)]
+    (assoc error :message (->> (str/split message #"\n")
+                               (remove #(str/starts-with? % "CL warning:"))
+                               (str/join "\n")
+                               (drop-follow-on-errors)
+                               (not-empty)))
+    error))
+
 (defn page-count
   "The number of pages a `result` of `size` hits spans."
   [{:keys [size page-size]}]
   (max 1 (long (Math/ceil (/ size (double page-size))))))
 
 (defn content-lang
-  "The language code of the corpus named `corpus` among `corpora`, when the
-  registry records a plausible one (a two- or three-letter code)."
+  "The language code of the corpus named `corpus` among the registry entry
+  maps `corpora`, when its entry records a plausible one."
   [corpora corpus]
-  (some (fn [{:keys [id language]}]
-          (when (and (= corpus (str/upper-case id))
-                     (re-matches #"[a-z]{2,3}" (str language)))
-            language))
+  (some (fn [{:keys [id] :as m}]
+          (when (= corpus (str/upper-case id))
+            (corpus/language m)))
         corpora))
+
+(defn folder-ids
+  "Every corpus ID named by the configured `folders` tree."
+  [folders]
+  (set (mapcat corpus-views/folder-corpora folders)))
+
+(defn empty-folder?
+  "True when resolved `folder` holds no corpora at any depth."
+  [{:keys [corpora folders] :as folder}]
+  (and (empty? corpora) (every? empty-folder? folders)))
+
+(defn resolve-folder
+  "Replace the corpus IDs of configured `folder` (and of its subfolders)
+  with their overview maps from `by-id`, dropping IDs the registry does not
+  know and subfolders left empty by that."
+  [by-id {:keys [label corpora folders] :as folder}]
+  {:label   label
+   :corpora (into [] (keep by-id) corpora)
+   :folders (into [] (comp (map #(resolve-folder by-id %))
+                           (remove empty-folder?))
+                  folders)})
+
+(defn grouped-corpora
+  "Group the corpus `overviews` by the configured `folders` tree; corpora no
+  folder claims follow as a final label-less folder, so a corpus never
+  disappears because the configuration lags behind the registry. Folders
+  the registry leaves empty are dropped."
+  [folders overviews]
+  (let [by-id     (into {} (map (juxt :id identity)) overviews)
+        unclaimed (vec (remove (comp (folder-ids folders) :id) overviews))]
+    (cond-> (into [] (comp (map #(resolve-folder by-id %))
+                           (remove empty-folder?))
+                  folders)
+      (seq unclaimed) (conj {:label nil :corpora unclaimed :folders []}))))
+
+(defn overview!
+  "The overview of registry entry map `m` via `ctx`, sizeless (and
+  uncached) when the size cannot be read right now."
+  [ctx m]
+  (try (corpus/overview! ctx m)
+       (catch Exception _ (corpus/overview m))))
+
+(defn corpus-tree!
+  "The registry `corpora` (maps as from dk.cst.corpus-probe.corpus/corpora)
+  summarized via `ctx`, in parallel since each summary is a CQP round trip
+  on a cache miss, and grouped by its configured folder tree."
+  [ctx corpora]
+  (grouped-corpora (:folders ctx)
+                   (vec (search/pmap-n (search/parallelism ctx)
+                                       #(overview! ctx %)
+                                       corpora))))
+
+(defn split-known
+  "Split the `selected` corpus names into [known unknown] by the registry
+  `corpora`, so that only names the registry has reach a command and the
+  rest are reported without spawning anything."
+  [corpora selected]
+  (let [known? (set (map (comp str/upper-case :id) corpora))]
+    [(filterv known? selected) (vec (remove known? selected))]))
+
+(defn unknown-counts
+  "The count entries reporting the `unknown` corpus names as such."
+  [unknown]
+  (mapv (fn [corpus] {:corpus corpus :error {:type :unknown-corpus}})
+        unknown))
+
+(defn public-counts
+  "The per-corpus counts of concordance `result` with each error prepared
+  for display by `public-error`."
+  [result]
+  (update result :counts
+          (partial mapv #(cond-> % (:error %) (update :error public-error)))))
+
+(defn search-outcome!
+  "Search the `known` corpora for `cqp` via `ctx`, page `page` in `sort`
+  order: {:result <concordance with its :pages>}, the `unknown` corpus
+  names reported among its counts, or {:error ...} when no corpus was
+  selected at all. Per-corpus errors travel inside the result."
+  [ctx known unknown cqp page sort]
+  (if (and (empty? known) (empty? unknown))
+    {:error {:type :no-corpus}}
+    (let [result (-> (search/concordance! ctx known cqp {:page page
+                                                          :sort sort})
+                     (update :counts into (unknown-counts unknown)))]
+      {:result (assoc (public-counts result) :pages (page-count result))})))
 
 (defn search-page
   "Handle a search-page `request` against `ctx`: render the form, and when
-  the query params describe a search, its KWIC result or CQP error."
+  the query params describe a search, its concordance or the reason there
+  is none."
   [ctx request]
-  (let [params  (:query-params request)
+  (let [params  (scalar-params (:query-params request))
         corpora (corpus/corpora ctx)
-        corpus  (or (:corpus params) (some-> (first corpora) :id str/upper-case))
+        selected (corpora-param (:corpus params))
+        [known unknown] (split-known corpora selected)
         cqp     (->cqp params)
-        page-n  (or (some-> (:page params) parse-long) 0)
-        outcome (when (and corpus cqp)
-                  (try
-                    (let [result (search/kwic! ctx corpus cqp
-                                               {:page page-n
-                                                :sort (:sort params)})]
-                      {:result (assoc result :pages (page-count result))})
-                    (catch Exception e
-                      {:error (or (:error (ex-data e))
-                                  {:message (ex-message e)})})))
-        pages   (some-> outcome :result :pages)]
+        page-n  (page-param (:page params))
+        outcome (when cqp
+                  (search-outcome! ctx known unknown cqp page-n
+                                   (:sort params)))
+        pages   (some-> outcome :result :pages)
+        ;; the page (and the embedded payload) exposes only corpus overviews;
+        ;; the full registry maps carry absolute server paths and stay
+        ;; server-side
+        params* (assoc params :corpus selected)
+        view-data {:folders    (corpus-tree! ctx corpora)
+                   :sort-modes (mapv (fn [[value label _]] [value label])
+                                     query/sort-modes)
+                   :params     params*
+                   :result     (:result outcome)
+                   :error      (:error outcome)
+                   :langs      (into {}
+                                     (map (juxt identity
+                                                #(content-lang corpora %)))
+                                     selected)
+                   :freq-href  (when cqp
+                                 (str "/frequencies?"
+                                      (query-string
+                                       (assoc (search-params params*)
+                                              :attr (attr-param nil)))))
+                   :export-hrefs (when (:result outcome)
+                                   (export-hrefs "/export/kwic"
+                                                 (assoc (search-params params*)
+                                                        :sort (:sort params))))
+                   :export-limit export/hit-limit
+                   :prev-href  (when (pos? page-n)
+                                 (page-href params (dec page-n)))
+                   :next-href  (when (and pages (< (inc page-n) pages))
+                                 (page-href params (inc page-n)))}]
     (html-response
-     ;; the page (and the embedded payload) exposes only corpus :id; the full
-     ;; registry maps carry absolute server paths and stay server-side
-     {:corpora      (mapv #(select-keys % [:id]) corpora)
-      :sort-modes   (mapv (fn [[value label _]] [value label]) query/sort-modes)
-      :params       (assoc params :corpus corpus)
-      :result       (:result outcome)
-      :error        (:error outcome)
-      :content-lang (content-lang corpora corpus)
-      :prev-href    (when (pos? page-n) (page-href params (dec page-n)))
-      :next-href    (when (and pages (< (inc page-n) pages))
-                      (page-href params (inc page-n)))})))
+     (document (search-title (:params view-data))
+               (page/app-view view-data)
+               (->transit view-data)))))
+
+(defn attr-options!
+  "The attribute descriptions ({:type :name}) offered for grouping the
+  `corpora` via `ctx`: their union, positional attributes first.
+
+  Each kind keeps the registry order of the first corpus reporting it; a
+  corpus that cannot be read contributes none. Falls back to word, the one
+  attribute every corpus has. Every attribute is offered whatever the
+  query: a structural one cannot table a whole corpus, and that request
+  is then rejected with its reason, so the form still shows what was
+  asked."
+  [ctx corpora]
+  (let [attrs (->> corpora
+                   (mapcat (fn [c] (try (search/groupable-attrs! ctx c)
+                                        (catch Exception _ nil))))
+                   (map #(select-keys % [:type :name]))
+                   (distinct)
+                   (sort-by (comp {:positional 0 :structural 1} :type))
+                   (vec))]
+    (if (seq attrs) attrs [{:type :positional :name :word}])))
+
+(defn frequency-outcome!
+  "Table the `known` corpora for `cqp` (nil for the whole corpora) by
+  `attr` via `ctx`: {:result ...}, the `unknown` corpus names reported
+  among its counts, or {:error ...} when no corpus was selected at all.
+  Per-corpus errors travel inside the result."
+  [ctx known unknown cqp attr]
+  (if (and (empty? known) (empty? unknown))
+    {:error {:type :no-corpus}}
+    {:result (-> (search/frequency-table! ctx known (or cqp "") attr)
+                 (update :counts into (unknown-counts unknown))
+                 (public-counts))}))
+
+(defn frequencies-page
+  "Handle a frequency page `request` against `ctx`: render the form, and
+  once it has been submitted (the `attr` param is present) the breakdown
+  of the query's hits, or of the whole selected corpora when the query is
+  blank, by the chosen attribute."
+  [ctx request]
+  (let [params    (scalar-params (:query-params request))
+        corpora   (corpus/corpora ctx)
+        selected  (corpora-param (:corpus params))
+        [known unknown] (split-known corpora selected)
+        cqp       (->cqp params)
+        attr      (attr-param (:attr params))
+        submitted (contains? params :attr)
+        outcome   (when submitted
+                    (frequency-outcome! ctx known unknown cqp attr))
+        params*   (assoc params :corpus selected :attr attr)
+        view-data {:folders   (corpus-tree! ctx corpora)
+                   :params    params*
+                   :attrs     (attr-options! ctx known)
+                   :result    (:result outcome)
+                   :error     (:error outcome)
+                   :kwic-href (when cqp
+                                (str "/?"
+                                     (query-string (search-params params*))))
+                   :export-hrefs (when (:result outcome)
+                                   (export-hrefs "/export/frequencies"
+                                                 (assoc (search-params params*)
+                                                        :attr attr)))}]
+    (html-response
+     (document (if submitted
+                 (page-title (if cqp (:q params) "all tokens")
+                             (page/corpora-phrase selected)
+                             (str "by " attr)
+                             "frequencies")
+                 (page-title "Frequencies"))
+               (freq-views/frequencies-view view-data)))))
+
+(defn text-response
+  "A 200 response serving `text` in export `format` (a key of
+  dk.cst.corpus-probe.export/formats) as a download named `name`."
+  [format name text]
+  {:status  200
+   :headers {"Content-Type"        (:content-type (export/formats format))
+             "Content-Disposition" (str "attachment; filename=\"" name "."
+                                        format "\"")}
+   :body    text})
+
+(defn export-failure
+  "A 400 response explaining, corpus by corpus, why the search behind an
+  export produced nothing to export, from the per-corpus `counts`."
+  [counts]
+  {:status  400
+   :headers {"Content-Type" "text/plain; charset=utf-8"}
+   :body    (->> (:counts (public-counts {:counts counts}))
+                 (map (fn [{:keys [corpus error]}]
+                        (str corpus ": " (name (:type error :cqp))
+                             (some->> (:message error) (str "\n")))))
+                 (str/join "\n\n"))})
+
+(defn export-response
+  "The download of `rows` (a header and data rows of strings, see
+  dk.cst.corpus-probe.export) rendered in `format` under `name`, or the
+  `export-failure` when `readable?` says no corpus of the `counts` could
+  be searched, so a failed search never downloads as an empty file."
+  [format name readable? {:keys [counts]} rows]
+  (if (some readable? counts)
+    (text-response format name ((:render (export/formats format)) rows))
+    (export-failure counts)))
+
+(defn export-kwic
+  "Handle a concordance export `request` against `ctx`: the hits of the
+  query in the selected corpora (the first
+  dk.cst.corpus-probe.export/hit-limit of them, in the requested sort) as
+  a TSV or CSV download; 400 without a query, known corpora or a known
+  format, or when no corpus could be searched."
+  [ctx request]
+  (let [params   (scalar-params (:query-params request))
+        [known]  (split-known (corpus/corpora ctx)
+                              (corpora-param (:corpus params)))
+        cqp      (->cqp params)
+        format   (:format params)]
+    (if-not (and cqp (seq known) (export/formats format))
+      {:status 400 :body "bad request"}
+      (let [result (search/concordance! ctx known cqp
+                                        {:page      0
+                                         :page-size export/hit-limit
+                                         :sort      (:sort params)})]
+        (export-response format "kwic" :size result
+                         (export/kwic-table result))))))
+
+(defn export-frequencies
+  "Handle a frequency table export `request` against `ctx`: every row of
+  the breakdown of the query (or of the whole corpora) by the `attr`
+  param as a TSV or CSV download; 400 without known corpora or a known
+  format, or when no corpus could be counted."
+  [ctx request]
+  (let [params   (scalar-params (:query-params request))
+        [known]  (split-known (corpus/corpora ctx)
+                              (corpora-param (:corpus params)))
+        cqp      (->cqp params)
+        format   (:format params)]
+    (if-not (and (seq known) (export/formats format))
+      {:status 400 :body "bad request"}
+      (let [table (search/frequency-table! ctx known (or cqp "")
+                                           (attr-param (:attr params)))]
+        (export-response format "frequencies" :tokens table
+                         (export/frequency-table table))))))
+
+(defn corpora-page
+  "Handle the corpus index `request` against `ctx`: every registry corpus,
+  summarized and grouped by the configured folder tree."
+  [ctx _request]
+  (html-response
+   (document (page-title "Corpora")
+             (corpus-views/index-view
+              {:folders (corpus-tree! ctx (corpus/corpora ctx))}))))
+
+(defn corpus-page
+  "Handle a corpus info page `request` against `ctx`, rendering the corpus
+  named by the :id path parameter (case-insensitively); 404 when it is not
+  a registry corpus."
+  [ctx request]
+  (let [corpus (str/upper-case (str (get-in request [:path-params :id])))
+        file   (when (query/corpus-name? corpus)
+                 (corpus/registry-file ctx corpus))]
+    (if-not (and file (corpus/registry-file? file))
+      {:status 404 :body "not found"}
+      (let [registry (corpus/read-registry file)
+            outcome  (try {:stats (tools/describe-corpus! ctx corpus)
+                           :info  (corpus/info! ctx corpus)}
+                          (catch Exception e
+                            {:error (search/error-map e)}))]
+        (html-response
+         (document (page-title corpus)
+                   (corpus-views/info-view
+                    (assoc outcome
+                           :corpus corpus
+                           :title  (not-empty (:name registry))
+                           :lang   (corpus/language registry)))))))))
 
 (defn resource-response
   "A 200 response serving classpath `resource` as `content-type`, uncached
@@ -189,7 +567,7 @@
       (try
         (let [q      (query/position-query cpos* matchend*)
               result (search/kwic! ctx corpus q {:context      expanded-context
-                                                 :page-size    1
+                                                 :rows         [0 0]
                                                  :struct-attrs []})]
           (if-let [hit (first (:hits result))]
             {:status  200
@@ -223,6 +601,13 @@
   "The route table, with handlers closed over `ctx`."
   [ctx]
   #{["/"              :get (partial search-page ctx)  :route-name ::search]
+    ["/frequencies"   :get (partial frequencies-page ctx)
+     :route-name ::frequencies]
+    ["/export/kwic"   :get (partial export-kwic ctx) :route-name ::export-kwic]
+    ["/export/frequencies" :get (partial export-frequencies ctx)
+     :route-name ::export-frequencies]
+    ["/corpora"       :get (partial corpora-page ctx) :route-name ::corpora]
+    ["/corpus/:id"    :get (partial corpus-page ctx)  :route-name ::corpus]
     ["/api/context"   :get (partial context-page ctx) :route-name ::context]
     ["/css/style.css" :get stylesheet                 :route-name ::stylesheet]
     ["/js/*path"      :get js-file                    :route-name ::js]})

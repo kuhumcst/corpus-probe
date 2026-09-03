@@ -2,4 +2,17 @@
  :registry    "dev/corpus/registry"
  ;; locale for CQP's ExternalSort collation (needs gawk on PATH); all KU
  ;; corpora are Danish, so a single locale suffices for now.
- :sort-locale "da_DK.UTF-8"}
+ :sort-locale "da_DK.UTF-8"
+ ;; how many cqp processes one request runs at once, and the wall-clock
+ ;; budget after which a search stops querying further corpora
+ :parallelism 8
+ :search-budget-ms 60000
+ ;; the corpus index grouping: folders may nest and name corpora by their
+ ;; uppercase CQP ID; corpora not named anywhere are listed ungrouped, so
+ ;; this tree only ever adds structure, never hides a corpus. PROBE is left
+ ;; out deliberately to exercise the ungrouped tail.
+ :folders     [{:label   "Litteratur"
+                :folders [{:label   "Folkeviser"
+                           :corpora ["VISER"]}]}
+               {:label   "Folketinget"
+                :corpora ["TALER"]}]}

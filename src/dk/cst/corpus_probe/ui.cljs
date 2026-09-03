@@ -10,6 +10,7 @@
   expanded view survives a reload and can be shared."
   (:require [clojure.string :as str]
             [cognitect.transit :as transit]
+            [dk.cst.corpus-probe.views.kwic :as kwic]
             [dk.cst.corpus-probe.views.page :as page]
             [replicant.dom :as r]))
 
@@ -28,31 +29,32 @@
   (js/URL. js/location.href))
 
 (defn collapse!
-  "Remove `cpos` from the expanded set if it is still there."
-  [cpos]
-  (when (contains? (:expanded @state) cpos)
-    (swap! state update :expanded dissoc cpos)))
+  "Remove the hit keyed `k` from the expanded set if it is still there."
+  [k]
+  (when (contains? (:expanded @state) k)
+    (swap! state update :expanded dissoc k)))
 
 (defn fetch-context!
   "Fetch the hit at `cpos`/`matchend` in `corpus` with wider context and, if
-  it is still wanted, store it under `:expanded` `cpos`.
+  it is still wanted, store it under its key in `:expanded`.
 
   A failed request or a hit the user collapsed while the fetch was in flight
   collapses the entry again, so a late response never revives a hit the user
   dismissed."
   [corpus cpos matchend]
-  (-> (js/fetch (str "/api/context?corpus=" corpus
-                     "&cpos=" cpos "&matchend=" matchend))
-      (.then (fn [response]
-               (if (.-ok response)
-                 (.text response)
-                 (throw (js/Error. "context request failed")))))
-      (.then (fn [body]
-               (let [hit (transit/read (transit/reader :json) body)]
-                 (if (and hit (contains? (:expanded @state) cpos))
-                   (swap! state assoc-in [:expanded cpos] hit)
-                   (collapse! cpos)))))
-      (.catch (fn [_] (collapse! cpos)))))
+  (let [k [corpus cpos]]
+    (-> (js/fetch (str "/api/context?corpus=" corpus
+                       "&cpos=" cpos "&matchend=" matchend))
+        (.then (fn [response]
+                 (if (.-ok response)
+                   (.text response)
+                   (throw (js/Error. "context request failed")))))
+        (.then (fn [body]
+                 (let [hit (transit/read (transit/reader :json) body)]
+                   (if (and hit (contains? (:expanded @state) k))
+                     (swap! state assoc-in [:expanded k] hit)
+                     (collapse! k)))))
+        (.catch (fn [_] (collapse! k))))))
 
 (defn handle!
   "Apply an `action` to the state, using `data` (the Replicant dispatch data)
@@ -71,13 +73,14 @@
                (:selected @state))
       (swap! state dissoc :selected))
     :toggle-context
-    (let [{:keys [cpos matchend]} arg]
-      (if (contains? (:expanded @state) cpos)
-        (swap! state update :expanded dissoc cpos)
+    (let [{:keys [corpus cpos matchend]} arg
+          k (kwic/hit-key arg)]
+      (if (contains? (:expanded @state) k)
+        (swap! state update :expanded dissoc k)
         ;; commit intent immediately (loading placeholder) so the toggle and
         ;; the URL reflect the click at once and a duplicate fetch is suppressed
-        (do (swap! state assoc-in [:expanded cpos] ::loading)
-            (fetch-context! (get-in @state [:params :corpus]) cpos matchend))))
+        (do (swap! state assoc-in [:expanded k] ::loading)
+            (fetch-context! corpus cpos matchend))))
     nil))
 
 (defn sync-popover!
@@ -86,17 +89,20 @@
   [selected?]
   (when-let [el (.getElementById js/document "token-details")]
     (cond
-      (and selected? (not (.matches el ":popover-open")))     (.showPopover el)
-      (and (not selected?) (.matches el ":popover-open"))     (.hidePopover el))))
+      (and selected? (not (.matches el ":popover-open"))) (.showPopover el)
+      (and (not selected?) (.matches el ":popover-open")) (.hidePopover el))))
 
 (defn sync-expand-url!
-  "Mirror the expanded corpus positions in the URL's `expand` parameter,
-  replacing history so the URL stays shareable without new entries."
+  "Mirror the expanded hits in the URL's `expand` parameter as
+  `CORPUS:cpos` items, replacing history so the URL stays shareable without
+  new entries."
   []
-  (let [url    (current-url)
-        cposes (sort (keys (:expanded @state)))]
-    (if (seq cposes)
-      (.set (.-searchParams url) "expand" (str/join "," cposes))
+  (let [url (current-url)
+        ks  (sort (keys (:expanded @state)))]
+    (if (seq ks)
+      (.set (.-searchParams url) "expand"
+            (str/join "," (map (fn [[corpus cpos]] (str corpus ":" cpos))
+                               ks)))
       (.delete (.-searchParams url) "expand"))
     (.replaceState js/history nil "" (.-href url))))
 
@@ -112,36 +118,39 @@
   (sync-expand-url!))
 
 (defn expand-param
-  "The set of corpus positions named in the URL's `expand` parameter."
+  "The set of hit keys named in the URL's `expand` parameter (`CORPUS:cpos`
+  items); malformed items are ignored."
   []
   (when-let [param (.get (.-searchParams (current-url)) "expand")]
-    (set (keep parse-long (str/split param #",")))))
+    (set (keep (fn [item]
+                 (let [[corpus cpos] (str/split item #":" 2)]
+                   (when-let [n (some-> cpos parse-long)]
+                     [corpus n])))
+               (str/split param #",")))))
 
 (defn wanted-hits
-  "The loaded hits whose position is in `wanted` (nil when nothing is
-  wanted); `?expand` is scoped to the current page, so off-page positions
-  are ignored."
+  "The loaded hits whose key is in `wanted` (nil when nothing is wanted);
+  `?expand` is scoped to the current page, so off-page hits are ignored."
   [wanted]
   (when wanted
-    (filter (fn [{:keys [cpos]}] (wanted cpos))
+    (filter (comp wanted kwic/hit-key)
             (get-in @state [:result :hits]))))
 
 (defn init!
   "Boot the client: seed state from the bootstrap payload, wire dispatch,
   re-render on every state change, and restore any expansions from the URL.
 
-  The wanted positions are seeded as loading placeholders before the first
+  The wanted hits are seeded as loading placeholders before the first
   render, so that render's URL sync keeps the `expand` parameter rather than
   wiping it before the restore fetches run."
   []
   (reset! state (read-payload))
-  (let [hits   (wanted-hits (expand-param))
-        corpus (get-in @state [:params :corpus])]
+  (let [hits (wanted-hits (expand-param))]
     (when (seq hits)
       (swap! state assoc :expanded
-             (into {} (map (fn [{:keys [cpos]}] [cpos ::loading])) hits)))
+             (into {} (map (fn [hit] [(kwic/hit-key hit) ::loading])) hits)))
     (r/set-dispatch! handle!)
     (add-watch state ::render (fn [_ _ _ _] (render!)))
     (render!)
-    (doseq [{:keys [cpos anchors]} hits]
+    (doseq [{:keys [corpus cpos anchors]} hits]
       (fetch-context! corpus cpos (:matchend anchors)))))

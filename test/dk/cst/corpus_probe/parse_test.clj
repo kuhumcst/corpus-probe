@@ -75,6 +75,42 @@
     (is (= [{:values ["bad\ttitle"] :freq 7}]
            (parse/group->freqs ["bad\ttitle\t7"])))))
 
+(deftest lexicon->freqs-test
+  (let [freqs (parse/lexicon->freqs (golden-lines "lexdecode.tsv"))]
+    (testing "entries come out sorted by frequency, in the group shape"
+      (is (= [{:values ["."] :freq 6} {:values ["hund"] :freq 5}]
+             (take 2 freqs)))
+      (is (= 32 (count freqs)))
+      (is (apply >= (map :freq freqs))))))
+
+(deftest describe->map-test
+  (let [stats (parse/describe->map (golden-lines "describe.txt"))]
+    (is (= "PROBE" (:name stats)))
+    (is (= 47 (:size stats)))
+    (is (= "utf8" (:charset stats)))
+    (testing "an empty description is absent, not blank"
+      (is (not (contains? stats :description))))
+    (testing "per-attribute statistics keep registry order"
+      (is (= [{:name :word :tokens 47 :types 36}
+              {:name :pos :tokens 47 :types 15}
+              {:name :lemma :tokens 47 :types 32}]
+             (:p-attrs stats)))
+      (is (= {:name :s :regions 6 :values? false}
+             (first (:s-attrs stats))))
+      (is (= [:s_id :text_id :text_title :text_year]
+             (->> (:s-attrs stats) (filter :values?) (map :name)))))
+    (is (= [] (:a-attrs stats))))
+  (testing "an attribute without data keeps its name and no counts"
+    (is (= [{:name :lemma}]
+           (:p-attrs (parse/describe->map
+                      ["p-ATT lemma                       NO DATA"])))))
+  (testing "a description and alignment attributes are captured"
+    (let [stats (parse/describe->map
+                 ["description:    Danske folkeviser (dev)"
+                  "a-ATT viser_probe               3 alignment blocks"])]
+      (is (= "Danske folkeviser (dev)" (:description stats)))
+      (is (= [{:name :viser_probe :blocks 3}] (:a-attrs stats))))))
+
 (deftest info->map-test
   (let [info (parse/info->map (golden-lines "info.txt"))]
     (is (= "PROBE" (:name info)))

@@ -20,10 +20,33 @@
        "set StructureDelimiter \"\tS\t\"; "
        "set ShowTagAttributes off;"))
 
+(def page-defaults
+  "Default concordance paging: the first page of 25 hits."
+  {:page 0 :page-size 25})
+
+(def max-row
+  "The highest row CQP can address: its range bounds are C ints, and a
+  larger number wraps negative, which CQP reads as the entire result."
+  Integer/MAX_VALUE)
+
+(defn page-rows
+  "The row range [from to] of page `page` with `page-size` hits per page:
+  0-based and inclusive, as `cat` and `dump` take it.
+
+  Negative or zero values are clamped to the first page of one row, and
+  the page to the last one below `max-row`, since CQP treats a negative
+  range bound as the entire result."
+  [page page-size]
+  (let [size (max 1 page-size)
+        from (* (min (max 0 page) (quot (- max-row size) size)) size)]
+    [from (dec (+ from size))]))
+
 (def kwic-defaults
-  "Default KWIC paging options, shared by `kwic-commands` and the result
-  maps of dk.cst.corpus-probe.search so the two cannot disagree."
-  {:context 5 :page 0 :page-size 25})
+  "Default KWIC display options, shared by `kwic-commands` and
+  dk.cst.corpus-probe.search so the two cannot disagree: five tokens of
+  context and the rows of the default page."
+  {:context 5
+   :rows    (page-rows (:page page-defaults) (:page-size page-defaults))})
 
 (defn corpus-name?
   "True when `s` is a syntactically valid uppercase CQP corpus name.
@@ -32,6 +55,15 @@
   strings outside the QueryLock sandbox, so anything else must be rejected."
   [s]
   (boolean (re-matches #"[A-Z][A-Z0-9_-]*" (str s))))
+
+(defn valid-corpus-name
+  "Return `corpus` when it is a valid corpus name (see `corpus-name?`),
+  else throw; the guard every command builder applies before splicing a
+  corpus name into a command."
+  [corpus]
+  (when-not (corpus-name? corpus)
+    (throw (ex-info "Invalid corpus name" {:corpus corpus})))
+  corpus)
 
 (defn escape-literal
   "Escape `s` for embedding inside a double-quoted CQP regular expression:
@@ -131,29 +163,27 @@
       "sort Last;"))
 
 (defn kwic-commands
-  "Build the command batch for one KWIC page of `query` (raw CQP) against
+  "Build the command batch for the rows `:rows` of `query` (raw CQP) against
   `corpus`, returning a vector of command strings.
 
   Batch order, relied upon by dk.cst.corpus-probe.search:
   0 display profile + context, 1 corpus activation, 2 locked query,
-  3 `size`, 4 sort, 5 `show` + `cat` page, 6 `dump` page, then one `tabulate`
-  page per entry of `struct-attrs`.
+  3 `size`, 4 sort, 5 `show` + `cat` rows, 6 `dump` rows, then one `tabulate`
+  per entry of `struct-attrs`.
 
   `p-attrs` are the corpus's positional attributes (registry order) to show;
   `struct-attrs` the annotated s-attributes to fetch per hit. Each gets its
   own single-column `tabulate` command so that a whole output line is one
   annotation value. Annotation values may legally contain TAB, so packing
   them into one TAB-separated row would misalign the columns. `context` is
-  in tokens; `page`/`page-size` select the hits and are clamped to sane
-  values, since CQP treats negative range bounds as the entire result. `sort`
-  is a sort mode (see `sort-modes`); the `cat`, `dump` and `tabulate` pages
-  then follow the sorted order."
-  [corpus query {:keys [p-attrs struct-attrs context page page-size sort]
-                 :or   {context   (:context kwic-defaults)
-                        page      (:page kwic-defaults)
-                        page-size (:page-size kwic-defaults)}}]
-  (let [from       (* (max 0 page) (max 1 page-size))
-        to         (dec (+ from (max 1 page-size)))
+  in tokens; `rows` is the [from to] row range (see `page-rows`) of the hits
+  to fetch, which `cat` clamps to the result silently. `sort` is a sort mode
+  (see `sort-modes`); the `cat`, `dump` and `tabulate` rows then follow the
+  sorted order."
+  [corpus query {:keys [p-attrs struct-attrs context rows sort]
+                 :or   {context (:context kwic-defaults)
+                        rows    (:rows kwic-defaults)}}]
+  (let [[from to]  rows
         page-range (str "Last " from " " to)
         show       (when (next p-attrs)
                      (str "show " (str/join " " (map #(str "+" (name %))

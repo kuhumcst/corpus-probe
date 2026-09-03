@@ -26,7 +26,7 @@
            "ALIGNED"   :aligned} k) (keyword v)])))
 
 (defn read-registry
-  "Parse the CWB registry file `f` into a corpus map.
+  "Parse the CWB registry entry file `f` into a registry entry map.
 
   Returns {:id <s> :name <s> :home <s> :info <s> :charset <s> :language <s>
   :p-attrs [<kw> ...] :s-attrs [<kw> ...] :aligned [<kw> ...]} with
@@ -40,15 +40,36 @@
                    (assoc m k v)))
                {:p-attrs [] :s-attrs [] :aligned []})))
 
+(defn registry-file?
+  "True when `f` looks like a registry entry: a plain file named like a
+  corpus ID. Subdirectories and files with other names are not entries."
+  [^java.io.File f]
+  (and (.isFile f)
+       (boolean (re-matches #"[a-z0-9_-]+" (.getName f)))))
+
 (defn corpora
-  "Read every registry file in `ctx`'s :registry directory into corpus maps,
-  sorted by :id. Files whose names are not valid corpus IDs are skipped."
+  "Read every registry entry in `ctx`'s :registry directory into registry
+  entry maps, sorted by :id.
+
+  The :id is the entry's filename, which is the name CQP resolves a corpus
+  by, whatever the ID field inside says. Files that are not entries
+  (subdirectories, names that are not corpus IDs, text without a HOME line)
+  are skipped."
   [{:keys [registry] :as ctx}]
   (->> (.listFiles (io/file registry))
-       (filter #(re-matches #"[a-z0-9_-]+" (.getName ^java.io.File %)))
-       (map read-registry)
+       (filter registry-file?)
+       (map (fn [^java.io.File f] (assoc (read-registry f) :id (.getName f))))
+       (filter :home)
        (sort-by :id)
        (vec)))
+
+(defn language
+  "The language of the corpus with registry entry map `m`, when its language
+  property is a plausible code (two or three letters) rather than the
+  `??` placeholder cwb-encode writes."
+  [{:keys [language] :as m}]
+  (when (re-matches #"[a-z]{2,3}" (str language))
+    language))
 
 (def cwb->charset
   "CWB charset property values mapped to Java charset names (the CWB names
@@ -83,33 +104,116 @@
   corpus must use its own encoding."
   [ctx corpus]
   (let [f (registry-file ctx corpus)]
-    (or (when (.exists f)
+    (or (when (registry-file? f)
           (cwb->charset (:charset (read-registry f))))
         "UTF-8")))
 
-(defonce ^{:doc "Cache of `show cd;` attribute descriptions, keyed by
-  [registry corpus registry-file-mtime]. The mtime keys stale entries out
-  when a corpus is re-encoded under a running JVM."}
-  attribute-cache
+(defonce ^{:doc "Cache of per-corpus facts: a delay per key
+  [registry corpus label registry-file-mtime]. The mtime keys stale
+  entries out when a corpus is re-encoded under a running JVM."}
+  facts-cache
   (atom {}))
 
+(defn- without-superseded
+  "Remove from `cache` the entries of the same registry, corpus and label
+  as key `k` (older mtimes of the same facts)."
+  [cache [registry corpus label :as k]]
+  (into {} (remove (fn [[[r c l] _]]
+                     (and (= r registry) (= c corpus) (= l label))))
+        cache))
+
+(defn with-facts-cache!
+  "Return the cached facts of `corpus` in `ctx` under cache key part
+  `label`, computing them with no-arg `f` on a miss.
+
+  Concurrent misses share one computation: the cache holds a delay per key,
+  so the first caller runs `f` while the others wait for its value. A
+  computation that throws is forgotten again, so the next caller retries.
+  Entries live until the corpus's registry file changes; the entry they
+  supersede is dropped then."
+  [{:keys [registry] :as ctx} corpus label f]
+  (let [k [registry corpus label (.lastModified (registry-file ctx corpus))]
+        d (get (swap! facts-cache
+                      (fn [cache]
+                        (if (contains? cache k)
+                          cache
+                          (assoc (without-superseded cache k) k (delay (f))))))
+               k)]
+    (try @d
+         (catch Exception e
+           (swap! facts-cache
+                  (fn [cache]
+                    (cond-> cache (identical? d (get cache k)) (dissoc k))))
+           (throw e)))))
+
+(defn corpus-facts!
+  "Run CQP `command` against activated `corpus` (an uppercase CQP corpus
+  name) via `ctx` and parse its output lines with `parse-fn`, cached per
+  registry + corpus + command until the corpus's registry file changes.
+
+  The corpus name is validated first, since it is spliced into the
+  activation command; the batch runs in the corpus's own charset."
+  [ctx corpus command parse-fn]
+  (query/valid-corpus-name corpus)
+  (with-facts-cache!
+    ctx corpus command
+    (fn []
+      (let [ctx (assoc ctx :charset (charset ctx corpus))
+            {:keys [results error]} (cqp/run-batch! ctx [(str corpus ";")
+                                                         command])]
+        (when error
+          (throw (ex-info "Could not read corpus facts"
+                          {:corpus corpus :command command :error error})))
+        (parse-fn (second results))))))
+
 (defn attributes!
-  "Return the attribute descriptions of `corpus` (an uppercase CQP corpus
-  name) as reported by `show cd;` via the installation in `ctx`, cached per
-  registry + corpus until the corpus's registry file changes.
+  "Return the attribute descriptions of `corpus` as reported by `show cd;`
+  via the installation in `ctx`, cached until the corpus's registry file
+  changes.
 
   Unlike the registry, this marks which s-attributes carry annotation values
   (:values?), which decides what `tabulate` can extract per hit."
-  [{:keys [registry] :as ctx} corpus]
-  (when-not (query/corpus-name? corpus)
-    (throw (ex-info "Invalid corpus name" {:corpus corpus})))
-  (let [k [registry corpus (.lastModified (registry-file ctx corpus))]]
-    (or (get @attribute-cache k)
-        (let [{:keys [results error]} (cqp/run-batch! ctx [(str corpus ";")
-                                                           "show cd;"])]
-          (when error
-            (throw (ex-info "Could not read corpus attributes"
-                            {:corpus corpus :error error})))
-          (let [attrs (parse/show-cd->attributes (second results))]
-            (swap! attribute-cache assoc k attrs)
-            attrs)))))
+  [ctx corpus]
+  (corpus-facts! ctx corpus "show cd;" parse/show-cd->attributes))
+
+(defn info!
+  "Return the corpus facts of `corpus` as reported by `info;` via the
+  installation in `ctx` (see dk.cst.corpus-probe.parse/info->map), cached
+  until the corpus's registry file changes."
+  [ctx corpus]
+  (corpus-facts! ctx corpus "info;" parse/info->map))
+
+(defn overview
+  "Summarize registry entry map `m` for the corpus index: its uppercase CQP
+  :id, its :title (the registry NAME, when set) and its :language (see
+  `language`)."
+  [{:keys [id name] :as m}]
+  {:id       (str/upper-case id)
+   :title    (not-empty name)
+   :language (language m)})
+
+(defn phantom?
+  "True when exception `e` is CQP reporting a corpus as undefined: the
+  outcome for a registry entry whose data files are gone, which stays
+  that way until the entry changes."
+  [e]
+  (boolean (re-find #"is undefined"
+                    (str (get-in (ex-data e) [:error :message])))))
+
+(defn overview!
+  "The `overview` of registry entry map `m` plus its :size in tokens via
+  `ctx`, cached until the entry changes.
+
+  The size is nil for a phantom entry (see `phantom?`), an outcome cached
+  like any other so a phantom costs one process rather than one per
+  request; any other failure to read the size propagates uncached, so a
+  transient one is retried."
+  [ctx m]
+  (let [{:keys [id] :as summary} (overview m)]
+    (with-facts-cache!
+      ctx id "overview"
+      (fn []
+        (assoc summary
+               :size (try (:size (info! ctx id))
+                          (catch clojure.lang.ExceptionInfo e
+                            (if (phantom? e) nil (throw e)))))))))
