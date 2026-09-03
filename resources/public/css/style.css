@@ -11,3 +11,9 @@
 .kwic .left  { text-align: right; }
 .kwic .match { text-align: center; }
 .kwic .right { text-align: left; }
+
+/* clickable tokens open the inspection sidebar */
+.kwic .token { cursor: pointer; }
+
+/* the expanded-context row spans all columns and wraps */
+.kwic .expanded td { white-space: normal; text-align: left; }

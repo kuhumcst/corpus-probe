@@ -4,8 +4,29 @@
             [clojure.java.io :as io]
             [io.pedestal.connector :as conn]
             [io.pedestal.http.http-kit :as http-kit]
+            [io.pedestal.interceptor :as interceptor]
             [dk.cst.corpus-probe.api :as api])
   (:gen-class))
+
+(def content-security-policy
+  "A single-origin CSP: the app serves its own script, style and assets, so
+  host-based `'self'` replaces Pedestal's default nonce-based policy (which
+  blocks a plain script tag). The page has no inline scripts or styles, so
+  `'unsafe-inline'` is omitted; `'unsafe-eval'` is the one exception the
+  shadow-cljs dev module loader requires."
+  (str "default-src 'self'; "
+       "script-src 'self' 'unsafe-eval'; "
+       "style-src 'self'; "
+       "img-src 'self' data:"))
+
+(def csp-interceptor
+  "Overrides the Content-Security-Policy set by the default interceptors.
+  Placed first in the chain so its :leave runs last and wins."
+  (interceptor/interceptor
+   {:name  ::csp
+    :leave (fn [ctx]
+             (assoc-in ctx [:response :headers "Content-Security-Policy"]
+                       content-security-policy))}))
 
 (defn read-config
   "Read config.edn from the classpath, resolving the :registry path to an
@@ -30,6 +51,7 @@
        (reset! server
                (-> (conn/default-connector-map port)
                    (conn/with-default-interceptors)
+                   (update :interceptors #(into [csp-interceptor] %))
                    (conn/with-routes (api/routes config))
                    (http-kit/create-connector nil)
                    (conn/start!))))))

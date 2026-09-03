@@ -1,2 +1,5 @@
-{:port     8080
- :registry "dev/corpus/registry"}
+{:port        8080
+ :registry    "dev/corpus/registry"
+ ;; locale for CQP's ExternalSort collation (needs gawk on PATH); all KU
+ ;; corpora are Danish, so a single locale suffices for now.
+ :sort-locale "da_DK.UTF-8"}

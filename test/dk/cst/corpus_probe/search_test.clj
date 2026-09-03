@@ -34,6 +34,47 @@
                                                     {:prefix?           true
                                                      :case-insensitive? true})))))))
 
+(deftest sort-test
+  (when-cwb
+   (let [order   (fn [opts] (mapv :cpos (:hits (search/kwic! ctx "PROBE" "[]"
+                                                             (merge {:page-size 50}
+                                                                    opts)))))
+         natural (order {})
+         sorted  (order {:sort "word"})]
+     (is (= 47 (count sorted)))
+     (testing "word sort reorders the hits away from corpus order"
+       (is (not= natural sorted)))
+     (testing "context sorts also run and cover the whole result"
+       (is (= 47 (count (order {:sort "left"}))))
+       (is (= 47 (count (order {:sort "right"})))))
+     (testing "an unknown sort mode is corpus order"
+       (is (= natural (order {:sort "bogus"})))))))
+
+(deftest danish-collation-test
+  ;; requires gawk + the da_DK.UTF-8 locale for CQP's ExternalSort
+  (when-cwb
+   (let [words (->> (search/kwic! (assoc ctx :sort-locale "da_DK.UTF-8")
+                                  "PROBE" "[]" {:sort "word" :page-size 50})
+                    :hits
+                    (mapv (comp :word first :match)))]
+     (testing "collation is case-folded Danish, not byte order"
+       ;; byte order would sort uppercase Det before lowercase dag
+       (is (< (.indexOf words "dag") (.indexOf words "Det"))))
+     (testing "o-slash sorts after regular letters within a word"
+       (is (< (.indexOf words "Katten") (.indexOf words "København")))))))
+
+(deftest context-expansion-test
+  (when-cwb
+   (testing "a hit re-fetched by position returns wider context"
+     (let [q (query/position-query 9 9)
+           {:keys [hits size]} (search/kwic! ctx "PROBE" q
+                                             {:context      50
+                                              :page-size    1
+                                              :struct-attrs []})]
+       (is (= 1 size))
+       (is (= ["hund"] (map :word (:match (first hits)))))
+       (is (pos? (count (:left (first hits)))))))))
+
 (deftest frequencies-test
   (when-cwb
    (let [freqs (search/frequencies! ctx "PROBE" "[pos = \"N.*\"]" :lemma)]

@@ -96,14 +96,48 @@
                   (str/replace #";+\s*$" ""))]
     (str "set QueryLock " key ";\n" query "\n;\nunlock " key ";")))
 
+(defn position-query
+  "A CQP query matching exactly the span from corpus position `cpos` to
+  `matchend`, for re-fetching a known hit with wider context.
+
+  `cpos` and `matchend` are coerced to integers, so no user text reaches the
+  query; the span is anchored with the fast `_ = n` position test, guarded by
+  the always-true `word=\".*\"` so the token constraint is not position-only
+  (which older CQP forbids query-initially)."
+  [cpos matchend]
+  (let [n (- (long matchend) (long cpos))]
+    (str "[word=\".*\" & _ = " (long cpos) "]"
+         (when (pos? n) (str " []{" n "}")))))
+
+(def sort-modes
+  "The KWIC sort modes, in display order: each maps to a label and the CQP
+  command that reorders the result `Last`. The context sorts order by the
+  words nearest the match (up to five tokens either side)."
+  [["corpus" "corpus order"  "sort Last;"]
+   ["word"   "match"         "set ExternalSort on; sort Last by word;"]
+   ["left"   "left context"  "set ExternalSort on; sort Last by word on match[-1] .. match[-5];"]
+   ["right"  "right context" "set ExternalSort on; sort Last by word on matchend[1] .. matchend[5];"]
+   ["random" "random"        "sort Last randomize 1;"]])
+
+(defn sort-command
+  "The CQP command that sorts `Last` for sort mode `mode` (see `sort-modes`);
+  an unknown mode falls back to corpus order.
+
+  Word sort delegates to CQP's ExternalSort so the collation follows the
+  process locale (Danish, not byte order); random sort uses a fixed seed so
+  pagination is stable across requests."
+  [mode]
+  (or (some (fn [[k _ command]] (when (= k mode) command)) sort-modes)
+      "sort Last;"))
+
 (defn kwic-commands
   "Build the command batch for one KWIC page of `query` (raw CQP) against
   `corpus`, returning a vector of command strings.
 
   Batch order, relied upon by dk.cst.corpus-probe.search:
   0 display profile + context, 1 corpus activation, 2 locked query,
-  3 `size`, 4 `show` + `cat` page, 5 `dump` page, then one `tabulate` page
-  per entry of `struct-attrs`.
+  3 `size`, 4 sort, 5 `show` + `cat` page, 6 `dump` page, then one `tabulate`
+  page per entry of `struct-attrs`.
 
   `p-attrs` are the corpus's positional attributes (registry order) to show;
   `struct-attrs` the annotated s-attributes to fetch per hit. Each gets its
@@ -111,8 +145,10 @@
   annotation value. Annotation values may legally contain TAB, so packing
   them into one TAB-separated row would misalign the columns. `context` is
   in tokens; `page`/`page-size` select the hits and are clamped to sane
-  values, since CQP treats negative range bounds as the entire result."
-  [corpus query {:keys [p-attrs struct-attrs context page page-size]
+  values, since CQP treats negative range bounds as the entire result. `sort`
+  is a sort mode (see `sort-modes`); the `cat`, `dump` and `tabulate` pages
+  then follow the sorted order."
+  [corpus query {:keys [p-attrs struct-attrs context page page-size sort]
                  :or   {context   (:context kwic-defaults)
                         page      (:page kwic-defaults)
                         page-size (:page-size kwic-defaults)}}]
@@ -126,6 +162,7 @@
            (str corpus ";")
            (locked-query query)
            "size Last;"
+           (sort-command sort)
            (str show "cat " page-range ";")
            (str "dump " page-range ";")]
           (map #(str "tabulate " page-range " match " (name %) ";"))

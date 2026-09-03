@@ -66,20 +66,23 @@
   {:banner ... :results [[line ...] ...] :error ... :exit ...}.
 
   `ctx` holds :registry (absolute path, required) and optionally :cqp
-  (executable name/path), :timeout-ms and :charset (the corpus encoding used
-  for both stdin and stdout). `:results` aligns positionally with `commands`;
+  (executable name/path), :timeout-ms, :charset (the corpus encoding used
+  for both stdin and stdout) and :sort-locale (an LC_ALL value giving CQP's
+  ExternalSort its collation). `:results` aligns positionally with `commands`;
   `:error` is nil on success, or a map with :type :timeout (process killed),
   :type :cqp (:message holds the stderr text) or :type :misaligned (section
   count differs from command count: the process died early, or output data
   collided with the section marker; either way positional alignment is
   lost and the results must not be trusted)."
-  [{:keys [registry cqp timeout-ms charset]
+  [{:keys [registry cqp timeout-ms charset sort-locale]
     :or   {cqp "cqp" timeout-ms 30000 charset "UTF-8"}}
    commands]
   (let [stdin (commands->stdin commands)
-        proc  (p/process {:cmd      [cqp "-c" "-r" registry]
-                          :in       (io/input-stream (.getBytes stdin charset))
-                          :shutdown p/destroy-tree})
+        proc  (p/process (cond-> {:cmd      [cqp "-c" "-r" registry]
+                                  :in       (io/input-stream (.getBytes stdin charset))
+                                  :shutdown p/destroy-tree}
+                           ;; LC_ALL sets the collation CQP's ExternalSort uses
+                           sort-locale (assoc :extra-env {"LC_ALL" sort-locale})))
         out   (future (slurp (:out proc) :encoding charset))
         err   (future (slurp (:err proc) :encoding charset))
         res   (deref proc timeout-ms ::timeout)]

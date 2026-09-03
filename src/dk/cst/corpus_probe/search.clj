@@ -43,8 +43,9 @@
   :page-size <n> :hits [hit ...]} where each hit combines the parsed KWIC
   line (:cpos :left :match :right), its anchors from `dump` (:anchors) and
   its structural metadata (:structs). `opts` accepts :page, :page-size,
-  :context (tokens) and :struct-attrs (defaults to every annotated
-  s-attribute of the corpus; anything not in that inventory is rejected).
+  :context (tokens), :sort (a sort mode) and :struct-attrs (defaults to every
+  annotated s-attribute of the corpus; anything not in that inventory is
+  rejected).
 
   Throws ex-info when CQP reports an error, times out or dies."
   ([ctx corpus query]
@@ -67,7 +68,7 @@
      (when error
        (throw (ex-info "KWIC query failed"
                        {:corpus corpus :query query :error error})))
-     (let [[_ _ _ size-lines cat-lines dump-lines & tab-sections] results
+     (let [[_ _ _ size-lines _sort cat-lines dump-lines & tab-sections] results
            {:keys [struct-attrs page page-size]} opts
            hits    (parse/kwic->hits p-attrs cat-lines)
            anchors (parse/dump->anchors dump-lines)

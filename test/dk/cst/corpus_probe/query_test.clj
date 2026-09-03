@@ -49,28 +49,47 @@
     (is (re-find #"# comment\n;\nunlock \d+;$"
                  (query/locked-query "\"hund\" # comment")))))
 
+(deftest position-query-test
+  (testing "a single-token span anchors just the position"
+    (is (= "[word=\".*\" & _ = 9]" (query/position-query 9 9))))
+  (testing "a multi-token span adds a trailing matchall count"
+    (is (= "[word=\".*\" & _ = 9] []{4}" (query/position-query 9 13)))))
+
+(deftest sort-command-test
+  (testing "the default is corpus order"
+    (is (= "sort Last;" (query/sort-command "corpus")))
+    (is (= "sort Last;" (query/sort-command nil)))
+    (is (= "sort Last;" (query/sort-command "bogus"))))
+  (testing "word sort uses ExternalSort for locale collation"
+    (is (str/includes? (query/sort-command "word") "ExternalSort")))
+  (testing "random sort uses a fixed seed"
+    (is (str/includes? (query/sort-command "random") "randomize 1"))))
+
 (deftest kwic-commands-test
   (let [opts     {:p-attrs      [:word :pos :lemma]
                   :struct-attrs [:text_id :text_title]
                   :page         2
-                  :page-size    10}
+                  :page-size    10
+                  :sort         "word"}
         commands (query/kwic-commands "PROBE" "\"hund\"" opts)]
-    (is (= 8 (count commands)))
+    (is (= 9 (count commands)))
     (is (= "PROBE;" (nth commands 1)))
+    (testing "the sort slot precedes the page commands"
+      (is (str/includes? (nth commands 4) "ExternalSort")))
     (testing "paging arithmetic"
-      (is (str/includes? (nth commands 4) "cat Last 20 29;"))
-      (is (= "dump Last 20 29;" (nth commands 5))))
+      (is (str/includes? (nth commands 5) "cat Last 20 29;"))
+      (is (= "dump Last 20 29;" (nth commands 6))))
     (testing "p-attributes beyond word are shown"
-      (is (str/includes? (nth commands 4) "show +pos +lemma; ")))
+      (is (str/includes? (nth commands 5) "show +pos +lemma; ")))
     (testing "each struct attribute gets its own single-column tabulate"
-      (is (= "tabulate Last 20 29 match text_id;" (nth commands 6)))
-      (is (= "tabulate Last 20 29 match text_title;" (nth commands 7)))))
+      (is (= "tabulate Last 20 29 match text_id;" (nth commands 7)))
+      (is (= "tabulate Last 20 29 match text_title;" (nth commands 8)))))
   (testing "no tabulate commands without struct attributes"
-    (is (= 6 (count (query/kwic-commands "PROBE" "\"hund\""
+    (is (= 7 (count (query/kwic-commands "PROBE" "\"hund\""
                                          {:p-attrs [:word]})))))
   (testing "negative or zero paging values are clamped, not passed to CQP"
     (let [commands (query/kwic-commands "PROBE" "\"hund\""
                                         {:p-attrs   [:word]
                                          :page      -1
                                          :page-size 0})]
-      (is (= "dump Last 0 0;" (nth commands 5))))))
+      (is (= "dump Last 0 0;" (nth commands 6))))))
