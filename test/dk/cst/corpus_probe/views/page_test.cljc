@@ -9,11 +9,7 @@
                :folders [{:label nil :folders []
                           :corpora [{:id "PROBE" :size 47}]}]
                :params  {:corpus ["PROBE"] :q "hund" :sort "word"}}
-        html  (page/search-form state "/"
-                                (page/sort-control "en"
-                                                   [["corpus" :sort-corpus]
-                                                    ["word" :sort-word]]
-                                                   "word"))]
+        html  (page/search-form state "/" nil)]
     (testing "the form is wrapped in a <search> landmark"
       (is (= :search (first html))))
     (testing "the form submits to the given action"
@@ -25,20 +21,80 @@
       (is (some #{"search"} (deep html))))
     (testing "grouped controls have legends"
       (is (some #{:legend} (deep html))))
-    (testing "the sort control offers the given modes"
-      (is (some #{"corpus order"} (deep html)))
-      (is (some #{"match"} (deep html))))
-    (testing "the language travels with the search as a hidden field"
-      (is (some #{{:type "hidden" :name "lang" :value "en"}} (deep html))))
+    (testing "the example is the one for the mode being searched in"
+      (is (some #(and (map? %) (= "q" (:id %))
+                      (= "hund, or several words in order" (:placeholder %)))
+                (deep html))))
+    (testing "the selection the reader made is marked as one they made"
+      (is (some #{{:type "hidden" :name "scope" :value "chosen"}}
+                (deep html))))
+    (testing "the sort is not here: it orders a result, it does not ask one"
+      (is (not (some #{"sort"} (deep html)))))
+    (testing "no language travels with the search: it is not part of one"
+      (is (not (some #(and (map? %) (= "lang" (:name %))) (deep html)))))
+    (testing "extra hidden inputs ride along with the search"
+      (is (some #{{:type "hidden" :name "attr" :value "word"}}
+                (deep (page/search-form
+                       state "/" [:input {:type  "hidden" :name "attr"
+                                          :value "word"}])))))
     (testing "the same form in Danish"
-      (let [da (deep (page/search-form
-                      (assoc state :lang "da") "/"
-                      (page/sort-control "da" [["corpus" :sort-corpus]]
-                                         "corpus")))]
+      (let [da (deep (page/search-form (assoc state :lang "da") "/" nil))]
         (is (some #{"Søg"} da))
         (is (some #{"Forespørgsel"} da))
-        (is (some #{"korpusrækkefølge"} da))
-        (is (some #{{:type "hidden" :name "lang" :value "da"}} da))))))
+        (is (not (some #(and (map? %) (= "lang" (:name %))) da)))))))
+
+(deftest view-controls-test
+  (testing "no controls, nothing rendered"
+    (is (nil? (page/view-controls "en" nil))))
+  (testing "a control that acts on a result submits the form that made it"
+    (let [html (page/view-controls
+                "en" (page/sort-control "en" [["word" :sort-word]] "word"))]
+      (is (some #(and (map? %) (= page/form-id (:form %))) (deep html)))
+      (is (some #{"Apply"} (deep html)))
+      (is (some #{"Anvend"}
+                (deep (page/view-controls "da" (page/sort-control
+                                                "da" [["word" :sort-word]]
+                                                "word"))))))))
+
+(deftest query-mode-test
+  (let [radios (fn [params]
+                 (->> (deep (page/search-form
+                             {:lang "en" :folders [] :params params} "/" nil))
+                      (filter #(and (map? %) (= "mode" (:name %))))))]
+    (testing "Simple comes first, since it is what most searches want"
+      (is (= ["simple" "cqp"] (map :value (radios {})))))
+    (testing "and it is the default, so a bare word is not a parse error"
+      (is (= [true false] (map (comp boolean :checked) (radios {}))))
+      (is (= [true false] (map (comp boolean :checked)
+                               (radios {:mode "simple"})))))
+    (testing "CQP mode is opt-in and stays selected once chosen"
+      (is (= [false true] (map (comp boolean :checked)
+                               (radios {:mode "cqp"})))))
+    (testing "each radio dispatches the mode it selects, so the client can
+              swap the example without a round trip"
+      (is (= [[:set-mode "simple"] [:set-mode "cqp"]]
+             (map (comp :change :on) (radios {})))))))
+
+(deftest query-example-test
+  (testing "each mode gets the example for the input it takes"
+    (is (= :query-example-simple (page/query-example nil)))
+    (is (= :query-example-simple (page/query-example "simple")))
+    (is (= :query-example-cqp (page/query-example "cqp"))))
+  (testing "the placeholder follows the mode"
+    (let [ph (fn [mode]
+               (->> (deep (page/search-form
+                           {:lang "en" :folders [] :params {:mode mode}}
+                           "/" nil))
+                    (some #(when (and (map? %) (= "q" (:id %)))
+                             (:placeholder %)))))]
+      (is (= "hund, or several words in order" (ph nil)))
+      (is (= "[lemma = \"hund\"] or [pos = \"N.*\"]" (ph "cqp")))
+      (is (= "[lemma = \"hund\"] eller [pos = \"N.*\"]"
+             (->> (deep (page/search-form
+                         {:lang "da" :folders [] :params {:mode "cqp"}}
+                         "/" nil))
+                  (some #(when (and (map? %) (= "q" (:id %)))
+                           (:placeholder %)))))))))
 
 (deftest filter-phrase-test
   (is (= "" (page/filter-phrase {})))
@@ -75,11 +131,14 @@
       (is (= ["1583" "1591" "1600" "S" "Havfruens sang"] (map :value inputs))))
     (testing "chosen values are checked, whether the corpora offer them or not"
       (is (= [false true true false true] (map :checked inputs))))
-    (testing "an attribute with a selection starts open and counts it"
-      (is (= [true false true]
+    (testing "one disclosure over the filter, open only while it is active"
+      (is (= [true]
              (keep #(when (and (map? %) (contains? % :open)) (:open %))
-                   (deep html))))
+                   (deep html)))))
+    (testing "an attribute counts its selection without reopening itself"
       (is (some #{" · 2 selected"} (deep html))))
+    (testing "the whole filter counts what is chosen across attributes"
+      (is (some #{"3 selected"} (deep html))))
     (testing "the region counts are machine-readable, with their unit"
       (is (some #{[:data {:value "2"} "2 regions"]} (deep html)))
       (is (some #{[:data {:value "1"} "1 region"]} (deep html))))
@@ -235,13 +294,23 @@
 
 (deftest result-section-test
   (let [html (page/result-section {:lang         "en"
+                                   :view         :kwic
+                                   :view-hrefs   [[:kwic :concordance "/?v=k"]
+                                                  [:frequencies :frequencies
+                                                   "/?v=f"]]
+                                   :sort-modes   [["corpus" :sort-corpus]
+                                                  ["word" :sort-word]]
                                    :result       sample-result
                                    :next-href    "/?page=1"
-                                   :freq-href    "/frequencies?q=x"
                                    :export-hrefs {:tsv "/e?format=tsv"}
                                    :export-limit 5})]
-    (testing "the frequencies of the same hits are linked"
-      (is (some #{"/frequencies?q=x"} (deep html))))
+    (testing "what to do next with the hits follows them, not precedes them"
+      (let [order (fn [x] (.indexOf (vec (deep html)) x))]
+        (is (< (order :table.kwic) (order :p.downloads)))))
+    (testing "the other view of the same hits is offered above them"
+      (let [order (fn [x] (.indexOf (vec (deep html)) x))]
+        (is (some #{:nav.views} (deep html)))
+        (is (< (order :nav.views) (order :table.kwic)))))
     (testing "a cut export is announced"
       (is (some #{" the first 5 hits"} (deep html))))
     (testing "the region names itself and can be landed on"
@@ -257,6 +326,10 @@
       (is (some #{[:h3 "CQP error"]} (deep html)))
       (is (some #{[:caption "Hits per corpus"]} (deep html)))
       (is (some #{:table.kwic} (deep html))))
+    (testing "the sort travels with the result, not with the query form"
+      (is (some #{"corpus order"} (deep html)))
+      (is (some #(and (map? %) (= "sort" (:id %)) (= page/form-id (:form %)))
+                (deep html))))
     (testing "the page links are rendered above the table as well as below"
       (is (= 2 (count (filter #(and (vector? %) (= :ul.pager (first %)))
                               (deep html))))))
@@ -294,7 +367,6 @@
                 {:lang         "en"
                  :result       {:size   0 :page 0 :pages 1 :hits []
                                 :counts [{:corpus "PROBE" :size 0}]}
-                 :freq-href    "/frequencies?q=x"
                  :export-hrefs {:tsv "/e?format=tsv"}})]
       (is (some #{"No hits."} (deep html)))
       (is (not (some #{:table.kwic} (deep html))))
@@ -312,39 +384,24 @@
     (is (= "NCSI" (page/attribute-value :pos "NCSI")))))
 
 (deftest sidebar-test
-  (testing "the aside is always present as an auto popover"
-    (let [html (page/sidebar "en" nil)]
+  (testing "nothing selected, no panel: it describes the cursor or nothing"
+    (is (nil? (page/sidebar "en" nil))))
+  (let [html (page/sidebar "en" {:token   {:word "hund" :pos "NCSI"}
+                                 :structs {:text_title "Hverdag"}
+                                 :corpus  "PROBE"})]
+    (testing "it is a named complementary region, not a popover"
       (is (= :aside.sidebar (first html)))
-      (is (= "auto" (:popover (second html))))
-      (testing "with no content when nothing is selected"
-        (is (nil? (last html))))))
-  (testing "a selection lists the token's own attributes and its hit's structs"
-    (let [html (page/sidebar "en"
-                             {:token   {:word "hund" :pos "NCSI" :open [:s]}
-                              :structs {:text_title "Hverdag"}
-                              :corpus  "PROBE"})]
-      (is (some #{"Token"} (deep html)))
-      (is (some #{"Hverdag"} (deep html)))
-      (testing "the corpus links to its info page"
-        (is (some #{[:a {:href "/corpus/probe?lang=en"} [:code "PROBE"]]}
-                  (deep html))))
-      (testing "structure tags are not shown as attributes"
-        (is (not (some #{"open"} (deep html))))))))
+      (is (= "Token details" (:aria-label (second html))))
+      (is (not (contains? (second html) :popover))))
+    (testing "it never takes focus, so the cursor can keep moving"
+      (is (not (some #(and (map? %) (contains? % :autofocus)) (deep html)))))
+    (testing "the token, its text and its corpus are named groups"
+      (is (some #{[:h3 "Token"]} (deep html)))
+      (is (some #{[:h3 "Text"]} (deep html)))
+      (is (some #{[:h3 "Corpus"]} (deep html)))
+      (is (some #{"NCSI"} (deep html)))
+      (is (some #{"Hverdag"} (deep html))))
+    (testing "closing is a plain button, since Escape is handled by the grid"
+      (is (some #{[:button {:type "button" :on {:click [:close]}} "Close"]}
+                (deep html))))))
 
-(deftest app-view-test
-  (testing "the page names itself and the bypass link can reach it"
-    (let [html (page/app-view {:lang "en" :folders [] :params {}})]
-      (is (= layout/main-attrs (second html)))
-      (is (some #{[:h1 "Search"]} (deep html)))))
-  (testing "the form submits to the results, so a search lands on its answer"
-    (let [html (page/app-view {:lang "en" :folders [] :params {}})]
-      (is (= (str "/" page/results-fragment)
-             (get-in html [3 1 1 :action])))))
-  (testing "an error is shown as the outcome of the search"
-    (let [html (page/app-view {:lang "en" :folders [] :params {}
-                               :error {:type :cqp :message "boom"}})]
-      (is (some #{"boom"} (deep html)))
-      (is (some #{"results"} (deep html)))))
-  (testing "no query renders no results region at all"
-    (let [html (page/app-view {:lang "en" :folders [] :params {}})]
-      (is (not (some #{"results"} (deep html)))))))

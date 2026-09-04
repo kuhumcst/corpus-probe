@@ -3,6 +3,7 @@
             [clojure.test :refer [deftest is testing]]
             [cognitect.transit :as transit]
             [dk.cst.corpus-probe.api :as api]
+            [dk.cst.corpus-probe.corpus :as corpus]
             [dk.cst.corpus-probe.cqp-test :refer [ctx when-cwb]]
             [taoensso.telemere :as t])
   (:import [java.io ByteArrayInputStream]))
@@ -22,16 +23,36 @@
            (api/->cqp {:q "hund" :mode "simple" :prefix "on" :ci "on"}))))
   (testing "blank input yields nil"
     (is (nil? (api/->cqp {:q "   " :mode "cqp"})))
-    (is (nil? (api/->cqp {:mode "simple"})))))
+    (is (nil? (api/->cqp {:mode "simple"}))))
+  (testing "simple is the default: a bare word is a word search, not CQP"
+    (is (= "[word = \"hund\"]" (api/->cqp {:q "hund"})))
+    (is (= "[word = \"hund\"]" (api/->cqp {:q "hund" :mode ""})))
+    (testing "and its options still apply"
+      (is (= "[word = \"hund.*\" %c]"
+             (api/->cqp {:q "hund" :prefix "on" :ci "on"}))))))
+
+(deftest selected-corpora-test
+  (let [corpora [{:id "probe"} {:id "viser"}]]
+    (testing "the corpora the request names win"
+      (is (= ["PROBE"] (api/selected-corpora nil corpora {:corpus "probe"})))
+      (is (= ["PROBE" "VISER"]
+             (api/selected-corpora nil corpora {:corpus ["probe" "viser"]
+                                                :scope  "chosen"}))))
+    (testing "a reader who unticked every corpus gets no corpus, not all"
+      (is (= [] (api/selected-corpora nil corpora {:scope "chosen"}))))
+    (when-cwb
+     (testing "naming none searches every corpus CWB can read"
+       (is (= ["PROBE" "TALER" "VISER"]
+              (sort (api/selected-corpora ctx (corpus/corpora ctx) {}))))))))
 
 (deftest results-fragment-hrefs-test
   (testing "a page turn lands on the results, not the top of the form"
     (is (str/ends-with? (api/page-href {:q "hund"} 1) "#results")))
-  (testing "so does the link to the frequencies of the same hits"
-    (is (str/ends-with? (:freq-href (api/search-view-data
-                                     {:registry "nonesuch"}
-                                     {:query-params {:q "hund"}}))
-                        "#results"))))
+  (testing "so does every view of the same search"
+    (is (every? #(str/ends-with? (last %) "#results")
+                (:view-hrefs (api/search-view-data
+                              {:registry "nonesuch"}
+                              {:query-params {:q "hund"}}))))))
 
 (deftest page-href-test
   (let [href (api/page-href {:corpus "PROBE" :q "hund" :page "0"} 2)]
@@ -143,7 +164,7 @@
 (deftest corpus-page-test
   (let [ctx  {:registry "test/resources"}
         page (fn [id] (api/corpus-page ctx {:path-params {:id id}
-                                            :query-params {:lang "en"}}))]
+                                            :headers {"cookie" "lang=en"}}))]
     (testing "a hostile corpus name is rejected before touching anything"
       (is (= 404 (:status (page "bad; exit"))))
       (is (= 404 (:status (page "../resources/registry-probe")))))
@@ -166,8 +187,10 @@
 
 (deftest document-test
   (let [switch {"da" "/?lang=da" "en" "/?lang=en"}
-        plain  (api/document "en" switch "T" [:main {:id "main"} "body"])
-        client (api/document "en" switch "T" [:main {:id "main"} "body"] "[]")
+        base   {:lang "en" :switch switch :title "T"
+                :body [:main {:id "main"} "body"]}
+        plain  (api/document base)
+        client (api/document (assoc base :payload "[]"))
         ;; nil rather than -1 for absent, so an order assertion cannot
         ;; pass on a part that is not there at all
         at     (fn [doc s] (let [i (.indexOf ^String doc ^String s)]
@@ -178,13 +201,63 @@
     (testing "the footer follows the body, so it is the document's own"
       (is (some? (at plain "<footer")))
       (is (< (at plain "<main") (at plain "<footer"))))
-    (testing "#app and the client script are served together, or not at all"
-      (is (not (str/includes? plain "id=\"app\"")))
-      (is (not (str/includes? plain "/js/main.js")))
-      (is (str/includes? client "<div id=\"app\">"))
-      (is (str/includes? client "/js/main.js")))
+    (testing "every page mounts the client, so every page can route"
+      (is (str/includes? plain "<div id=\"app\">"))
+      (is (str/includes? plain "/js/main.js"))
+      (is (str/includes? client "<div id=\"app\">")))
+    (testing "only a page given one carries a bootstrap payload"
+      (is (not (str/includes? plain "id=\"bootstrap\"")))
+      (is (str/includes? client "id=\"bootstrap\"")))
     (testing "a page with no payload still gets its <main>"
       (is (str/includes? plain "<main")))))
+
+(deftest shell-data-test
+  (let [request {:uri "/" :query-params {:q "hund" :corpus "PROBE"}}
+        data    (api/shell-data request "da" {:q "hund" :corpus ["PROBE"]})]
+    (testing "the masthead travels in the view data, so a routed navigation
+              re-renders it rather than leaving last render's links"
+      (is (= "/" (:path data)))
+      (is (contains? data :nav)))
+    (testing "returning to the search keeps the query"
+      (is (str/includes? (:search (:nav data)) "q=hund")))
+    (testing "no URL names a language: that is the reader's own preference"
+      (is (= "/corpora" (:corpora-heading (:nav data))))
+      (is (not (str/includes? (:search (:nav data)) "lang="))))
+    (testing "the frequency table is not a place: it is a view of a result"
+      (is (not (contains? (:nav data) :frequencies))))))
+
+(deftest result-title-test
+  (let [params {:q "hund" :corpus ["PROBE"] :attr "lemma"}
+        result {:size 6 :page 0 :counts [{:corpus "PROBE" :size 6}]}]
+    (testing "the concordance names its hit count"
+      (is (= "hund · 6 hits · PROBE · corpus-probe"
+             (api/result-title "en" :kwic params result))))
+    (testing "a frequency table counts values, so it names what it grouped"
+      (is (= "hund · PROBE · by lemma · Frequencies · corpus-probe"
+             (api/result-title "en" :frequencies params result))))
+    (testing "a whole-corpus table says so rather than naming a query"
+      (is (= "All tokens · PROBE · by lemma · Frequencies · corpus-probe"
+             (api/result-title "en" :frequencies (assoc params :q "")
+                               result))))))
+
+(deftest view-hrefs-test
+  (let [hrefs (api/view-hrefs {:q "hund" :corpus ["PROBE"] :lang "da"})]
+    (testing "one entry per view, in display order"
+      (is (= [:kwic :frequencies] (map first hrefs)))
+      (is (= [:concordance :frequencies] (map second hrefs))))
+    (testing "every view of one search shares its URL but for the view param"
+      (doseq [[_ _ href] hrefs]
+        (is (str/includes? href "q=hund"))
+        (is (str/includes? href "corpus=PROBE"))
+        (is (str/ends-with? href "#results")))
+      (is (str/includes? (last (first hrefs)) "view=kwic"))
+      (is (str/includes? (last (second hrefs)) "view=frequencies")))))
+
+(deftest view-param-test
+  (is (= :kwic (api/view-param nil)))
+  (is (= :kwic (api/view-param "kwic")))
+  (is (= :kwic (api/view-param "nonesuch")))
+  (is (= :frequencies (api/view-param "frequencies"))))
 
 (deftest search-title-test
   (testing "no query is just the app name"
@@ -238,17 +311,20 @@
     (is (nil? (api/accept-language nil)))))
 
 (deftest request-language-test
-  (testing "the lang param wins when we have the language"
-    (is (= "en" (api/request-language {:query-params {:lang "en"}
-                                     :headers {"accept-language" "da"}}))))
-  (testing "a language we do not have falls back to the header"
-    (is (= "en" (api/request-language {:query-params {:lang "de"}
-                                     :headers {"accept-language" "en"}}))))
+  (testing "the language the reader chose wins over what their browser asks"
+    (is (= "en" (api/request-language
+                 {:headers {"cookie" "lang=en" "accept-language" "da"}}))))
+  (testing "a stored language we do not have falls back to the header"
+    (is (= "en" (api/request-language
+                 {:headers {"cookie" "lang=de" "accept-language" "en"}}))))
   (testing "without either, Danish"
     (is (= "da" (api/request-language {})))
     (is (= "da" (api/request-language {:headers {"accept-language" "de"}}))))
-  (testing "a repeated param counts by its first value"
-    (is (= "en" (api/request-language {:query-params {:lang ["en" "da"]}})))))
+  (testing "the URL has no say: a shared link imposes no language"
+    (is (= "da" (api/request-language {:query-params {:lang "en"}})))
+    (is (= "en" (api/request-language
+                 {:query-params {:lang "da"}
+                  :headers      {"cookie" "lang=en"}})))))
 
 (deftest valueless-param-test
   (testing "a query param written without a value names nothing"
@@ -265,19 +341,54 @@
                                                 :query-params
                                                 {nil "foo"}})))))))
 
-(deftest language-hrefs-test
-  (let [hrefs (api/language-hrefs {:uri "/frequencies"
-                                   :query-params {:corpus ["A" "B"]
-                                                  :attr "word"
-                                                  :lang "da"}})]
-    (testing "each language is the same page in that language"
-      (is (= #{"da" "en"} (set (keys hrefs))))
-      (is (str/starts-with? (hrefs "en") "/frequencies?"))
-      (is (str/includes? (hrefs "en") "lang=en"))
-      (is (not (str/includes? (hrefs "en") "lang=da")))
-      (testing "keeping every other param, repeated ones included"
-        (is (str/includes? (hrefs "en") "corpus=A&corpus=B"))
-        (is (str/includes? (hrefs "en") "attr=word"))))))
+(deftest cookie-value-test
+  (testing "a stored setting is read back by its name"
+    (is (= "en" (api/cookie-value "lang=en" :lang)))
+    (is (= "da" (api/cookie-value "other=1; lang=da; more=2" :lang))))
+  (testing "a value the setting does not accept is not read back"
+    (is (nil? (api/cookie-value "lang=xx" :lang)))
+    (is (nil? (api/cookie-value "" :lang)))
+    (is (nil? (api/cookie-value nil :lang)))))
+
+(deftest preference-cookies-test
+  (testing "a named setting with a value it accepts is stored for a year"
+    (is (= ["lang=en;Path=/;Max-Age=31536000;SameSite=Lax"]
+           (api/preference-cookies {:lang "en"}))))
+  (testing "a value the setting refuses stores nothing, not a fallback"
+    (is (= [] (api/preference-cookies {:lang "xx"}))))
+  (testing "a name the allowlist does not carry cannot be stored at all"
+    (is (= [] (api/preference-cookies {:session "stolen" :evil "x"})))
+    (is (= ["lang=en;Path=/;Max-Age=31536000;SameSite=Lax"]
+           (api/preference-cookies {:lang "en" :session "stolen"}))))
+  (testing "so a caller can never choose both a cookie's name and its value"
+    (is (every? #(str/starts-with? % "lang=")
+                (api/preference-cookies {:lang    "da"
+                                         :return  "/"
+                                         "lang"   "xx"
+                                         :Path    "/evil"})))))
+
+(deftest preferences-page-test
+  (let [post (fn [params] (api/preferences-page nil {:form-params params}))]
+    (testing "the choice is stored and the reader sent back where they were"
+      (let [{:keys [status headers]} (post {:lang "en" :return "/?q=hund"})]
+        (is (= 303 status))
+        (is (= "/?q=hund" (get headers "Location")))
+        (is (= ["lang=en;Path=/;Max-Age=31536000;SameSite=Lax"]
+               (get headers "Set-Cookie")))))
+    (testing "a return that names anywhere but this app is not followed"
+      (is (= "/" (get-in (post {:lang "en" :return "https://evil.example/"})
+                         [:headers "Location"])))
+      (is (= "/" (get-in (post {:lang "en" :return "//evil.example/"})
+                         [:headers "Location"]))))
+    (testing "a request that stores nothing sets no cookie header at all"
+      (is (not (contains? (:headers (post {:lang "xx" :return "/"}))
+                          "Set-Cookie"))))))
+
+(deftest safe-return-test
+  (is (= "/?q=x" (api/safe-return "/?q=x")))
+  (is (= "/" (api/safe-return "//evil.example")))
+  (is (= "/" (api/safe-return "https://evil.example")))
+  (is (= "/" (api/safe-return nil))))
 
 (deftest scalar-params-test
   (testing "a repeated scalar param keeps its first value, corpus its vector"
@@ -376,25 +487,21 @@
                (api/frequencies-page ctx
                                      {:query-params (assoc params
                                                            :lang "en")}))]
-    (testing "a fresh visit is just the form"
-      (let [{:keys [status body]} (page {})]
-        (is (= 200 status))
-        (is (str/includes? body "Group by"))
-        (is (not (str/includes? body "No corpus selected")))))
-    (testing "a submission without a corpus is refused"
-      (is (str/includes? (:body (page {:attr "word" :q "hund"}))
-                         "No corpus selected")))
-    (testing "the page is served in the language asked for"
-      (let [body (:body (api/frequencies-page
-                         ctx {:query-params {:lang "da"}}))]
-        (is (str/includes? body "<html lang=\"da\">"))
-        (is (str/includes? body "Gruppér efter"))
-        (is (str/includes? body "lang=en"))))
-    (testing "and in the language the browser asks for when none is given"
-      (let [body (:body (api/frequencies-page
-                         ctx {:headers {"accept-language" "en-GB,en;q=0.9"}}))]
-        (is (str/includes? body "<html lang=\"en\">"))
-        (is (str/includes? body "Group by"))))))
+    (testing "the old frequency page is now a view of a search, and says so"
+      (let [{:keys [status headers]} (page {:q "hund" :corpus "PROBE"})]
+        (is (= 301 status))
+        (let [location (get headers "Location")]
+          (is (str/starts-with? location "/?"))
+          (is (str/includes? location "view=frequencies"))
+          (is (str/includes? location "q=hund"))
+          (is (str/includes? location "corpus=PROBE"))
+          (is (str/ends-with? location "#results")))))
+    (testing "a grouping is named, so the redirect lands on a table"
+      (is (str/includes? (get-in (page {:q "hund"}) [:headers "Location"])
+                         "attr=word"))
+      (is (str/includes? (get-in (page {:q "hund" :attr "lemma"})
+                                 [:headers "Location"])
+                         "attr=lemma")))))
 
 (deftest export-validation-test
   (let [ctx    {:registry "test/resources"}

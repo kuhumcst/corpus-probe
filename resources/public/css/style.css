@@ -22,8 +22,11 @@
 /* the masthead is one row, not four stacked blocks */
 header { display: flex; flex-wrap: wrap; align-items: baseline;
          column-gap: 1.5rem; row-gap: 0.25rem; }
-header .sitename, header .subtitle { margin-block: 0.5rem; }
-header nav.languages { margin-inline-start: auto; }
+.languages p { margin-block: 0.5rem; }
+/* the switch sits at the far end of the masthead row, away from the
+   navigation it is not part of. Matched by class rather than by element,
+   so it survives the switch being a form rather than a nav */
+header .languages { margin-inline-start: auto; }
 
 /* prev, the page position and next as one row: the position sits between
    the two directions wherever both exist, and does not move when one of
@@ -35,21 +38,40 @@ ul.pager { list-style: none; display: flex; gap: 1.5em; padding: 0; }
 pre { overflow-x: auto; }
 .about pre { white-space: pre-wrap; }
 
+/* a KWIC line must not reflow, or the columns stop lining up, so the
+   concordance scrolls inside itself rather than taking the document with
+   it (WCAG 1.4.10) */
+.scroll { overflow-x: auto; overscroll-behavior-x: contain; }
+
 .kwic {
-  border-collapse: collapse;
-  font-family: monospace;
-  white-space: nowrap;
+  border-collapse: collapse;  /* no borders: this drops the UA spacing */
+  font-family: monospace;     /* PLAN.md §7: the terminal KWIC, by decision */
+  white-space: nowrap;        /* contained by .scroll above */
 }
 
-/* keep the columns of a hit apart, however long its contexts run */
-.kwic th, .kwic td { padding: 0 0.25em; }
+/* keep the columns of a hit apart, and put space between the context
+   controls of adjacent rows, which had none at all (WCAG 2.5.8) */
+.kwic th, .kwic td { padding: 0.15em 0.25em; }
+
+/* the row's one control is a target of its own (WCAG 2.5.8) */
+.kwic .cpos button { min-inline-size: 24px; min-block-size: 24px; }
 
 .kwic .left  { text-align: right; }
 .kwic .match { text-align: center; }
 .kwic .right { text-align: left; }
 
-/* clickable tokens open the inspection sidebar */
-.kwic .token { cursor: pointer; }
+/* a token is a button once the client runs, so a keyboard can inspect it.
+   It must still read as running text */
+.kwic button.token { font: inherit; color: inherit; background: none;
+                     border: 0; padding: 0; cursor: pointer;
+                     vertical-align: baseline; }
+
+/* the cursor is a position in the concordance, not a passing focus, so it
+   is shown however the reader put it there. A mouse click on a button
+   matches :focus but deliberately not :focus-visible, which would leave a
+   clicked token looking like no token at all until an arrow key moved it */
+.kwic button.token:focus { outline: 2px solid currentColor;
+                           outline-offset: 1px; }
 
 /* the expanded-context row spans all columns and wraps */
 .kwic .expanded td { white-space: normal; text-align: left; }
@@ -57,6 +79,63 @@ pre { overflow-x: auto; }
 /* the site nav is a horizontal link list; the page you are on is marked */
 header nav ul { list-style: none; display: flex; gap: 1.5em; padding: 0; }
 header nav [aria-current] { font-weight: bold; }
+
+/* Once a search has an answer, the query controls become a rail beside it
+   rather than a wall above it, so refining a query costs no scroll. Only
+   above 64rem: below that the single column is the design, and the
+   results fragment still lands the reader on the answer. */
+@media (min-width: 64rem) {
+  main:has(> .result) {
+    display: grid;
+    grid-template-columns: minmax(16rem, 22rem) minmax(0, 1fr);
+    grid-template-areas: "heading results" "query results";
+    /* the heading row is the heading: without this the results, which span
+       both rows, have their height shared out between them and push the
+       rail hundreds of pixels down the page */
+    grid-template-rows: min-content 1fr;
+    column-gap: 2rem;
+    /* the rail keeps its own height rather than stretching to the results,
+       which is also what lets it stick */
+    align-items: start;
+  }
+  main:has(> .result) > h1      { grid-area: heading; }
+  main:has(> .result) > .result { grid-area: results; }
+
+  /* the rail follows the reader down the results rather than scrolling
+     away from them. It cannot obscure anything: it is a column beside the
+     hits, not a bar over them. A rail taller than the viewport scrolls
+     inside itself, or its foot would be unreachable */
+  main:has(> .result) > search,
+  main:has(> .result) > .sidebar {
+    grid-area: query;
+    position: sticky;
+    inset-block-start: 1rem;
+    max-block-size: calc(100vh - 2rem);
+    overflow-y: auto;
+  }
+
+  /* the panel takes the query column while it is open, so the hits it
+     describes keep their width; the form is still there and still
+     submits, it is just not what the column is for right now */
+  main:has(> .sidebar) > search { display: none; }
+}
+
+/* the views of one result read as a row of choices, the current one
+   marked, like the site nav above them */
+nav.views ul { list-style: none; display: flex; gap: 1.5em; padding: 0; }
+nav.views [aria-current] { font-weight: bold; }
+
+/* the corpus tree and the metadata filter sit behind summaries now, and a
+   disclosure that shows a text cursor does not read as a control */
+summary { cursor: pointer; }
+
+/* the label is the target: one row per corpus and per filter value */
+.corpora label, .filters label { display: block; padding-block: 0.15rem; }
+
+/* one attribute may carry hundreds of values, which would otherwise bury
+   every control below it */
+.filters details > ul { max-block-size: 40vh; overflow-y: auto;
+                        overscroll-behavior: contain; }
 
 /* statistics tables (attributes, hit counts, frequencies): separated
    columns, aligned numbers */
@@ -69,5 +148,11 @@ header nav [aria-current] { font-weight: bold; }
    lists: indent by nesting, no bullets */
 .corpora ul, .filters ul { list-style: none; padding-left: 1em; }
 
-/* a concordance's corpus header row reads left to right like its hits */
-.kwic .corpus th { text-align: left; }
+/* a concordance's corpus header row, its column headings and its position
+   column read left to right like the hits themselves */
+.kwic .corpus th, .kwic thead th, .kwic .cpos { text-align: left; }
+
+/* narrow: the panel is a sheet at the foot of the viewport, so it does
+   not push the hits it describes off the screen */
+.sidebar { position: fixed; inset: auto 0 0 0; max-block-size: 45vh;
+           overflow: auto; background: Canvas; }

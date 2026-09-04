@@ -8,13 +8,13 @@
     (let [item (corpus/corpus-item "en" {:id    "VISER"
                                          :title "Folkeviser"
                                          :size  48})]
-      (is (= [:a {:href "/corpus/viser?lang=en"} "Folkeviser"] (second item)))
+      (is (= [:a {:href "/corpus/viser"} "Folkeviser"] (second item)))
       (is (some #{[:code "VISER"]} (deep item)))))
   (testing "an untitled corpus links its ID"
-    (is (= [:a {:href "/corpus/probe?lang=en"} "PROBE"]
+    (is (= [:a {:href "/corpus/probe"} "PROBE"]
            (second (corpus/corpus-item "en" {:id "PROBE" :size 47})))))
   (testing "the info link keeps the language"
-    (is (= [:a {:href "/corpus/probe?lang=da"} "PROBE"]
+    (is (= [:a {:href "/corpus/probe"} "PROBE"]
            (second (corpus/corpus-item "da" {:id "PROBE" :size 47})))))
   (testing "an unreadable corpus is marked unavailable in either language"
     (is (some #{[:em "unavailable"]}
@@ -45,19 +45,25 @@
   (let [litteratur {:label   "Litteratur"
                     :corpora [{:id "VISER" :size 48}]
                     :folders []}
-        item       (partial corpus/corpus-item "en")]
+        item       (partial corpus/corpus-item "en")
+        label      :label]
     (testing "a labelled folder is a disclosure, open as told"
-      (let [[tag attrs summary] (corpus/folder-view item
+      (let [[tag attrs summary] (corpus/folder-view item label
                                                     (constantly true)
                                                     litteratur)]
         (is (= :details tag))
         (is (:open attrs))
         (is (= [:summary "Litteratur"] summary)))
-      (is (not (:open (second (corpus/folder-view item
+      (is (not (:open (second (corpus/folder-view item label
                                                   (constantly false)
                                                   litteratur))))))
+    (testing "the summary is computed, so a closed folder can still count"
+      (is (= [:summary "Litteratur · 1 corpora"]
+             (nth (corpus/folder-view item (partial corpus/folder-count "en")
+                                      (constantly false) litteratur)
+                  2))))
     (testing "the label-less tail folder is a bare list"
-      (is (= :ul (first (corpus/folder-view item
+      (is (= :ul (first (corpus/folder-view item label
                                             (constantly true)
                                             {:label   nil
                                              :corpora [{:id "PROBE" :size 1}]
@@ -75,9 +81,22 @@
                   (->> (deep (corpus/chooser "en" folders selected))
                        (filter #(and (map? %) (contains? % :open)))
                        (map :open)))]
-    (testing "folders holding a selected corpus start open, others closed"
-      (is (= [true true false] (open #{"VISER"})))
-      (is (= [false false false] (open #{}))))
+    (testing "the chooser is one disclosure, closed unless nothing is chosen"
+      (is (= false (first (open #{"VISER"}))))
+      (is (= true (first (open #{})))))
+    (testing "inside it, a folder holding part of the selection starts open"
+      (is (= [false true true false] (open #{"VISER"}))))
+    (testing "the whole registry selected opens nothing: there is no part"
+      (is (= [false false false false] (open #{"VISER" "TALER"}))))
+    (testing "nothing selected opens nothing inside either"
+      (is (= [true false false false] (open #{}))))
+    (testing "the summary says what is selected"
+      (is (some #{"All corpora"} (deep (corpus/chooser "en" folders
+                                                       #{"VISER" "TALER"}))))
+      (is (some #{"1 of 2 selected"} (deep (corpus/chooser "en" folders
+                                                           #{"VISER"}))))
+      (is (some #{"Select at least one corpus"}
+                (deep (corpus/chooser "en" folders #{})))))
     (testing "the legend is in the chosen language"
       (is (some #{[:legend "Korpusser"]}
                 (deep (corpus/chooser "da" folders #{})))))))
@@ -130,7 +149,7 @@
         (is (re-find #"Positionelle attributter" da))
         (is (re-find #"Søg i" da))
         (testing "and its own links keep it"
-          (is (re-find #"/\?corpus=VISER&lang=da" da)))))
+          (is (re-find #"/\?corpus=VISER\"" da)))))
     (testing "an error becomes a fixed alert leaking nothing of its message"
       (let [html (pr-str (corpus/info-view "en" {:corpus "GONE"
                                                  :error  {:message

@@ -1,8 +1,12 @@
 (ns dk.cst.corpus-probe.views.layout
   "Hiccup shared by every page: the bypass link, the site masthead with its
-  navigation and the language switch, and the site footer."
-  (:require [clojure.string :as str]
-            [dk.cst.corpus-probe.i18n :as i18n]))
+  navigation and the language switch, and the site footer.
+
+  No URL here names a language. Which language a reader wants is their own
+  preference, remembered for them, so the same URL serves either one and
+  a link can be shared without imposing the sharer's language on whoever
+  opens it."
+  (:require [dk.cst.corpus-probe.i18n :as i18n]))
 
 (def main-id
   "The id of every page's <main>. Named once, so `skip-link` and the
@@ -31,66 +35,96 @@
   {"da" "Dansk"
    "en" "English"})
 
-(defn language-switch
-  "The language switch: the current page in each supported language, from
-  `switch` (a map of language code to that URL), the page's own `lang`
-  marked as current.
+(def preferences-path
+  "Where a setting is stored: a preference is not a place, so choosing one
+  changes state and sends the reader back where they were."
+  "/preferences")
 
-  Each link is labelled in the language it leads to and carries that
-  language, since its text is not in the language of the page around it."
-  [lang switch]
-  [:nav.languages {:aria-label (i18n/tr lang :language)}
-   [:ul
-    (for [code i18n/languages]
-      [:li [:a (cond-> {:href (switch code) :lang code :hreflang code}
-                 (= code lang) (assoc :aria-current "page"))
-            (language-names code)]])]])
+(defn language-switch
+  "The language switch: every supported language named in itself, the one
+  in use as plain text and each other as a button that stores it,
+  submitting to `preferences-path` and returning to `path`.
+
+  The language in use is shown but is not a control, because choosing it
+  would do nothing and a control that can do nothing is one a reader has
+  to reason about; the others are controls, because choosing them does
+  something. So the switch says both what the page is in and what it could
+  be in, and the difference between the two is the difference between text
+  and a button rather than a mark a reader has to notice.
+
+  A form rather than links, because the language a reader wants is their
+  preference rather than a property of the page they are on: the same URL
+  serves either language, and the choice is remembered for them. Each name
+  carries its own language, since none of them is in the language of the
+  page around it."
+  [lang path]
+  [:form.languages {:method "post" :action preferences-path}
+   [:input {:type "hidden" :name "return" :value path}]
+   [:p (i18n/tr lang :language) ": "
+    (interpose
+     " · "
+     (for [code i18n/languages]
+       (if (= code lang)
+         [:span {:lang code :aria-current "true"} (language-names code)]
+         [:button {:type  "submit"
+                   :name  "lang"
+                   :value code
+                   :lang  code}
+          (language-names code)])))]])
 
 (def nav-items
   "The top-level navigation, in display order: the dictionary key naming
   each page and its path."
   [[:search "/"]
-   [:frequencies "/frequencies"]
    [:corpora-heading "/corpora"]])
 
-(defn current-path
-  "The path of the page being served, read from the language `switch`:
-  every entry there is this page's own URL in one language, so the path is
-  known without threading the request through the document shell."
-  [switch]
-  (some-> (first (vals switch)) (str/split #"\?") first))
-
 (defn site-header
-  "The site masthead shared by every page, in language `lang`: the name
-  linking home, the top-level navigation with the served page marked as
-  the current one, and the language switch over `switch` (see
-  `language-switch`).
+  "The site masthead shared by every page, in language `lang`: three
+  things with one role each. Who this is (the name, linking to a fresh
+  search), where a reader can go (the top-level navigation over `nav`,
+  each `nav-items` key to its URL, with `path`, the page being served,
+  marked as the current one), and how they want it (the language switch,
+  which returns to `path`).
+
+  What the app is stays in the footer rather than being restated over
+  every page: a reader of a tool needs it once.
+
+  The nav's hrefs are given rather than built here, because the search
+  keeps its query across the masthead and only the handler knows what that
+  query is.
 
   The site name is a paragraph, not a heading: it is the same string on
   every page, so it names the site rather than the page, and each page's
   own <h1> lives inside its <main>. Every link here carries `lang`, the
   site name included, so following one keeps the language the reader
   chose."
-  [lang switch]
-  (let [path (current-path switch)]
-    [:header
-     [:p.sitename [:a {:href (str "/?lang=" lang)} "corpus-probe"]]
-     [:p.subtitle (i18n/tr lang :subtitle)]
-     [:nav {:aria-label (i18n/tr lang :site)}
-      [:ul
-       (for [[k p] nav-items]
-         [:li [:a (cond-> {:href (str p "?lang=" lang)}
-                    (= p path) (assoc :aria-current "page"))
-               (i18n/tr lang k)]])]]
-     (language-switch lang switch)]))
+  [lang path nav]
+  [:header
+   ;; the site's name is a link home and nothing else: HTML has no element
+   ;; for the name of a site, and what this actually is, is the way back to
+   ;; a clean search. It keeps no query, so it is also the app's start
+   ;; again: the navigation beside it is what carries a search onward
+   [:a.sitename {:href "/"} "corpus-probe"]
+   [:nav {:aria-label (i18n/tr lang :site)}
+    [:ul
+     (for [[k p] nav-items]
+       [:li [:a (cond-> {:href (get nav k p)}
+                  (= p path) (assoc :aria-current "page"))
+             (i18n/tr lang k)]])]]
+   (language-switch lang path)])
 
 (defn site-footer
-  "The site's contentinfo in language `lang`: what this app is a front end
-  for, credited where a reader can follow it.
+  "The site's contentinfo in language `lang`: what this app is, and what
+  it is a front end for, credited where a reader can follow it.
+
+  Both belong here rather than in the masthead, where a tagline would
+  compete with the site's name for the same row on every page.
 
   One line. Rendered as a direct child of <body>, so it is the document's
   contentinfo rather than a section footer inside the main content."
   [lang]
   [:footer
-   [:p (i18n/tr lang :powered-by) " "
-    [:a {:href "https://cwb.sourceforge.io/"} "IMS Open Corpus Workbench"]]])
+   [:p (i18n/tr lang :subtitle) ". "
+    (i18n/tr lang :powered-by) " "
+    [:a {:href "https://cwb.sourceforge.io/"} "IMS Open Corpus Workbench"]
+    "."]])

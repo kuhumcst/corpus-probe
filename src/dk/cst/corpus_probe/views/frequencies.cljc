@@ -11,7 +11,6 @@
             [dk.cst.corpus-probe.i18n :as i18n]
             [dk.cst.corpus-probe.stats :as stats]
             [dk.cst.corpus-probe.views.corpus :as corpus-views]
-            [dk.cst.corpus-probe.views.layout :as layout]
             [dk.cst.corpus-probe.views.page :as page]))
 
 (def row-limit
@@ -30,18 +29,23 @@
   "The grouping control in language `lang`: a select over the attribute
   descriptions `attrs` with `selected` (a string) chosen, the positional
   and the structural attributes in their own option groups, under CWB's
-  names for them."
+  names for them.
+
+  It names the form it submits with, so it can sit beside the table it
+  regroups rather than inside the query form: regrouping a result is a
+  different task from writing the query that produced it."
   [lang attrs selected]
   (let [{p :positional s :structural} (group-by :type attrs)]
-    [:p
+    (list
      [:label {:for "attr"} (i18n/tr lang :group-by)]
-     [:select {:id "attr" :name "attr"}
+     " "
+     [:select {:id "attr" :name "attr" :form page/form-id}
       (when (seq p)
         [:optgroup {:label (i18n/tr lang :p-attrs)}
          (map (partial attr-option selected) p)])
       (when (seq s)
         [:optgroup {:label (i18n/tr lang :s-attrs)}
-         (map (partial attr-option selected) s)])]]))
+         (map (partial attr-option selected) s)])])))
 
 (defn frequency-summary
   "The summary of frequency `result` showing `shown` of its rows, used as
@@ -108,7 +112,7 @@
            (frequency-cells lang (get freqs corpus 0) tokens))
          (when total? (frequency-cells lang total tokens))])]]))
 
-(defn counted?
+(defn tabled?
   "True when any corpus of frequency `result` could be counted, so its
   rows are an answer rather than a report of failure."
   [{:keys [counts] :as result}]
@@ -119,51 +123,27 @@
   of the frequency `result` showing `shown` of its rows when any corpus
   could be counted, else the name of the `error` that came instead."
   [lang {:keys [counts] :as result} error shown]
-  (if (counted? result)
+  (if (tabled? result)
     (frequency-summary lang result shown)
     (page/error-name lang (or error (some :error counts)))))
 
 (defn frequency-section
-  "The outcome of a frequency request in `state`, as a region named by its
-  own visible heading and focusable, so a GET search can land on it.
+  "The frequency view of the search in `state`.
 
-  Holds the frequency `:result` or the `:error` that came instead: the
-  errors of individual corpora, then, when any corpus could be counted, a
-  link to the concordance of the same hits (`:kwic-href`, absent for a
-  whole-corpus table), the download links (`:export-hrefs`, exports
-  holding every row) and the table, in the state's `:lang`."
-  [{:keys [lang result error kwic-href export-hrefs] :as state}]
+  Holds, when any corpus could be counted, the grouping control and the
+  table, then the download links (`:export-hrefs`, exports holding every
+  row), in the state's `:lang`, wrapped in the shared
+  dk.cst.corpus-probe.views.page/results-region."
+  [{:keys [lang attrs params result error export-hrefs] :as state}]
   (let [shown (min row-limit (count (:rows result)))]
-    [:section.result {:id              page/results-id
-                      :tabindex        "-1"
-                      :aria-labelledby "results-heading"}
-     [:h2 {:id "results-heading"}
-      (frequency-heading lang result error shown)]
-     (when error (page/error-body lang error nil))
-     (for [[e corpora] (page/error-groups (:counts result))]
-       (page/error-section lang e corpora))
-     (when (counted? result)
+    (page/results-region
+     state
+     (frequency-heading lang result error shown)
+     (when (tabled? result)
        (list
-        (when kwic-href
-          [:p [:a {:href kwic-href} (i18n/tr lang :this-concordance)]])
+        (page/view-controls lang (attr-control lang attrs (:attr params)))
+        (frequency-table lang result)
+        ;; what to do next with the table, so it follows the table
         (page/download-links lang export-hrefs
                              (when (< row-limit (count (:rows result)))
-                               (i18n/tr lang :all-values)))
-        (frequency-table lang result)))]))
-
-(defn frequencies-view
-  "The frequency page's main content from `state`: the search form (see
-  dk.cst.corpus-probe.views.page/search-form) with the grouping control
-  over `:attrs`, and the results region when the params described a
-  request (see `frequency-section`, which holds the `:error` as well as
-  the `:result`), all in the state's `:lang`.
-
-  The form submits to the results fragment, so a request lands the reader
-  on its own answer rather than at the top of the form that asked for it.
-  The <main> is focusable so the bypass link can move the reader into it."
-  [{:keys [lang params attrs result error] :as state}]
-  [:main layout/main-attrs
-   [:h1 (i18n/tr lang :frequencies)]
-   (page/search-form state (str "/frequencies" page/results-fragment)
-                     (attr-control lang attrs (:attr params)))
-   (when (or result error) (frequency-section state))])
+                               (i18n/tr lang :all-values))))))))

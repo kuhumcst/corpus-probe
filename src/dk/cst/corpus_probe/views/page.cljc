@@ -4,10 +4,11 @@
   frequency page: the search form, the error sections and the download
   links.
 
-  `app-view` is the page's main content (the site header around it is the
-  document's). The server renders it for first paint with no selection;
-  the client renders the same view from the same state, so clicking a
-  token reveals the sidebar without a round trip. The markup uses the
+  The page these build is assembled by
+  dk.cst.corpus-probe.views.search/search-view, which knows both views a
+  result can be shown in. The server renders it for first paint with no
+  selection; the client renders the same views from the same state, so
+  clicking a token reveals the sidebar without a round trip. The markup uses the
   element HTML provides for each part: <search> for the query form, a
   named region for the outcome, <nav> for pagination, headings for errors
   and an <aside> for the inspector, so the document is meaningful without
@@ -29,15 +30,37 @@
   region they name cannot drift apart."
   (str "#" results-id))
 
+(def form-id
+  "The id of the search form, so a control that acts on a result can sit
+  beside the result and still submit the search that produced it."
+  "search-form")
+
 (defn sort-control
   "The sort control of the concordance in language `lang`: a select over
-  the `sort-modes` [value label-key] pairs with `sort` chosen."
+  the `sort-modes` [value label-key] pairs with `sort` chosen.
+
+  It names the form it submits with, so it can sit beside the table it
+  reorders rather than inside the query form: ordering a result is a
+  different task from writing the query that produced it."
   [lang sort-modes sort]
-  [:p
+  (list
    [:label {:for "sort"} (i18n/tr lang :sort)]
-   [:select {:id "sort" :name "sort"}
+   " "
+   [:select {:id "sort" :name "sort" :form form-id}
     (for [[value k] sort-modes]
-      [:option {:value value :selected (= value sort)} (i18n/tr lang k)])]])
+      [:option {:value value :selected (= value sort)} (i18n/tr lang k)])]))
+
+(defn view-controls
+  "The `controls` (hiccup) that reorder or regroup a result already
+  fetched, with the submit that applies them, in language `lang`; nil
+  without controls.
+
+  They live with the result rather than in the query form, so re-ordering
+  a concordance costs a click instead of a scroll back past the form."
+  [lang controls]
+  (when controls
+    [:p.viewctl controls " "
+     [:button {:type "submit" :form form-id} (i18n/tr lang :apply)]]))
 
 (def filter-prefix
   "The query param prefix naming a metadata filter: the prefix followed by
@@ -90,13 +113,15 @@
   its value `rows` (see `filter-item`) plus the `chosen` values missing
   from them, so a selection is never lost on resubmit.
 
-  Open, and counting the selection in its summary, when any value is
-  chosen. The wording is in language `lang`."
+  Closed whatever is chosen, its summary counting the selection: one
+  attribute may carry hundreds of values, and reopening them on every
+  resubmit grew the form exactly while the reader was refining it. The
+  wording is in language `lang`."
   [lang attr rows chosen]
   (let [listed (set (map :value rows))
         rows   (into rows (for [value (sort chosen) :when (not (listed value))]
                             {:value value}))]
-    [:details {:open (boolean (seq chosen))}
+    [:details
      [:summary [:code (name attr)]
       (when (seq chosen)
         (str " · " (count chosen) " " (i18n/tr lang :selected)))]
@@ -106,61 +131,93 @@
   "The metadata filter fieldset of the search form from `filters` (see
   dk.cst.corpus-probe.frequency/filter-options!); nil without metadata.
 
-  A disclosure per listed attribute (`:attrs`) holds a checkbox per value
-  (see `filter-details`), followed by one per `:selected` attribute the
-  list lacks, then a note naming the `:unlisted` attributes, all worded in
-  language `lang`. `:selected` maps each attribute to the set of chosen
-  values."
+  One disclosure over the whole filter, counting the values chosen across
+  every attribute and open only while the filter is active, so a corpus
+  with forty annotated attributes is one line rather than forty. Inside
+  it, a disclosure per listed attribute (`:attrs`) holds a checkbox per
+  value (see `filter-details`), followed by one per `:selected` attribute
+  the list lacks, then a note naming the `:unlisted` attributes, all
+  worded in language `lang`. `:selected` maps each attribute to the set of
+  chosen values."
   [lang {:keys [attrs unlisted selected] :as filters}]
   (when (or (seq attrs) (seq unlisted) (seq selected))
-    (let [listed (set (map :name attrs))]
+    (let [listed (set (map :name attrs))
+          n      (reduce + (map count (vals selected)))]
       [:fieldset.filters
        [:legend (i18n/tr lang :metadata)]
-       (for [{attr :name :keys [rows]} attrs]
-         (filter-details lang attr rows (get selected attr)))
-       (for [[attr chosen] (sort-by key selected) :when (not (listed attr))]
-         (filter-details lang attr [] chosen))
-       (when (seq unlisted)
-         [:p (i18n/tr lang :too-many-values)
-          (interpose ", " (map (fn [attr] [:code (name attr)]) unlisted))])])))
+       [:details {:open (pos? n)}
+        [:summary (str n " " (i18n/tr lang :selected))]
+        (for [{attr :name :keys [rows]} attrs]
+          (filter-details lang attr rows (get selected attr)))
+        (for [[attr chosen] (sort-by key selected) :when (not (listed attr))]
+          (filter-details lang attr [] chosen))
+        (when (seq unlisted)
+          [:p (i18n/tr lang :too-many-values)
+           (interpose ", "
+                      (map (fn [attr] [:code (name attr)]) unlisted))])]])))
+
+(defn query-example
+  "The dictionary key of the example query for `mode`: the two modes take
+  different input, so one example cannot serve both."
+  [mode]
+  (if (= mode "cqp") :query-example-cqp :query-example-simple))
 
 (defn search-form
   "The search form of `state`: over its `:folders` tree of corpus
   overviews and its metadata `:filter-controls`, prefilled from its
   `:params` (:corpus, a vector of selected names, :q :mode :ci :prefix
-  :suffix), submitted as GET to `action`, with the page's own `controls`
-  (hiccup) after the query.
+  :suffix), submitted as GET to `action`, with the page's own `extra`
+  hidden inputs.
+
+  The query input comes first, then the two settings that decide how it
+  is read, then the scope of the search: the corpus chooser and the
+  metadata filter, each behind one disclosure. So the field the reader
+  reaches for is the first control in the form, whatever the registry
+  holds.
+
+  The query example is the placeholder of the mode in `:params`, and the
+  mode radios dispatch `:set-mode`, so choosing a mode swaps the example
+  without a round trip; without the client the example is the one the
+  search was submitted with.
 
   Wrapped in a <search> landmark; GET, so every search has a shareable URL
-  and works without JavaScript. The controls are the sort of the
-  concordance or the grouping attribute of the frequency table. The corpus
+  and works without JavaScript. The form carries an id, so a control
+  rendered outside it (the sort of the concordance, the grouping of the
+  frequency table) still submits with it. The corpus
   chooser, the metadata filter, the mode radios and the simple-search
-  option checkboxes are separate <fieldset> groups. The chosen `:lang` is
-  submitted along with the search, so the results come back in the same
-  language."
-  [{:keys [lang folders filter-controls params] :as state} action controls]
+  option checkboxes are separate <fieldset> groups. No language is
+  submitted with the search: which language the answer is worded in is the
+  reader's own stored preference, not part of what they asked."
+  [{:keys [lang folders filter-controls params] :as state} action extra]
   (let [{:keys [corpus q mode ci prefix suffix]} params]
     [:search
-     [:form.search {:method "get" :action action}
-      [:input {:type "hidden" :name "lang" :value lang}]
-      (corpus-views/chooser lang folders (set corpus))
-      (filter-fieldset lang filter-controls)
+     [:form.search {:id form-id :method "get" :action action}
+      extra
       [:p
        [:label {:for "q"} (i18n/tr lang :query)]
        [:input {:id           "q"
                 :name         "q"
                 :type         "search"
                 :value        (or q "")
-                :placeholder  (i18n/tr lang :query-example)
+                :placeholder  (i18n/tr lang (query-example mode))
                 :autocomplete "off"
                 :spellcheck   "false"}]]
-      controls
       [:fieldset.mode
        [:legend (i18n/tr lang :query-mode)]
-       [:label [:input {:type "radio" :name "mode" :value "cqp"
-                        :checked (not= mode "simple")}] "CQP"]
-       [:label [:input {:type "radio" :name "mode" :value "simple"
-                        :checked (= mode "simple")}] (i18n/tr lang :simple)]]
+       [:label [:input {:type    "radio" :name "mode" :value "simple"
+                        :checked (not= mode "cqp")
+                        :on      {:change [:set-mode "simple"]}}]
+        (i18n/tr lang :simple)]
+       [:label [:input {:type    "radio" :name "mode" :value "cqp"
+                        :checked (= mode "cqp")
+                        :on      {:change [:set-mode "cqp"]}}]
+        "CQP"]]
+      ;; marks a selection the reader actually made: without it, unticking
+      ;; every corpus and submitting is indistinguishable from arriving
+      ;; with no corpus named, which searches them all
+      [:input {:type "hidden" :name "scope" :value "chosen"}]
+      (corpus-views/chooser lang folders (set corpus))
+      (filter-fieldset lang filter-controls)
       [:fieldset.options
        [:legend (i18n/tr lang :simple-options)]
        [:label [:input {:type "checkbox" :name "ci" :value "on"
@@ -334,6 +391,24 @@
   [{:keys [counts] :as result}]
   (boolean (some :size counts)))
 
+(defn view-switch
+  "The switch between the views of one result in language `lang`: each of
+  `hrefs` ([view label-key url], see
+  dk.cst.corpus-probe.api/view-hrefs) as a link, `view` marked as the one
+  being shown; nil without hrefs.
+
+  Links rather than an ARIA tablist: each view is its own URL and its own
+  question put to CQP, so following one is a navigation, which is what a
+  link means. A tablist would promise a panel that is already loaded."
+  [lang view hrefs]
+  (when (seq hrefs)
+    [:nav.views {:aria-label (i18n/tr lang :result-views)}
+     [:ul
+      (for [[k label href] hrefs]
+        [:li [:a (cond-> {:href href}
+                   (= k view) (assoc :aria-current "page"))
+              (i18n/tr lang label)]])]]))
+
 (defn result-heading
   "The heading naming the results region in language `lang`: the summary
   of the concordance `result` when any corpus could be searched, else the
@@ -344,28 +419,41 @@
     (result-summary lang result)
     (error-name lang (or error (some :error counts)))))
 
-(defn result-section
-  "The outcome of a search in `state`, as a region named by its own
-  visible heading and focusable, so a GET search can land on it.
+(defn results-region
+  "The outcome of a search in `state` under `heading`, as a region named by
+  that heading and focusable, so a GET search can land on it.
 
-  Holds either the concordance `:result` or the `:error` that came
-  instead: the errors of individual corpora, then, when any corpus could
-  be searched and found something, the pagination above and below the
-  table, the per-corpus counts, a link to the frequencies of the same hits
-  (`:freq-href`), the download links (`:export-hrefs`, exports holding at
-  most `:export-limit` hits) and the concordance with its `:expanded` hits
-  and `:langs`, all worded in the state's `:lang`."
-  [{:keys [lang result error langs expanded freq-href export-hrefs
-           export-limit prev-href next-href] :as state}]
+  Every view of a result shares this: the heading, the switch between the
+  views, the error that replaced the result or the errors of individual
+  corpora, and then `body`, the view's own content. The two views differ
+  only in what they say about the same hits, so they differ only in what
+  they pass here."
+  [{:keys [lang view view-hrefs result error] :as state} heading body]
+  [:section.result {:id              results-id
+                    :tabindex        "-1"
+                    :aria-labelledby "results-heading"}
+   [:h2 {:id "results-heading"} heading]
+   (view-switch lang view view-hrefs)
+   (when error (error-body lang error nil))
+   (for [[e corpora] (error-groups (:counts result))]
+     (error-section lang e corpora))
+   body])
+
+(defn result-section
+  "The concordance view of the search in `state`: when any corpus could be
+  searched and found something, the sort control, the pagination above and
+  below the table, the per-corpus counts and the concordance with its
+  `:expanded` hits and `:langs`, then the download links (`:export-hrefs`,
+  exports holding at most `:export-limit` hits), all worded in the state's
+  `:lang` and wrapped in the shared `results-region`."
+  [{:keys [lang sort-modes params result error langs expanded client?
+           export-hrefs export-limit prev-href next-href]
+    :as state}]
   (let [{:keys [counts hits size]} result
         position (when result (page-phrase lang result))]
-    [:section.result {:id              results-id
-                      :tabindex        "-1"
-                      :aria-labelledby "results-heading"}
-     [:h2 {:id "results-heading"} (result-heading lang result error)]
-     (when error (error-body lang error nil))
-     (for [[e corpora] (error-groups counts)]
-       (error-section lang e corpora))
+    (results-region
+     state
+     (result-heading lang result error)
      (when (searched? result)
        ;; a search that found nothing has nothing to page, download or
        ;; count: the table would be a header over no rows and the exports
@@ -373,20 +461,24 @@
        (if (zero? size)
          [:p (i18n/tr lang :no-hits)]
          (list
+          (view-controls lang (sort-control lang sort-modes (:sort params)))
           (pagination lang prev-href next-href position)
           (when (next counts) (counts-table lang counts))
-          (when freq-href
-            [:p [:a {:href freq-href} (i18n/tr lang :these-freqs)]])
+          (kwic/concordance hits {:caption  (i18n/tr lang :concordance)
+                                  :lang     lang
+                                  :langs    langs
+                                  :expanded expanded
+                                  :client?  client?
+                                  :cursor   (:cursor state)})
+          (pager-links lang prev-href next-href position)
+          ;; what to do next with these hits, so it follows them: reading
+          ;; the concordance is the task, taking it elsewhere is the one
+          ;; after
           (download-links lang export-hrefs
                           (when (and export-limit (> size export-limit))
                             (str (i18n/tr lang :the-first) " "
                                  (i18n/group-digits lang export-limit) " "
-                                 (i18n/tr lang :hits))))
-          (kwic/concordance hits {:caption  (i18n/tr lang :concordance)
-                                  :lang     lang
-                                  :langs    langs
-                                  :expanded expanded})
-          (pager-links lang prev-href next-href position))))]))
+                                 (i18n/tr lang :hits))))))))))
 
 (defn attribute-value
   "Render attribute value `v` semantically by its key `k`: a text title as
@@ -409,49 +501,35 @@
   [title m]
   (when (seq m)
     [:section
-     [:h2 title]
+     [:h3 title]
      (attribute-list m)]))
 
 (defn sidebar
-  "The token inspection panel, an auto popover so it floats in the top layer
-  with the browser's own light-dismiss and Escape handling.
+  "The token inspection panel: what the concordance's cursor is on, in
+  language `lang`, from `selected` (its :token, :structs and :corpus);
+  nil while nothing is selected.
 
-  The `<aside>` is always present (the client toggles it via the Popover API
-  from `:selected` state); it holds the `selected` token's own attributes,
-  its hit's structural metadata and its corpus as titled groups only while
-  a token is selected. The `:toggle` handler lets a browser-driven dismiss
-  clear the selection. The group titles are in language `lang`; the
-  attribute names inside them are the corpus's own."
-  [lang selected]
-  [:aside.sidebar {:id         "token-details"
-                   :popover    "auto"
-                   :aria-label (i18n/tr lang :token-details)
-                   :on         {:toggle [:popover-toggle]}}
-   (when-let [{:keys [token structs corpus]} selected]
-     (list
-      [:button {:type "button" :on {:click [:close]}} (i18n/tr lang :close)]
-      (detail-group (i18n/tr lang :token) (dissoc token :open :close))
-      (detail-group (i18n/tr lang :text) structs)
-      (when corpus
-        [:section
-         [:h2 (i18n/tr lang :corpus-heading)]
-         [:p [:a {:href (corpus-views/corpus-href lang corpus)}
-              [:code corpus]]]])))])
+  Above the rail's breakpoint it takes the query column, so it sits beside
+  the hits it describes without narrowing them; below it, it is a sheet at
+  the foot of the viewport.
 
-(defn app-view
-  "The search page's main content from application `state`, in its
-  `:lang`: the search form (see `search-form`) with the `:sort-modes`
-  control, the results region when the params described a search (see
-  `result-section`, which holds the `:error` as well as the `:result`),
-  and the inspection `:selected` sidebar.
+  It does not take focus: the cursor stays on the token so the arrow keys
+  keep moving, and the panel describes whatever the cursor is on. That is
+  why it is not a popover, which would put itself in the top layer, out of
+  the grid, and want focus of its own. Escape closes it from the
+  concordance.
 
-  The form submits to the results fragment, so a search lands the reader
-  on its own answer rather than at the top of the form that asked for it.
-  The <main> is focusable so the bypass link can move the reader into it."
-  [{:keys [lang sort-modes params result error selected] :as state}]
-  [:main layout/main-attrs
-   [:h1 (i18n/tr lang :search)]
-   (search-form state (str "/" results-fragment)
-                (sort-control lang sort-modes (:sort params)))
-   (when (or result error) (result-section state))
-   (sidebar lang selected)])
+  The group titles are in `lang`; the attribute names inside them are the
+  corpus's own."
+  [lang {:keys [token structs corpus] :as selected}]
+  (when selected
+    [:aside.sidebar {:aria-label (i18n/tr lang :token-details)}
+     [:h2 (i18n/tr lang :token-details)]
+     [:button {:type "button" :on {:click [:close]}} (i18n/tr lang :close)]
+     (detail-group (i18n/tr lang :token) (dissoc token :open :close))
+     (detail-group (i18n/tr lang :text) structs)
+     (when corpus
+       [:section
+        [:h3 (i18n/tr lang :corpus-heading)]
+        [:p [:a {:href (corpus-views/corpus-href lang corpus)}
+             [:code corpus]]]])]))

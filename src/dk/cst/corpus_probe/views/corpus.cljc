@@ -15,9 +15,12 @@
             [dk.cst.corpus-probe.views.layout :as layout]))
 
 (defn corpus-href
-  "The URL of the info page of the corpus named `id`, in language `lang`."
-  [lang id]
-  (str "/corpus/" (str/lower-case id) "?lang=" lang))
+  "The URL of the info page of the corpus named `id`.
+
+  It names no language: which language the page is read in is the
+  reader's own preference, not part of the address of a corpus."
+  [_lang id]
+  (str "/corpus/" (str/lower-case id)))
 
 (defn count-cell
   "A statistics table cell for count `n` in language `lang`, or for the
@@ -72,16 +75,23 @@
   (concat corpora (mapcat folder-corpora folders)))
 
 (defn folder-view
-  "One resolved `folder` of the corpus tree: its corpora rendered by `item`
-  and its subfolders recursively, wrapped in a <details> disclosure titled
-  by its label and open when `open?` says so of the folder. The label-less
-  tail folder of ungrouped corpora renders as a bare list."
-  [item open? {:keys [label corpora folders] :as folder}]
+  "One resolved `folder` of the corpus tree: its corpora rendered by
+  `item` and its subfolders recursively, wrapped in a <details> disclosure
+  whose summary is `(summary folder)` and which is open when `open?` says
+  so of the folder.
+
+  The summary is a function rather than the bare label so a closed folder
+  can still say how many corpora it holds, which is what keeps a collapsed
+  tree navigable at a registry of a hundred and fifty. The label-less tail
+  folder of ungrouped corpora renders as a bare list."
+  [item summary open? {:keys [label corpora folders] :as folder}]
   (let [items [:ul
                (map item corpora)
-               (map (fn [f] [:li (folder-view item open? f)]) folders)]]
+               (map (fn [f] [:li (folder-view item summary open? f)]) folders)]]
     (if label
-      [:details {:open (boolean (open? folder))} [:summary label] items]
+      [:details {:open (boolean (open? folder))}
+       [:summary (summary folder)]
+       items]
       items)))
 
 (defn labelled-folders
@@ -97,10 +107,38 @@
                           (update f :label #(or % (i18n/tr lang :other)))))))
 
 (defn corpus-tree
-  "The `folders` tree of corpus overviews rendered with `item` and `open?`
-  (see `folder-view`), the ungrouped tail labelled in language `lang`."
-  [lang item open? folders]
-  (map (partial folder-view item open?) (labelled-folders lang folders)))
+  "The `folders` tree of corpus overviews rendered with `item`, `summary`
+  and `open?` (see `folder-view`), the ungrouped tail labelled in language
+  `lang`."
+  [lang item summary open? folders]
+  (map (partial folder-view item summary open?)
+       (labelled-folders lang folders)))
+
+(defn folder-count
+  "The label of `folder` followed by how many corpora it holds, in
+  language `lang`, so a closed folder still says what is inside it."
+  [lang folder]
+  (str (:label folder) " · " (count (folder-corpora folder)) " "
+       (i18n/tr lang :corpora)))
+
+(defn folder-selection
+  "`folder-count` plus how many of the folder's corpora are in the set
+  `selected`, so a closed folder says whether the selection is inside it."
+  [lang selected folder]
+  (let [n (count (filter (comp selected :id) (folder-corpora folder)))]
+    (cond-> (folder-count lang folder)
+      (pos? n) (str " · " n " " (i18n/tr lang :selected)))))
+
+(defn chooser-summary
+  "What the corpus chooser's disclosure says about a selection of `n` of
+  `total` corpora, in language `lang`: that it is all of them, how many it
+  is, or that none is chosen."
+  [lang n total]
+  (cond
+    (zero? n)    (i18n/tr lang :pick-a-corpus)
+    (= n total)  (i18n/tr lang :all-corpora)
+    :else        (str n " " (i18n/tr lang :of) " " total " "
+                      (i18n/tr lang :selected))))
 
 (defn index-view
   "The corpus index page body in language `lang`: the `folders` tree of
@@ -113,22 +151,35 @@
   [:main layout/main-attrs
    [:h1 (i18n/tr lang :corpora-heading)]
    [:div.corpora
-    (corpus-tree lang (partial corpus-item lang) (constantly true) folders)]])
+    (corpus-tree lang (partial corpus-item lang) (partial folder-count lang)
+                 (constantly true) folders)]])
 
 (defn chooser
   "The corpus selection of the search form: the `folders` tree as a group
-  of checkboxes, the IDs in the set `selected` checked. A folder holding a
-  selected corpus starts open so the selection is visible; the rest start
-  closed, since a full registry has over a hundred corpora. The wording is
-  in language `lang`."
+  of checkboxes, the IDs in the set `selected` checked, behind one
+  disclosure summarising the selection.
+
+  Closed unless nothing is selected, when choosing a corpus is the
+  reader's next move: a registry of a hundred and fifty corpora is an open
+  tree between the reader and every other control in the form, and the
+  default selects them all. A closed <details> keeps its checkboxes in the
+  document and still submits them, so folding the tree away never narrows
+  a search. Inside it, a folder holding part of the selection starts open.
+  The wording is in language `lang`."
   [lang folders selected]
-  [:fieldset.corpora
-   [:legend (i18n/tr lang :corpora-heading)]
-   (corpus-tree lang
-                (partial chooser-item lang selected)
-                (fn [folder]
-                  (some (comp selected :id) (folder-corpora folder)))
-                folders)])
+  (let [total (count (mapcat folder-corpora folders))]
+    [:fieldset.corpora
+     [:legend (i18n/tr lang :corpora-heading)]
+     [:details {:open (empty? selected)}
+      [:summary (chooser-summary lang (count selected) total)]
+      (corpus-tree lang
+                   (partial chooser-item lang selected)
+                   (partial folder-selection lang selected)
+                   (fn [folder]
+                     (and (seq selected)
+                          (not= (count selected) total)
+                          (some (comp selected :id) (folder-corpora folder))))
+                   folders)]]))
 
 (defn facts-list
   "The general facts of a corpus as a definition list: its token count and
@@ -257,8 +308,8 @@
    ;; offered, as the chooser does not offer it either
    (when-not phantom?
      [:p
-      [:a {:href (str "/?corpus=" corpus "&lang=" lang)}
+      [:a {:href (str "/?corpus=" corpus)}
        (str (i18n/tr lang :search-in) " " corpus)]
       " · "
-      [:a {:href (str "/frequencies?corpus=" corpus "&attr=word&lang=" lang)}
+      [:a {:href (str "/?corpus=" corpus "&view=frequencies&attr=word")}
        (str (i18n/tr lang :word-freqs) " " corpus)]])])

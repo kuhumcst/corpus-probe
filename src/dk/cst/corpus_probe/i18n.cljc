@@ -45,14 +45,21 @@
    ;; :corpus and :corpus-heading are
    :corpora         {:da "korpusser" :en "corpora"}
    :corpora-heading {:da "Korpusser" :en "Corpora"}
+   :all-corpora     {:da "Alle korpusser" :en "All corpora"}
+   :pick-a-corpus   {:da "Vælg mindst ét korpus"
+                     :en "Select at least one corpus"}
    :description     {:da "Søg i CWB-korpusser og læs KWIC-konkordanser."
                      :en "Search CWB corpora and read KWIC concordances."}
 
    ;; the search form
    :metadata        {:da "Metadata" :en "Metadata"}
    :query           {:da "Forespørgsel" :en "Query"}
-   :query-example   {:da "[lemma = \"hund\"] eller almindelige ord"
-                     :en "[lemma = \"hund\"] or plain words"}
+   ;; one example per query mode, since the two take different input; the
+   ;; stylesheet shows the one whose radio is checked
+   :query-example-simple {:da "hund, eller flere ord i rækkefølge"
+                          :en "hund, or several words in order"}
+   :query-example-cqp    {:da "[lemma = \"hund\"] eller [pos = \"N.*\"]"
+                          :en "[lemma = \"hund\"] or [pos = \"N.*\"]"}
    :query-mode      {:da "Forespørgselstype" :en "Query mode"}
    :simple          {:da "Simpel" :en "Simple"}
    :simple-options  {:da "Indstillinger for simpel søgning"
@@ -61,6 +68,7 @@
    :starts-with     {:da "starter med" :en "starts with"}
    :ends-with       {:da "slutter med" :en "ends with"}
    :submit          {:da "Søg" :en "Search"}
+   :apply           {:da "Anvend" :en "Apply"}
    :sort            {:da "Sortering" :en "Sort"}
    :group-by        {:da "Gruppér efter" :en "Group by"}
    :selected        {:da "valgt" :en "selected"}
@@ -78,6 +86,12 @@
 
    ;; the concordance and its summary
    :concordance     {:da "Konkordans" :en "Concordance"}
+   :result-views    {:da "Resultatvisning" :en "Result view"}
+   :position        {:da "position" :en "position"}
+   :source          {:da "kilde" :en "source"}
+   :loading         {:da "Henter …" :en "Loading …"}
+   :context-failed  {:da "Konteksten kunne ikke hentes."
+                     :en "Could not load the context."}
    :no-hits         {:da "Ingen træf." :en "No hits."}
    :hit             {:da "træf" :en "hit"}
    :hits            {:da "træf" :en "hits"}
@@ -93,10 +107,6 @@
    :next            {:da "næste" :en "next"}
    :wider-context   {:da "Vis eller skjul bredere kontekst"
                      :en "Toggle wider context"}
-   :these-freqs     {:da "Frekvenser for disse træf"
-                     :en "Frequencies of these hits"}
-   :this-concordance {:da "Konkordans for disse træf"
-                      :en "Concordance of these hits"}
    :download        {:da "Download" :en "Download"}
    :the-first       {:da "de første" :en "the first"}
    :all-values      {:da "alle værdier" :en "all values"}
