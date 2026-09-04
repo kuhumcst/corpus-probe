@@ -96,7 +96,9 @@
     (testing "the position is the row's header and its first cell"
       (is (= :th.cpos (first (nth row 2))))
       (is (= "row" (:scope (second (nth row 2)))))
-      (is (= :td.structs (first (nth row 3)))))
+      (is (= :td.left (first (nth row 3)))))
+    (testing "the source comes last, out of the line a reader is reading"
+      (is (= :td.structs (first (nth row 6)))))
     (testing "the position cell is a disclosure button showing the cpos"
       (let [button (nth (nth row 2) 2)]
         (is (= :button (first button)))
@@ -121,7 +123,7 @@
                                2) 2)
                      [1 :aria-label]))))
     (testing "the match is wrapped in a mark element"
-      (is (= :mark (get-in row [5 1 0]))))))
+      (is (= :mark (get-in row [4 1 0]))))))
 
 (deftest hit-rows-test
   (testing "a hit is always two children, the second nil without an expansion"
@@ -204,15 +206,15 @@
       (is (= [:thead
               [:tr
                [:th.cpos {:scope "col"} "position"]
-               [:th.structs {:scope "col"} "source"]
                [:th.left {:scope "col"} "left context"]
                [:th.match {:scope "col"} "match"]
-               [:th.right {:scope "col"} "right context"]]]
+               [:th.right {:scope "col"} "right context"]
+               [:th.structs {:scope "col"} "source"]]]
              (nth table 2))))
     (testing "a heading carries its column's class, so a rule about the
               column reaches the heading too"
       (is (= [:th.structs {:scope "col"} "source"]
-             (get-in table [2 1 2]))))
+             (get-in table [2 1 5]))))
     (testing "hits are grouped by corpus, each group headed by its name"
       (is (= 2 (count groups)))
       (is (= [:th {:scope "rowgroup" :colspan 5}

@@ -205,17 +205,19 @@
   carrying its corpus positions and `expanded?` its disclosure state.
 
   The corpus position is the row's header and its first cell, so every
-  other cell resolves a row header as well as a column one."
+  other cell resolves a row header as well as a column one. The source
+  comes last: between the position and the left context it stood in the
+  middle of the line a reader is there to read."
   [{:keys [ui client?] :as opts} hit expanded?]
   (let [source (hit-source hit)
         {:keys [left match right structs anchors cpos]} hit
         nl     (count left)]
     [:tr.hit (position-data cpos anchors)
      [:th.cpos {:scope "row"} (context-control ui client? hit expanded?)]
-     [:td.structs {:title (source-title structs)} (source-label structs)]
      [:td.left (tokens opts hit source 0 left)]
      [:td.match [:mark (tokens opts hit source nl match)]]
-     [:td.right (tokens opts hit source (+ nl (count match)) right)]]))
+     [:td.right (tokens opts hit source (+ nl (count match)) right)]
+     [:td.structs {:title (source-title structs)} (source-label structs)]]))
 
 (defn expanded-row
   "A full-width row showing hit `ex` (fetched with wider context, so
@@ -296,10 +298,10 @@
   [:thead
    [:tr
     [:th.cpos {:scope "col"} (i18n/tr ui "position")]
-    [:th.structs {:scope "col"} (i18n/tr ui "source")]
     [:th.left {:scope "col"} (i18n/tr ui "left context")]
     [:th.match {:scope "col"} (i18n/tr ui "match")]
-    [:th.right {:scope "col"} (i18n/tr ui "right context")]]])
+    [:th.right {:scope "col"} (i18n/tr ui "right context")]
+    [:th.structs {:scope "col"} (i18n/tr ui "source")]]])
 
 (def caption-id
   "The id of the concordance's caption, which names its scroll region."
