@@ -36,15 +36,53 @@
              (assoc-in ctx [:response :headers "Content-Security-Policy"]
                        content-security-policy))}))
 
-(defn read-config
-  "Read config.edn from the classpath, resolving the :registry and
-  :cache-dir paths to absolute ones so cqp finds them regardless of
-  working directory."
+(def config-property
+  "The system property naming a configuration file to read on top of the
+  built-in one. The environment variable CORPUS_PROBE_CONFIG does the
+  same, for a service manager that sets no properties."
+  "corpus-probe.config")
+
+(defn config-file
+  "The configuration file to read on top of the one on the classpath, from
+  the `config-property` system property or the CORPUS_PROBE_CONFIG
+  environment variable; nil when neither names one.
+
+  The property wins, so one run started by hand can override what a
+  service manager sets for every run."
   []
-  (let [config   (edn/read-string (slurp (io/resource "config.edn")))
+  (or (not-empty (System/getProperty config-property))
+      (not-empty (System/getenv "CORPUS_PROBE_CONFIG"))))
+
+(defn read-config
+  "Read config.edn from the classpath, merge the `config-file` over it
+  when there is one, and resolve the :registry and :cache-dir paths to
+  absolute ones so cqp finds them regardless of working directory.
+
+  The merge is shallow, so an installation's own file need only carry what
+  it changes: the registry it serves, where the query result cache goes
+  and how large it may grow, the timeouts. What it leaves out stays as the
+  built-in file has it, the :folders tree above all, which describes the
+  corpora rather than the machine.
+
+  Without this there is nowhere to put any of that. config.edn is read
+  from the classpath, so in a packaged jar it is inside the jar, and every
+  setting would be fixed at build time. A file that is named but cannot be
+  read stops the server rather than being passed over: a configuration
+  silently ignored is the failure this exists to prevent."
+  []
+  (let [built-in (edn/read-string (slurp (io/resource "config.edn")))
+        path     (config-file)
+        override (when path
+                   (try
+                     (edn/read-string (slurp (io/file path)))
+                     (catch Exception e
+                       (throw (ex-info "Cannot read the configuration file"
+                                       {:config-file path} e)))))
+        config   (merge built-in override)
         absolute #(.getAbsolutePath (io/file %))]
     (cond-> (update config :registry absolute)
-      (:cache-dir config) (update :cache-dir absolute))))
+      (:cache-dir config) (update :cache-dir absolute)
+      path                (assoc :config-file path))))
 
 (defonce ^{:doc "The running Pedestal connector, nil when stopped."}
   server

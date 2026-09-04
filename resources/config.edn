@@ -1,3 +1,8 @@
+;; The built-in settings. This file is read from the classpath, so in a
+;; packaged jar it lives inside the jar: an installation puts its own paths
+;; and limits in a file of its own, named by CORPUS_PROBE_CONFIG or the
+;; corpus-probe.config system property, and that is merged over this one.
+;; See README.md.
 {:port        8080
  :registry    "dev/corpus/registry"
  ;; locale for CQP's ExternalSort collation (needs gawk on PATH) and for the

@@ -62,6 +62,23 @@ clojure -M:cljs -m shadow.cljs.devtools.cli compile app   # build the client
 clojure -M -m dk.cst.corpus-probe.server                  # serve (config.edn)
 ```
 
+Settings come from [resources/config.edn](resources/config.edn), which is
+read from the classpath and so lives inside a packaged jar. An installation
+puts its own paths and limits in a file of its own and names it, either way
+round:
+
+```sh
+CORPUS_PROBE_CONFIG=/etc/corpus-probe/config.edn clojure -M -m dk.cst.corpus-probe.server
+clojure -J-Dcorpus-probe.config=/etc/corpus-probe/config.edn -M -m dk.cst.corpus-probe.server
+```
+
+That file is merged over the built-in one, so it need only carry what it
+changes: the registry it serves, where the query result cache goes and how
+large it may grow, the timeouts. The `:folders` tree describes the corpora
+rather than the machine, so it stays in the jar. A file that is named but
+cannot be read stops the server, and the effective settings are logged at
+startup.
+
 The parsers are developed against byte-exact golden files in
 [test/resources/golden/](test/resources/golden/), regenerated deliberately
 with `dev/capture-golden.sh`. Integration tests skip themselves when `cqp`
