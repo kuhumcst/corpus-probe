@@ -105,6 +105,17 @@
                 query/sort-modes))
     (is (every? #(= 2 (count %)) query/sort-modes))))
 
+(deftest sample-command-test
+  (testing "a sample is seeded, so one URL always names the same hits"
+    (is (= "randomize 1; reduce Last to 100;" (query/sample-command 100))))
+  (testing "no sample where none is asked for"
+    (is (nil? (query/sample-command nil)))
+    (testing "including a sample of none of the hits, which CQP ignores
+              silently and would otherwise leave the whole result reported
+              as a sample of it"
+      (is (nil? (query/sample-command 0)))
+      (is (nil? (query/sample-command -1))))))
+
 (deftest page-rows-test
   (is (= [0 24] (query/page-rows 0 25)))
   (is (= [20 29] (query/page-rows 2 10)))
@@ -204,6 +215,28 @@
                                          {:p-attrs   [:word]
                                           :cache-dir "/var/cache/probe"
                                           :nqr       "q_abc"}))))))
+
+(deftest kwic-batch-sample-test
+  (testing "the sample is drawn before the result is counted or ordered"
+    ;; the size to report is the sample's, and CQP's reduce discards the
+    ;; sort order of the result it reduces
+    (is (= [:setup :corpus :query :sample :size :sort :cat :dump]
+           (mapv first (query/kwic-batch "PROBE" "\"hund\""
+                                         {:p-attrs [:word] :sample 100})))))
+  (testing "and what is saved is the sample, sorted"
+    (is (= [:setup :corpus :query :sample :size :sort :save :cat :dump]
+           (mapv first (query/kwic-batch "PROBE" "\"hund\""
+                                         {:p-attrs   [:word]
+                                          :sample    100
+                                          :cache-dir "/var/cache/probe"
+                                          :nqr       "q_abc"})))))
+  (let [b (batch-commands (query/kwic-batch "PROBE" "\"hund\""
+                                            {:p-attrs [:word] :sample 100}))]
+    (is (= ["randomize 1; reduce Last to 100;"] (:sample b))))
+  (testing "a batch that asks for no sample has no such command at all"
+    (is (nil? (:sample (batch-commands
+                        (query/kwic-batch "PROBE" "\"hund\""
+                                          {:p-attrs [:word]})))))))
 
 (deftest stored-kwic-batch-test
   (let [batch (query/stored-kwic-batch "PROBE" "q_abc"

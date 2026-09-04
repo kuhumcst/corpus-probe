@@ -132,6 +132,21 @@ nothing. The wire protocol needs no version branching at all.
 arbitrary attribute, log-likelihood comparison of two searches, reading mode,
 collocation tables (`cwb-scan-corpus` around dumped match positions).
 
+**Considered and deferred, to reconsider if a reader asks** — *restriction
+to a subcorpus built from a query's results* ("search only the texts where
+X occurs"; CQPweb has it, KORP never has). Verified to work in CQP: a query
+`expand to text`, activated, with the real query run inside it, and the
+activations nest, so it composes with the metadata filter. It would reuse
+the shape of §8's `restricted-query` and needs no new state, the previous
+query travelling in the URL. Deferred because its value here is unproven:
+the *sentence*-level reading of "within these results" needs no feature at
+all (`[word="kat"] []* [word="hund"] within s` is one ordinary query), so
+only the text-level reading is a real gap; CQPweb's audience is a teaching
+one working a single corpus hard; and no KU reader has asked for it. The
+same effort spent on query building for non-experts (the v2
+attribute/operator builder of §8) would change more of what a linguist can
+ask. One request from a real reader flips this.
+
 **Deliberately dropped** (each was verified absent/disabled/unused at KU):
 word picture, lemgram search, maps, dependency trees, parallel-corpus views,
 auth/user accounts, news widgets — and above all **any database**. Everything
@@ -370,8 +385,8 @@ measured at 2M matches on an M-series Mac:
   serialized), so paging a sorted result costs ~20 ms — ~35× cheaper than
   re-sorting per request (Korp's approach) and ~270× cheaper than external
   re-sort. `cat` clamps out-of-range pages silently; no bounds pre-check.
-- Cache key: hash of (corpus, query, within, sort-mode, seed) **plus a corpus
-  build stamp** (registry mtime) — a stale save file against a re-indexed
+- Cache key: hash of (corpus, query, within, sample, sort-mode, seed) **plus a
+  corpus build stamp** (registry mtime) — a stale save file against a re-indexed
   corpus crashes CQP with SIGBUS (verified). Any abnormal exit ⇒ delete the
   file and re-run. Reap files by mtime (Korp uses 20 min).
 - **Danish collation** requires `set ExternalSort on;` with

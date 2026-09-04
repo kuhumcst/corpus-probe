@@ -320,7 +320,17 @@
   (testing "a metadata filter is named"
     (is (= "hund · PROBE · text_year 1591 · corpus-probe"
            (api/search-title en {:q "hund" :corpus ["PROBE"]
-                                   :f.text_year ["1591"]})))))
+                                   :f.text_year ["1591"]}))))
+  (testing "a sample says so beside the count it drew"
+    (let [title (fn [size]
+                  (api/search-title en {:q "hund" :corpus ["PROBE"]}
+                                    {:size   size :page 0 :sample 100
+                                     :counts [{:corpus "PROBE" :size size}]}))]
+      (is (= (str "hund · 6 hits · a random sample of at most 100"
+                  " · PROBE · corpus-probe")
+             (title 6)))
+      (testing "and a search that found nothing drew nothing, so it does not"
+        (is (= "hund · 0 hits · PROBE · corpus-probe" (title 0)))))))
 
 (deftest accept-language-test
   (testing "the first language we have wins, by quality"
@@ -442,7 +452,22 @@
   (testing "the filter params identify a search along with the query"
     (is (= {:q "hund" :corpus ["A"] :f.text_year ["1591"]}
            (api/search-params {:q "hund" :corpus ["A"] :page "2" :sort "word"
-                               :f.text_year ["1591"]})))))
+                               :f.text_year ["1591"]}))))
+  (testing "so does the sample, which decides which hits there are; the
+            sort, which only decides their order, still does not"
+    (is (= {:q "hund" :sample "100"}
+           (api/search-params {:q "hund" :sample "100" :sort "word"})))))
+
+(deftest sample-param-test
+  (is (= 100 (api/sample-param "100")))
+  (testing "no sample is the whole result"
+    (is (nil? (api/sample-param nil)))
+    (is (nil? (api/sample-param ""))))
+  (testing "a sample of none of the hits is no sample rather than an
+            empty result, and neither is anything that is not a number"
+    (is (nil? (api/sample-param "0")))
+    (is (nil? (api/sample-param "-5")))
+    (is (nil? (api/sample-param "many")))))
 
 (deftest page-param-test
   (is (= 0 (api/page-param nil)))

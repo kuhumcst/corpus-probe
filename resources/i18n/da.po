@@ -238,6 +238,12 @@ msgstr "Gå til indhold"
 msgid "Sort"
 msgstr "Sortering"
 
+msgid "Sample"
+msgstr "Stikprøve"
+
+msgid "all hits"
+msgstr "alle træf"
+
 msgid "corpus order"
 msgstr "korpusrækkefølge"
 
@@ -324,6 +330,12 @@ msgstr "med annotationer"
 
 msgid "within"
 msgstr "inden for"
+
+msgid "a random sample of at most"
+msgstr "en tilfældig stikprøve på højst"
+
+msgid "per corpus"
+msgstr "pr. korpus"
 
 msgid "Word frequencies of"
 msgstr "Ordfrekvenser i"

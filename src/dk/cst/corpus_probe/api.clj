@@ -266,6 +266,16 @@
   [v]
   (max 0 (or (some-> v parse-long) 0)))
 
+(defn sample-param
+  "How many hits the `sample` query param value `v` asks to be shown at
+  random: a positive integer, or nil for the whole result.
+
+  A sample of none of the hits is no sample rather than an empty result,
+  so zero and anything that is not a number name none."
+  [v]
+  (when-let [n (some-> v parse-long)]
+    (when (pos? n) n)))
+
 (defn corpora-param
   "The corpus names selected by the `corpus` query param value `v`: a string
   (one name, or several joined by commas as in Korp URLs) or a vector of
@@ -296,13 +306,18 @@
   ([ui {:keys [q corpus] :as params} result]
    (if (str/blank? q)
      (page-title)
-     (let [page-n (:page result 0)]
+     (let [page-n (:page result 0)
+           ;; a search every corpus refused still has a result, of size
+           ;; 0; titling that "0 hits" reports an answer the search never
+           ;; got, and contradicts the results heading
+           hits   (when (page/searched? result)
+                    (page/hits-phrase ui (:size result)))]
        (page-title q
-                   ;; a search every corpus refused still has a result, of
-                   ;; size 0; titling that "0 hits" reports an answer the
-                   ;; search never got, and contradicts the results heading
-                   (when (page/searched? result)
-                     (page/hits-phrase ui (:size result)))
+                   hits
+                   ;; only ever beside a count it could have drawn from:
+                   ;; a search that found nothing sampled nothing
+                   (when (and hits (pos? (:size result 0)))
+                     (page/sample-phrase ui (:sample result) corpus))
                    (when (seq corpus) (page/corpora-phrase ui corpus))
                    (page/filter-phrase (filter-params params))
                    (when (pos? page-n)
@@ -343,11 +358,16 @@
 
 (defn search-params
   "The `params` that identify a search (its corpora, query, metadata
-  filter), for linking the views of the same hits. The interface language
-  is not among them: it is the reader's preference, not part of the
-  search."
+  filter, the sample of its hits), for linking the views of the same
+  hits. The interface language is not among them: it is the reader's
+  preference, not part of the search.
+
+  The sample is here and the sort is not, because which hits there are is
+  part of the search while the order they are read in is not. The
+  frequency view draws no sample, but carries the param so that returning
+  to the concordance returns to the sample it was left in."
   [params]
-  (into (select-keys params [:corpus :q :mode :ci :prefix :suffix])
+  (into (select-keys params [:corpus :q :mode :ci :prefix :suffix :sample])
         (filter (comp filter-key? key))
         params))
 
@@ -667,7 +687,8 @@
                   (search-outcome! ctx known unknown cqp
                                    {:page   page-n
                                     :sort   (:sort params)
-                                    :filter (filter-params params)}))
+                                    :filter (filter-params params)
+                                    :sample (sample-param (:sample params))}))
         pages   (some-> outcome :result :pages)
         params* (assoc params :corpus selected :lang lang :attr attr)]
     (cond->
@@ -823,11 +844,13 @@
         format (:format params)]
     (if-not (and cqp (seq known) (export/formats format))
       {:status 400 :body "bad request"}
-      (let [result (search/concordance! ctx known cqp
-                                        {:page      0
-                                         :page-size export/hit-limit
-                                         :sort      (:sort params)
-                                         :filter    (filter-params params)})]
+      (let [result (search/concordance!
+                    ctx known cqp
+                    {:page      0
+                     :page-size export/hit-limit
+                     :sort      (:sort params)
+                     :filter    (filter-params params)
+                     :sample    (sample-param (:sample params))})]
         (export-response format "kwic" :size result
                          (export/kwic-table result))))))
 

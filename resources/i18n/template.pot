@@ -230,6 +230,14 @@ msgid "Sort"
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/page.cljc
+msgid "Sample"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/page.cljc
+msgid "all hits"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/page.cljc
 msgid "Apply"
 msgstr ""
 
@@ -335,6 +343,14 @@ msgstr ""
 
 #: src/dk/cst/corpus_probe/views/corpus.cljc src/dk/cst/corpus_probe/views/page.cljc
 msgid "of"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/page.cljc
+msgid "a random sample of at most"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/page.cljc
+msgid "per corpus"
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/frequencies.cljc src/dk/cst/corpus_probe/views/page.cljc

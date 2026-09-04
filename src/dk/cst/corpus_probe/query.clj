@@ -199,6 +199,11 @@
   region makes an empty subcorpus, within which the query finds nothing;
   an attribute the corpus lacks fails the filter query, and CQP's own
   error reaches the caller."
+  ;; TODO: this same shape would restrict a query to the texts another
+  ;; query matched, which is the one thing here CQP cannot say in a
+  ;; single query. Verified to work: `expand to` runs under QueryLock,
+  ;; and a second activation nests inside this filter's. Deferred rather
+  ;; than dropped, for the reasons in PLAN.md section 3.
   [query filter]
   (if (empty? filter)
     (locked-query query)
@@ -218,6 +223,30 @@
   (let [n (- (long matchend) (long cpos))]
     (str "[word=\".*\" & _ = " (long cpos) "]"
          (when (pos? n) (str " []{" n "}")))))
+
+(def sample-seed
+  "The seed CQP's random number generator is given before a sample is
+  drawn, so that a URL naming a sample always names the same hits: the
+  same result sampled twice is the same sample, in this process and in
+  the next one. Fixed for the reason the random sort mode's seed is."
+  1)
+
+(defn sample-command
+  "The command reducing the result `Last` to a random sample of `n` of
+  its matches, or nil when `n` asks for no sample.
+
+  CQP's own `reduce`, seeded so that the sample is reproducible. It has
+  to run before both `size` and `sort`: the size to report is the
+  sample's, and `reduce` discards the sort order of the result it
+  reduces.
+
+  A sample of more hits than there are is left to CQP, which keeps the
+  whole result, being what a reader would expect. A sample of none of
+  them is stopped here instead: CQP ignores `reduce ... to 0` silently,
+  and a whole result would then be reported as a sample of none of it."
+  [n]
+  (when (and n (pos? n))
+    (str "randomize " sample-seed "; reduce Last to " (long n) ";")))
 
 (def sort-modes
   "The KWIC sort modes, in display order: each mode's `sort` param value
@@ -292,22 +321,28 @@
   `struct-attrs` and `cache-dir` are as `page-commands` and
   `setup-command` take them.
 
+  `sample` reduces the result to that many random matches before
+  anything is counted or ordered (see `sample-command`), so that the
+  size reported and the rows paged are the sample's.
+
   Given `nqr`, the result is also saved under that name for
   `stored-kwic-batch` to page later. It is named only after being sorted,
   since the sort order travels with the result into the save file, which
   is what makes a stored result worth having."
   [corpus query {:keys [p-attrs struct-attrs context rows sort filter
-                        cache-dir nqr]
+                        sample cache-dir nqr]
                  :or   {context (:context kwic-defaults)
                         rows    (:rows kwic-defaults)}}]
-  (-> [[:setup  (setup-command context cache-dir)]
-       [:corpus (str corpus ";")]
-       [:query  (restricted-query query filter)]
-       [:size   "size Last;"]
-       [:sort   (sort-command sort)]]
-      (cond-> nqr (conj (let [nqr (valid-result-name nqr)]
-                          [:save (str nqr " = Last; save " nqr ";")])))
-      (into (page-commands "Last" rows p-attrs struct-attrs))))
+  (let [sampling (sample-command sample)]
+    (-> [[:setup  (setup-command context cache-dir)]
+         [:corpus (str corpus ";")]
+         [:query  (restricted-query query filter)]]
+        (cond-> sampling (conj [:sample sampling]))
+        (into [[:size "size Last;"]
+               [:sort (sort-command sort)]])
+        (cond-> nqr (conj (let [nqr (valid-result-name nqr)]
+                            [:save (str nqr " = Last; save " nqr ";")])))
+        (into (page-commands "Last" rows p-attrs struct-attrs)))))
 
 (defn stored-kwic-batch
   "The batch returning the rows `:rows` of the saved query result named
@@ -315,7 +350,7 @@
 
   No query runs and nothing is sorted, the matches and their order both
   coming from the save file, so the options that decided them (the query,
-  `sort` and `filter`) are none of this one's business."
+  `sort`, `filter` and `sample`) are none of this one's business."
   [corpus nqr {:keys [p-attrs struct-attrs context rows cache-dir]
                :or   {context (:context kwic-defaults)
                       rows    (:rows kwic-defaults)}}]

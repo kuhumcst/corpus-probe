@@ -52,6 +52,8 @@
       (is (not= (nqr "[]" {:sort "word"}) (nqr "[]" {:sort "left"})))
       (is (not= (nqr "[]" {:filter [[:text_year #{"1591"}]]})
                 (nqr "[]" {:filter [[:text_year #{"1583"}]]})))
+      (is (not= (nqr "[]" {}) (nqr "[]" {:sample 100})))
+      (is (not= (nqr "[]" {:sample 100}) (nqr "[]" {:sample 500})))
       (is (not= (nqr "[]" {}) (cache/result-name ctx "VISER" "[]" {}))))
     (testing "what the display does with the matches is not part of it"
       (is (= (nqr "[]" {})
@@ -128,11 +130,19 @@
       (is (not= (k "[]" {}) (k "\"hund\"" {})))
       (is (not= (k "[]" {}) (cache/match-key ctx "VISER" "[]" {})))
       (is (not= (k "[]" {:filter [[:y #{"a"}]]})
-                (k "[]" {:filter [[:y #{"b"}]]}))))
+                (k "[]" {:filter [[:y #{"b"}]]})))
+      (testing "a sample among them: it decides both which matches are
+                kept and how many, so a count of one is not a count of
+                the whole result"
+        (is (not= (k "[]" {}) (k "[]" {:sample 100})))
+        (is (not= (k "[]" {:sample 100}) (k "[]" {:sample 500})))))
     (testing "how they are ordered or displayed does not, since the count
               is the same either way"
       (is (= (k "[]" {}) (k "[]" {:sort "word"})))
-      (is (= (k "[]" {}) (k "[]" {:rows [25 49] :context 20}))))
+      (is (= (k "[]" {}) (k "[]" {:rows [25 49] :context 20})))
+      (testing "a sample being the same hits however they are then sorted"
+        (is (= (k "[]" {:sample 100})
+               (k "[]" {:sample 100 :sort "word"})))))
     (testing "but the saved result's key does take the ordering in"
       (is (not= (cache/result-key ctx "PROBE" "[]" {:sort "word"})
                 (cache/result-key ctx "PROBE" "[]" {:sort "left"}))))))

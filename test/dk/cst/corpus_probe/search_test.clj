@@ -69,6 +69,31 @@
      (testing "an unknown sort mode is corpus order"
        (is (= natural (order {:sort "bogus"})))))))
 
+(deftest sample-test
+  (when-cwb
+   (let [all    (search/size! ctx "PROBE" "[]")
+         drawn  (fn [n opts]
+                  (mapv :cpos (:hits (search/kwic! ctx "PROBE" "[]"
+                                                   (merge {:sample n
+                                                           :rows   [0 49]}
+                                                          opts)))))
+         sample (drawn 5 {})]
+     (is (= 47 all))
+     (testing "a sample holds that many of the matches, and the size the
+               search reports is the sample's"
+       (is (= 5 (count sample)))
+       (is (= 5 (search/size! ctx "PROBE" "[]" {:sample 5}))))
+     (testing "the same hits every time, so one URL names one sample"
+       (is (= sample (drawn 5 {}))))
+     (testing "the sample is of the matches rather than of an order of
+               them, so sorting shows the same hits in another order"
+       (is (= (set sample) (set (drawn 5 {:sort "word"})))))
+     (testing "a sample of more hits than there are is the whole result"
+       (is (= all (search/size! ctx "PROBE" "[]" {:sample 1000}))))
+     (testing "and asking for no sample leaves the result whole"
+       (is (= all (search/size! ctx "PROBE" "[]" {:sample nil})))
+       (is (= all (search/size! ctx "PROBE" "[]" {:sample 0})))))))
+
 (deftest danish-collation-test
   ;; requires gawk + the da_DK.UTF-8 locale for CQP's ExternalSort
   (when-cwb
@@ -576,6 +601,25 @@
                   (cache/result-file ctx "VISER" (name-of "corpus"))
                   {:replace-existing true})
          (is (= sorted (order "corpus"))))))))
+
+(deftest kwic-cache-sample-test
+  (when-cwb
+   (let [ctx  (cache-ctx)
+         hits (fn [n] (mapv :cpos (:hits (search/kwic! ctx "VISER" "[]"
+                                                       {:sample n}))))
+         five (hits 5)]
+     (testing "a sample is part of the search, so it is part of the name"
+       (is (not= five (hits nil)))
+       (is (= 2 (count (fs/list-dir (cache/corpus-directory ctx "VISER"))))))
+     (testing "a sampled result is stored and read like any other"
+       (is (= 5 (count five)))
+       (is (= five (hits 5))))
+     (testing "the sample really is read back from its file"
+       (let [name-of (fn [n] (stored-name ctx "VISER" "[]" {:sample n}))]
+         (fs/copy (cache/result-file ctx "VISER" (name-of 5))
+                  (cache/result-file ctx "VISER" (name-of nil))
+                  {:replace-existing true}))
+       (is (= five (hits nil)))))))
 
 (deftest kwic-cache-filter-test
   (when-cwb

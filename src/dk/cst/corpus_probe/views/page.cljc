@@ -69,12 +69,43 @@
       [:option {:value value :selected (= value sort)}
        (sort-label ui value)])]))
 
+(def sample-sizes
+  "The sample sizes the concordance offers, in display order: as many
+  hits as a reader might work through by hand, a result larger than that
+  being read by sampling it rather than by paging to the end.
+
+  A hand-written URL may name any other size, which `sample-control`
+  then shows beside these."
+  [50 100 500 1000])
+
+(defn sample-control
+  "The sample control of the concordance in `ui`: a select over the
+  `sample-sizes` with `sample` chosen, or the whole result when it names
+  none.
+
+  A size the list does not hold is offered beside them, so that a URL
+  naming one shows as the sample it is rather than as the whole result.
+  It names the form it submits with for the reason `sort-control` does."
+  [ui sample]
+  (list
+   [:label {:for "sample"} (i18n/tr ui "Sample")]
+   " "
+   [:select {:id   "sample" :name "sample" :form form-id
+             :on   {:change [:apply-view]}}
+    [:option {:value "" :selected (nil? sample)} (i18n/tr ui "all hits")]
+    (for [n (sort (cond-> (set sample-sizes) sample (conj sample)))]
+      [:option {:value n :selected (= n sample)}
+       (i18n/group-digits ui n)])]))
+
 (defn view-controls
-  "The `controls` (hiccup) that reorder or regroup a result already
-  fetched, in `ui`; nil without controls.
+  "The `controls` (hiccup) deciding how a result is read rather than what
+  was searched for, in `ui`; nil without controls.
 
   They live with the result rather than in the query form, so re-ordering
   a concordance costs a click instead of a scroll back past the form.
+  Sampling one is here for the same reason though it runs the query
+  again: how many of the hits to read is a question the reader has on
+  seeing how many there are.
 
   Each applies itself on being changed, so where `client?` there is no
   button: choosing an order is asking for it, and a control that needs a
@@ -479,15 +510,35 @@
   [ui {:keys [page pages] :as result}]
   (str (i18n/tr ui "page") " " (inc page) " " (i18n/tr ui "of") " " pages))
 
+(defn sample-phrase
+  "That a result holds a random `sample` of the matches rather than all
+  of them, in `ui`, over `corpora`; nil when it holds them all.
+
+  The number is the sample asked for rather than the hits it came back
+  with, the two differing wherever a corpus had fewer matches than that,
+  and it is named as being per corpus over several, one sample being
+  drawn in each (see dk.cst.corpus-probe.search/concordance!)."
+  [ui sample corpora]
+  (when sample
+    (str (i18n/tr ui "a random sample of at most") " "
+         (i18n/group-digits ui sample)
+         (when (next corpora) (str " " (i18n/tr ui "per corpus"))))))
+
 (defn result-summary
   "The summary text of a concordance `result` page (`:size` hits over
   `:pages`, in the corpora that could be searched, within its metadata
-  `:filter`), used as the heading naming the results region, in `ui`."
+  `:filter` and holding its random `:sample` of the matches), used as the
+  heading naming the results region, in `ui`."
   [ui {:keys [size counts] :as result}]
-  (str (hits-phrase ui size) " " (i18n/tr ui "in") " "
-       (corpora-phrase ui (map :corpus (filter :size counts)))
-       (within-phrase ui (:filter result))
-       " · " (page-phrase ui result)))
+  (let [searched (map :corpus (filter :size counts))]
+    (str (hits-phrase ui size) " " (i18n/tr ui "in") " "
+         (corpora-phrase ui searched)
+         (within-phrase ui (:filter result))
+         ;; a search that found nothing sampled nothing, and saying it
+         ;; drew a sample of what it found reads as the reason it is empty
+         (when (pos? size)
+           (some->> (sample-phrase ui (:sample result) searched) (str ", ")))
+         " · " (page-phrase ui result))))
 
 (defn counts-table
   "The per-corpus hit `counts` of a search over several corpora as a table,
@@ -701,12 +752,12 @@
 
 (defn result-section
   "The concordance view of the search in `state`: when any corpus could be
-  searched and found something, the sort control, the pagination above and
-  below the table, the concordance with its `:expanded` hits and `:langs`,
-  then the per-corpus counts as an aside and the download links
-  (`:export-hrefs`, exports holding at most `:export-limit` hits), all
-  worded in the state's `:ui` and wrapped in the shared
-  `results-region`."
+  searched and found something, the sort and sample controls, the
+  pagination above and below the table, the concordance with its
+  `:expanded` hits and `:langs`, then the per-corpus counts as an aside
+  and the download links (`:export-hrefs`, exports holding at most
+  `:export-limit` hits), all worded in the state's `:ui` and wrapped in
+  the shared `results-region`."
   [{:keys [ui sort-modes params result error langs expanded client?
            export-hrefs export-limit prev-href next-href]
     :as state}]
@@ -723,7 +774,9 @@
          [:p (i18n/tr ui "No hits.")]
          (list
           (view-controls ui client?
-                         (sort-control ui sort-modes (:sort params)))
+                         (list (sort-control ui sort-modes (:sort params))
+                               " "
+                               (sample-control ui (:sample result))))
           (pagination ui prev-href next-href position)
           (kwic/concordance hits {:caption  (i18n/tr ui "Concordance")
                                   :ui       ui

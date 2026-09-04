@@ -18,6 +18,16 @@ info pages, TSV/CSV export). Milestone 5, the cutover, is in progress:
 metadata filtering, the Danish and English UI and the startup vetting are
 done; the deployment next to KORP remains (see PLAN.md section 12).
 
+A result too large to read through can be sampled: the concordance keeps a
+given number of its hits, drawn at random with CQP's own `reduce` before
+the result is counted or ordered. The seed is fixed, so one URL always
+names the same hits and a colleague opening the link reads the ones the
+sender read. The draw is per corpus, which keeps a large corpus from
+crowding a small one out of the sample and keeps each corpus's saved
+result independent of which others were searched beside it. The frequency
+view is never sampled: counting a random hundred hits answers worse than
+counting them all and costs the same query.
+
 Startup vets the installation and logs what it finds. It checks that the
 CWB programs can be launched, and runs CQP's own sort pipeline (`sort ... |
 gawk`) under the configured locale to see whether it collates the way the

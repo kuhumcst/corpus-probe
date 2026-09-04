@@ -309,9 +309,11 @@
   :match :right), its anchors from `dump` (:anchors) and its structural
   metadata (:structs). `opts` accepts :rows (the [from to] row range, see
   dk.cst.corpus-probe.query/page-rows; default the first page), :context
-  (tokens), :sort (a sort mode), :filter (a metadata filter) and
-  :struct-attrs (defaults to every annotated s-attribute of the corpus;
-  anything not in that inventory is rejected).
+  (tokens), :sort (a sort mode), :filter (a metadata filter), :sample
+  (how many of the matches to keep, drawn at random; see
+  dk.cst.corpus-probe.query/sample-command) and :struct-attrs (defaults
+  to every annotated s-attribute of the corpus; anything not in that
+  inventory is rejected).
 
   When `ctx` keeps a cache (see dk.cst.corpus-probe.cache), the result is
   saved there and a later page of the same query, filter and sort mode is
@@ -357,15 +359,18 @@
                     hits anchors (or structs (repeat nil)))})))
 
 (defn run-size!
-  "Count the matches of CQP `query` in `corpus` via `ctx`, within
-  `filter-by` when there is one, by running the query.
+  "Count the matches of CQP `query` in `corpus` via `ctx` under `opts`
+  (its :filter as `corpus-filter!` returns one, and its :sample), by
+  running the query.
 
   Throws ex-info when CQP reports an error, times out or dies."
-  [ctx corpus query filter-by]
-  (let [{:keys [results error]}
-        (cqp/run-batch! ctx [(str corpus ";")
-                             (query/restricted-query query filter-by)
-                             "size Last;"])]
+  [ctx corpus query {:keys [filter sample]}]
+  (let [sampling (query/sample-command sample)
+        commands (-> [(str corpus ";")
+                      (query/restricted-query query filter)]
+                     (cond-> sampling (conj sampling))
+                     (conj "size Last;"))
+        {:keys [results error]} (cqp/run-batch! ctx commands)]
     (when error
       (throw (ex-info "Size query failed"
                       {:corpus corpus :query query :error error})))
@@ -382,11 +387,11 @@
   reports an error, times out or dies."
   ([ctx corpus query]
    (size! ctx corpus query {}))
-  ([ctx corpus query {:keys [filter]}]
-   (let [ctx       (corpus-ctx ctx corpus)
-         filter-by (corpus-filter! ctx corpus filter)]
-     (cache/count! ctx corpus query {:filter filter-by}
-                   #(run-size! (running-ctx ctx) corpus query filter-by)))))
+  ([ctx corpus query {:keys [filter sample]}]
+   (let [ctx  (corpus-ctx ctx corpus)
+         opts {:filter (corpus-filter! ctx corpus filter) :sample sample}]
+     (cache/count! ctx corpus query opts
+                   #(run-size! (running-ctx ctx) corpus query opts)))))
 
 (defn corpus-size!
   "The size of `query`'s result in `corpus` via `ctx` (`opts` as for
@@ -452,15 +457,21 @@
 
   `opts` accepts :page and :page-size (see
   dk.cst.corpus-probe.query/page-defaults) plus the display options of
-  `kwic!` (:context, :sort, :filter). Returns {:query ... :filter ...
-  :page ... :page-size ... :counts [{:corpus ... :size ...} ...] :size
-  <hits in all readable corpora> :hits [hit ...]}, each hit tagged with
-  its :corpus."
+  `kwic!` (:context, :sort, :filter, :sample). A :sample is drawn per
+  corpus, each being queried on its own, so over several corpora it is
+  that many hits from each: what also keeps one corpus's saved result
+  independent of which others were searched beside it, and what keeps a
+  large corpus from crowding a small one out of the sample. Returns
+  {:query ... :filter ... :sample ... :page ... :page-size ... :counts
+  [{:corpus ... :size ...} ...] :size <hits in all readable corpora>
+  :hits [hit ...]}, each hit tagged with its :corpus. The :sample is
+  reported back because a page of a sample is not a page of the whole
+  result and nothing else about it says so."
   ([ctx corpora query]
    (concordance! ctx corpora query {}))
   ([ctx corpora query opts]
-   (let [{:keys [page page-size filter] :as opts} (merge query/page-defaults
-                                                         opts)
+   (let [{:keys [page page-size filter sample] :as opts}
+         (merge query/page-defaults opts)
          kwic-opts (dissoc opts :page :page-size)
          deadline  (deadline ctx)
          {:keys [counts hits remaining]}
@@ -470,6 +481,7 @@
                                                kwic-opts))]
      {:query     query
       :filter    filter
+      :sample    sample
       :page      page
       :page-size page-size
       :counts    counts

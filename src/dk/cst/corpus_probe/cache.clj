@@ -101,18 +101,23 @@
 (defn match-key
   "What decides which matches `query` has in `corpus` under `ctx`, and so
   how many of them: the registry, the corpus and its `build-stamp`, the
-  query itself and the metadata filter of `opts`.
+  query itself, and the metadata filter and sample of `opts`.
 
   The registry is there because two of them can define one corpus name,
   and the filter's values are sorted because it holds them in sets, whose
-  printed order is no part of their value. Nothing about ordering or
+  printed order is no part of their value. The sample belongs here rather
+  than in `result-key` because it decides which matches there are and how
+  many, not what order they come in; the seed it is drawn with does not,
+  being the same one every time (see
+  dk.cst.corpus-probe.query/sample-seed). Nothing about ordering or
   display belongs here."
-  [ctx corpus query {filter-by :filter}]
+  [ctx corpus query {filter-by :filter sample :sample}]
   [(:registry ctx)
    corpus
    (build-stamp ctx corpus)
    query
-   (mapv (fn [[attr values]] [attr (vec (sort values))]) filter-by)])
+   (mapv (fn [[attr values]] [attr (vec (sort values))]) filter-by)
+   sample])
 
 (defn result-key
   "What decides which matches the saved result of `query` in `corpus` under

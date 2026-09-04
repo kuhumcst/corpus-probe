@@ -112,6 +112,43 @@
       (is (some #(and (map? %) (= [:apply-view] (get-in % [:on :change])))
                 (deep (sort* "en")))))))
 
+(deftest sample-control-test
+  (testing "no sample is the whole result, and it is what is chosen"
+    (let [html (page/sample-control en nil)]
+      (is (some #{"all hits"} (deep html)))
+      (is (some #(and (map? %) (= "" (:value %)) (:selected %)) (deep html)))))
+  (testing "the offered sizes are the ones the reader can choose between"
+    (is (= page/sample-sizes
+           (keep #(when (number? (:value %)) (:value %))
+                 (deep (page/sample-control en nil))))))
+  (testing "the chosen size is the one marked, and it submits the query
+            form as the sort control does"
+    (let [html (page/sample-control en 100)]
+      (is (some #(and (map? %) (= 100 (:value %)) (:selected %)) (deep html)))
+      (is (some #(and (map? %) (= "sample" (:name %))
+                      (= page/form-id (:form %))
+                      (= [:apply-view] (get-in % [:on :change])))
+                (deep html)))))
+  (testing "a size the list does not hold is offered beside them, in
+            order, so a hand-written URL shows as the sample it is"
+    (is (= [50 77 100 500 1000]
+           (keep #(when (number? (:value %)) (:value %))
+                 (deep (page/sample-control en 77)))))))
+
+(deftest sample-phrase-test
+  (testing "no sample, nothing said"
+    (is (nil? (page/sample-phrase en nil ["PROBE"]))))
+  (testing "the size named is the one asked for, a corpus with fewer
+            matches than that contributing all it has"
+    (is (= "a random sample of at most 100"
+           (page/sample-phrase en 100 ["PROBE"]))))
+  (testing "over several corpora it says that each was sampled, one
+            sample being drawn in every corpus"
+    (is (= "a random sample of at most 100 per corpus"
+           (page/sample-phrase en 100 ["PROBE" "VISER"])))
+    (is (= "en tilfældig stikprøve på højst 100 pr. korpus"
+           (page/sample-phrase da 100 ["PROBE" "VISER"])))))
+
 (deftest sort-label-test
   (testing "every sort mode the query namespace offers is named here"
     ;; in Danish, where no label can coincide with the param value
@@ -463,7 +500,7 @@
       (is (some #{"CQP-fejl"} (deep html)))
       (is (some #{"boom"} (deep html))))))
 
-(def sample-result
+(def example-result
   {:size 6 :page 0 :page-size 25 :pages 1
    :counts [{:corpus "PROBE" :size 5}
             {:corpus "VISER" :size 1}
@@ -474,7 +511,7 @@
 (deftest error-groups-test
   (testing "identical errors are reported once, naming every corpus"
     (is (= [[{:type :cqp :message "no lemma"} ["TALER" "GONE"]]]
-           (page/error-groups (:counts sample-result)))))
+           (page/error-groups (:counts example-result)))))
   (is (empty? (page/error-groups [{:corpus "PROBE" :size 1}]))))
 
 (deftest hits-phrase-test
@@ -487,7 +524,7 @@
 (deftest result-summary-test
   (testing "only the corpora that could be searched are counted"
     (is (= "6 hits in 2 corpora · page 1 of 1"
-           (page/result-summary en sample-result))))
+           (page/result-summary en example-result))))
   (is (= "5 hits in PROBE · page 1 of 1"
          (page/result-summary en {:size 5 :page 0 :pages 1
                                     :counts [{:corpus "PROBE" :size 5}]})))
@@ -502,7 +539,19 @@
            (page/result-summary da {:size   5 :page 0 :pages 1
                                       :filter {:text_year #{"1591"}}
                                       :counts [{:corpus "PROBE"
-                                                :size   5}]})))))
+                                                :size   5}]}))))
+  (testing "a sample qualifies the count, since a page of one is not a
+            page of the whole result and nothing else says so"
+    (is (= "5 hits in PROBE, a random sample of at most 100 · page 1 of 1"
+           (page/result-summary en {:size   5 :page 0 :pages 1
+                                    :sample 100
+                                    :counts [{:corpus "PROBE" :size 5}]}))))
+  (testing "a search that found nothing sampled nothing, and saying it
+            drew a sample reads as the reason the result is empty"
+    (is (= "0 hits in PROBE · page 1 of 1"
+           (page/result-summary en {:size   0 :page 0 :pages 1
+                                    :sample 100
+                                    :counts [{:corpus "PROBE" :size 0}]})))))
 
 (deftest download-links-test
   (is (nil? (page/download-links en nil nil)))
@@ -522,7 +571,7 @@
                :view-hrefs   [[:kwic "/?v=k"]
                               [:frequencies "/?v=f"]]
                :sort-modes   ["corpus" "word"]
-               :result       sample-result
+               :result       example-result
                :next-href    "/?page=1"
                :export-hrefs {:tsv "/e?format=tsv"}
                :export-limit 5}
@@ -556,6 +605,11 @@
       (is (some #{"corpus order"} (deep html)))
       (is (some #(and (map? %) (= "sort" (:id %)) (= page/form-id (:form %)))
                 (deep html))))
+    (testing "and so does the sample, which is a question the reader has
+              on seeing how many hits there are"
+      (is (some #(and (map? %) (= "sample" (:id %))
+                      (= page/form-id (:form %)))
+                (deep html))))
     (testing "the page links are rendered above the table as well as below"
       (is (= 2 (count (filter #(and (vector? %) (= :ul.row.pager (first %)))
                               (deep html))))))
@@ -583,7 +637,7 @@
     (testing "a single corpus gets no counts table"
       (let [html (page/result-section
                   {:lang   "en"
-                   :result (assoc sample-result
+                   :result (assoc example-result
                                   :counts [{:corpus "PROBE" :size 5}])})]
         (is (not (some #{[:caption "Hits per corpus"]} (deep html)))))))
   (testing "nothing searchable means only the errors, and the heading names one"
