@@ -131,9 +131,10 @@
   ([ctx corpora query attr]
    (frequency-table! ctx corpora query attr {}))
   ([ctx corpora query attr opts]
-   (let [results (vec (search/pmap-n (search/parallelism ctx)
-                              #(corpus-frequencies! ctx % query attr opts)
-                              corpora))]
+   (let [results (vec (search/pmap-n
+                       (search/parallelism ctx)
+                       #(corpus-frequencies! ctx % query attr opts)
+                       corpora))]
      {:query  query
       :filter (:filter opts)
       :attr   (keyword attr)

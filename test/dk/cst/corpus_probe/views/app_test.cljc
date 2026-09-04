@@ -30,6 +30,16 @@
       (is (some #{"boom"} (deep html)))
       (is (some #{"results"} (deep html))))))
 
+(deftest search-view-carries-the-view-test
+  (let [views (fn [v] (->> (deep (app-views/search-view (assoc base :view v)))
+                           (filter #(and (map? %) (= "view" (:name %))))))]
+    (testing "a form submitted from the frequency view answers in it"
+      ;; without this a regrouped result comes back as a concordance
+      (is (= [{:type "hidden" :name "view" :value "frequencies"}]
+             (views :frequencies))))
+    (testing "the concordance is the default, so it names nothing"
+      (is (empty? (views :kwic))))))
+
 (deftest result-view-test
   (let [result {:size 1 :page 0 :pages 1 :hits []
                 :counts [{:corpus "PROBE" :size 1}]}

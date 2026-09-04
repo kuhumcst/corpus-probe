@@ -39,7 +39,8 @@
     (list
      [:label {:for "attr"} (i18n/tr lang :group-by)]
      " "
-     [:select {:id "attr" :name "attr" :form page/form-id}
+     [:select {:id   "attr" :name "attr" :form page/form-id
+               :on   {:change [:apply-view]}}
       (when (seq p)
         [:optgroup {:label (i18n/tr lang :p-attrs)}
          (map (partial attr-option selected) p)])
@@ -134,14 +135,15 @@
   table, then the download links (`:export-hrefs`, exports holding every
   row), in the state's `:lang`, wrapped in the shared
   dk.cst.corpus-probe.views.page/results-region."
-  [{:keys [lang attrs params result error export-hrefs] :as state}]
+  [{:keys [lang attrs params result error export-hrefs client?] :as state}]
   (let [shown (min row-limit (count (:rows result)))]
     (page/results-region
      state
      (frequency-heading lang result error shown)
      (when (tabled? result)
        (list
-        (page/view-controls lang (attr-control lang attrs (:attr params)))
+        (page/view-controls lang client?
+                            (attr-control lang attrs (:attr params)))
         (frequency-table lang result)
         ;; what to do next with the table, so it follows the table
         (page/download-links lang export-hrefs

@@ -29,10 +29,11 @@ disabled and its info page says CWB has no data for it. Logging goes
 through [Telemere](https://github.com/taoensso/telemere), which also backs
 SLF4J, so Pedestal's own output lands in the same place.
 
-The interface is served in Danish or English, chosen by the `lang` query
-parameter, then by the request's `Accept-Language`, then Danish. What CWB
-itself says (query errors, attribute names, corpus titles and corpus text)
-is always shown verbatim.
+The interface is served in Danish or English, chosen by the reader's
+stored preference, then by the request's `Accept-Language`, then Danish.
+No URL names a language, so a shared link does not impose the sharer's on
+whoever opens it. What CWB itself says (query errors, attribute names,
+corpus titles and corpus text) is always shown verbatim.
 
 At the REPL, one function call in, plain data out:
 
@@ -61,6 +62,24 @@ clojure -X:test        # run the tests
 clojure -M:cljs -m shadow.cljs.devtools.cli compile app   # build the client
 clojure -M -m dk.cst.corpus-probe.server                  # serve (config.edn)
 ```
+
+The server listens on <http://localhost:7373>.
+
+Working on the client wants two processes side by side: a watch that
+recompiles on save, and a server told to let it through.
+
+```sh
+clojure -M:cljs -m shadow.cljs.devtools.cli watch app     # recompile on save
+CORPUS_PROBE_CONFIG=dev/watch.edn \
+  clojure -M -m dk.cst.corpus-probe.server                # serve, watch allowed
+```
+
+A watch pushes recompiled code over a socket to its own port, which the
+Content-Security-Policy blocks unless a configuration names it. That is
+what [dev/watch.edn](dev/watch.edn) is for, and why it is a file outside
+the jar rather than a default: the strict policy is the one that ships.
+`dk.cst.corpus-probe.ui/reload!` re-renders after each swap, so a saved
+file shows up without losing the search on screen.
 
 Settings come from [resources/config.edn](resources/config.edn), which is
 read from the classpath and so lives inside a packaged jar. An installation

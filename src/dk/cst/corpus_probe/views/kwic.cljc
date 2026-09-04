@@ -122,8 +122,9 @@
   [{:keys [client? cursor] :as opts} hit source i m]
   (let [k       [(hit-key hit) i]
         inspect [:inspect (assoc source :token m)]
+        title   (token-title m)
         attrs   (cond-> (token-data m)
-                  (token-title m) (assoc :title (token-title m)))]
+                  title (assoc :title title))]
     (if-not client?
       ;; no handler: nothing answers a click here, and the string renderer
       ;; would drop one anyway
@@ -268,9 +269,9 @@
   "The rows of `hits`, all from one corpus, as a row group under the
   concordance `opts` (see `concordance`): a header row naming the corpus
   (linking to its info page in the UI language `:lang`), then the hit rows
-  with their expansions. The
-  group carries the corpus's own language from `:langs` when known, since
-  the corpus text is in its own language while the surrounding UI is not."
+  with their expansions. The group carries the corpus's own language from
+  `:langs` when known, since the corpus text is in its own language while
+  the surrounding UI is not."
   [{:keys [lang langs] :as opts} [{:keys [corpus]} :as hits]]
   (let [corpus-lang (get langs corpus)]
     [:tbody (cond-> {}

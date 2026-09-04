@@ -141,37 +141,37 @@
   inside is still the document's banner. Every page mounts the client, so
   every page routes: the client swaps those two regions rather than
   reloading, and the server keeps serving the same complete page for
-  anything that does not run it. The document shell and the bootstrap script are emitted as
-  strings rather than through Replicant, so the transit payload's double
-  quotes are not mangled by the renderer bug (see
-  `correct-quote-escaping`). The document language is the UI language;
-  corpus text carries its own `lang`."
+  anything that does not run it. The document shell and the bootstrap
+  script are emitted as strings rather than through Replicant, so the
+  transit payload's double quotes are not mangled by the renderer bug
+  (see `correct-quote-escaping`). The document language is the UI
+  language; corpus text carries its own `lang`."
   [{:keys [lang path title body nav payload] :as opts}]
   (str "<!DOCTYPE html>"
-        "<html lang=\"" lang "\"><head>"
-        "<meta charset=\"utf-8\">"
-        "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
-        (correct-quote-escaping
-         (replicant/render [:meta {:name    "description"
-                                   :content (i18n/tr lang :description)}]))
-        (correct-quote-escaping (replicant/render [:title title]))
-        "<link rel=\"stylesheet\" href=\"/css/style.css\">"
-        "</head><body>"
-        (correct-quote-escaping (replicant/render (layout/skip-link lang)))
-        "<div id=\"masthead\">"
-        (correct-quote-escaping
-         (replicant/render (layout/site-header lang path nav)))
-        "</div>"
-        "<div id=\"app\">"
-        (correct-quote-escaping (replicant/render body))
-        "</div>"
-        (correct-quote-escaping (replicant/render (layout/site-footer lang)))
-        (when payload
-          (str "<script type=\"" transit-type "\" id=\"bootstrap\">"
-               (script-safe payload)
-               "</script>"))
-        "<script defer src=\"/js/main.js\"></script>"
-        "</body></html>"))
+       "<html lang=\"" lang "\"><head>"
+       "<meta charset=\"utf-8\">"
+       "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
+       (correct-quote-escaping
+        (replicant/render [:meta {:name    "description"
+                                  :content (i18n/tr lang :description)}]))
+       (correct-quote-escaping (replicant/render [:title title]))
+       "<link rel=\"stylesheet\" href=\"/css/style.css\">"
+       "</head><body>"
+       (correct-quote-escaping (replicant/render (layout/skip-link lang)))
+       "<div id=\"masthead\">"
+       (correct-quote-escaping
+        (replicant/render (layout/site-header lang path nav)))
+       "</div>"
+       "<div id=\"app\">"
+       (correct-quote-escaping (replicant/render body))
+       "</div>"
+       (correct-quote-escaping (replicant/render (layout/site-footer lang)))
+       (when payload
+         (str "<script type=\"" transit-type "\" id=\"bootstrap\">"
+              (script-safe payload)
+              "</script>"))
+       "<script defer src=\"/js/main.js\"></script>"
+       "</body></html>"))
 
 (defn wants-transit?
   "True when `request` asks for the data behind a route rather than a
@@ -704,26 +704,27 @@
 (defn nav-hrefs
   "The URL of each top-level page for `params`.
 
-  The search keeps the current query, so returning to it from the corpus
-  index does not lose it. The frequency table is not here: it is a view of
-  a search result, reached by the switch at the top of the results region
-  (see `view-hrefs`)."
-  [_lang params]
+  No URL names a language: which language a reader reads in is their own
+  preference, so none of these carries one. The search keeps the current
+  query, so returning to it from the corpus index does not lose it. The
+  frequency table is not here: it is a view of a search result, reached by
+  the switch at the top of the results region (see `view-hrefs`)."
+  [params]
   (let [search (search-params params)]
     {:search          (str "/?" (query-string search) page/results-fragment)
      :corpora-heading "/corpora"}))
 
 (defn shell-data
-  "The parts of a page the masthead is built from, for `request` in
-  language `lang` with search `params`: the `:path` being served, which
-  its navigation marks as current and its language switch returns to, and
-  the navigation `:nav` itself.
+  "The parts of a page the masthead is built from, for `request` with
+  search `params`: the `:path` being served, which its navigation marks as
+  current and its language switch returns to, and the navigation `:nav`
+  itself.
 
   They travel in the view data because the client re-renders the masthead,
   and the navigation depends on the search the reader is looking at."
-  [request lang params]
+  [request params]
   {:path (:uri request)
-   :nav  (nav-hrefs lang params)})
+   :nav  (nav-hrefs params)})
 
 (defn page-response
   "Answer `request` with the page `data` describes under `title`: as
@@ -738,7 +739,7 @@
    (page-response request title data {}))
   ([request title data nav-params]
    (let [lang (:lang data)
-         data (merge data (shell-data request lang nav-params))]
+         data (merge data (shell-data request nav-params))]
      (if (wants-transit? request)
        (transit-response (assoc data :title title))
        (html-response
@@ -839,9 +840,9 @@
         format (:format params)]
     (if-not (and (seq known) (export/formats format))
       {:status 400 :body "bad request"}
-      (let [table (frequency/frequency-table! ctx known (or cqp "")
-                                           (attr-param (:attr params))
-                                           {:filter (filter-params params)})]
+      (let [table (frequency/frequency-table!
+                   ctx known (or cqp "") (attr-param (:attr params))
+                   {:filter (filter-params params)})]
         (export-response format "frequencies" :tokens table
                          (export/frequency-table table))))))
 
@@ -928,11 +929,11 @@
   preference, so a link can be shared without imposing the sharer's
   settings on whoever opens it."
   [_ctx request]
-  (let [params (:form-params request)]
+  (let [params  (:form-params request)
+        cookies (preference-cookies params)]
     {:status  303
      :headers (cond-> {"Location" (safe-return (:return params))}
-                (seq (preference-cookies params))
-                (assoc "Set-Cookie" (preference-cookies params)))
+                (seq cookies) (assoc "Set-Cookie" cookies))
      :body    ""}))
 
 (defn resource-response
@@ -947,6 +948,32 @@
 (def expanded-context
   "Context width, in tokens each side, for an expanded hit."
   50)
+
+(defn filters-page
+  "Return the metadata filters the corpora named in the request offer, as
+  transit, so the client can refresh the filter fieldset when the corpus
+  selection changes without submitting a search.
+
+  Only names the registry has reach CQP (see `split-known`); an unknown
+  one simply contributes nothing, since nothing is being searched here.
+
+  The values a reader has chosen are not answered: those are the reader's
+  and the client is already holding them. An attribute list that no
+  longer offers a chosen value leaves that value where it is (see
+  dk.cst.corpus-probe.views.page/filter-details), so narrowing the corpora
+  never quietly drops part of a filter.
+
+  The per-corpus half of this is cached against each registry file (see
+  dk.cst.corpus-probe.tools/annotation-values!), so a repeat selection
+  costs the merge and the collated sort rather than a CQP round trip."
+  [ctx request]
+  (let [corpora   (corpus/corpora ctx)
+        named     (corpora-param (:corpus (:query-params request)))
+        [known _] (split-known corpora named)]
+    {:status  200
+     :headers {"Content-Type"  "application/transit+json; charset=utf-8"
+               "Cache-Control" "no-store"}
+     :body    (->transit (frequency/filter-options! ctx known))}))
 
 (defn context-page
   "Return the hit at the requested corpus position with wider context, as
@@ -1011,5 +1038,6 @@
     ["/corpora"       :get (partial corpora-page ctx) :route-name ::corpora]
     ["/corpus/:id"    :get (partial corpus-page ctx)  :route-name ::corpus]
     ["/api/context"   :get (partial context-page ctx) :route-name ::context]
+    ["/api/filters"   :get (partial filters-page ctx) :route-name ::filters]
     ["/css/style.css" :get stylesheet                 :route-name ::stylesheet]
     ["/js/*path"      :get js-file                    :route-name ::js]})

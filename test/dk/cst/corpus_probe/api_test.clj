@@ -5,6 +5,7 @@
             [dk.cst.corpus-probe.api :as api]
             [dk.cst.corpus-probe.corpus :as corpus]
             [dk.cst.corpus-probe.cqp-test :refer [ctx when-cwb]]
+            [dk.cst.corpus-probe.frequency :as frequency]
             [taoensso.telemere :as t])
   (:import [java.io ByteArrayInputStream]))
 
@@ -93,6 +94,33 @@
       (is (= 400 (:status (context {:corpus   "PROBE"
                                     :cpos     "x"
                                     :matchend "9"})))))))
+
+(deftest filters-page-test
+  (let [asked (atom nil)
+        call  (fn [params]
+                (with-redefs [corpus/corpora
+                              (fn [_] [{:id "probe"} {:id "viser"}])
+                              frequency/filter-options!
+                              (fn [_ corpora]
+                                (reset! asked corpora)
+                                {:attrs [{:name :text_year :rows []}]
+                                 :unlisted []})]
+                  (api/filters-page {} {:query-params params})))]
+    (testing "only names the registry has reach the filters"
+      (let [response (call {:corpus ["PROBE" "NOSUCH"]})]
+        (is (= ["PROBE"] @asked))
+        (is (= 200 (:status response)))
+        (is (str/starts-with? (get-in response [:headers "Content-Type"])
+                              "application/transit+json"))))
+    (testing "the attributes come back for the client to render"
+      (is (= [{:name :text_year :rows []}]
+             (:attrs (transit-> (:body (call {:corpus "VISER"})))))))
+    (testing "a hostile name is filtered out rather than reaching a command"
+      (call {:corpus "bad; exit"})
+      (is (= [] @asked)))
+    (testing "the values a reader chose are the reader's, not answered here"
+      (is (not (contains? (transit-> (:body (call {:corpus "PROBE"})))
+                          :selected))))))
 
 (deftest public-error-test
   (testing "CL warning lines (which may name server paths) are dropped"
@@ -213,7 +241,7 @@
 
 (deftest shell-data-test
   (let [request {:uri "/" :query-params {:q "hund" :corpus "PROBE"}}
-        data    (api/shell-data request "da" {:q "hund" :corpus ["PROBE"]})]
+        data    (api/shell-data request {:q "hund" :corpus ["PROBE"]})]
     (testing "the masthead travels in the view data, so a routed navigation
               re-renders it rather than leaving last render's links"
       (is (= "/" (:path data)))

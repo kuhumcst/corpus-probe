@@ -5,16 +5,17 @@
   links.
 
   The page these build is assembled by
-  dk.cst.corpus-probe.views.search/search-view, which knows both views a
+  dk.cst.corpus-probe.views.app/search-view, which knows both views a
   result can be shown in. The server renders it for first paint with no
   selection; the client renders the same views from the same state, so
-  clicking a token reveals the sidebar without a round trip. The markup uses the
-  element HTML provides for each part: <search> for the query form, a
-  named region for the outcome, <nav> for pagination, headings for errors
-  and an <aside> for the inspector, so the document is meaningful without
-  the stylesheet."
+  clicking a token reveals the sidebar without a round trip. The markup
+  uses the element HTML provides for each part: <search> for the query
+  form, a named region for the outcome, <nav> for pagination, headings for
+  errors and an <aside> for the inspector, so the document is meaningful
+  without the stylesheet."
   (:require [clojure.string :as str]
             [dk.cst.corpus-probe.i18n :as i18n]
+            [dk.cst.corpus-probe.views.controls :as controls]
             [dk.cst.corpus-probe.views.corpus :as corpus-views]
             [dk.cst.corpus-probe.views.kwic :as kwic]
             [dk.cst.corpus-probe.views.layout :as layout]))
@@ -46,21 +47,29 @@
   (list
    [:label {:for "sort"} (i18n/tr lang :sort)]
    " "
-   [:select {:id "sort" :name "sort" :form form-id}
+   [:select {:id   "sort" :name "sort" :form form-id
+             :on   {:change [:apply-view]}}
     (for [[value k] sort-modes]
       [:option {:value value :selected (= value sort)} (i18n/tr lang k)])]))
 
 (defn view-controls
   "The `controls` (hiccup) that reorder or regroup a result already
-  fetched, with the submit that applies them, in language `lang`; nil
-  without controls.
+  fetched, in language `lang`; nil without controls.
 
   They live with the result rather than in the query form, so re-ordering
-  a concordance costs a click instead of a scroll back past the form."
-  [lang controls]
+  a concordance costs a click instead of a scroll back past the form.
+
+  Each applies itself on being changed, so where `client?` there is no
+  button: choosing an order is asking for it, and a control that needs a
+  second control to take effect is one the reader has to be told about.
+  Without a client nothing can act on a change, so the button is what
+  applies it there."
+  [lang client? controls]
   (when controls
-    [:p.viewctl controls " "
-     [:button {:type "submit" :form form-id} (i18n/tr lang :apply)]]))
+    [:p.viewctl controls
+     (when-not client?
+       (list " " [:button {:type "submit" :form form-id}
+                  (i18n/tr lang :apply)]))]))
 
 (def filter-prefix
   "The query param prefix naming a metadata filter: the prefix followed by
@@ -85,82 +94,235 @@
   (when (seq filter)
     (str " " (i18n/tr lang :within) " " (filter-phrase filter))))
 
-(declare attribute-value)
+(defn attribute-value
+  "Render attribute value `v` semantically by its key `k`: a text title as
+  `<cite>`, a four-digit year as `<time>`, otherwise plain text."
+  [k v]
+  (let [n (name k)]
+    (cond
+      (str/ends-with? n "_title")                              [:cite v]
+      (and (str/ends-with? n "_year") (re-matches #"\d{4}" v)) [:time v]
+      :else                                                    v)))
 
 (defn filter-item
-  "One value `m` ({:value :total}) of metadata attribute `attr` in the
-  filter fieldset: a checkbox submitting the value under the attribute's
-  filter param, checked when the value is in the set `chosen`.
+  "One metadata value `m` of attribute `attr` as a filter entry: a checkbox
+  named for the attribute's filter param, checked when `chosen` holds its
+  value, and, in language `lang`, how many regions carry it, when known: a
+  chosen value the corpora no longer offer has no count.
 
-  The label shows the value as the sidebar does (see `attribute-value`)
-  and, in language `lang`, how many regions carry it, when known: a chosen
-  value the corpora no longer offer has no count."
-  [lang attr chosen {:keys [value total] :as m}]
-  [:li
+  A value the filter box has hidden keeps its checkbox in the document,
+  for the reason a filtered-out corpus does: a box the form cannot see is
+  part of a filter dropped without anyone saying so."
+  [lang attr chosen {:keys [value total hidden?] :as m}]
+  [:li (cond-> {} hidden? (assoc :hidden true))
    [:label
     [:input {:type    "checkbox"
              :name    (str filter-prefix (name attr))
              :value   value
-             :checked (contains? chosen value)}]
+             :checked (contains? chosen value)
+             :on      {:change [:toggle-filter-values [attr [value]]]}}]
     " " (attribute-value attr value)
     (when total
       (list " " [:data {:value (str total)}
                  (str (i18n/group-digits lang total) " "
                       (i18n/tr lang (if (= 1 total) :region :regions)))]))]])
 
+(defn attr-rows
+  "The rows to offer for attribute `attr`: its listed `rows` followed by
+  the `chosen` values missing from them, so a selection is never lost on
+  resubmit."
+  [rows chosen]
+  (let [listed (set (map :value rows))]
+    (into (vec rows)
+          (for [value (sort chosen) :when (not (listed value))]
+            {:value value}))))
+
+(defn narrow-attrs
+  "`attrs` (each with its rows already prepared) with every value that
+  does not answer `q` marked `:hidden?`, and an attribute left with
+  nothing showing marked too.
+
+  An attribute whose own name answers `q` keeps all of its values, so
+  naming an attribute is a way of asking for its values rather than a way
+  of finding none. Marked rather than dropped, so that what a reader has
+  chosen goes on being submitted while they look for something else."
+  [q attrs]
+  (mapv (fn [{:keys [name rows] :as attr}]
+          (let [whole? (controls/answers? q name)
+                rows   (mapv #(cond-> %
+                                (not (or whole? (controls/answers? q (:value %))))
+                                (assoc :hidden? true))
+                             rows)]
+            (cond-> (assoc attr :rows rows)
+              (every? :hidden? rows) (assoc :hidden? true))))
+        attrs))
+
 (defn filter-details
-  "The disclosure of metadata attribute `attr` in the filter fieldset:
-  its value `rows` (see `filter-item`) plus the `chosen` values missing
-  from them, so a selection is never lost on resubmit.
+  "The disclosure of one prepared metadata attribute (its `:name`, its
+  `:rows` and whether the filter has left it `:hidden?`) in the filter
+  fieldset, with the `chosen` values of that attribute and, where
+  `client?`, a control taking every value showing.
 
   Closed whatever is chosen, its summary counting the selection: one
   attribute may carry hundreds of values, and reopening them on every
   resubmit grew the form exactly while the reader was refining it. The
   wording is in language `lang`."
-  [lang attr rows chosen]
-  (let [listed (set (map :value rows))
-        rows   (into rows (for [value (sort chosen) :when (not (listed value))]
-                            {:value value}))]
-    [:details
-     [:summary [:code (name attr)]
-      (when (seq chosen)
-        (str " · " (count chosen) " " (i18n/tr lang :selected)))]
-     [:ul (map (partial filter-item lang attr chosen) rows)]]))
+  [lang client? {attr :name :keys [rows hidden?]} chosen]
+  ;; a set even when nothing is chosen, since it is read as a predicate
+  (let [chosen  (set chosen)
+        showing (mapv :value (remove :hidden? rows))]
+    (controls/toggled
+     (when client?
+       (controls/select-all (str (i18n/tr lang :all-values-of) " " (name attr))
+                            showing chosen
+                            [:toggle-filter-values [attr showing]]))
+     [:details (cond-> {} hidden? (assoc :hidden true))
+      [:summary [:code (name attr)]
+       (when (seq chosen)
+         (str " · " (count chosen) " " (i18n/tr lang :selected)))]
+      [:ul (map (partial filter-item lang attr chosen) rows)]])))
+
+(defn value-count
+  "How many metadata values are chosen across every attribute of
+  `selected`, a map of attribute to the set chosen under it."
+  [selected]
+  (reduce + (map count (vals selected))))
+
+(defn clear-toggle
+  "The control emptying the whole metadata filter, over the prepared
+  `attrs` and the `selected` values, in language `lang`.
+
+  The same control the corpus chooser carries in this position, with the
+  one direction that has no meaning here taken away. Choosing every value
+  of every attribute is not a filter at all: it accepts every region
+  carrying the attribute, which is what choosing none already does, and it
+  would put one query parameter per value into the URL, tens of thousands
+  of them at the KU registry. So it is disabled while nothing is chosen,
+  which is the only state it could do that from, and every state it is
+  offered in clears.
+
+  It empties the whole filter rather than the part the box is showing.
+  A filter is not a thing to empty by halves: what survived would be a
+  constraint the reader had just told the box to hide from them."
+  [lang attrs selected]
+  (let [items (for [{attr :name :keys [rows]} attrs
+                    {:keys [value]} rows]
+                [attr value])]
+    (controls/select-all (i18n/tr lang :clear-filter)
+                         items
+                         (fn [[attr value]]
+                           (contains? (get selected attr) value))
+                         [:clear-filter]
+                         {:clear-only? true})))
 
 (defn filter-fieldset
   "The metadata filter fieldset of the search form from `filters` (see
   dk.cst.corpus-probe.frequency/filter-options!); nil without metadata.
 
   One disclosure over the whole filter, counting the values chosen across
-  every attribute and open only while the filter is active, so a corpus
-  with forty annotated attributes is one line rather than forty. Inside
-  it, a disclosure per listed attribute (`:attrs`) holds a checkbox per
-  value (see `filter-details`), followed by one per `:selected` attribute
-  the list lacks, then a note naming the `:unlisted` attributes, all
-  worded in language `lang`. `:selected` maps each attribute to the set of
-  chosen values."
-  [lang {:keys [attrs unlisted selected] :as filters}]
+  every attribute, so a corpus with forty annotated attributes is one line
+  rather than forty. Inside it, a disclosure per listed attribute
+  (`:attrs`) holds a checkbox per value (see `filter-details`), followed
+  by one per `:selected` attribute the list lacks, then a note naming the
+  `:unlisted` attributes, all worded in language `lang`. `:selected` maps
+  each attribute to the set of chosen values.
+
+  Where `:client?`, it carries the same three controls the corpus chooser
+  does, from the same namespace: a box narrowing it to the attributes and
+  values answering `:filter`, a control per attribute taking every value
+  showing, and one beside the whole fieldset (see `clear-toggle`).
+
+  The count is of `:selected`, which is live: it follows the boxes as the
+  reader ticks them, rather than saying what the last search was for.
+  What is open follows `:served`, the selection the page arrived with,
+  until `:open?` says the reader has opened or shut it themselves, for the
+  reason the corpus chooser's does: a count that opened and shut the
+  fieldset as it changed would be moving the controls while they were
+  being used.
+
+  Which attributes there are to filter by depends on the corpora
+  selected, and only the server knows: `:pending?` marks the fieldset busy
+  while the client is fetching them for a selection that has changed."
+  [lang {:keys [attrs unlisted selected] :as filters}
+   {:keys [served open? pending? client?] q :filter}]
   (when (or (seq attrs) (seq unlisted) (seq selected))
-    (let [listed (set (map :name attrs))
-          n      (reduce + (map count (vals selected)))]
+    (let [listed    (set (map :name attrs))
+          n         (value-count selected)
+          prepared  (concat
+                     (for [{attr :name :keys [rows]} attrs]
+                       {:name attr :rows (attr-rows rows (get selected attr))})
+                     (for [[attr chosen] (sort-by key selected)
+                           :when (not (listed attr))]
+                       {:name attr :rows (attr-rows [] chosen)}))
+          filtering (not (str/blank? q))
+          shown     (cond->> prepared
+                      filtering (narrow-attrs (str/lower-case q)))
+          nothing-found? (and filtering (every? :hidden? shown))]
       [:fieldset.filters
        [:legend (i18n/tr lang :metadata)]
-       [:details {:open (pos? n)}
+       (when client?
+         (controls/filter-box "value-filter" (i18n/tr lang :filter-values) q
+                              [:filter-values]))
+       (when client?
+         (controls/filter-status (when nothing-found?
+                                   (i18n/tr lang :no-values-found))))
+       (controls/toggled
+        (when client? (clear-toggle lang prepared selected))
+       ;; TODO: a visible in-flight treatment. aria-busy says it to a
+       ;; screen reader and nothing says it to anyone else; the
+       ;; role="status" pattern of `navigation-status` is the obvious one
+       ;; to reach for when we decide what it should look like
+       [:details (cond-> {:open (or filtering
+                                    (if (some? open?)
+                                      open?
+                                      (pos? (value-count served))))
+                          :on   {:toggle [:set-filters-open]}}
+                   pending?       (assoc :aria-busy "true")
+                   ;; nothing in it answers, so the message below stands
+                   ;; where it was; hidden rather than dropped, because
+                   ;; its checkboxes are what a search submits
+                   nothing-found? (assoc :hidden true))
         [:summary (str n " " (i18n/tr lang :selected))]
-        (for [{attr :name :keys [rows]} attrs]
-          (filter-details lang attr rows (get selected attr)))
-        (for [[attr chosen] (sort-by key selected) :when (not (listed attr))]
-          (filter-details lang attr [] chosen))
+        (for [{attr :name :as m} shown]
+          (filter-details lang client? m (get selected attr)))
+        ;; a caveat about the control rather than part of it, which is
+        ;; what <small> is for: these attributes are not on offer here
         (when (seq unlisted)
-          [:p (i18n/tr lang :too-many-values)
-           (interpose ", "
-                      (map (fn [attr] [:code (name attr)]) unlisted))])]])))
+          [:p [:small (i18n/tr lang :too-many-values)
+               (interpose ", "
+                          (map (fn [attr] [:code (name attr)]) unlisted))]])])])))
 
 (defn query-example
   "The dictionary key of the example query for `mode`: the two modes take
   different input, so one example cannot serve both."
   [mode]
   (if (= mode "cqp") :query-example-cqp :query-example-simple))
+
+(defn navigation-status
+  "The live region reporting a routed navigation in flight in language
+  `lang`, which says so while `pending?` and holds nothing otherwise.
+
+  Rendered whether or not there is anything to say, because a live region
+  announces a change to what it holds: one created already full has no
+  change to announce, and several screen readers say nothing at all. A
+  <div> rather than a <p>, so that the empty one costs no margins.
+
+  It sits with the query controls rather than with the results, because
+  the wait starts at the submit button and the results it is about may
+  not exist yet. Above 64rem those controls are a sticky rail, so it
+  stays in view while a page of hits is fetched too."
+  [lang pending?]
+  [:div.status {:role "status"}
+   ;; TODO: design this. A line of text arriving under the form is what
+   ;; it says, not a thing anyone drew, and three questions are open:
+   ;; where a reader is actually looking when they are waiting (the foot
+   ;; of the rail is where the button is, but not where the answer will
+   ;; be); whether it wants a minimum time on screen, since an answer at
+   ;; 450ms still flashes past `dk.cst.corpus-probe.ui/pending-delay-ms`;
+   ;; and whether waiting should say more than that it is waiting. The
+   ;; metadata filter has the same decision pending (see
+   ;; `filter-fieldset`), and the two should be answered together.
+   (when pending? [:p (i18n/tr lang :loading)])])
 
 (defn search-form
   "The search form of `state`: over its `:folders` tree of corpus
@@ -169,64 +331,115 @@
   :suffix), submitted as GET to `action`, with the page's own `extra`
   hidden inputs.
 
-  The query input comes first, then the two settings that decide how it
-  is read, then the scope of the search: the corpus chooser and the
-  metadata filter, each behind one disclosure. So the field the reader
-  reaches for is the first control in the form, whatever the registry
-  holds.
+  The query input comes first, then everything that decides how it is
+  read: the mode, and under it the options that only a simple query has.
+  Then the scope of the search, the corpus chooser and the metadata
+  filter, each behind one disclosure. So the field the reader reaches for
+  is the first control in the form, whatever the registry holds, and what
+  qualifies what they typed is under their hand rather than past two
+  disclosures.
 
   The query example is the placeholder of the mode in `:params`, and the
   mode radios dispatch `:set-mode`, so choosing a mode swaps the example
-  without a round trip; without the client the example is the one the
-  search was submitted with.
+  and disables the simple options without a round trip; without the
+  client both are as the search was submitted.
 
   Wrapped in a <search> landmark; GET, so every search has a shareable URL
   and works without JavaScript. The form carries an id, so a control
   rendered outside it (the sort of the concordance, the grouping of the
-  frequency table) still submits with it. The corpus
-  chooser, the metadata filter, the mode radios and the simple-search
-  option checkboxes are separate <fieldset> groups. No language is
-  submitted with the search: which language the answer is worded in is the
-  reader's own stored preference, not part of what they asked."
-  [{:keys [lang folders filter-controls params] :as state} action extra]
+  frequency table) still submits with it. The corpus chooser, the metadata
+  filter and the query options are <fieldset> groups; inside the last, the
+  mode and the options it governs are a named group each without a box of
+  their own. No language is submitted with the search: which language the
+  answer is worded in is the reader's own stored preference, not part of
+  what they asked.
+
+  Where the client runs, `navigation-status` follows the form inside the
+  landmark, so a reader learns that their question is in flight beside
+  the button they asked it with, and `:served-corpus`, the corpora this
+  page was served for, decides which folders of the chooser start open
+  while `:params` follows what the reader is choosing now."
+  [{:keys [lang folders filter-controls params client? pending? served-corpus
+           served-filter corpus-filter value-filter chooser-open?
+           filters-open? filters-pending?]
+    :as state}
+   action extra]
   (let [{:keys [corpus q mode ci prefix suffix]} params]
     [:search
      [:form.search {:id form-id :method "get" :action action}
       extra
+      ;; the button belongs against the field it submits, not at the foot
+      ;; of every control that qualifies it. A field with a search button
+      ;; beside it needs no visible label to say what it is, so the name
+      ;; it keeps is the one only a screen reader reads
       [:p
-       [:label {:for "q"} (i18n/tr lang :query)]
        [:input {:id           "q"
                 :name         "q"
                 :type         "search"
+                :aria-label   (i18n/tr lang :query)
                 :value        (or q "")
                 :placeholder  (i18n/tr lang (query-example mode))
                 :autocomplete "off"
-                :spellcheck   "false"}]]
-      [:fieldset.mode
-       [:legend (i18n/tr lang :query-mode)]
-       [:label [:input {:type    "radio" :name "mode" :value "simple"
-                        :checked (not= mode "cqp")
-                        :on      {:change [:set-mode "simple"]}}]
-        (i18n/tr lang :simple)]
-       [:label [:input {:type    "radio" :name "mode" :value "cqp"
-                        :checked (= mode "cqp")
-                        :on      {:change [:set-mode "cqp"]}}]
-        "CQP"]]
+                :spellcheck   "false"}]
+       " "
+       [:button {:type "submit"} (i18n/tr lang :submit)]]
+      ;; one group: everything here qualifies the query above it, and two
+      ;; boxes said that twice. A row each, so the mode a reader is in
+      ;; does not run into the options it decides the meaning of.
+      ;;
+      ;; The options are disabled rather than taken away when they mean
+      ;; nothing: a reader who looks at CQP and comes back finds what they
+      ;; had ticked still ticked, the form does not change height under
+      ;; them, and a disabled control is not submitted, so nothing about a
+      ;; simple search rides along with a CQP one
+      [:fieldset.query-options
+       [:legend (i18n/tr lang :query-options)]
+       ;; the radios are still a group of their own, and still named:
+       ;; a fieldset is not the only thing that can say so
+       [:p {:role "radiogroup" :aria-label (i18n/tr lang :query-mode)}
+        [:label [:input {:type    "radio" :name "mode" :value "simple"
+                         :checked (not= mode "cqp")
+                         :on      {:change [:set-mode "simple"]}}]
+         (i18n/tr lang :simple)]
+        " "
+        [:label [:input {:type    "radio" :name "mode" :value "cqp"
+                         :checked (= mode "cqp")
+                         :on      {:change [:set-mode "cqp"]}}]
+         "CQP"]]
+       [:p {:role "group" :aria-label (i18n/tr lang :simple-options)}
+        [:label [:input {:type "checkbox" :name "ci" :value "on"
+                         :checked  (some? ci)
+                         :disabled (= mode "cqp")}]
+         (i18n/tr lang :ignore-case)]
+        " "
+        [:label [:input {:type "checkbox" :name "prefix" :value "on"
+                         :checked  (some? prefix)
+                         :disabled (= mode "cqp")}]
+         (i18n/tr lang :starts-with)]
+        " "
+        [:label [:input {:type "checkbox" :name "suffix" :value "on"
+                         :checked  (some? suffix)
+                         :disabled (= mode "cqp")}]
+         (i18n/tr lang :ends-with)]]]
       ;; marks a selection the reader actually made: without it, unticking
       ;; every corpus and submitting is indistinguishable from arriving
       ;; with no corpus named, which searches them all
       [:input {:type "hidden" :name "scope" :value "chosen"}]
-      (corpus-views/chooser lang folders (set corpus))
-      (filter-fieldset lang filter-controls)
-      [:fieldset.options
-       [:legend (i18n/tr lang :simple-options)]
-       [:label [:input {:type "checkbox" :name "ci" :value "on"
-                        :checked (some? ci)}] (i18n/tr lang :ignore-case)]
-       [:label [:input {:type "checkbox" :name "prefix" :value "on"
-                        :checked (some? prefix)}] (i18n/tr lang :starts-with)]
-       [:label [:input {:type "checkbox" :name "suffix" :value "on"
-                        :checked (some? suffix)}] (i18n/tr lang :ends-with)]]
-      [:button {:type "submit"} (i18n/tr lang :submit)]]]))
+      (corpus-views/chooser lang folders
+                            {:selected (set corpus)
+                             :served   (set (or served-corpus corpus))
+                             :client?  client?
+                             :filter   corpus-filter
+                             :open?    chooser-open?})
+      (filter-fieldset lang filter-controls
+                       {:served   served-filter
+                        :open?    filters-open?
+                        :pending? filters-pending?
+                        :client?  client?
+                        :filter   value-filter})]
+     ;; only where the client runs: every other navigation is the
+     ;; browser's own, and the browser reports those itself
+     (when client? (navigation-status lang pending?))]))
 
 (defn corpora-phrase
   "The corpus `names` in words in language `lang`: the one name, or how
@@ -298,7 +511,7 @@
   browsers and crawlers use for sequential pages."
   [lang prev-href next-href position]
   (when (or prev-href next-href)
-    [:ul.pager
+    [:ul.row.pager
      (when prev-href
        [:li [:a {:href prev-href :rel "prev"}
              (str "← " (i18n/tr lang :previous))]])
@@ -403,7 +616,7 @@
   [lang view hrefs]
   (when (seq hrefs)
     [:nav.views {:aria-label (i18n/tr lang :result-views)}
-     [:ul
+     [:ul.row
       (for [[k label href] hrefs]
         [:li [:a (cond-> {:href href}
                    (= k view) (assoc :aria-current "page"))
@@ -427,11 +640,18 @@
   views, the error that replaced the result or the errors of individual
   corpora, and then `body`, the view's own content. The two views differ
   only in what they say about the same hits, so they differ only in what
-  they pass here."
-  [{:keys [lang view view-hrefs result error] :as state} heading body]
-  [:section.result {:id              results-id
-                    :tabindex        "-1"
-                    :aria-labelledby "results-heading"}
+  they pass here.
+
+  Marked busy while a navigation is `pending?`, since until that one
+  lands what this holds is the answer to the question before it."
+  [{:keys [lang view view-hrefs result error pending?] :as state} heading body]
+  [:section.result (cond-> {:id              results-id
+                            :tabindex        "-1"
+                            :aria-labelledby "results-heading"}
+                     ;; while the next question is in flight these hits
+                     ;; are still the previous one's answer, and nothing
+                     ;; about them says so
+                     pending? (assoc :aria-busy "true"))
    [:h2 {:id "results-heading"} heading]
    (view-switch lang view view-hrefs)
    (when error (error-body lang error nil))
@@ -442,10 +662,11 @@
 (defn result-section
   "The concordance view of the search in `state`: when any corpus could be
   searched and found something, the sort control, the pagination above and
-  below the table, the per-corpus counts and the concordance with its
-  `:expanded` hits and `:langs`, then the download links (`:export-hrefs`,
-  exports holding at most `:export-limit` hits), all worded in the state's
-  `:lang` and wrapped in the shared `results-region`."
+  below the table, the concordance with its `:expanded` hits and `:langs`,
+  then the per-corpus counts as an aside and the download links
+  (`:export-hrefs`, exports holding at most `:export-limit` hits), all
+  worded in the state's `:lang` and wrapped in the shared
+  `results-region`."
   [{:keys [lang sort-modes params result error langs expanded client?
            export-hrefs export-limit prev-href next-href]
     :as state}]
@@ -461,9 +682,9 @@
        (if (zero? size)
          [:p (i18n/tr lang :no-hits)]
          (list
-          (view-controls lang (sort-control lang sort-modes (:sort params)))
+          (view-controls lang client?
+                         (sort-control lang sort-modes (:sort params)))
           (pagination lang prev-href next-href position)
-          (when (next counts) (counts-table lang counts))
           (kwic/concordance hits {:caption  (i18n/tr lang :concordance)
                                   :lang     lang
                                   :langs    langs
@@ -471,6 +692,15 @@
                                   :client?  client?
                                   :cursor   (:cursor state)})
           (pager-links lang prev-href next-href position)
+          ;; an <aside>, after the hits rather than before them: it is
+          ;; about the answer rather than part of it, and where the hits
+          ;; came from is a question a reader has once they have read
+          ;; them. After the page links too, which belong against the
+          ;; foot of the table they turn, where a reader who has finished
+          ;; reading reaches. Unnamed, so that inside the results
+          ;; <section> it stays a container rather than becoming a second
+          ;; complementary landmark: the table's own caption names it
+          (when (next counts) [:aside (counts-table lang counts)])
           ;; what to do next with these hits, so it follows them: reading
           ;; the concordance is the task, taking it elsewhere is the one
           ;; after
@@ -479,16 +709,6 @@
                             (str (i18n/tr lang :the-first) " "
                                  (i18n/group-digits lang export-limit) " "
                                  (i18n/tr lang :hits))))))))))
-
-(defn attribute-value
-  "Render attribute value `v` semantically by its key `k`: a text title as
-  `<cite>`, a four-digit year as `<time>`, otherwise plain text."
-  [k v]
-  (let [n (name k)]
-    (cond
-      (str/ends-with? n "_title")                             [:cite v]
-      (and (str/ends-with? n "_year") (re-matches #"\d{4}" v)) [:time v]
-      :else                                                   v)))
 
 (defn attribute-list
   "A definition list of the attribute map `m`, each value rendered by

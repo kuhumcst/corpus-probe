@@ -25,7 +25,7 @@
             [dk.cst.corpus-probe.tools :as tools]
             [taoensso.telemere :as t])
   (:import [java.text Collator]
-           [java.util Comparator Locale]))
+           [java.util Locale]))
 
 (defn corpus-ctx
   "Return `ctx` configured for `corpus`: validates the corpus name (it is
@@ -467,7 +467,7 @@
          (fill-page! ctx corpora query (query/page-rows page page-size)
                      deadline kwic-opts)
          counts    (into counts (corpus-sizes! ctx remaining query deadline
-                                              kwic-opts))]
+                                               kwic-opts))]
      {:query     query
       :filter    filter
       :page      page

@@ -55,23 +55,10 @@
     (is (= 5 (count anchors)))
     (is (= {:match 9 :matchend 9 :target nil :keyword nil} (second anchors)))))
 
-(deftest tsv->rows-test
-  (is (= ["Hunden" "hund" "t1" "Hverdag"]
-         (first (parse/tsv->rows (golden-lines "tabulate.tsv"))))))
-
-(deftest count->freqs-test
-  (let [freqs (parse/count->freqs (golden-lines "count.txt"))]
-    (is (= {:freq 5 :row 5 :value "hund"} (first freqs)))
-    (is (= {:freq 1 :row 0 :value "København"} (nth freqs 2)))))
-
 (deftest group->freqs-test
-  (testing "unary grouping"
-    (is (= {:values ["hund"] :freq 5}
-           (first (parse/group->freqs (golden-lines "group.txt"))))))
-  (testing "pairwise grouping"
-    (is (= {:values ["NCSI" "hund"] :freq 3}
-           (first (parse/group->freqs 2 (golden-lines "group-pairwise.txt"))))))
-  (testing "a TAB inside a grouped annotation value stays intact (unary)"
+  (is (= {:values ["hund"] :freq 5}
+         (first (parse/group->freqs (golden-lines "group.txt")))))
+  (testing "a TAB inside a grouped annotation value stays intact"
     (is (= [{:values ["bad\ttitle"] :freq 7}]
            (parse/group->freqs ["bad\ttitle\t7"])))))
 

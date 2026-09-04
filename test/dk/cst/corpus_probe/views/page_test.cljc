@@ -37,24 +37,78 @@
                 (deep (page/search-form
                        state "/" [:input {:type  "hidden" :name "attr"
                                           :value "word"}])))))
+    (testing "the query options are one group, under the query field"
+      (let [order (fn [x] (.indexOf (vec (deep html)) x))]
+        (is (< (order :input) (order :fieldset.query-options)))
+        (is (< (order :fieldset.query-options) (order :fieldset.corpora)))
+        ;; the two boxes said the same thing twice; the groups they named
+        ;; are still named, without a box each
+        (is (not (some #{:fieldset.mode :fieldset.options} (deep html))))
+        (is (some #{{:role "radiogroup" :aria-label "Query mode"}}
+                  (deep html)))
+        (is (some #{{:role "group" :aria-label "Simple-search options"}}
+                  (deep html)))))
+    (testing "and the options are live only for a query they can qualify"
+      (let [disabled (fn [mode]
+                       (->> (deep (page/search-form
+                                   (assoc-in state [:params :mode] mode)
+                                   "/" nil))
+                            (filter #(and (map? %) (= "checkbox" (:type %))
+                                          (#{"ci" "prefix" "suffix"} (:name %))))
+                            (map :disabled)))]
+        (is (= [false false false] (disabled "simple")))
+        (is (= [true true true] (disabled "cqp")))))
+    (testing "a disabled fieldset submits nothing, so no simple option
+              rides along with a CQP query"
+      ;; the checkboxes are still there and still ticked, so looking at
+      ;; CQP and coming back does not lose what the reader had chosen
+      (let [html (deep (page/search-form
+                        (-> state
+                            (assoc-in [:params :mode] "cqp")
+                            (assoc-in [:params :ci] "on"))
+                        "/" nil))]
+        (is (some #(and (map? %) (= "ci" (:name %)) (:checked %)
+                        (:disabled %))
+                  html))))
+    (testing "no status region without a client to put anything in it"
+      (is (not (some #{:div.status} (deep html)))))
+    (testing "with one it follows the form, inside the same landmark"
+      (let [live (page/search-form (assoc state :client? true :pending? true)
+                                   "/" nil)]
+        (is (= :div.status (first (last live))))
+        (is (some #{"Loading …"} (deep live)))))
     (testing "the same form in Danish"
       (let [da (deep (page/search-form (assoc state :lang "da") "/" nil))]
         (is (some #{"Søg"} da))
         (is (some #{"Forespørgsel"} da))
         (is (not (some #(and (map? %) (= "lang" (:name %))) da)))))))
 
+(deftest navigation-status-test
+  (testing "the region is rendered before it has anything to announce"
+    (is (= [:div.status {:role "status"} nil]
+           (page/navigation-status "en" false))))
+  (testing "and reports a navigation in flight in either language"
+    (is (some #{"Loading …"} (deep (page/navigation-status "en" true))))
+    (is (some #{"Henter …"} (deep (page/navigation-status "da" true))))))
+
 (deftest view-controls-test
-  (testing "no controls, nothing rendered"
-    (is (nil? (page/view-controls "en" nil))))
-  (testing "a control that acts on a result submits the form that made it"
-    (let [html (page/view-controls
-                "en" (page/sort-control "en" [["word" :sort-word]] "word"))]
-      (is (some #(and (map? %) (= page/form-id (:form %))) (deep html)))
-      (is (some #{"Apply"} (deep html)))
-      (is (some #{"Anvend"}
-                (deep (page/view-controls "da" (page/sort-control
-                                                "da" [["word" :sort-word]]
-                                                "word"))))))))
+  (let [sort* (fn [lang] (page/sort-control lang [["word" :sort-word]] "word"))]
+    (testing "no controls, nothing rendered"
+      (is (nil? (page/view-controls "en" false nil))))
+    (testing "a control that acts on a result submits the form that made it"
+      (let [html (page/view-controls "en" false (sort* "en"))]
+        (is (some #(and (map? %) (= page/form-id (:form %))) (deep html)))))
+    (testing "without a client, a button is what applies it"
+      (is (some #{"Apply"} (deep (page/view-controls "en" false (sort* "en")))))
+      (is (some #{"Anvend"} (deep (page/view-controls "da" false
+                                                      (sort* "da"))))))
+    (testing "with one, choosing an order is asking for it: no button"
+      (let [html (page/view-controls "en" true (sort* "en"))]
+        (is (not (some #{"Apply"} (deep html))))
+        (is (not (some #(and (vector? %) (= :button (first %))) (deep html))))))
+    (testing "and the control itself is what applies it"
+      (is (some #(and (map? %) (= [:apply-view] (get-in % [:on :change])))
+                (deep (sort* "en")))))))
 
 (deftest query-mode-test
   (let [radios (fn [params]
@@ -109,11 +163,14 @@
 
 (deftest filter-fieldset-test
   (testing "no metadata renders nothing"
-    (is (nil? (page/filter-fieldset "en" nil)))
+    (is (nil? (page/filter-fieldset "en" nil {})))
     (is (nil? (page/filter-fieldset "en" {:attrs    []
                                           :unlisted []
-                                          :selected {}}))))
-  (let [html (page/filter-fieldset
+                                          :selected {}}
+                                    {}))))
+  (let [selected {:text_year  #{"1591" "1600"}
+                  :text_title #{"Havfruens sang"}}
+        html (page/filter-fieldset
               "en"
               {:attrs    [{:name :text_year
                            :rows [{:value "1583" :total 1}
@@ -121,8 +178,8 @@
                           {:name :text_party
                            :rows [{:value "S" :total 2}]}]
                :unlisted [:text_title]
-               :selected {:text_year  #{"1591" "1600"}
-                          :text_title #{"Havfruens sang"}}})
+               :selected selected}
+              {:served selected})
         inputs (filter #(and (map? %) (= "checkbox" (:type %))) (deep html))]
     (testing "each value is a checkbox under the attribute's filter param"
       (is (= ["f.text_year" "f.text_year" "f.text_year" "f.text_party"
@@ -131,6 +188,151 @@
       (is (= ["1583" "1591" "1600" "S" "Havfruens sang"] (map :value inputs))))
     (testing "chosen values are checked, whether the corpora offer them or not"
       (is (= [false true true false true] (map :checked inputs))))
+    (testing "every value reports its change, so the count can be live"
+      (is (every? #(= [:toggle-filter-values [(keyword (subs (:name %) 2))
+                                              [(:value %)]]]
+                      (get-in % [:on :change]))
+                  inputs)))
+    (testing "the count is of what the boxes say now"
+      (is (some #{"3 selected"} (deep html))))
+    (testing "but what is open is of what the page was served"
+      ;; ticking a first value must not open the fieldset under the reader,
+      ;; nor unticking the last one shut it
+      (is (= [false] (->> (deep (page/filter-fieldset
+                                 "en" {:attrs [] :unlisted []
+                                       :selected {:text_year #{"1591"}}}
+                                 {}))
+                          (filter #(and (map? %) (contains? % :open)))
+                          (map :open))))
+      (is (= [true] (->> (deep (page/filter-fieldset
+                                "en" {:attrs    [{:name :text_year :rows []}]
+                                      :unlisted [] :selected {}}
+                                {:served {:text_year #{"1591"}}}))
+                         (filter #(and (map? %) (contains? % :open)))
+                         (map :open)))))
+    (testing "the attributes not on offer are a caveat, so small print"
+      (is (some #(and (vector? %) (= :small (first %))) (deep html)))
+      (is (some #{[:code "text_title"]} (deep html))))
+    (testing "the reader owns the disclosure once they have touched it"
+      (let [open* (fn [opts] (->> (deep (page/filter-fieldset
+                                         "en" {:attrs [{:name :a :rows []}]
+                                               :unlisted [] :selected {}}
+                                         opts))
+                                  (filter #(and (map? %) (contains? % :open)))
+                                  first :open))]
+        (is (false? (open* {})))
+        (is (true? (open* {:served {:a #{"1"}}})))
+        (is (true? (open* {:open? true})))
+        ;; and a reader who shut it is not overruled by what was served
+        (is (false? (open* {:open? false :served {:a #{"1"}}})))))
+    (testing "it is marked busy while its attributes are being fetched"
+      (let [busy (fn [opts] (->> (deep (page/filter-fieldset
+                                        "en" {:attrs [{:name :a :rows []}]
+                                              :unlisted [] :selected {}}
+                                        opts))
+                                 (filter #(and (map? %) (contains? % :open)))
+                                 first :aria-busy))]
+        (is (= "true" (busy {:pending? true})))
+        (is (nil? (busy {})))))
+    (testing "each attribute carries a control over the values it shows"
+      (let [alls (->> (deep (page/filter-fieldset
+                             "en"
+                             {:attrs    [{:name :text_year
+                                          :rows [{:value "1583"}
+                                                 {:value "1591"}]}]
+                              :unlisted [] :selected {}}
+                             {:client? true}))
+                      (filter #(and (map? %) (contains? % :replicant/on-render))))]
+        ;; the fieldset's own control comes first, then one per attribute
+        (is (= ["Clear filter" "All values of text_year"]
+               (map :aria-label alls)))
+        (is (= [[:clear-filter] [:toggle-filter-values [:text_year ["1583" "1591"]]]]
+               (map #(get-in % [:on :change]) alls)))))
+    (testing "and takes only the values the filter box leaves showing"
+      (let [alls (->> (deep (page/filter-fieldset
+                             "en"
+                             {:attrs    [{:name :text_year
+                                          :rows [{:value "1583"}
+                                                 {:value "1591"}]}]
+                              :unlisted [] :selected {}}
+                             {:client? true :filter "1591"}))
+                      (filter #(and (map? %) (contains? % :replicant/on-render))))]
+        (is (= [[:clear-filter] [:toggle-filter-values [:text_year ["1591"]]]]
+               (map #(get-in % [:on :change]) alls))))
+      ;; and the value it hid keeps its box, so the filter is not narrowed
+      (let [html (deep (page/filter-fieldset
+                        "en" {:attrs    [{:name :text_year
+                                          :rows [{:value "1583"}
+                                                 {:value "1591"}]}]
+                              :unlisted [] :selected {:text_year #{"1583"}}}
+                        {:client? true :filter "1591"}))]
+        (is (some #(and (map? %) (= "1583" (:value %)) (:checked %)) html))
+        (is (some #{{:hidden true}} html))))
+    (testing "the region saying nothing was found is there before it says it"
+      (let [region (fn [opts]
+                     (->> (page/filter-fieldset
+                           "en" {:attrs    [{:name :text_year
+                                             :rows [{:value "1591"}]}]
+                                 :unlisted [] :selected {}}
+                           (merge {:client? true} opts))
+                          (tree-seq coll? seq)
+                          (filter #(and (vector? %) (= :div.empty (first %))))
+                          first))]
+        (is (= [:div.empty {:role "status"} nil] (region {})))
+        (is (= [:div.empty {:role "status"} nil] (region {:filter "1591"})))
+        (is (= [:div.empty {:role "status"} "No values found."]
+               (region {:filter "zzz"})))))
+    (testing "the filter box is there only with a client, and submits nothing"
+      (let [box (fn [opts] (->> (deep (page/filter-fieldset
+                                       "en" {:attrs [{:name :a :rows []}]
+                                             :unlisted [] :selected {}}
+                                       opts))
+                                (filter #(and (map? %)
+                                              (= "value-filter" (:id %))))
+                                first))]
+        (is (nil? (box {})))
+        (is (= "search" (:type (box {:client? true}))))
+        ;; and its own label, not the corpus filter's
+        (is (some #{[:label {:for "value-filter"} "Filter values"]}
+                  (deep (page/filter-fieldset
+                         "en" {:attrs [{:name :a :rows []}]
+                               :unlisted [] :selected {}}
+                         {:client? true}))))
+        (is (nil? (:name (box {:client? true}))))))
+    (testing "the fieldset's own control is the chooser's, minus one half"
+      (let [root (fn [selected]
+                   (->> (deep (page/filter-fieldset
+                               "en" {:attrs    [{:name :a :rows [{:value "1"}
+                                                                 {:value "2"}]}]
+                                     :unlisted [] :selected selected}
+                               {:client? true}))
+                        (filter #(and (map? %) (= "Clear filter" (:aria-label %))))
+                        first))]
+        (testing "nothing chosen: offered, but not from the one state it
+                  must not act from"
+          (is (true? (:disabled (root {}))))
+          (is (false? (:checked (root {}))))
+          (is (= [:set-indeterminate false]
+                 (:replicant/on-render (root {})))))
+        (testing "something chosen: live, partly checked, and it clears"
+          (is (false? (:disabled (root {:a #{"1"}}))))
+          (is (= [:set-indeterminate true]
+                 (:replicant/on-render (root {:a #{"1"}}))))
+          (is (= [:clear-filter] (get-in (root {:a #{"1"}}) [:on :change]))))
+        (testing "everything chosen: checked, and it still only clears"
+          (is (true? (:checked (root {:a #{"1" "2"}}))))
+          (is (false? (:disabled (root {:a #{"1" "2"}})))))))
+    (testing "and it answers for the whole filter, not the part on show"
+      ;; emptying by halves would leave a constraint the box is hiding
+      (let [root (->> (deep (page/filter-fieldset
+                             "en" {:attrs    [{:name :a :rows [{:value "1"}]}
+                                              {:name :b :rows [{:value "2"}]}]
+                                   :unlisted [] :selected {:b #{"2"}}}
+                             {:client? true :filter "a"}))
+                      (filter #(and (map? %) (= "Clear filter" (:aria-label %))))
+                      first)]
+        (is (false? (:disabled root)))
+        (is (= [:set-indeterminate true] (:replicant/on-render root)))))
     (testing "one disclosure over the filter, open only while it is active"
       (is (= [true]
              (keep #(when (and (map? %) (contains? % :open)) (:open %))
@@ -187,7 +389,7 @@
       (is (= "Pagination" (:aria-label (second html))))
       (is (= "Sidenavigation"
              (:aria-label (second (page/pagination "da" "/?page=0" nil "x")))))
-      (is (some #{:ul.pager} (deep html))))))
+      (is (some #{:ul.row.pager} (deep html))))))
 
 (deftest searched?-test
   (testing "a corpus that answered makes the counts an answer"
@@ -293,17 +495,17 @@
       (is (some #{" the first 10 hits"} (deep html))))))
 
 (deftest result-section-test
-  (let [html (page/result-section {:lang         "en"
-                                   :view         :kwic
-                                   :view-hrefs   [[:kwic :concordance "/?v=k"]
-                                                  [:frequencies :frequencies
-                                                   "/?v=f"]]
-                                   :sort-modes   [["corpus" :sort-corpus]
-                                                  ["word" :sort-word]]
-                                   :result       sample-result
-                                   :next-href    "/?page=1"
-                                   :export-hrefs {:tsv "/e?format=tsv"}
-                                   :export-limit 5})]
+  (let [state {:lang         "en"
+               :view         :kwic
+               :view-hrefs   [[:kwic :concordance "/?v=k"]
+                              [:frequencies :frequencies "/?v=f"]]
+               :sort-modes   [["corpus" :sort-corpus]
+                              ["word" :sort-word]]
+               :result       sample-result
+               :next-href    "/?page=1"
+               :export-hrefs {:tsv "/e?format=tsv"}
+               :export-limit 5}
+        html  (page/result-section state)]
     (testing "what to do next with the hits follows them, not precedes them"
       (let [order (fn [x] (.indexOf (vec (deep html)) x))]
         (is (< (order :table.kwic) (order :p.downloads)))))
@@ -318,6 +520,9 @@
               :tabindex        "-1"
               :aria-labelledby "results-heading"}
              (second html))))
+    (testing "and is busy while the answer to the next question is coming"
+      (is (= "true" (:aria-busy (second (page/result-section
+                                         (assoc state :pending? true)))))))
     (testing "its heading is the summary the caption used to carry"
       (is (some #{[:h2 {:id "results-heading"}
                    "6 hits in 2 corpora · page 1 of 1"]}
@@ -331,7 +536,7 @@
       (is (some #(and (map? %) (= "sort" (:id %)) (= page/form-id (:form %)))
                 (deep html))))
     (testing "the page links are rendered above the table as well as below"
-      (is (= 2 (count (filter #(and (vector? %) (= :ul.pager (first %)))
+      (is (= 2 (count (filter #(and (vector? %) (= :ul.row.pager (first %)))
                               (deep html))))))
     (testing "but only the first is a landmark, since both would share a name"
       (is (= 1 (count (filter #(and (vector? %) (= :nav.pagination (first %)))
@@ -340,6 +545,18 @@
       (let [order (fn [x] (.indexOf (vec (deep html)) x))]
         (is (< (order [:h3 "CQP error"]) (order :table.counts)))
         (is (< (order [:h3 "CQP error"]) (order :table.kwic)))))
+    (testing "but the counts break the hits down, so they follow them"
+      (let [order (fn [x] (.indexOf (vec (deep html)) x))]
+        (is (< (order :table.kwic) (order :table.counts)))
+        ;; and after the *last* page links, which belong against the foot
+        ;; of the table they turn, not merely after the first
+        (is (< (.lastIndexOf (vec (deep html)) :ul.row.pager)
+               (order :table.counts)))
+        (is (< (order :table.counts) (order :p.downloads)))))
+    (testing "and they are an aside: about the hits rather than part of them"
+      (is (some #(and (vector? %) (= :aside (first %))
+                      (= :table.counts (first (second %))))
+                (deep html))))
     (testing "an erroring corpus shows no count in the table"
       (is (some #{[:em "error"]} (deep html))))
     (testing "a single corpus gets no counts table"

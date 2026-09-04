@@ -27,17 +27,24 @@
 (defn search-view
   "The search page's main content from application `state`, in its
   `:lang`: the page heading, the query form (see
-  dk.cst.corpus-probe.views.page/search-form), the results region when
-  the inspection panel while a token is `:selected`, and the results
-  region when the params described a search.
+  dk.cst.corpus-probe.views.page/search-form, carrying the `:view` as a
+  hidden input so that a control applied from one view answers in that
+  view), the inspection panel while a token is `:selected`, and the
+  results region when the params described a search.
 
   The form submits to the results fragment, so a search lands the reader
   on its own answer rather than at the top of the form that asked for it.
   The <main> is focusable so the bypass link can move the reader into it."
-  [{:keys [lang result error selected client?] :as state}]
+  [{:keys [lang view result error selected client?] :as state}]
   [:main layout/main-attrs
    [:h1 (i18n/tr lang :search)]
-   (page/search-form state (str "/" page/results-fragment) nil)
+   ;; the form has to say which view it is being submitted from, or a
+   ;; result regrouped from the frequency table comes back as a
+   ;; concordance: one page serves both, and only this says which
+   (page/search-form state (str "/" page/results-fragment)
+                     (when (= :frequencies view)
+                       [:input {:type  "hidden" :name "view"
+                                :value "frequencies"}]))
    ;; the panel takes the form's column while it is open, so it sits next
    ;; to the hits it describes; it comes before them in the document so
    ;; reading order and visual order agree at every width

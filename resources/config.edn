@@ -3,7 +3,11 @@
 ;; and limits in a file of its own, named by CORPUS_PROBE_CONFIG or the
 ;; corpus-probe.config system property, and that is merged over this one.
 ;; See README.md.
-{:port        8080
+
+;; A port of its own, deliberately not 8080 or 3000: those are where every
+;; other dev server on a machine already is, and a corpus server that has
+;; to be moved before it will start is one more thing to remember.
+{:port        7373
  :registry    "dev/corpus/registry"
  ;; locale for CQP's ExternalSort collation (needs gawk on PATH) and for the
  ;; app's own collation of metadata and frequency values, so the two agree;

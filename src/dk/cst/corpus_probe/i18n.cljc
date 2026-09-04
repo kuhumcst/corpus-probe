@@ -38,6 +38,9 @@
    :powered-by      {:da "Drevet af" :en "Powered by"}
    :subtitle        {:da "CWB-korpussøgning" :en "CWB corpus search"}
    :site            {:da "Websted" :en "Site"}
+   ;; names the corpus info page's own navigation, which a reader would
+   ;; otherwise meet as a second unnamed one after the site's
+   :this-corpus     {:da "Dette korpus" :en "This corpus"}
    :language        {:da "Sprog" :en "Language"}
    :search          {:da "Søgning" :en "Search"}
    :frequencies     {:da "Frekvenser" :en "Frequencies"}
@@ -46,6 +49,21 @@
    :corpora         {:da "korpusser" :en "corpora"}
    :corpora-heading {:da "Korpusser" :en "Corpora"}
    :all-corpora     {:da "Alle korpusser" :en "All corpora"}
+   ;; names the folder toggle, which has no visible label of its own: the
+   ;; folder it belongs to is named beside it, by the summary
+   :all-in-folder   {:da "Alle korpusser i" :en "All corpora in"}
+   ;; the box that narrows the chooser, and what it says when a reader has
+   ;; narrowed it to nothing
+   ;; one label each, not one shared: two boxes on a page whose names are
+   ;; both "Filtrér" are two boxes a reader hears no difference between
+   :filter-corpora  {:da "Filtrér korpusser" :en "Filter corpora"}
+   :filter-values   {:da "Filtrér værdier" :en "Filter values"}
+   :no-corpora-found {:da "Ingen korpusser fundet."
+                      :en "No corpora found."}
+   ;; the metadata filter's own versions of the same three things
+   :no-values-found {:da "Ingen værdier fundet." :en "No values found."}
+   :all-values-of   {:da "Alle værdier af" :en "All values of"}
+   :clear-filter    {:da "Ryd filter" :en "Clear filter"}
    :pick-a-corpus   {:da "Vælg mindst ét korpus"
                      :en "Select at least one corpus"}
    :description     {:da "Søg i CWB-korpusser og læs KWIC-konkordanser."
@@ -62,6 +80,7 @@
                           :en "[lemma = \"hund\"] or [pos = \"N.*\"]"}
    :query-mode      {:da "Forespørgselstype" :en "Query mode"}
    :simple          {:da "Simpel" :en "Simple"}
+   :query-options   {:da "Forespørgselsindstillinger" :en "Query options"}
    :simple-options  {:da "Indstillinger for simpel søgning"
                      :en "Simple-search options"}
    :ignore-case     {:da "ignorer store og små bogstaver" :en "ignore case"}

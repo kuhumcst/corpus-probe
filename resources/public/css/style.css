@@ -28,10 +28,13 @@ header { display: flex; flex-wrap: wrap; align-items: baseline;
    so it survives the switch being a form rather than a nav */
 header .languages { margin-inline-start: auto; }
 
-/* prev, the page position and next as one row: the position sits between
-   the two directions wherever both exist, and does not move when one of
-   them is out of range */
-ul.pager { list-style: none; display: flex; gap: 1.5em; padding: 0; }
+/* a list of links read as one row: the site navigation, the views of a
+   result, the page links (where the position sits between the two
+   directions wherever both exist, and does not move when one of them is
+   out of range) and the actions on a corpus. Matched by a class on the
+   list rather than by the elements around it, so that restructuring the
+   markup above cannot quietly stop it matching */
+ul.row { list-style: none; display: flex; gap: 1.5em; padding: 0; }
 
 /* cqp's error text carries a <-- pointer aligned by column, so it scrolls
    rather than reflowing; a corpus .info file is prose, so it wraps */
@@ -76,8 +79,7 @@ pre { overflow-x: auto; }
 /* the expanded-context row spans all columns and wraps */
 .kwic .expanded td { white-space: normal; text-align: left; }
 
-/* the site nav is a horizontal link list; the page you are on is marked */
-header nav ul { list-style: none; display: flex; gap: 1.5em; padding: 0; }
+/* the page you are on is marked */
 header nav [aria-current] { font-weight: bold; }
 
 /* Once a search has an answer, the query controls become a rail beside it
@@ -120,17 +122,18 @@ header nav [aria-current] { font-weight: bold; }
   main:has(> .sidebar) > search { display: none; }
 }
 
-/* the views of one result read as a row of choices, the current one
-   marked, like the site nav above them */
-nav.views ul { list-style: none; display: flex; gap: 1.5em; padding: 0; }
+/* the current view of a result is marked, like the site nav above it */
 nav.views [aria-current] { font-weight: bold; }
 
 /* the corpus tree and the metadata filter sit behind summaries now, and a
    disclosure that shows a text cursor does not read as a control */
 summary { cursor: pointer; }
 
-/* the label is the target: one row per corpus and per filter value */
-.corpora label, .filters label { display: block; padding-block: 0.15rem; }
+/* the label is the target: one row per corpus and per filter value. The
+   rows only: a label naming a control beside it, as the corpus filter's
+   does, stays inline like every other label in the form */
+.corpora li label, .filters li label { display: block;
+                                       padding-block: 0.15rem; }
 
 /* one attribute may carry hundreds of values, which would otherwise bury
    every control below it */
@@ -156,3 +159,15 @@ summary { cursor: pointer; }
    not push the hits it describes off the screen */
 .sidebar { position: fixed; inset: auto 0 0 0; max-block-size: 45vh;
            overflow: auto; background: Canvas; }
+
+/* a select-all and the disclosure it governs are one control pair, so
+   they share a row rather than stacking; the disclosure takes the rest of
+   it, and may not shrink below its content or the tree loses its indent */
+.group { display: flex; align-items: baseline; gap: 0.25em; }
+.group > details { flex: 1; min-inline-size: 0; }
+
+/* a disabled control is greyed by the user agent and the words beside it
+   are not, which leaves an option that cannot apply reading as one that
+   does. GrayText is the system colour for exactly this, so it introduces
+   no palette */
+label:has(input:disabled) { color: GrayText; }

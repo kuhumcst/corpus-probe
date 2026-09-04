@@ -1,0 +1,14 @@
+;; Settings for running the server against a shadow-cljs watch, read on
+;; top of the built-in resources/config.edn:
+;;   CORPUS_PROBE_CONFIG=dev/watch.edn clojure -M -m dk.cst.corpus-probe.server
+;;
+;; Deliberately not named config.edn. The :dev alias puts dev/ on the
+;; classpath, where a second config.edn shadows the built-in one that
+;; read-config looks up by name, and the server then starts with no
+;; registry at all.
+;;
+;; Nothing here reaches a packaged jar: dev/ is not a source path.
+{;; the origin a shadow-cljs watch pushes recompiled code from. It widens
+ ;; the Content-Security-Policy to let that socket through and to allow
+ ;; the eval its module loader does; absent, the policy stays strict.
+ :dev-client "ws://localhost:9630"}

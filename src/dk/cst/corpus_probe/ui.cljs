@@ -28,6 +28,22 @@
 (defonce state
   (atom nil))
 
+(defonce pending-timer
+  ;; the wait before a routed navigation is worth reporting, so that an
+  ;; answer arriving at once is not announced and then unannounced
+  (atom nil))
+
+(defonce filters-timer
+  ;; the pending debounce of a metadata filter refresh, so that a reader
+  ;; ticking their way through a folder asks for one set of filters at the
+  ;; end rather than one per box
+  (atom nil))
+
+(defonce in-flight
+  ;; the AbortController of the routed navigation being fetched, if there
+  ;; is one, so that starting another can call off the one it replaces
+  (atom nil))
+
 (def arrow-keys
   "How each key moves the concordance's cursor: [rows tokens], a step
   between hits and a step within one."
@@ -80,7 +96,7 @@
                    (.text response)
                    (throw (js/Error. "context request failed")))))
         (.then (fn [body]
-                 (let [hit (transit/read (transit/reader :json) body)]
+                 (let [hit (read-transit body)]
                    (if (and hit (contains? (:expanded @state) k))
                      (swap! state assoc-in [:expanded k] hit)
                      (collapse! k)))))
@@ -186,6 +202,162 @@
 
       :else nil)))
 
+(defn select-corpora
+  "The selected corpus IDs `corpus` with every ID in `ids` added when
+  `add?`, and with all of them removed otherwise.
+
+  Sorted, so that a selection reads the same however the reader arrived
+  at it, and a set throughout, so that selecting a folder whose corpora
+  are already selected cannot list one of them twice."
+  [corpus ids add?]
+  (let [selected (set corpus)]
+    (vec (sort (if add? (into selected ids) (reduce disj selected ids))))))
+
+(defn choose-values
+  "`selected`, each metadata attribute mapped to the values chosen under
+  it, with every value in `values` added under `attr`, or all of them
+  taken away when they are all there already.
+
+  One rule for one value and for every value of an attribute, as the
+  corpus chooser has one rule for a corpus and for a folder: a box that is
+  on turns off, and an attribute only partly chosen fills rather than
+  clearing the part the reader already had.
+
+  An attribute left with nothing chosen is dropped rather than kept empty,
+  so that an attribute the reader has finished with does not go on being
+  counted as one they are filtering by."
+  [selected attr values]
+  (let [chosen (set (get selected attr))
+        chosen (if (every? chosen values)
+                 (reduce disj chosen values)
+                 (into chosen values))]
+    (if (seq chosen)
+      (assoc selected attr chosen)
+      (dissoc selected attr))))
+
+(defn toggle-corpora!
+  "Select every corpus in `ids`, or clear them all when they are already
+  selected.
+
+  One rule serves a single corpus and a whole folder alike: a box that is
+  on turns off, and a folder that is wholly selected clears, while a
+  folder that is only partly selected fills rather than clearing the part
+  of it the reader already had."
+  [ids]
+  (swap! state update-in [:params :corpus]
+         (fn [corpus]
+           (select-corpora corpus ids (not (every? (set corpus) ids))))))
+
+(defn cancel!
+  "Call off whatever `timer` was waiting to do."
+  [timer]
+  (some-> @timer js/clearTimeout)
+  (reset! timer nil))
+
+(defn debounce!
+  "Call `f` after `ms`, cancelling whatever `timer` was already waiting to
+  do.
+
+  For a control that fires while a reader is still working it: only the
+  state they stop on is worth acting on, and the ones on the way are
+  worth nothing and cost a search each."
+  [timer ms f]
+  (cancel! timer)
+  (reset! timer (js/setTimeout f ms)))
+
+(def pending-delay-ms
+  "How long a routed navigation may take before it is worth saying that
+  it is in flight.
+
+  A search of the dev registry answers in tens of milliseconds, and
+  saying so and then unsaying it is a flicker where the reader asked a
+  question: worse than saying nothing. The case this exists for is the KU
+  registry, where a whole-corpus sort has been measured at 649 seconds
+  against a 300 second timeout. So nothing is said until an answer is
+  late enough that a reader has begun to wonder."
+  400)
+
+(defn apply-view!
+  "Submit the search again with the result's own controls as they now
+  stand.
+
+  At once, because a <select> reports the value a reader settled on
+  rather than the ones they passed over on the way: choosing an order is
+  asking for it, and any wait between the two is a wait nobody asked for.
+
+  Through the form rather than by building a URL, so that the sort or the
+  grouping travels with everything else the form holds and takes the same
+  routed path a reader pressing the button would."
+  []
+  (some-> (.getElementById js/document page/form-id) (.requestSubmit)))
+
+(def filters-debounce-ms
+  "How long the corpus selection must hold still before the metadata
+  filters it offers are fetched. Long enough that ticking several boxes in
+  a row is one request, short enough that a reader who has stopped is not
+  left waiting on a timer."
+  300)
+
+(defn chosen-corpora
+  "The selected corpus IDs of `state` in a settled order, which is what
+  the metadata filters are asked for and remembered by."
+  [state]
+  (vec (sort (get-in state [:params :corpus]))))
+
+(defn filters-stale?
+  "True when the metadata filters `state` holds are not the ones the
+  corpora now selected offer, and the reader is looking at them.
+
+  Only while they are open: filters nobody has opened are filters nobody
+  has to fetch, and a corpus selection is usually changed several times
+  before anyone asks what metadata it carries."
+  [{:keys [filters-open? filters-for] :as state}]
+  (and filters-open? (not= (chosen-corpora state) filters-for)))
+
+(defn fetch-filters!
+  "Fetch the metadata filters `corpora` offer and put them in the state,
+  keeping whatever values the reader has already chosen.
+
+  Only `:attrs` and `:unlisted` are replaced. `:selected` is the reader's,
+  and a chosen value the new corpora do not offer keeps its checkbox (see
+  dk.cst.corpus-probe.views.page/filter-details), so narrowing a selection
+  never quietly drops part of a filter.
+
+  A response is applied only while it still describes the selection, so a
+  slow answer to a question the reader has moved on from is dropped rather
+  than overwriting the answer to the one they are asking now."
+  [corpora]
+  (let [params (js/URLSearchParams.)]
+    (doseq [corpus corpora] (.append params "corpus" corpus))
+    (swap! state assoc :filters-pending? true)
+    (-> (js/fetch (str "/api/filters?" params)
+                  #js {:headers #js {"Accept" transit-type}})
+        (.then (fn [response]
+                 (if (.-ok response)
+                   (.text response)
+                   (throw (js/Error. "filters request failed")))))
+        (.then (fn [body]
+                 (let [options (read-transit body)]
+                   (swap! state
+                          (fn [current]
+                            (cond-> (assoc current :filters-pending? false)
+                              (= corpora (chosen-corpora current))
+                              (-> (assoc :filters-for corpora)
+                                  (update :filter-controls merge
+                                          (select-keys options
+                                                       [:attrs :unlisted])))))))))
+        (.catch (fn [_] (swap! state assoc :filters-pending? false))))))
+
+(defn refresh-filters!
+  "Fetch the metadata filters the selection now offers, once it has held
+  still for `filters-debounce-ms`; a no-op while what is on screen already
+  describes the selection, or while nobody is looking at it."
+  []
+  (debounce! filters-timer filters-debounce-ms
+             (fn []
+               (when (filters-stale? @state)
+                 (fetch-filters! (chosen-corpora @state))))))
+
 (defn close-panel!
   "Dismiss the inspection panel and leave focus in the concordance it
   describes, rather than on a token.
@@ -235,10 +407,25 @@
   whatever the cursor is on rather than waiting for a press.
   `:move-cursor` answers a key pressed on a token, `:leave-concordance`
   closes the panel once focus has gone elsewhere, and `:close` dismisses
-  it from its own button. `:toggle-context`
-  expands a hit (fetching its wider context) or collapses it. `:set-mode`
-  records the query mode the reader picked, which swaps the query example
-  the placeholder shows.
+  it from its own button. `:toggle-context` expands a hit (fetching its
+  wider context) or collapses it. `:set-mode` records the query mode the
+  reader picked, which swaps the query example the placeholder shows.
+  `:apply-view` submits the search again with a result control as it now
+  stands, so choosing an order is asking for it.
+  `:toggle-corpora` records a corpus box or a whole folder being selected
+  or cleared, and `:set-indeterminate`, a render hook rather than an
+  event, marks a folder holding only part of the selection.
+  `:toggle-filter-values` records metadata values being chosen or dropped,
+  one or a whole attribute at a time, so the filter counts what the boxes
+  say rather than what the last search asked, and `:clear-filter` empties
+  it. `:filter-values` records what the reader is looking for among those
+  values and `:swallow-enter` keeps Enter in either filter box from
+  submitting the search. `:set-filters-open` records the metadata filter
+  being opened or shut, which both decides the disclosure and says whether
+  the filters it holds are worth fetching again. `:set-chooser-open`
+  records the corpus tree being opened or shut, so that a filter can open
+  it without emptying the box shutting it again. `:filter-corpora` records
+  what the reader is looking for in the corpus chooser.
 
   Re-rendering the form does not disturb what the reader has typed: the
   query input's value is the same in both renders, so Replicant leaves the
@@ -246,6 +433,39 @@
   [data [action arg]]
   (case action
     :set-mode (swap! state assoc-in [:params :mode] arg)
+    :apply-view (apply-view!)
+    :toggle-corpora (do (toggle-corpora! arg) (refresh-filters!))
+    ;; what metadata a selection offers is the server's to say, so it is
+    ;; fetched rather than known, and only once a reader looks at it
+    :set-filters-open
+    (do (swap! state assoc :filters-open?
+               (.-open (.-target (:replicant/dom-event data))))
+        (refresh-filters!))
+    :toggle-filter-values
+    (swap! state update-in [:filter-controls :selected]
+           choose-values (first arg) (second arg))
+    :clear-filter
+    (swap! state assoc-in [:filter-controls :selected] {})
+    :filter-values (swap! state assoc :value-filter
+                          (.-value (.-target (:replicant/dom-event data))))
+    ;; the reader owns the corpus tree's disclosure once they have opened
+    ;; or shut it; before that the view decides from what was served
+    :set-chooser-open
+    (swap! state assoc :chooser-open?
+           (.-open (.-target (:replicant/dom-event data))))
+    :filter-corpora
+    (swap! state assoc :corpus-filter
+           (.-value (.-target (:replicant/dom-event data))))
+    ;; a text field in a form submits it on Enter, and a reader finding
+    ;; something to tick is not asking for an answer yet
+    :swallow-enter
+    (let [event (:replicant/dom-event data)]
+      (when (= "Enter" (.-key event))
+        (.preventDefault event)))
+    ;; a checkbox has three states and only two of them are attributes,
+    ;; so the third is written to the element itself on every render
+    :set-indeterminate
+    (set! (.-indeterminate (:replicant/node data)) arg)
     :inspect (swap! state assoc :selected arg)
     :close   (close-panel!)
     :move-cursor (move-cursor! (:replicant/dom-event data) arg)
@@ -339,11 +559,11 @@
   [url]
   (let [target (when (= (str "#" page/results-id) (.-hash url))
                  (.getElementById js/document page/results-id))]
-    (cond
-      (nil? target)        (.scrollTo js/window 0 0)
-      (at-hand? target)    (.focus target #js {:preventScroll true})
-      :else                (do (.scrollIntoView target)
-                               (.focus target #js {:preventScroll true})))))
+    (if (nil? target)
+      (.scrollTo js/window 0 0)
+      (do (when-not (at-hand? target)
+            (.scrollIntoView target))
+          (.focus target #js {:preventScroll true})))))
 
 (defn wanted-hits
   "The hits of `data` whose key is in `wanted` (nil when nothing is
@@ -368,6 +588,26 @@
                               (map (fn [hit] [(kwic/hit-key hit) ::loading]))
                               hits)))))
 
+(defn client-state
+  "Server `data` as the state this client renders from: marked as the
+  client's, seeded with the expansions the URL names, and remembering the
+  corpora the page was served for.
+
+  Those last two are what the corpus chooser and the metadata filter judge
+  what to open by. The selections themselves change under the reader as
+  they tick boxes, and a disclosure that opened and shut with them would
+  fight them; what the page arrived with holds still until the next page
+  does."
+  [data]
+  (-> data
+      (assoc :client?       true
+             :served-corpus (get-in data [:params :corpus])
+             :served-filter (get-in data [:filter-controls :selected])
+             ;; what the filters on screen describe, so that a selection
+             ;; that has changed can be told from one that has not
+             :filters-for   (vec (sort (get-in data [:params :corpus]))))
+      (with-expansions)))
+
 (defn fetch-expansions!
   "Fetch the wider context of every hit currently placeheld in `:expanded`."
   []
@@ -385,23 +625,49 @@
   cannot render is still a working page: the server renders every one of
   them. `push?` adds a history entry; a popstate replaces nothing.
 
+  Marks the state pending once an answer is `pending-delay-ms` late, and
+  not before. A whole-corpus search can run for minutes, and until the
+  client routed anything the browser reported that wait itself; an answer
+  that arrives at once wants no report at all. The answer replaces the
+  state wholesale, which is how the mark is cleared.
+
+  A navigation started while one is in flight calls the first off rather
+  than racing it, so the reader gets the answer to their latest question,
+  and the abandoned one does not mistake being called off for failing and
+  load the page the reader has already left.
+
   Any expansion the URL names is restored, so going back to a page whose
   hits were expanded shows them expanded again."
   [href push?]
-  (-> (js/fetch href #js {:headers #js {"Accept" transit-type}})
-      (.then (fn [response]
-               (if (.-ok response)
-                 (.text response)
-                 (throw (js/Error. "route request failed")))))
-      (.then (fn [body]
-               (let [data (read-transit body)
-                     url  (js/URL. href js/location.href)]
-                 (when push? (.pushState js/history nil "" href))
-                 (set! (.-title js/document) (:title data))
-                 (reset! state (with-expansions (assoc data :client? true)))
-                 (fetch-expansions!)
-                 (land! url))))
-      (.catch (fn [_] (set! (.-href js/location) href)))))
+  (let [controller (js/AbortController.)]
+    (some-> @in-flight (.abort))
+    (reset! in-flight controller)
+    (debounce! pending-timer pending-delay-ms
+               #(swap! state assoc :pending? true))
+    (-> (js/fetch href #js {:headers #js {"Accept" transit-type}
+                            :signal  (.-signal controller)})
+        (.then (fn [response]
+                 (if (.-ok response)
+                   (.text response)
+                   (throw (js/Error. "route request failed")))))
+        (.then (fn [body]
+                 (let [data (read-transit body)
+                       url  (js/URL. href js/location.href)]
+                   ;; before the state is replaced, or a report scheduled
+                   ;; for a wait that is over lands on the answer to it
+                   (cancel! pending-timer)
+                   (when push? (.pushState js/history nil "" href))
+                   (set! (.-title js/document) (:title data))
+                   (reset! state (client-state data))
+                   (fetch-expansions!)
+                   (land! url))))
+        (.catch (fn [_]
+                  ;; an abort leaves the timer alone: it belongs to the
+                  ;; navigation that did the aborting, which is still in
+                  ;; flight and may yet be worth reporting
+                  (when-not (.-aborted (.-signal controller))
+                    (cancel! pending-timer)
+                    (set! (.-href js/location) href)))))))
 
 (defn set-preference!
   "Store `v` under setting `k` and fetch this page again with it applied.
@@ -474,16 +740,26 @@
          (when (and (= "get" (str/lower-case (or (.-method form) "get")))
                     (= (.-origin (js/URL. (.-action form)))
                        js/location.origin))
-         (.preventDefault e)
-         ;; the browser's own rules for what a form submits, so a routed
-         ;; submit sends exactly what a real one would
+           (.preventDefault e)
+           ;; the browser's own rules for what a form submits, so a routed
+           ;; submit sends exactly what a real one would
            (let [url (js/URL. (.-action form))
                  qs  (.toString (js/URLSearchParams. (js/FormData. form)))]
-             (.preventDefault e)
              (set! (.-search url) qs)
              (navigate! (.-href url) true)))))))
   (.addEventListener js/window "popstate"
                      (fn [_] (navigate! js/location.href false))))
+
+(defn ^:dev/after-load reload!
+  "Render again once shadow-cljs has swapped in recompiled code.
+
+  Nothing else would: the views are called from the state watcher, and a
+  recompile changes the code without changing the state, so a saved file
+  would sit invisible until the reader next did something. State itself
+  survives, which is the point of a watch: the search stays on screen
+  while the view that draws it is edited."
+  []
+  (render!))
 
 (defn init!
   "Boot the client: seed state from the bootstrap payload, wire dispatch and
@@ -492,7 +768,7 @@
   []
   ;; the views render tokens and disclosures as controls only where this
   ;; script is running to answer them
-  (reset! state (with-expansions (assoc (read-payload) :client? true)))
+  (reset! state (client-state (read-payload)))
   (route-clicks!)
   (r/set-dispatch! handle!)
   (add-watch state ::render (fn [_ _ _ _] (render!)))

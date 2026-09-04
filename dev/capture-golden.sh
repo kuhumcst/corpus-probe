@@ -27,13 +27,7 @@ run_cqp "${PROFILE}"'show +s; A = "hund.*" %c; cat A;'       > "$OUT/kwic-harden
 run_cqp 'PROBE; show cd;'                                    > "$OUT/show-cd.txt"
 run_cqp 'PROBE; info;'                                       > "$OUT/info.txt"
 run_cqp 'PROBE; A = "hund.*" %c; dump A;'                    > "$OUT/dump.tsv"
-run_cqp 'PROBE; A = "hund.*" %c;
-tabulate A match word, match lemma, match text_id, match text_title;' \
-                                                             > "$OUT/tabulate.tsv"
-run_cqp 'PROBE; B = [pos = "N.*"]; count B by lemma;'        > "$OUT/count.txt"
 run_cqp 'PROBE; B = [pos = "N.*"]; group B match lemma;'     > "$OUT/group.txt"
-run_cqp 'PROBE; B = [pos = "N.*"];
-group B match lemma by match pos;'                           > "$OUT/group-pairwise.txt"
 
 cwb-describe-corpus -r "$REG" -s PROBE                       > "$OUT/describe.txt"
 cwb-lexdecode -r "$REG" -fb -P lemma PROBE                   > "$OUT/lexdecode.tsv"

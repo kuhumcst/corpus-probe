@@ -106,7 +106,7 @@
    ;; again: the navigation beside it is what carries a search onward
    [:a.sitename {:href "/"} "corpus-probe"]
    [:nav {:aria-label (i18n/tr lang :site)}
-    [:ul
+    [:ul.row
      (for [[k p] nav-items]
        [:li [:a (cond-> {:href (get nav k p)}
                   (= p path) (assoc :aria-current "page"))

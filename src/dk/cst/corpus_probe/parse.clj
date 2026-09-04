@@ -107,44 +107,16 @@
              :keyword  (when-not (= -1 keyword*) keyword*)}))
         lines))
 
-(defn tsv->rows
-  "Split TAB-separated `lines` (from `tabulate` and the cwb-* tools) into
-  row vectors.
+(defn group->freqs
+  "Parse `lines` from `group` into frequency maps.
 
-  Only positional-attribute values are guaranteed TAB-free; a column holding
-  s-attribute annotation values must be the only column, or be extracted
-  with a bounded split instead."
-  [lines]
-  (mapv #(str/split % #"\t" -1) lines))
-
-(defn count->freqs
-  "Parse `lines` from `count ... by` into frequency maps.
-
-  Returns [{:freq <n> :row <n> :value <s>} ...] where :row is the first row
-  of that value's block in the re-sorted query result, usable as a `cat`
-  offset to show its matches."
+  Returns [{:values [<s>] :freq <n>} ...]. The frequency is split off from
+  the right, so an annotation value containing TAB stays intact."
   [lines]
   (mapv (fn [line]
-          (let [[freq row value] (str/split line #"\t" 3)]
-            {:freq (parse-long freq) :row (parse-long row) :value value}))
+          (let [[_ value freq] (re-matches #"(?s)(.*)\t(\d+)" line)]
+            {:values [value] :freq (parse-long freq)}))
         lines))
-
-(defn group->freqs
-  "Parse `lines` from `group` into frequency maps, splitting the value part
-  into `n` values (default 1; pass 2 for pairwise grouping, whose values CQP
-  prints in the opposite order of the command's anchors).
-
-  Returns [{:values [<s> ...] :freq <n>} ...]. The frequency is split off
-  from the right, so in the unary case an annotation value containing TAB
-  stays intact; TAB-bearing values make pairwise rows inherently ambiguous."
-  ([lines]
-   (group->freqs 1 lines))
-  ([n lines]
-   (mapv (fn [line]
-           (let [[_ values freq] (re-matches #"(?s)(.*)\t(\d+)" line)]
-             {:values (str/split values #"\t" n)
-              :freq   (parse-long freq)}))
-         lines)))
 
 (defn lexicon->freqs
   "Parse `lines` from `cwb-lexdecode -fb` (frequency TAB value, one line per

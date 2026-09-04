@@ -20,6 +20,23 @@
           (System/setProperty server/config-property was)
           (System/clearProperty server/config-property))))))
 
+(deftest content-security-policy-test
+  (testing "what ships is strict: no eval, and no origin but this one"
+    (let [policy (server/content-security-policy {})]
+      (is (= (str "default-src 'self'; script-src 'self'; "
+                  "style-src 'self'; img-src 'self' data:")
+             policy))
+      (is (not (re-find #"unsafe-eval" policy)))
+      (is (not (re-find #"connect-src" policy)))))
+  (testing "a watch is let through only where one is configured"
+    (let [policy (server/content-security-policy
+                  {:dev-client "ws://localhost:9630"})]
+      (is (re-find #"script-src 'self' 'unsafe-eval'" policy))
+      (is (re-find #"connect-src 'self' ws://localhost:9630" policy))))
+  (testing "the app's own fetches survive the widening"
+    (is (re-find #"connect-src 'self'"
+                 (server/content-security-policy {:dev-client "ws://x"})))))
+
 (deftest read-config-test
   (testing "with nothing named, the built-in configuration is what runs"
     (let [config (server/read-config)]
@@ -60,7 +77,7 @@
           (System/clearProperty server/config-property))))))
 
 (deftest malformed-config-file-test
-  (with-config-file "{:port 8080"
+  (with-config-file "{:port 7373"
     (fn [_]
       (testing "so does one that is not readable EDN"
         (is (thrown? Exception (server/read-config)))))))
