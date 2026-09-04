@@ -1,5 +1,6 @@
 (ns dk.cst.corpus-probe.views.kwic-test
-  (:require [clojure.test :refer [deftest is testing]]
+  (:require [dk.cst.corpus-probe.views.hiccup :refer [da en]]
+            [clojure.test :refer [deftest is testing]]
             [dk.cst.corpus-probe.views.kwic :as kwic]))
 
 (deftest token-title-test
@@ -86,7 +87,7 @@
 
 (def client
   "Concordance options as the client renders them."
-  {:lang "en" :client? true})
+  {:ui en :client? true})
 
 (deftest hit-row-test
   (let [row (kwic/hit-row client sample-hit false)]
@@ -104,7 +105,7 @@
         (is (= [:toggle-context {:corpus "PROBE" :cpos 9 :matchend 9}]
                (get-in button [1 :on :click])))))
     (testing "without a client it is the bare position, not a dead control"
-      (is (= "9" (nth (nth (kwic/hit-row {:lang "en"} sample-hit false) 2) 2))))
+      (is (= "9" (nth (nth (kwic/hit-row {:ui en} sample-hit false) 2) 2))))
     (testing "aria-expanded tracks the flag, and names the row it revealed"
       (let [button (nth (nth (kwic/hit-row client sample-hit true) 2) 2)]
         (is (= "true" (:aria-expanded (second button))))
@@ -115,7 +116,7 @@
       (is (= "9 · Toggle wider context"
              (get-in (nth (nth row 2) 2) [1 :aria-label])))
       (is (= "9 · Vis eller skjul bredere kontekst"
-             (get-in (nth (nth (kwic/hit-row {:lang "da" :client? true}
+             (get-in (nth (nth (kwic/hit-row {:ui da :client? true}
                                              sample-hit false)
                                2) 2)
                      [1 :aria-label]))))
@@ -124,11 +125,11 @@
 
 (deftest hit-rows-test
   (testing "a hit is always two children, the second nil without an expansion"
-    (let [rows (kwic/hit-rows {:lang "en"} sample-hit)]
+    (let [rows (kwic/hit-rows {:ui en} sample-hit)]
       (is (= 2 (count rows)))
       (is (nil? (second rows)))))
   (testing "a failed fetch says so, in a live region: it had no page load"
-    (let [rows (kwic/hit-rows {:lang "en" :expanded {["PROBE" 9] kwic/failed}}
+    (let [rows (kwic/hit-rows {:ui en :expanded {["PROBE" 9] kwic/failed}}
                               sample-hit)]
       (is (= 2 (count rows)))
       (is (= [:span {:role "alert"} "Could not load the context."]
@@ -137,7 +138,7 @@
     (let [ex   {:left  [{:word "en"}]
                 :match [{:word "hund"}]
                 :right [{:word "i"}]}
-          rows (kwic/hit-rows {:lang "en" :client? true
+          rows (kwic/hit-rows {:ui en :client? true
                                :expanded {["PROBE" 9] ex}}
                               sample-hit)]
       (is (= 2 (count rows)))
@@ -168,7 +169,7 @@
               "t-PROBE-9-3" "t-PROBE-9-4" "t-PROBE-9-5"]
              (filter #(re-matches #"t-.*" %) ids)))))
   (testing "a pending placeholder shows a loading row, also a live region"
-    (let [rows (kwic/hit-rows {:lang "en" :expanded {["PROBE" 9] :loading}}
+    (let [rows (kwic/hit-rows {:ui en :expanded {["PROBE" 9] :loading}}
                               sample-hit)]
       (is (= 2 (count rows)))
       (is (= [:span {:role "status"} "Loading …"]
@@ -219,7 +220,7 @@
     (testing "hits without a corpus form one plain group without a header"
       (let [group (first (nth (nth (kwic/concordance
                                     [(dissoc sample-hit :corpus)]
-                                    {:lang "en"})
+                                    {:ui en})
                                    2)
                               3))]
         (is (= :tbody (first group)))

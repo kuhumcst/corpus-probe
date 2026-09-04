@@ -1,0 +1,344 @@
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+"Language: da\n"
+
+msgid "Alignment attributes"
+msgstr "Alignment-attributter"
+
+msgid "All corpora"
+msgstr "Alle korpusser"
+
+msgid "All corpora in"
+msgstr "Alle korpusser i"
+
+msgid "All tokens"
+msgstr "Alle tokens"
+
+msgid "all values"
+msgstr "alle værdier"
+
+msgid "All values of"
+msgstr "Alle værdier af"
+
+msgid "annotations"
+msgstr "annotationer"
+
+msgid "Apply"
+msgstr "Anvend"
+
+msgid "attribute"
+msgstr "attribut"
+
+msgid "blocks"
+msgstr "blokke"
+
+msgid "by"
+msgstr "efter"
+
+msgid "charset"
+msgstr "tegnsæt"
+
+msgid "Clear filter"
+msgstr "Ryd filter"
+
+msgid "Close"
+msgstr "Luk"
+
+msgid "Concordance"
+msgstr "Konkordans"
+
+msgid "Could not load the context."
+msgstr "Konteksten kunne ikke hentes."
+
+msgid "corpora"
+msgstr "korpusser"
+
+msgid "Corpora"
+msgstr "Korpusser"
+
+msgid "corpus"
+msgstr "korpus"
+
+msgid "Corpus"
+msgstr "Korpus"
+
+msgid "CQP error"
+msgstr "CQP-fejl"
+
+msgid "Search CWB corpora and read KWIC concordances."
+msgstr "Søg i CWB-korpusser og læs KWIC-konkordanser."
+
+msgid "Download"
+msgstr "Download"
+
+msgid "ends with"
+msgstr "slutter med"
+
+msgid "error"
+msgstr "fejl"
+
+msgid "Filter corpora"
+msgstr "Filtrér korpusser"
+
+msgid "Filter values"
+msgstr "Filtrér værdier"
+
+msgid "Frequencies"
+msgstr "Frekvenser"
+
+msgid "frequency"
+msgstr "frekvens"
+
+msgid "Group by"
+msgstr "Gruppér efter"
+
+msgid "Hits per corpus"
+msgstr "Træf pr. korpus"
+
+msgid "ignore case"
+msgstr "ignorer store og små bogstaver"
+
+msgid "in"
+msgstr "i"
+
+msgid "Info"
+msgstr "Info"
+
+msgid "Unexpected error"
+msgstr "Uventet fejl"
+
+msgid "The search failed on the server; its log has the details."
+msgstr "Søgningen mislykkedes på serveren; detaljerne står i serverens log."
+
+msgid "Language"
+msgstr "Sprog"
+
+msgid "Loading …"
+msgstr "Henter …"
+
+msgid "Metadata"
+msgstr "Metadata"
+
+msgid "CQP output could not be read"
+msgstr "CQP's output kunne ikke læses"
+
+msgid "CQP printed something other than the requested rows."
+msgstr "CQP udskrev noget andet end de ønskede rækker."
+
+msgid "most frequent shown"
+msgstr "hyppigste vises"
+
+msgid "next"
+msgstr "næste"
+
+msgid "No corpora found."
+msgstr "Ingen korpusser fundet."
+
+msgid "No corpus selected"
+msgstr "Intet korpus valgt"
+
+msgid "Select at least one corpus to search."
+msgstr "Vælg mindst ét korpus at søge i."
+
+msgid "no data"
+msgstr "ingen data"
+
+msgid "No hits."
+msgstr "Ingen træf."
+
+msgid "No values found."
+msgstr "Ingen værdier fundet."
+
+msgid "of"
+msgstr "af"
+
+msgid "Other"
+msgstr "Andre"
+
+msgid "positional attributes"
+msgstr "positionelle attributter"
+
+msgid "Positional attributes"
+msgstr "Positionelle attributter"
+
+msgid "page"
+msgstr "side"
+
+msgid "Pagination"
+msgstr "Sidenavigation"
+
+msgid "per million"
+msgstr "pr. million"
+
+msgid "Select at least one corpus"
+msgstr "Vælg mindst ét korpus"
+
+msgid "position"
+msgstr "position"
+
+msgid "Powered by"
+msgstr "Drevet af"
+
+msgid "previous"
+msgstr "forrige"
+
+msgid "Query"
+msgstr "Forespørgsel"
+
+msgid "[lemma = \"hund\"] or [pos = \"N.*\"]"
+msgstr "[lemma = \"hund\"] eller [pos = \"N.*\"]"
+
+msgid "hund, or several words in order"
+msgstr "hund, eller flere ord i rækkefølge"
+
+msgid "Query mode"
+msgstr "Forespørgselstype"
+
+msgid "Query options"
+msgstr "Forespørgselsindstillinger"
+
+msgid "Request rejected"
+msgstr "Forespørgslen blev afvist"
+
+msgid "Result view"
+msgstr "Resultatvisning"
+
+msgid "structural attributes"
+msgstr "strukturelle attributter"
+
+msgid "Structural attributes"
+msgstr "Strukturelle attributter"
+
+msgid "Search"
+msgstr "Søgning"
+
+msgid "Search in"
+msgstr "Søg i"
+
+msgid "selected"
+msgstr "valgt"
+
+msgid "Simple"
+msgstr "Simpel"
+
+msgid "Simple-search options"
+msgstr "Indstillinger for simpel søgning"
+
+msgid "Site"
+msgstr "Websted"
+
+msgid "size"
+msgstr "størrelse"
+
+msgid "Skip to content"
+msgstr "Gå til indhold"
+
+msgid "Sort"
+msgstr "Sortering"
+
+msgid "corpus order"
+msgstr "korpusrækkefølge"
+
+msgid "left context"
+msgstr "venstre kontekst"
+
+msgid "random"
+msgstr "tilfældig"
+
+msgid "right context"
+msgstr "højre kontekst"
+
+msgid "match"
+msgstr "match"
+
+msgid "source"
+msgstr "kilde"
+
+msgid "starts with"
+msgstr "starter med"
+
+msgid "button|Search"
+msgstr "Søg"
+
+msgid "CWB corpus search"
+msgstr "CWB-korpussøgning"
+
+msgid "Text"
+msgstr "Tekst"
+
+msgid "the"
+msgstr "de"
+
+msgid "the first"
+msgstr "de første"
+
+msgid "This corpus"
+msgstr "Dette korpus"
+
+msgid "The query timed out"
+msgstr "Forespørgslen tog for lang tid"
+
+msgid "Token"
+msgstr "Token"
+
+msgid "Token details"
+msgstr "Tokendetaljer"
+
+msgid "tokens"
+msgstr "tokens"
+
+msgid "Too many values to list: "
+msgstr "For mange værdier til at vise: "
+
+msgid "total"
+msgstr "i alt"
+
+msgid "types"
+msgstr "typer"
+
+msgid "unavailable"
+msgstr "utilgængelig"
+
+msgid "The registry lists this corpus, but CWB has no data for it."
+msgstr "Registret har dette korpus, men CWB har ingen data til det."
+
+msgid "Unknown corpus"
+msgstr "Ukendt korpus"
+
+msgid "The registry has no corpus by that name."
+msgstr "Registret har intet korpus med det navn."
+
+msgid "Could not read corpus"
+msgstr "Korpusset kunne ikke læses"
+
+msgid "CWB could not read this corpus's data files."
+msgstr "CWB kunne ikke læse dette korpus' datafiler."
+
+msgid "Toggle wider context"
+msgstr "Vis eller skjul bredere kontekst"
+
+msgid "with annotations"
+msgstr "med annotationer"
+
+msgid "within"
+msgstr "inden for"
+
+msgid "Word frequencies of"
+msgstr "Ordfrekvenser i"
+
+msgid "hit"
+msgid_plural "hits"
+msgstr[0] "træf"
+msgstr[1] "træf"
+
+msgid "region"
+msgid_plural "regions"
+msgstr[0] "region"
+msgstr[1] "regioner"
+
+msgid "value"
+msgid_plural "values"
+msgstr[0] "værdi"
+msgstr[1] "værdier"

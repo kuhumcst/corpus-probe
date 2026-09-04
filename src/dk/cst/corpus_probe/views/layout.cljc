@@ -21,13 +21,13 @@
 
 (defn skip-link
   "The bypass link past the masthead to the page's own content, in
-  language `lang`: the first focusable thing in the document, off screen
+  `ui`: the first focusable thing in the document, off screen
   until a keyboard reaches it.
 
   WCAG 2.4.1 asks for a mechanism past the blocks a page repeats, and the
   masthead is one on every page here."
-  [lang]
-  [:a.skip {:href (str "#" main-id)} (i18n/tr lang :skip-to-content)])
+  [ui]
+  [:a.skip {:href (str "#" main-id)} (i18n/tr ui "Skip to content")])
 
 (def language-names
   "Each supported language named in itself, as a language switch should
@@ -57,14 +57,14 @@
   serves either language, and the choice is remembered for them. Each name
   carries its own language, since none of them is in the language of the
   page around it."
-  [lang path]
+  [ui path]
   [:form.languages {:method "post" :action preferences-path}
    [:input {:type "hidden" :name "return" :value path}]
-   [:p (i18n/tr lang :language) ": "
+   [:p (i18n/tr ui "Language") ": "
     (interpose
      " · "
      (for [code i18n/languages]
-       (if (= code lang)
+       (if (= code (:lang ui))
          [:span {:lang code :aria-current "true"} (language-names code)]
          [:button {:type  "submit"
                    :name  "lang"
@@ -73,13 +73,21 @@
           (language-names code)])))]])
 
 (def nav-items
-  "The top-level navigation, in display order: the dictionary key naming
-  each page and its path."
+  "The top-level navigation, in display order: the key naming each page
+  (which is also the key its URL arrives under) and its path."
   [[:search "/"]
    [:corpora-heading "/corpora"]])
 
+(defn nav-label
+  "What the `nav-items` entry `k` is called, in `ui`."
+  [ui k]
+  (case k
+    :search          (i18n/tr ui "Search")
+    :corpora-heading (i18n/tr ui "Corpora")
+    (name k)))
+
 (defn site-header
-  "The site masthead shared by every page, in language `lang`: three
+  "The site masthead shared by every page, in `ui`: three
   things with one role each. Who this is (the name, linking to a fresh
   search), where a reader can go (the top-level navigation over `nav`,
   each `nav-items` key to its URL, with `path`, the page being served,
@@ -95,26 +103,26 @@
 
   The site name is a paragraph, not a heading: it is the same string on
   every page, so it names the site rather than the page, and each page's
-  own <h1> lives inside its <main>. Every link here carries `lang`, the
+  own <h1> lives inside its <main>. Every link here carries the
   site name included, so following one keeps the language the reader
   chose."
-  [lang path nav]
+  [ui path nav]
   [:header
    ;; the site's name is a link home and nothing else: HTML has no element
    ;; for the name of a site, and what this actually is, is the way back to
    ;; a clean search. It keeps no query, so it is also the app's start
    ;; again: the navigation beside it is what carries a search onward
    [:a.sitename {:href "/"} "corpus-probe"]
-   [:nav {:aria-label (i18n/tr lang :site)}
+   [:nav {:aria-label (i18n/tr ui "Site")}
     [:ul.row
      (for [[k p] nav-items]
        [:li [:a (cond-> {:href (get nav k p)}
                   (= p path) (assoc :aria-current "page"))
-             (i18n/tr lang k)]])]]
-   (language-switch lang path)])
+             (nav-label ui k)]])]]
+   (language-switch ui path)])
 
 (defn site-footer
-  "The site's contentinfo in language `lang`: what this app is, and what
+  "The site's contentinfo in `ui`: what this app is, and what
   it is a front end for, credited where a reader can follow it.
 
   Both belong here rather than in the masthead, where a tagline would
@@ -122,9 +130,9 @@
 
   One line. Rendered as a direct child of <body>, so it is the document's
   contentinfo rather than a section footer inside the main content."
-  [lang]
+  [ui]
   [:footer
-   [:p (i18n/tr lang :subtitle) ". "
-    (i18n/tr lang :powered-by) " "
+   [:p (i18n/tr ui "CWB corpus search") ". "
+    (i18n/tr ui "Powered by") " "
     [:a {:href "https://cwb.sourceforge.io/"} "IMS Open Corpus Workbench"]
     "."]])

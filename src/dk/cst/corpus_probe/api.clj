@@ -147,31 +147,34 @@
   (see `correct-quote-escaping`). The document language is the UI
   language; corpus text carries its own `lang`."
   [{:keys [lang path title body nav payload] :as opts}]
-  (str "<!DOCTYPE html>"
-       "<html lang=\"" lang "\"><head>"
-       "<meta charset=\"utf-8\">"
-       "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
-       (correct-quote-escaping
-        (replicant/render [:meta {:name    "description"
-                                  :content (i18n/tr lang :description)}]))
-       (correct-quote-escaping (replicant/render [:title title]))
-       "<link rel=\"stylesheet\" href=\"/css/style.css\">"
-       "</head><body>"
-       (correct-quote-escaping (replicant/render (layout/skip-link lang)))
-       "<div id=\"masthead\">"
-       (correct-quote-escaping
-        (replicant/render (layout/site-header lang path nav)))
-       "</div>"
-       "<div id=\"app\">"
-       (correct-quote-escaping (replicant/render body))
-       "</div>"
-       (correct-quote-escaping (replicant/render (layout/site-footer lang)))
-       (when payload
-         (str "<script type=\"" transit-type "\" id=\"bootstrap\">"
-              (script-safe payload)
-              "</script>"))
-       "<script defer src=\"/js/main.js\"></script>"
-       "</body></html>"))
+  (let [ui (i18n/->ui lang)]
+    (str "<!DOCTYPE html>"
+         "<html lang=\"" lang "\"><head>"
+         "<meta charset=\"utf-8\">"
+         "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
+         (correct-quote-escaping
+          (replicant/render
+           [:meta {:name    "description"
+                   :content (i18n/tr ui (str "Search CWB corpora and read "
+                                             "KWIC concordances."))}]))
+         (correct-quote-escaping (replicant/render [:title title]))
+         "<link rel=\"stylesheet\" href=\"/css/style.css\">"
+         "</head><body>"
+         (correct-quote-escaping (replicant/render (layout/skip-link ui)))
+         "<div id=\"masthead\">"
+         (correct-quote-escaping
+          (replicant/render (layout/site-header ui path nav)))
+         "</div>"
+         "<div id=\"app\">"
+         (correct-quote-escaping (replicant/render body))
+         "</div>"
+         (correct-quote-escaping (replicant/render (layout/site-footer ui)))
+         (when payload
+           (str "<script type=\"" transit-type "\" id=\"bootstrap\">"
+                (script-safe payload)
+                "</script>"))
+         "<script defer src=\"/js/main.js\"></script>"
+         "</body></html>")))
 
 (defn wants-transit?
   "True when `request` asks for the data behind a route rather than a
@@ -278,7 +281,7 @@
        (vec)))
 
 (defn search-title
-  "The document title of the search page for `params` in language `lang`:
+  "The document title of the search page for `params` in `ui`:
   the query, how many hits it found (from `result`, when given), the
   selected corpora (`:corpus`, a vector of names, when any), the metadata
   filter and the page number when past the first; just the app name when
@@ -288,9 +291,9 @@
   title and nothing else, so the title is where the outcome of a search
   first reaches a screen reader. It is left out when no corpus could be
   searched, since then there is no count to report."
-  ([lang params]
-   (search-title lang params nil))
-  ([lang {:keys [q corpus] :as params} result]
+  ([ui params]
+   (search-title ui params nil))
+  ([ui {:keys [q corpus] :as params} result]
    (if (str/blank? q)
      (page-title)
      (let [page-n (:page result 0)]
@@ -299,34 +302,33 @@
                    ;; size 0; titling that "0 hits" reports an answer the
                    ;; search never got, and contradicts the results heading
                    (when (page/searched? result)
-                     (page/hits-phrase lang (:size result)))
-                   (when (seq corpus) (page/corpora-phrase lang corpus))
+                     (page/hits-phrase ui (:size result)))
+                   (when (seq corpus) (page/corpora-phrase ui corpus))
                    (page/filter-phrase (filter-params params))
                    (when (pos? page-n)
-                     (str (i18n/tr lang :page) " " (inc page-n))))))))
+                     (str (i18n/tr ui "page") " " (inc page-n))))))))
 
 (defn frequency-title
-  "The document title of the frequency view for `params` in language
-  `lang`: what was counted, in which corpora, within the metadata filter,
-  and by what.
+  "The document title of the frequency view for `params` in `ui`: what
+  was counted, in which corpora, within the metadata filter, and by what.
 
   A frequency result counts values rather than hits, so it cannot borrow
   the concordance's title: there is no hit count to report."
-  [lang {:keys [q corpus attr] :as params}]
-  (page-title (if (str/blank? q) (i18n/tr lang :all-tokens) q)
-              (when (seq corpus) (page/corpora-phrase lang corpus))
+  [ui {:keys [q corpus attr] :as params}]
+  (page-title (if (str/blank? q) (i18n/tr ui "All tokens") q)
+              (when (seq corpus) (page/corpora-phrase ui corpus))
               (page/filter-phrase (filter-params params))
-              (str (i18n/tr lang :by) " " attr)
-              (i18n/tr lang :frequencies)))
+              (str (i18n/tr ui "by") " " attr)
+              (i18n/tr ui "Frequencies")))
 
 (defn result-title
-  "The document title of the search described by `params` in language
-  `lang`, shown in `view` with `result`: each view names what it shows,
-  since a full page load announces the title and nothing else."
-  [lang view params result]
+  "The document title of the search described by `params` in `ui`, shown
+  in `view` with `result`: each view names what it shows, since a full
+  page load announces the title and nothing else."
+  [ui view params result]
   (if (= :frequencies view)
-    (frequency-title lang params)
-    (search-title lang params result)))
+    (frequency-title ui params)
+    (search-title ui params result)))
 
 (defn page-href
   "The URL of page `page` of the search described by `params`.
@@ -603,36 +605,36 @@
 
 (def result-views
   "The views a search result can be shown in, in display order: the
-  keyword naming each, its `view` param value and the dictionary key
-  heading it.
+  keyword naming each and its `view` param value. What each is called is
+  the interface's business (see
+  dk.cst.corpus-probe.views.page/view-label).
 
   A frequency table is not another page, it is the same search counted
   rather than listed, so it is a view of the result rather than a place of
   its own."
-  [[:kwic "kwic" :concordance]
-   [:frequencies "frequencies" :frequencies]])
+  [[:kwic "kwic"]
+   [:frequencies "frequencies"]])
 
 (defn view-param
   "The result view named by the `view` query param value `v`: the
   concordance for anything that does not name another view."
   [v]
-  (or (some (fn [[k value _]] (when (= v value) k)) result-views) :kwic))
+  (or (some (fn [[k value]] (when (= v value) k)) result-views) :kwic))
 
 (defn view-hrefs
   "Each result view of the search described by `params`, for the switch at
-  the top of the results region: [view-keyword label-key url], in display
-  order.
+  the top of the results region: [view-keyword url], in display order.
 
   Every view of one search shares its URL but for the `view` param, so
   moving between them keeps the query, the corpora and the filter by
   construction rather than by carrying them across."
   [params]
-  (for [[k value label] result-views]
-    [k label (str "/?" (query-string (assoc (search-params params)
-                                            :view  value
-                                            :attr  (:attr params)
-                                            :sort  (:sort params)))
-                  page/results-fragment)]))
+  (for [[k value] result-views]
+    [k (str "/?" (query-string (assoc (search-params params)
+                                      :view  value
+                                      :attr  (:attr params)
+                                      :sort  (:sort params)))
+            page/results-fragment)]))
 
 (defn search-view-data
   "The data dk.cst.corpus-probe.views.app/search-view renders one
@@ -689,8 +691,7 @@
                                                   :attr attr))))
 
       (not freq?)
-      (assoc :sort-modes   (mapv (fn [[value label _]] [value label])
-                                 query/sort-modes)
+      (assoc :sort-modes   (mapv first query/sort-modes)
              :export-limit export/hit-limit
              :export-hrefs (when (:result outcome)
                              (export-hrefs "/export/kwic"
@@ -757,8 +758,8 @@
   [ctx request]
   (let [data (assoc (search-view-data ctx request) :route :search)]
     (page-response request
-                   (result-title (:lang data) (:view data) (:params data)
-                                 (:result data))
+                   (result-title (i18n/->ui (:lang data)) (:view data)
+                                 (:params data) (:result data))
                    data
                    (:params data))))
 
@@ -850,9 +851,10 @@
   "Handle the corpus index `request` against `ctx`: every registry corpus,
   summarized and grouped by the configured folder tree."
   [ctx request]
-  (let [lang (request-language request)]
+  (let [lang (request-language request)
+        ui   (i18n/->ui lang)]
     (page-response request
-                   (page-title (i18n/tr lang :corpora-heading))
+                   (page-title (i18n/tr ui "Corpora"))
                    {:route :corpora
                     :lang  lang
                     :data  {:folders (corpus-tree! ctx (corpus/corpora ctx))}})))

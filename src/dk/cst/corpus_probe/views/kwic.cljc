@@ -179,18 +179,18 @@
 
 (defn context-control
   "The corpus position of `hit` as the control revealing its wider context,
-  in language `lang`, `expanded?` giving its state; the bare position where
+  in `ui`, `expanded?` giving its state; the bare position where
   no client answers the click.
 
   Its accessible name opens with the visible position, so what is said
   matches what is seen, and while expanded it names the row it revealed."
-  [lang client? hit expanded?]
+  [ui client? hit expanded?]
   (let [cpos (str (:cpos hit))]
     (if-not client?
       cpos
       [:button (cond-> {:type          "button"
                         :aria-label    (str cpos " · "
-                                            (i18n/tr lang :wider-context))
+                                            (i18n/tr ui "Toggle wider context"))
                         :aria-expanded (str (boolean expanded?))
                         :on            {:click [:toggle-context
                                                 {:corpus   (:corpus hit)
@@ -206,12 +206,12 @@
 
   The corpus position is the row's header and its first cell, so every
   other cell resolves a row header as well as a column one."
-  [{:keys [lang client?] :as opts} hit expanded?]
+  [{:keys [ui client?] :as opts} hit expanded?]
   (let [source (hit-source hit)
         {:keys [left match right structs anchors cpos]} hit
         nl     (count left)]
     [:tr.hit (position-data cpos anchors)
-     [:th.cpos {:scope "row"} (context-control lang client? hit expanded?)]
+     [:th.cpos {:scope "row"} (context-control ui client? hit expanded?)]
      [:td.structs {:title (source-title structs)} (source-label structs)]
      [:td.left (tokens opts hit source 0 left)]
      [:td.match [:mark (tokens opts hit source nl match)]]
@@ -248,12 +248,12 @@
 
 (defn hit-rows
   "The row(s) for `hit` under the concordance `opts` (see `concordance`),
-  in its UI language `:lang`: the KWIC row, followed by its
+  in its `:ui`: the KWIC row, followed by its
   expanded-context row when `:expanded` holds a fetched hit under its
   `hit-key`, a status row while one is pending, or an alert row when the
   fetch failed; always two children, the second nil when there is no
   expansion, so a hit never changes how many rows it contributes."
-  [{:keys [lang expanded] :as opts} hit]
+  [{:keys [ui expanded] :as opts} hit]
   (let [ex  (get expanded (hit-key hit))
         row (hit-row opts hit (some? ex))]
     ;; always two children, the second sometimes nothing: a hit that
@@ -262,17 +262,19 @@
     [row (cond
            (nil? ex)     nil
            (map? ex)     (expanded-row opts hit ex)
-           (= failed ex) (status-row "alert" (i18n/tr lang :context-failed))
-           :else         (status-row "status" (i18n/tr lang :loading)))]))
+           (= failed ex) (status-row
+                          "alert"
+                          (i18n/tr ui "Could not load the context."))
+           :else         (status-row "status" (i18n/tr ui "Loading …")))]))
 
 (defn corpus-group
   "The rows of `hits`, all from one corpus, as a row group under the
   concordance `opts` (see `concordance`): a header row naming the corpus
-  (linking to its info page in the UI language `:lang`), then the hit rows
+  (linking to its info page in `:ui`), then the hit rows
   with their expansions. The group carries the corpus's own language from
   `:langs` when known, since the corpus text is in its own language while
   the surrounding UI is not."
-  [{:keys [lang langs] :as opts} [{:keys [corpus]} :as hits]]
+  [{:keys [ui langs] :as opts} [{:keys [corpus]} :as hits]]
   (let [corpus-lang (get langs corpus)]
     [:tbody (cond-> {}
               corpus      (assoc :data-corpus corpus)
@@ -280,21 +282,21 @@
      (when corpus
        [:tr.corpus
         [:th {:scope "rowgroup" :colspan column-count}
-         [:a {:href (corpus-views/corpus-href lang corpus)}
+         [:a {:href (corpus-views/corpus-href ui corpus)}
           [:code corpus]]]])
      (mapcat #(hit-rows opts %) hits)]))
 
 (defn column-headers
-  "The concordance's column headings in language `lang`. The three token
+  "The concordance's column headings in `ui`. The three token
   columns reuse the words the sort control already uses for them."
-  [lang]
+  [ui]
   [:thead
    [:tr
-    [:th {:scope "col"} (i18n/tr lang :position)]
-    [:th {:scope "col"} (i18n/tr lang :source)]
-    [:th {:scope "col"} (i18n/tr lang :sort-left)]
-    [:th {:scope "col"} (i18n/tr lang :sort-word)]
-    [:th {:scope "col"} (i18n/tr lang :sort-right)]]])
+    [:th {:scope "col"} (i18n/tr ui "position")]
+    [:th {:scope "col"} (i18n/tr ui "source")]
+    [:th {:scope "col"} (i18n/tr ui "left context")]
+    [:th {:scope "col"} (i18n/tr ui "match")]
+    [:th {:scope "col"} (i18n/tr ui "right context")]]])
 
 (def caption-id
   "The id of the concordance's caption, which names its scroll region."
@@ -317,7 +319,7 @@
   because a focusable region needs a name.
 
   `opts` may carry a `:caption` (hiccup or string naming the table),
-  `:lang` (the UI language of the headings and row controls), `:langs`
+  `:ui` (the lookup context of the headings and row controls), `:langs`
   (corpus name to the language of its own text), `:expanded`, a map of
   `hit-key` to a wider-context hit to render beneath its row, `:client?`,
   true where the script that answers a token click is running, and
@@ -327,7 +329,7 @@
   Focus leaving the region closes the inspection panel, since the panel
   describes the token the cursor is on and there is nothing to describe
   once the reader has gone elsewhere."
-  [hits {:keys [caption lang] :as opts}]
+  [hits {:keys [caption ui] :as opts}]
   (let [{:keys [expanded cursor]} opts
         ;; a cursor left behind by a hit that has since collapsed names no
         ;; token, which would leave the concordance with no tab stop at all
@@ -344,5 +346,5 @@
                   :on              {:focusout [:leave-concordance]}}
      [:table.kwic
       (when caption [:caption {:id caption-id} caption])
-      (column-headers lang)
+      (column-headers ui)
       (map #(corpus-group opts %) (partition-by :corpus hits))]]))

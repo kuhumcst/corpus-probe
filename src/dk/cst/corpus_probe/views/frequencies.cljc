@@ -26,7 +26,7 @@
   [:option {:value (name attr) :selected (= (name attr) selected)} (name attr)])
 
 (defn attr-control
-  "The grouping control in language `lang`: a select over the attribute
+  "The grouping control in `ui`: a select over the attribute
   descriptions `attrs` with `selected` (a string) chosen, the positional
   and the structural attributes in their own option groups, under CWB's
   names for them.
@@ -34,62 +34,62 @@
   It names the form it submits with, so it can sit beside the table it
   regroups rather than inside the query form: regrouping a result is a
   different task from writing the query that produced it."
-  [lang attrs selected]
+  [ui attrs selected]
   (let [{p :positional s :structural} (group-by :type attrs)]
     (list
-     [:label {:for "attr"} (i18n/tr lang :group-by)]
+     [:label {:for "attr"} (i18n/tr ui "Group by")]
      " "
      [:select {:id   "attr" :name "attr" :form page/form-id
                :on   {:change [:apply-view]}}
       (when (seq p)
-        [:optgroup {:label (i18n/tr lang :p-attrs)}
+        [:optgroup {:label (i18n/tr ui "positional attributes")}
          (map (partial attr-option selected) p)])
       (when (seq s)
-        [:optgroup {:label (i18n/tr lang :s-attrs)}
+        [:optgroup {:label (i18n/tr ui "structural attributes")}
          (map (partial attr-option selected) s)])])))
 
 (defn frequency-summary
   "The summary of frequency `result` showing `shown` of its rows, used as
   the heading naming the results region: what was counted, in the corpora
   that could be counted and within the metadata filter, by what, and how
-  many values there are, in language `lang`."
-  [lang {:keys [query attr counts rows] :as result} shown]
+  many values there are, in `ui`."
+  [ui {:keys [query attr counts rows] :as result} shown]
   (let [n        (count rows)
         readable (filter :tokens counts)]
     (str (if (str/blank? query)
-           (i18n/tr lang :all-tokens)
-           (page/hits-phrase lang (reduce + (keep :size readable))))
-         " " (i18n/tr lang :in) " "
-         (page/corpora-phrase lang (map :corpus readable))
-         (page/within-phrase lang (:filter result))
-         " " (i18n/tr lang :by) " " (name attr)
-         " · " (i18n/group-digits lang n) " "
-         (i18n/tr lang (if (= 1 n) :value :values))
+           (i18n/tr ui "All tokens")
+           (page/hits-phrase ui (reduce + (keep :size readable))))
+         " " (i18n/tr ui "in") " "
+         (page/corpora-phrase ui (map :corpus readable))
+         (page/within-phrase ui (:filter result))
+         " " (i18n/tr ui "by") " " (name attr)
+         " · " (i18n/group-digits ui n) " "
+         (i18n/trn ui "value" "values" n)
          (when (< shown n)
-           (str ", " (i18n/tr lang :the) " " (i18n/group-digits lang shown)
-                " " (i18n/tr lang :most-frequent))))))
+           (str ", " (i18n/tr ui "the") " " (i18n/group-digits ui shown)
+                " " (i18n/tr ui "most frequent shown"))))))
 
 (defn frequency-cells
-  "The two cells of a frequency `n` in a corpus of `tokens`, in language
-  `lang`: the count and its rate per million tokens."
-  [lang n tokens]
-  (list [:td.n (i18n/group-digits lang n)]
-        [:td.n (i18n/group-digits lang (stats/per-million n tokens))]))
+  "The two cells of a frequency `n` in a corpus of `tokens`, in `ui`:
+  the count and its rate per million tokens."
+  [ui n tokens]
+  (list [:td.n (i18n/group-digits ui n)]
+        [:td.n (i18n/group-digits ui (stats/per-million n tokens))]))
 
 (defn frequency-table
   "The merged frequency `result` as a table: a row per value (the
   `row-limit` most frequent), a column group per readable corpus (its
   frequency and the rate per million tokens) and, over several corpora, a
   total group. The counts are headed frequency, CWB's own word for what
-  `group` and cwb-lexdecode report; the headings are in language `lang`."
-  [lang {:keys [attr counts rows] :as result}]
+  `group` and cwb-lexdecode report; the headings are in `ui`."
+  [ui {:keys [attr counts rows] :as result}]
   (let [readable (filter :tokens counts)
         total?   (boolean (next readable))
         tokens   (reduce + (map :tokens readable))
         shown    (take row-limit rows)
         groups   (cond-> readable total? (concat [:total]))]
     [:table.frequencies
-     [:caption (i18n/tr lang :frequencies)]
+     [:caption (i18n/tr ui "Frequencies")]
      [:colgroup]
      (for [_ groups] [:colgroup {:span 2}])
      [:thead
@@ -97,21 +97,21 @@
        [:th {:scope "col" :rowspan 2} [:code (name attr)]]
        (for [{:keys [corpus]} readable]
          [:th {:scope "colgroup" :colspan 2}
-          [:a {:href (corpus-views/corpus-href lang corpus)}
+          [:a {:href (corpus-views/corpus-href ui corpus)}
            [:code corpus]]])
        (when total?
-         [:th {:scope "colgroup" :colspan 2} (i18n/tr lang :total)])]
+         [:th {:scope "colgroup" :colspan 2} (i18n/tr ui "total")])]
       [:tr
        (for [_ groups]
-         (list [:th {:scope "col"} (i18n/tr lang :frequency)]
-               [:th {:scope "col"} (i18n/tr lang :per-million)]))]]
+         (list [:th {:scope "col"} (i18n/tr ui "frequency")]
+               [:th {:scope "col"} (i18n/tr ui "per million")]))]]
      [:tbody
       (for [{:keys [value freqs total]} shown]
         [:tr
          [:th {:scope "row"} (page/attribute-value attr value)]
          (for [{:keys [corpus tokens]} readable]
-           (frequency-cells lang (get freqs corpus 0) tokens))
-         (when total? (frequency-cells lang total tokens))])]]))
+           (frequency-cells ui (get freqs corpus 0) tokens))
+         (when total? (frequency-cells ui total tokens))])]]))
 
 (defn tabled?
   "True when any corpus of frequency `result` could be counted, so its
@@ -120,32 +120,32 @@
   (boolean (some :tokens counts)))
 
 (defn frequency-heading
-  "The heading naming the results region in language `lang`: the summary
+  "The heading naming the results region in `ui`: the summary
   of the frequency `result` showing `shown` of its rows when any corpus
   could be counted, else the name of the `error` that came instead."
-  [lang {:keys [counts] :as result} error shown]
+  [ui {:keys [counts] :as result} error shown]
   (if (tabled? result)
-    (frequency-summary lang result shown)
-    (page/error-name lang (or error (some :error counts)))))
+    (frequency-summary ui result shown)
+    (page/error-name ui (or error (some :error counts)))))
 
 (defn frequency-section
   "The frequency view of the search in `state`.
 
   Holds, when any corpus could be counted, the grouping control and the
   table, then the download links (`:export-hrefs`, exports holding every
-  row), in the state's `:lang`, wrapped in the shared
+  row), in the state's `:ui`, wrapped in the shared
   dk.cst.corpus-probe.views.page/results-region."
-  [{:keys [lang attrs params result error export-hrefs client?] :as state}]
+  [{:keys [ui attrs params result error export-hrefs client?] :as state}]
   (let [shown (min row-limit (count (:rows result)))]
     (page/results-region
      state
-     (frequency-heading lang result error shown)
+     (frequency-heading ui result error shown)
      (when (tabled? result)
        (list
-        (page/view-controls lang client?
-                            (attr-control lang attrs (:attr params)))
-        (frequency-table lang result)
+        (page/view-controls ui client?
+                            (attr-control ui attrs (:attr params)))
+        (frequency-table ui result)
         ;; what to do next with the table, so it follows the table
-        (page/download-links lang export-hrefs
+        (page/download-links ui export-hrefs
                              (when (< row-limit (count (:rows result)))
-                               (i18n/tr lang :all-values))))))))
+                               (i18n/tr ui "all values"))))))))

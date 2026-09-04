@@ -26,7 +26,7 @@
 
 (defn search-view
   "The search page's main content from application `state`, in its
-  `:lang`: the page heading, the query form (see
+  `:ui`: the page heading, the query form (see
   dk.cst.corpus-probe.views.page/search-form, carrying the `:view` as a
   hidden input so that a control applied from one view answers in that
   view), the inspection panel while a token is `:selected`, and the
@@ -35,9 +35,9 @@
   The form submits to the results fragment, so a search lands the reader
   on its own answer rather than at the top of the form that asked for it.
   The <main> is focusable so the bypass link can move the reader into it."
-  [{:keys [lang view result error selected client?] :as state}]
+  [{:keys [ui view result error selected client?] :as state}]
   [:main layout/main-attrs
-   [:h1 (i18n/tr lang :search)]
+   [:h1 (i18n/tr ui "Search")]
    ;; the form has to say which view it is being submitted from, or a
    ;; result regrouped from the frequency table comes back as a
    ;; concordance: one page serves both, and only this says which
@@ -48,18 +48,26 @@
    ;; the panel takes the form's column while it is open, so it sits next
    ;; to the hits it describes; it comes before them in the document so
    ;; reading order and visual order agree at every width
-   (when client? (page/sidebar lang selected))
+   (when client? (page/sidebar ui selected))
    (when (or result error) (result-view state))])
 
 (defn page
   "The main content of the page `state` describes, by its `:route`; nil
   for a route this app does not render.
 
-  The two read-only pages take the interface language and their own data,
-  whose `:lang` is the corpus's rather than the interface's."
+  The lookup context every view translates through is derived here from
+  the state's `:lang` and handed down as `:ui`, so the state itself
+  carries only the language code: it travels to the client as transit,
+  and the client already holds every table (see
+  dk.cst.corpus-probe.i18n).
+
+  The two read-only pages take that context and their own data, whose
+  `:lang` is the corpus's rather than the interface's."
   [{:keys [route lang] :as state}]
-  (case route
-    :search  (search-view state)
-    :corpora (corpus-views/index-view lang (:data state))
-    :corpus  (corpus-views/info-view lang (:data state))
-    nil))
+  (let [ui    (i18n/->ui lang)
+        state (assoc state :ui ui)]
+    (case route
+      :search  (search-view state)
+      :corpora (corpus-views/index-view ui (:data state))
+      :corpus  (corpus-views/info-view ui (:data state))
+      nil)))

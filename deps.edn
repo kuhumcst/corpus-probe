@@ -14,10 +14,16 @@
         ;; into Telemere too, so one library handles all of it; without a
         ;; backend bound, every log call is silently discarded
         com.taoensso/telemere          {:mvn/version "1.4.0"}
-        com.taoensso/telemere-slf4j    {:mvn/version "1.4.0"}}
+        com.taoensso/telemere-slf4j    {:mvn/version "1.4.0"}
+        ;; gettext: the UI translations live in i18n/*.po rather than in a
+        ;; map in the source, so adding a language is dropping in a file
+        brightin/pottery               {:mvn/version "1.0.2"}}
 
  :aliases
  {:dev  {:extra-paths ["dev" "test"]}
+
+  ;; Regenerate the translation template: clojure -M:i18n
+  :i18n {:main-opts ["-m" "dk.cst.corpus-probe.i18n-scan"]}
 
   :cljs {:extra-deps {thheller/shadow-cljs        {:mvn/version "3.5.0"}
                       com.cognitect/transit-cljs  {:mvn/version "0.8.280"}}}

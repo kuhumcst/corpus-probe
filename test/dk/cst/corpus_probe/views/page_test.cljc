@@ -1,6 +1,8 @@
 (ns dk.cst.corpus-probe.views.page-test
-  (:require [clojure.test :refer [deftest is testing]]
-            [dk.cst.corpus-probe.views.hiccup :refer [deep]]
+  (:require [clojure.string :as str]
+            [clojure.test :refer [deftest is testing]]
+            [dk.cst.corpus-probe.views.hiccup :refer [da deep en]]
+            [dk.cst.corpus-probe.query :as query]
             [dk.cst.corpus-probe.views.layout :as layout]
             [dk.cst.corpus-probe.views.page :as page]))
 
@@ -78,7 +80,7 @@
         (is (= :div.status (first (last live))))
         (is (some #{"Loading …"} (deep live)))))
     (testing "the same form in Danish"
-      (let [da (deep (page/search-form (assoc state :lang "da") "/" nil))]
+      (let [da (deep (page/search-form (assoc state :ui da) "/" nil))]
         (is (some #{"Søg"} da))
         (is (some #{"Forespørgsel"} da))
         (is (not (some #(and (map? %) (= "lang" (:name %))) da)))))))
@@ -86,34 +88,50 @@
 (deftest navigation-status-test
   (testing "the region is rendered before it has anything to announce"
     (is (= [:div.status {:role "status"} nil]
-           (page/navigation-status "en" false))))
+           (page/navigation-status en false))))
   (testing "and reports a navigation in flight in either language"
-    (is (some #{"Loading …"} (deep (page/navigation-status "en" true))))
-    (is (some #{"Henter …"} (deep (page/navigation-status "da" true))))))
+    (is (some #{"Loading …"} (deep (page/navigation-status en true))))
+    (is (some #{"Henter …"} (deep (page/navigation-status da true))))))
 
 (deftest view-controls-test
   (let [sort* (fn [lang] (page/sort-control lang [["word" :sort-word]] "word"))]
     (testing "no controls, nothing rendered"
-      (is (nil? (page/view-controls "en" false nil))))
+      (is (nil? (page/view-controls en false nil))))
     (testing "a control that acts on a result submits the form that made it"
-      (let [html (page/view-controls "en" false (sort* "en"))]
+      (let [html (page/view-controls en false (sort* "en"))]
         (is (some #(and (map? %) (= page/form-id (:form %))) (deep html)))))
     (testing "without a client, a button is what applies it"
-      (is (some #{"Apply"} (deep (page/view-controls "en" false (sort* "en")))))
-      (is (some #{"Anvend"} (deep (page/view-controls "da" false
+      (is (some #{"Apply"} (deep (page/view-controls en false (sort* "en")))))
+      (is (some #{"Anvend"} (deep (page/view-controls da false
                                                       (sort* "da"))))))
     (testing "with one, choosing an order is asking for it: no button"
-      (let [html (page/view-controls "en" true (sort* "en"))]
+      (let [html (page/view-controls en true (sort* "en"))]
         (is (not (some #{"Apply"} (deep html))))
         (is (not (some #(and (vector? %) (= :button (first %))) (deep html))))))
     (testing "and the control itself is what applies it"
       (is (some #(and (map? %) (= [:apply-view] (get-in % [:on :change])))
                 (deep (sort* "en")))))))
 
+(deftest sort-label-test
+  (testing "every sort mode the query namespace offers is named here"
+    ;; in Danish, where no label can coincide with the param value
+    (is (= ["korpusrækkefølge" "match" "venstre kontekst" "højre kontekst"
+            "tilfældig"]
+           (map (comp (partial page/sort-label da) first) query/sort-modes)))
+    (doseq [[value] query/sort-modes]
+      (is (not (str/blank? (page/sort-label en value)))
+          (str "sort mode " value " has no label"))))
+  (testing "a mode nothing offers falls back to its own name"
+    (is (= "nonesuch" (page/sort-label en "nonesuch")))))
+
+(deftest view-label-test
+  (is (= "Concordance" (page/view-label en :kwic)))
+  (is (= "Frekvenser" (page/view-label da :frequencies))))
+
 (deftest query-mode-test
   (let [radios (fn [params]
                  (->> (deep (page/search-form
-                             {:lang "en" :folders [] :params params} "/" nil))
+                             {:ui en :folders [] :params params} "/" nil))
                       (filter #(and (map? %) (= "mode" (:name %))))))]
     (testing "Simple comes first, since it is what most searches want"
       (is (= ["simple" "cqp"] (map :value (radios {})))))
@@ -131,13 +149,17 @@
 
 (deftest query-example-test
   (testing "each mode gets the example for the input it takes"
-    (is (= :query-example-simple (page/query-example nil)))
-    (is (= :query-example-simple (page/query-example "simple")))
-    (is (= :query-example-cqp (page/query-example "cqp"))))
+    (is (= "hund, or several words in order" (page/query-example en nil)))
+    (is (= "hund, or several words in order" (page/query-example en "simple")))
+    (is (= "[lemma = \"hund\"] or [pos = \"N.*\"]"
+           (page/query-example en "cqp")))
+    (testing "and is translated like any other string"
+      (is (= "hund, eller flere ord i rækkefølge"
+             (page/query-example da nil)))))
   (testing "the placeholder follows the mode"
     (let [ph (fn [mode]
                (->> (deep (page/search-form
-                           {:lang "en" :folders [] :params {:mode mode}}
+                           {:ui en :folders [] :params {:mode mode}}
                            "/" nil))
                     (some #(when (and (map? %) (= "q" (:id %)))
                              (:placeholder %)))))]
@@ -145,7 +167,7 @@
       (is (= "[lemma = \"hund\"] or [pos = \"N.*\"]" (ph "cqp")))
       (is (= "[lemma = \"hund\"] eller [pos = \"N.*\"]"
              (->> (deep (page/search-form
-                         {:lang "da" :folders [] :params {:mode "cqp"}}
+                         {:ui da :folders [] :params {:mode "cqp"}}
                          "/" nil))
                   (some #(when (and (map? %) (= "q" (:id %)))
                            (:placeholder %)))))))))
@@ -155,16 +177,16 @@
   (is (= "text_author ukendt; text_year 1583, 1591"
          (page/filter-phrase {:text_year   #{"1591" "1583"}
                               :text_author #{"ukendt"}})))
-  (is (nil? (page/within-phrase "en" nil)))
+  (is (nil? (page/within-phrase en nil)))
   (is (= " within text_year 1591"
-         (page/within-phrase "en" {:text_year #{"1591"}})))
+         (page/within-phrase en {:text_year #{"1591"}})))
   (is (= " inden for text_year 1591"
-         (page/within-phrase "da" {:text_year #{"1591"}}))))
+         (page/within-phrase da {:text_year #{"1591"}}))))
 
 (deftest filter-fieldset-test
   (testing "no metadata renders nothing"
-    (is (nil? (page/filter-fieldset "en" nil {})))
-    (is (nil? (page/filter-fieldset "en" {:attrs    []
+    (is (nil? (page/filter-fieldset en nil {})))
+    (is (nil? (page/filter-fieldset en {:attrs    []
                                           :unlisted []
                                           :selected {}}
                                     {}))))
@@ -350,8 +372,8 @@
       (is (some #{[:code "text_title"]} (deep html))))))
 
 (deftest page-phrase-test
-  (is (= "page 3 of 6" (page/page-phrase "en" {:page 2 :pages 6})))
-  (is (= "side 3 af 6" (page/page-phrase "da" {:page 2 :pages 6}))))
+  (is (= "page 3 of 6" (page/page-phrase en {:page 2 :pages 6})))
+  (is (= "side 3 af 6" (page/page-phrase da {:page 2 :pages 6}))))
 
 (deftest results-fragment-test
   (testing "the fragment names the region the search lands on"
@@ -359,36 +381,36 @@
 
 (deftest pager-links-test
   (testing "no links renders nothing"
-    (is (nil? (page/pager-links "en" nil nil "page 1 of 1"))))
+    (is (nil? (page/pager-links en nil nil "page 1 of 1"))))
   (testing "links carry the rel values browsers use for a sequence"
-    (let [html (page/pager-links "en" "/?page=0" "/?page=2" "page 2 of 3")]
+    (let [html (page/pager-links en "/?page=0" "/?page=2" "page 2 of 3")]
       (is (some #{"prev"} (deep html)))
       (is (some #{"next"} (deep html)))
       (is (some #{"next →"} (deep html)))))
   (testing "the position rides between the two directions"
-    (let [html (page/pager-links "en" "/?page=0" "/?page=2" "page 2 of 3")]
+    (let [html (page/pager-links en "/?page=0" "/?page=2" "page 2 of 3")]
       (is (= [:li "page 2 of 3"]
              (second (filter #(and (vector? %) (= :li (first %)))
                              (deep html)))))))
   (testing "a direction that is out of range is left out, not held open"
-    (let [html (page/pager-links "en" nil "/?page=1" "page 1 of 3")]
+    (let [html (page/pager-links en nil "/?page=1" "page 1 of 3")]
       (is (= 2 (count (filter #(and (vector? %) (= :li (first %)))
                               (deep html)))))
       (is (not (some #{"prev"} (deep html))))))
   (testing "in Danish"
-    (let [html (page/pager-links "da" "/?page=0" "/?page=2" "side 2 af 3")]
+    (let [html (page/pager-links da "/?page=0" "/?page=2" "side 2 af 3")]
       (is (some #{"← forrige"} (deep html)))
       (is (some #{"næste →"} (deep html))))))
 
 (deftest pagination-test
   (testing "nothing to page is no landmark at all"
-    (is (nil? (page/pagination "en" nil nil "page 1 of 1"))))
+    (is (nil? (page/pagination en nil nil "page 1 of 1"))))
   (testing "the links are wrapped in a navigation landmark, named"
-    (let [html (page/pagination "en" "/?page=0" "/?page=2" "page 2 of 3")]
+    (let [html (page/pagination en "/?page=0" "/?page=2" "page 2 of 3")]
       (is (= :nav.pagination (first html)))
       (is (= "Pagination" (:aria-label (second html))))
       (is (= "Sidenavigation"
-             (:aria-label (second (page/pagination "da" "/?page=0" nil "x")))))
+             (:aria-label (second (page/pagination da "/?page=0" nil "x")))))
       (is (some #{:ul.row.pager} (deep html))))))
 
 (deftest searched?-test
@@ -402,13 +424,13 @@
     (is (not (page/searched? nil)))))
 
 (deftest error-name-test
-  (is (= "CQP error" (page/error-name "en" {:type :cqp})))
-  (is (= "The query timed out" (page/error-name "en" {:type :timeout})))
+  (is (= "CQP error" (page/error-name en {:type :cqp})))
+  (is (= "The query timed out" (page/error-name en {:type :timeout})))
   (is (= "Forespørgslen tog for lang tid"
-         (page/error-name "da" {:type :timeout}))))
+         (page/error-name da {:type :timeout}))))
 
 (deftest error-section-test
-  (let [html (page/error-section "en" {:type :cqp :message "boom"} ["TALER"])]
+  (let [html (page/error-section en {:type :cqp :message "boom"} ["TALER"])]
     (testing "no live region: it is in the document before the page is parsed"
       (is (not (some #{"alert"} (deep html)))))
     (testing "it heads itself below the region's own h2"
@@ -421,23 +443,23 @@
     (testing "the corpora concerned are named"
       (is (some #{[:code "TALER"]} (deep html)))))
   (testing "no corpus selected is explained without a CQP message"
-    (let [html (page/error-section "en" {:type :no-corpus} nil)]
+    (let [html (page/error-section en {:type :no-corpus} nil)]
       (is (some #{"No corpus selected"} (deep html)))
       (is (some #{"Select at least one corpus to search."} (deep html)))
       (is (not (some #{:pre} (deep html))))))
   (testing "our own rejections and internal failures are not CQP errors"
     (is (some #{"Request rejected"}
-              (deep (page/error-section "en" {:type    :rejected
+              (deep (page/error-section en {:type    :rejected
                                               :message "x"} nil))))
     (is (some #{"Unexpected error"}
-              (deep (page/error-section "en" {:type :internal} nil))))
+              (deep (page/error-section en {:type :internal} nil))))
     (is (some #{"Unknown corpus"}
-              (deep (page/error-section "en" {:type :unknown-corpus} ["X"])))))
+              (deep (page/error-section en {:type :unknown-corpus} ["X"])))))
   (testing "the headings and explanations are translated, CQP's message not"
-    (let [html (page/error-section "da" {:type :no-corpus} nil)]
+    (let [html (page/error-section da {:type :no-corpus} nil)]
       (is (some #{"Intet korpus valgt"} (deep html)))
       (is (some #{"Vælg mindst ét korpus at søge i."} (deep html))))
-    (let [html (page/error-section "da" {:type :cqp :message "boom"} ["X"])]
+    (let [html (page/error-section da {:type :cqp :message "boom"} ["X"])]
       (is (some #{"CQP-fejl"} (deep html)))
       (is (some #{"boom"} (deep html))))))
 
@@ -456,35 +478,35 @@
   (is (empty? (page/error-groups [{:corpus "PROBE" :size 1}]))))
 
 (deftest hits-phrase-test
-  (is (= "1 hit" (page/hits-phrase "en" 1)))
-  (is (= "0 hits" (page/hits-phrase "en" 0)))
+  (is (= "1 hit" (page/hits-phrase en 1)))
+  (is (= "0 hits" (page/hits-phrase en 0)))
   (testing "Danish has one form for both, with its own digit grouping"
-    (is (= "1 træf" (page/hits-phrase "da" 1)))
-    (is (= "1.000 træf" (page/hits-phrase "da" 1000)))))
+    (is (= "1 træf" (page/hits-phrase da 1)))
+    (is (= "1.000 træf" (page/hits-phrase da 1000)))))
 
 (deftest result-summary-test
   (testing "only the corpora that could be searched are counted"
     (is (= "6 hits in 2 corpora · page 1 of 1"
-           (page/result-summary "en" sample-result))))
+           (page/result-summary en sample-result))))
   (is (= "5 hits in PROBE · page 1 of 1"
-         (page/result-summary "en" {:size 5 :page 0 :pages 1
+         (page/result-summary en {:size 5 :page 0 :pages 1
                                     :counts [{:corpus "PROBE" :size 5}]})))
   (testing "a metadata filter qualifies the corpora"
     (is (= "5 hits in PROBE within text_year 1591 · page 1 of 1"
-           (page/result-summary "en" {:size   5 :page 0 :pages 1
+           (page/result-summary en {:size   5 :page 0 :pages 1
                                       :filter {:text_year #{"1591"}}
                                       :counts [{:corpus "PROBE"
                                                 :size   5}]}))))
   (testing "the same summary in Danish, the attribute name untranslated"
     (is (= "5 træf i PROBE inden for text_year 1591 · side 1 af 1"
-           (page/result-summary "da" {:size   5 :page 0 :pages 1
+           (page/result-summary da {:size   5 :page 0 :pages 1
                                       :filter {:text_year #{"1591"}}
                                       :counts [{:corpus "PROBE"
                                                 :size   5}]})))))
 
 (deftest download-links-test
-  (is (nil? (page/download-links "en" nil nil)))
-  (let [html (page/download-links "en"
+  (is (nil? (page/download-links en nil nil)))
+  (let [html (page/download-links en
                                   {:tsv "/x?format=tsv" :csv "/x?format=csv"}
                                   "the first 10 hits")]
     (testing "one download link per format, in a fixed order"
@@ -495,12 +517,11 @@
       (is (some #{" the first 10 hits"} (deep html))))))
 
 (deftest result-section-test
-  (let [state {:lang         "en"
+  (let [state {:ui           en
                :view         :kwic
-               :view-hrefs   [[:kwic :concordance "/?v=k"]
-                              [:frequencies :frequencies "/?v=f"]]
-               :sort-modes   [["corpus" :sort-corpus]
-                              ["word" :sort-word]]
+               :view-hrefs   [[:kwic "/?v=k"]
+                              [:frequencies "/?v=f"]]
+               :sort-modes   ["corpus" "word"]
                :result       sample-result
                :next-href    "/?page=1"
                :export-hrefs {:tsv "/e?format=tsv"}
@@ -602,8 +623,8 @@
 
 (deftest sidebar-test
   (testing "nothing selected, no panel: it describes the cursor or nothing"
-    (is (nil? (page/sidebar "en" nil))))
-  (let [html (page/sidebar "en" {:token   {:word "hund" :pos "NCSI"}
+    (is (nil? (page/sidebar en nil))))
+  (let [html (page/sidebar en {:token   {:word "hund" :pos "NCSI"}
                                  :structs {:text_title "Hverdag"}
                                  :corpus  "PROBE"})]
     (testing "it is a named complementary region, not a popover"

@@ -19,6 +19,7 @@
   and can be shared."
   (:require [clojure.string :as str]
             [cognitect.transit :as transit]
+            [dk.cst.corpus-probe.i18n :as i18n]
             [dk.cst.corpus-probe.views.kwic :as kwic]
             [dk.cst.corpus-probe.views.layout :as layout]
             [dk.cst.corpus-probe.views.page :as page]
@@ -526,10 +527,14 @@
   ;; point. The cheap mitigation, should the window ever matter, is to
   ;; read #q's live value here before rendering.
   (let [{:keys [lang path nav] :as state} @state]
+    ;; the document's own language, which only the server sets: a routed
+    ;; change of it would otherwise leave the page saying it is in the
+    ;; language it was served in while every word on it is in another
+    (set! (.-lang (.-documentElement js/document)) lang)
     ;; the masthead's links carry the current search, so it re-renders with
     ;; the page rather than keeping whatever the first server render said
     (r/render (.getElementById js/document "masthead")
-              (layout/site-header lang path nav))
+              (layout/site-header (i18n/->ui lang) path nav))
     (r/render (.getElementById js/document "app") (app-views/page state)))
   (sync-expand-url!))
 

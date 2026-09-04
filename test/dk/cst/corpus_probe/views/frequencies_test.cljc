@@ -1,6 +1,6 @@
 (ns dk.cst.corpus-probe.views.frequencies-test
   (:require [clojure.test :refer [deftest is testing]]
-            [dk.cst.corpus-probe.views.hiccup :refer [deep]]
+            [dk.cst.corpus-probe.views.hiccup :refer [da deep en]]
             [dk.cst.corpus-probe.views.frequencies :as freq]
             [dk.cst.corpus-probe.views.page :as page]))
 
@@ -19,21 +19,21 @@
 (deftest frequency-heading-test
   (testing "a table that could be counted is headed by its summary"
     (is (= "5 hits in PROBE by word · 1 value"
-           (freq/frequency-heading "en" counted nil 1))))
+           (freq/frequency-heading en counted nil 1))))
   (testing "a request no corpus answered is headed by its error instead"
     (is (= "The query timed out"
            (freq/frequency-heading
             "en" {:counts [{:corpus "X" :error {:type :timeout}}]} nil 0)))
     (is (= "No corpus selected"
-           (freq/frequency-heading "en" nil {:type :no-corpus} 0)))))
+           (freq/frequency-heading en nil {:type :no-corpus} 0)))))
 
 (deftest frequency-section-test
   (let [html (freq/frequency-section
               {:lang       "en"
                :result     counted
                :view       :frequencies
-               :view-hrefs [[:kwic :concordance "/?view=kwic"]
-                            [:frequencies :frequencies "/?view=frequencies"]]})]
+               :view-hrefs [[:kwic "/?view=kwic"]
+                            [:frequencies "/?view=frequencies"]]})]
     (testing "it is the shared results region, so a search lands on it"
       (is (= {:id              page/results-id
               :tabindex        "-1"
@@ -52,7 +52,7 @@
                 (deep html))))))
 
 (deftest attr-control-test
-  (let [html (freq/attr-control "en"
+  (let [html (freq/attr-control en
                                 [{:type :positional :name :word}
                                  {:type :positional :name :lemma}
                                  {:type :structural :name :text_year}]
@@ -78,19 +78,19 @@
 (deftest frequency-summary-test
   (testing "only the corpora that could be counted are counted"
     (is (= "31 hits in 2 corpora by lemma · 2 values"
-           (freq/frequency-summary "en" sample-result 2))))
+           (freq/frequency-summary en sample-result 2))))
   (testing "a metadata filter qualifies the corpora"
     (is (= "31 hits in 2 corpora within text_year 1591 by lemma · 2 values"
-           (freq/frequency-summary "en"
+           (freq/frequency-summary en
                                    (assoc sample-result
                                           :filter {:text_year #{"1591"}})
                                    2))))
   (testing "a cut table says so"
     (is (re-find #"the 1 most frequent shown"
-                 (freq/frequency-summary "en" sample-result 1))))
+                 (freq/frequency-summary en sample-result 1))))
   (testing "a whole-corpus table counts all tokens"
     (is (= "All tokens in PROBE by word · 0 values"
-           (freq/frequency-summary "en"
+           (freq/frequency-summary en
                                    {:query  ""
                                     :attr   :word
                                     :counts [{:corpus "PROBE" :tokens 47
@@ -99,12 +99,12 @@
                                    0))))
   (testing "the same caption in Danish, the attribute name untranslated"
     (is (= "31 træf i 2 korpusser efter lemma · 2 værdier"
-           (freq/frequency-summary "da" sample-result 2)))
+           (freq/frequency-summary da sample-result 2)))
     (is (re-find #", de 1 hyppigste vises"
-                 (freq/frequency-summary "da" sample-result 1)))))
+                 (freq/frequency-summary da sample-result 1)))))
 
 (deftest frequency-table-test
-  (let [table (freq/frequency-table "en" sample-result)
+  (let [table (freq/frequency-table en sample-result)
         [_ _ _ colgroups thead tbody] table
         row   (first (nth tbody 1))]
     (testing "a column group per readable corpus and one for the total"
@@ -127,7 +127,7 @@
                     "en" (update sample-result :counts (partial take 1)))]
         (is (not (some #{"total"} (deep single))))))
     (testing "the headings are translated, the attribute name is not"
-      (let [da (deep (freq/frequency-table "da" sample-result))]
+      (let [da (deep (freq/frequency-table da sample-result))]
         (is (some #{"frekvens"} da))
         (is (some #{"i alt"} da))
         (is (some #{[:code "lemma"]} da))))))

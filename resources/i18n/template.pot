@@ -1,0 +1,455 @@
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+#: src/dk/cst/corpus_probe/api.clj
+msgid "Search CWB corpora and read KWIC concordances."
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/corpus.cljc
+msgid "no data"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/corpus.cljc
+msgid "tokens"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/corpus.cljc
+msgid "unavailable"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/corpus.cljc
+msgid "Other"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/corpus.cljc
+msgid "Select at least one corpus"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/corpus.cljc
+msgid "All corpora"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/corpus.cljc
+msgid "All corpora in"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/corpus.cljc
+msgid "Filter corpora"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/corpus.cljc
+msgid "No corpora found."
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/corpus.cljc
+msgid "size"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/corpus.cljc
+msgid "charset"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/corpus.cljc
+msgid "Positional attributes"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/corpus.cljc
+msgid "attribute"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/corpus.cljc
+msgid "types"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/corpus.cljc
+msgid "Structural attributes"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/corpus.cljc
+msgid "annotations"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/corpus.cljc
+msgid "with annotations"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/corpus.cljc
+msgid "Alignment attributes"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/corpus.cljc
+msgid "blocks"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/corpus.cljc
+msgid "Info"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/corpus.cljc
+msgid "Could not read corpus"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/corpus.cljc
+msgid "The registry lists this corpus, but CWB has no data for it."
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/corpus.cljc
+msgid "CWB could not read this corpus's data files."
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/corpus.cljc
+msgid "This corpus"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/corpus.cljc
+msgid "Search in"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/corpus.cljc
+msgid "Word frequencies of"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/frequencies.cljc
+msgid "Group by"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/frequencies.cljc
+msgid "positional attributes"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/frequencies.cljc
+msgid "structural attributes"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/api.clj src/dk/cst/corpus_probe/views/frequencies.cljc
+msgid "All tokens"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/api.clj src/dk/cst/corpus_probe/views/frequencies.cljc
+msgid "by"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/frequencies.cljc
+msgid "value"
+msgid_plural "values"
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/dk/cst/corpus_probe/views/frequencies.cljc
+msgid "the"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/frequencies.cljc
+msgid "most frequent shown"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/frequencies.cljc
+msgid "total"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/frequencies.cljc
+msgid "frequency"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/frequencies.cljc
+msgid "per million"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/frequencies.cljc
+msgid "all values"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/kwic.cljc
+msgid "Toggle wider context"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/kwic.cljc
+msgid "Could not load the context."
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/kwic.cljc
+msgid "position"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/kwic.cljc
+msgid "source"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/layout.cljc
+msgid "Skip to content"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/layout.cljc
+msgid "Language"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/app.cljc src/dk/cst/corpus_probe/views/layout.cljc
+msgid "Search"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/api.clj src/dk/cst/corpus_probe/views/corpus.cljc src/dk/cst/corpus_probe/views/layout.cljc
+msgid "Corpora"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/layout.cljc
+msgid "Site"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/layout.cljc
+msgid "CWB corpus search"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/layout.cljc
+msgid "Powered by"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/page.cljc
+msgid "corpus order"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/kwic.cljc src/dk/cst/corpus_probe/views/page.cljc
+msgid "match"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/kwic.cljc src/dk/cst/corpus_probe/views/page.cljc
+msgid "left context"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/kwic.cljc src/dk/cst/corpus_probe/views/page.cljc
+msgid "right context"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/page.cljc
+msgid "random"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/page.cljc
+msgid "Sort"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/page.cljc
+msgid "Apply"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/page.cljc
+msgid "within"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/corpus.cljc src/dk/cst/corpus_probe/views/page.cljc
+msgid "region"
+msgid_plural "regions"
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/dk/cst/corpus_probe/views/page.cljc
+msgid "All values of"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/corpus.cljc src/dk/cst/corpus_probe/views/page.cljc
+msgid "selected"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/page.cljc
+msgid "Clear filter"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/page.cljc
+msgid "Metadata"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/page.cljc
+msgid "Filter values"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/page.cljc
+msgid "No values found."
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/page.cljc
+msgid "Too many values to list: "
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/page.cljc
+msgid "[lemma = \"hund\"] or [pos = \"N.*\"]"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/page.cljc
+msgid "hund, or several words in order"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/kwic.cljc src/dk/cst/corpus_probe/views/page.cljc
+msgid "Loading …"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/page.cljc
+msgid "Query"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/page.cljc
+msgid "button|Search"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/page.cljc
+msgid "Query options"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/page.cljc
+msgid "Query mode"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/page.cljc
+msgid "Simple"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/page.cljc
+msgid "Simple-search options"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/page.cljc
+msgid "ignore case"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/page.cljc
+msgid "starts with"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/page.cljc
+msgid "ends with"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/corpus.cljc src/dk/cst/corpus_probe/views/page.cljc
+msgid "corpora"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/page.cljc
+msgid "hit"
+msgid_plural "hits"
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/dk/cst/corpus_probe/api.clj src/dk/cst/corpus_probe/views/page.cljc
+msgid "page"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/corpus.cljc src/dk/cst/corpus_probe/views/page.cljc
+msgid "of"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/frequencies.cljc src/dk/cst/corpus_probe/views/page.cljc
+msgid "in"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/page.cljc
+msgid "Hits per corpus"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/page.cljc
+msgid "corpus"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/page.cljc
+msgid "error"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/page.cljc
+msgid "previous"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/page.cljc
+msgid "next"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/page.cljc
+msgid "Pagination"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/page.cljc
+msgid "The query timed out"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/page.cljc
+msgid "No corpus selected"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/page.cljc
+msgid "Unknown corpus"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/page.cljc
+msgid "Request rejected"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/page.cljc
+msgid "CQP output could not be read"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/page.cljc
+msgid "Unexpected error"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/page.cljc
+msgid "CQP error"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/page.cljc
+msgid "Select at least one corpus to search."
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/page.cljc
+msgid "The registry has no corpus by that name."
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/page.cljc
+msgid "CQP printed something other than the requested rows."
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/page.cljc
+msgid "The search failed on the server; its log has the details."
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/page.cljc
+msgid "Download"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/page.cljc
+msgid "Concordance"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/api.clj src/dk/cst/corpus_probe/views/frequencies.cljc src/dk/cst/corpus_probe/views/page.cljc
+msgid "Frequencies"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/page.cljc
+msgid "Result view"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/page.cljc
+msgid "No hits."
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/page.cljc
+msgid "the first"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/page.cljc
+msgid "Token details"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/page.cljc
+msgid "Close"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/page.cljc
+msgid "Token"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/page.cljc
+msgid "Text"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/page.cljc
+msgid "Corpus"
+msgstr ""
+

@@ -36,25 +36,42 @@
   beside the result and still submit the search that produced it."
   "search-form")
 
+(defn sort-label
+  "What the sort mode `value` (see dk.cst.corpus-probe.query/sort-modes)
+  is called, in `ui`; the value itself for a mode nothing names.
+
+  Naming them here rather than in the query namespace keeps the CQP
+  command table free of anything the interface decides."
+  [ui value]
+  (case value
+    "corpus" (i18n/tr ui "corpus order")
+    "word"   (i18n/tr ui "match")
+    "left"   (i18n/tr ui "left context")
+    "right"  (i18n/tr ui "right context")
+    "random" (i18n/tr ui "random")
+    value))
+
 (defn sort-control
-  "The sort control of the concordance in language `lang`: a select over
-  the `sort-modes` [value label-key] pairs with `sort` chosen.
+  "The sort control of the concordance in `ui`: a select over
+  the `sort-modes` values (see dk.cst.corpus-probe.query/sort-modes)
+  with `sort` chosen and each named by `sort-label`.
 
   It names the form it submits with, so it can sit beside the table it
   reorders rather than inside the query form: ordering a result is a
   different task from writing the query that produced it."
-  [lang sort-modes sort]
+  [ui sort-modes sort]
   (list
-   [:label {:for "sort"} (i18n/tr lang :sort)]
+   [:label {:for "sort"} (i18n/tr ui "Sort")]
    " "
    [:select {:id   "sort" :name "sort" :form form-id
              :on   {:change [:apply-view]}}
-    (for [[value k] sort-modes]
-      [:option {:value value :selected (= value sort)} (i18n/tr lang k)])]))
+    (for [value sort-modes]
+      [:option {:value value :selected (= value sort)}
+       (sort-label ui value)])]))
 
 (defn view-controls
   "The `controls` (hiccup) that reorder or regroup a result already
-  fetched, in language `lang`; nil without controls.
+  fetched, in `ui`; nil without controls.
 
   They live with the result rather than in the query form, so re-ordering
   a concordance costs a click instead of a scroll back past the form.
@@ -64,12 +81,12 @@
   second control to take effect is one the reader has to be told about.
   Without a client nothing can act on a change, so the button is what
   applies it there."
-  [lang client? controls]
+  [ui client? controls]
   (when controls
     [:p.viewctl controls
      (when-not client?
        (list " " [:button {:type "submit" :form form-id}
-                  (i18n/tr lang :apply)]))]))
+                  (i18n/tr ui "Apply")]))]))
 
 (def filter-prefix
   "The query param prefix naming a metadata filter: the prefix followed by
@@ -88,11 +105,11 @@
                    (str (name attr) " " (str/join ", " (sort values))))))
 
 (defn within-phrase
-  "The metadata `filter` as the qualifier of a result summary in language
-  `lang`, or nil without a filter: \" within text_year 1591\"."
-  [lang filter]
+  "The metadata `filter` as the qualifier of a result summary in `ui`,
+  or nil without a filter: \" within text_year 1591\"."
+  [ui filter]
   (when (seq filter)
-    (str " " (i18n/tr lang :within) " " (filter-phrase filter))))
+    (str " " (i18n/tr ui "within") " " (filter-phrase filter))))
 
 (defn attribute-value
   "Render attribute value `v` semantically by its key `k`: a text title as
@@ -107,13 +124,13 @@
 (defn filter-item
   "One metadata value `m` of attribute `attr` as a filter entry: a checkbox
   named for the attribute's filter param, checked when `chosen` holds its
-  value, and, in language `lang`, how many regions carry it, when known: a
+  value, and, in `ui`, how many regions carry it, when known: a
   chosen value the corpora no longer offer has no count.
 
   A value the filter box has hidden keeps its checkbox in the document,
   for the reason a filtered-out corpus does: a box the form cannot see is
   part of a filter dropped without anyone saying so."
-  [lang attr chosen {:keys [value total hidden?] :as m}]
+  [ui attr chosen {:keys [value total hidden?] :as m}]
   [:li (cond-> {} hidden? (assoc :hidden true))
    [:label
     [:input {:type    "checkbox"
@@ -124,8 +141,8 @@
     " " (attribute-value attr value)
     (when total
       (list " " [:data {:value (str total)}
-                 (str (i18n/group-digits lang total) " "
-                      (i18n/tr lang (if (= 1 total) :region :regions)))]))]])
+                 (str (i18n/group-digits ui total) " "
+                      (i18n/trn ui "region" "regions" total))]))]])
 
 (defn attr-rows
   "The rows to offer for attribute `attr`: its listed `rows` followed by
@@ -166,21 +183,21 @@
   Closed whatever is chosen, its summary counting the selection: one
   attribute may carry hundreds of values, and reopening them on every
   resubmit grew the form exactly while the reader was refining it. The
-  wording is in language `lang`."
-  [lang client? {attr :name :keys [rows hidden?]} chosen]
+  wording is in `ui`."
+  [ui client? {attr :name :keys [rows hidden?]} chosen]
   ;; a set even when nothing is chosen, since it is read as a predicate
   (let [chosen  (set chosen)
         showing (mapv :value (remove :hidden? rows))]
     (controls/toggled
      (when client?
-       (controls/select-all (str (i18n/tr lang :all-values-of) " " (name attr))
+       (controls/select-all (str (i18n/tr ui "All values of") " " (name attr))
                             showing chosen
                             [:toggle-filter-values [attr showing]]))
      [:details (cond-> {} hidden? (assoc :hidden true))
       [:summary [:code (name attr)]
        (when (seq chosen)
-         (str " · " (count chosen) " " (i18n/tr lang :selected)))]
-      [:ul (map (partial filter-item lang attr chosen) rows)]])))
+         (str " · " (count chosen) " " (i18n/tr ui "selected")))]
+      [:ul (map (partial filter-item ui attr chosen) rows)]])))
 
 (defn value-count
   "How many metadata values are chosen across every attribute of
@@ -190,7 +207,7 @@
 
 (defn clear-toggle
   "The control emptying the whole metadata filter, over the prepared
-  `attrs` and the `selected` values, in language `lang`.
+  `attrs` and the `selected` values, in `ui`.
 
   The same control the corpus chooser carries in this position, with the
   one direction that has no meaning here taken away. Choosing every value
@@ -204,11 +221,11 @@
   It empties the whole filter rather than the part the box is showing.
   A filter is not a thing to empty by halves: what survived would be a
   constraint the reader had just told the box to hide from them."
-  [lang attrs selected]
+  [ui attrs selected]
   (let [items (for [{attr :name :keys [rows]} attrs
                     {:keys [value]} rows]
                 [attr value])]
-    (controls/select-all (i18n/tr lang :clear-filter)
+    (controls/select-all (i18n/tr ui "Clear filter")
                          items
                          (fn [[attr value]]
                            (contains? (get selected attr) value))
@@ -224,7 +241,7 @@
   rather than forty. Inside it, a disclosure per listed attribute
   (`:attrs`) holds a checkbox per value (see `filter-details`), followed
   by one per `:selected` attribute the list lacks, then a note naming the
-  `:unlisted` attributes, all worded in language `lang`. `:selected` maps
+  `:unlisted` attributes, all worded in `ui`. `:selected` maps
   each attribute to the set of chosen values.
 
   Where `:client?`, it carries the same three controls the corpus chooser
@@ -243,7 +260,7 @@
   Which attributes there are to filter by depends on the corpora
   selected, and only the server knows: `:pending?` marks the fieldset busy
   while the client is fetching them for a selection that has changed."
-  [lang {:keys [attrs unlisted selected] :as filters}
+  [ui {:keys [attrs unlisted selected] :as filters}
    {:keys [served open? pending? client?] q :filter}]
   (when (or (seq attrs) (seq unlisted) (seq selected))
     (let [listed    (set (map :name attrs))
@@ -259,15 +276,15 @@
                       filtering (narrow-attrs (str/lower-case q)))
           nothing-found? (and filtering (every? :hidden? shown))]
       [:fieldset.filters
-       [:legend (i18n/tr lang :metadata)]
+       [:legend (i18n/tr ui "Metadata")]
        (when client?
-         (controls/filter-box "value-filter" (i18n/tr lang :filter-values) q
+         (controls/filter-box "value-filter" (i18n/tr ui "Filter values") q
                               [:filter-values]))
        (when client?
          (controls/filter-status (when nothing-found?
-                                   (i18n/tr lang :no-values-found))))
+                                   (i18n/tr ui "No values found."))))
        (controls/toggled
-        (when client? (clear-toggle lang prepared selected))
+        (when client? (clear-toggle ui prepared selected))
        ;; TODO: a visible in-flight treatment. aria-busy says it to a
        ;; screen reader and nothing says it to anyone else; the
        ;; role="status" pattern of `navigation-status` is the obvious one
@@ -282,25 +299,27 @@
                    ;; where it was; hidden rather than dropped, because
                    ;; its checkboxes are what a search submits
                    nothing-found? (assoc :hidden true))
-        [:summary (str n " " (i18n/tr lang :selected))]
+        [:summary (str n " " (i18n/tr ui "selected"))]
         (for [{attr :name :as m} shown]
-          (filter-details lang client? m (get selected attr)))
+          (filter-details ui client? m (get selected attr)))
         ;; a caveat about the control rather than part of it, which is
         ;; what <small> is for: these attributes are not on offer here
         (when (seq unlisted)
-          [:p [:small (i18n/tr lang :too-many-values)
+          [:p [:small (i18n/tr ui "Too many values to list: ")
                (interpose ", "
                           (map (fn [attr] [:code (name attr)]) unlisted))]])])])))
 
 (defn query-example
-  "The dictionary key of the example query for `mode`: the two modes take
+  "The example query shown for `mode`, in `ui`: the two modes take
   different input, so one example cannot serve both."
-  [mode]
-  (if (= mode "cqp") :query-example-cqp :query-example-simple))
+  [ui mode]
+  (if (= mode "cqp")
+    (i18n/tr ui "[lemma = \"hund\"] or [pos = \"N.*\"]")
+    (i18n/tr ui "hund, or several words in order")))
 
 (defn navigation-status
-  "The live region reporting a routed navigation in flight in language
-  `lang`, which says so while `pending?` and holds nothing otherwise.
+  "The live region reporting a routed navigation in flight in `ui`,
+  which says so while `pending?` and holds nothing otherwise.
 
   Rendered whether or not there is anything to say, because a live region
   announces a change to what it holds: one created already full has no
@@ -311,7 +330,7 @@
   the wait starts at the submit button and the results it is about may
   not exist yet. Above 64rem those controls are a sticky rail, so it
   stays in view while a page of hits is fetched too."
-  [lang pending?]
+  [ui pending?]
   [:div.status {:role "status"}
    ;; TODO: design this. A line of text arriving under the form is what
    ;; it says, not a thing anyone drew, and three questions are open:
@@ -322,7 +341,7 @@
    ;; and whether waiting should say more than that it is waiting. The
    ;; metadata filter has the same decision pending (see
    ;; `filter-fieldset`), and the two should be answered together.
-   (when pending? [:p (i18n/tr lang :loading)])])
+   (when pending? [:p (i18n/tr ui "Loading …")])])
 
 (defn search-form
   "The search form of `state`: over its `:folders` tree of corpus
@@ -359,7 +378,7 @@
   the button they asked it with, and `:served-corpus`, the corpora this
   page was served for, decides which folders of the chooser start open
   while `:params` follows what the reader is choosing now."
-  [{:keys [lang folders filter-controls params client? pending? served-corpus
+  [{:keys [ui folders filter-controls params client? pending? served-corpus
            served-filter corpus-filter value-filter chooser-open?
            filters-open? filters-pending?]
     :as state}
@@ -376,13 +395,13 @@
        [:input {:id           "q"
                 :name         "q"
                 :type         "search"
-                :aria-label   (i18n/tr lang :query)
+                :aria-label   (i18n/tr ui "Query")
                 :value        (or q "")
-                :placeholder  (i18n/tr lang (query-example mode))
+                :placeholder  (query-example ui mode)
                 :autocomplete "off"
                 :spellcheck   "false"}]
        " "
-       [:button {:type "submit"} (i18n/tr lang :submit)]]
+       [:button {:type "submit"} (i18n/trx ui "button" "Search")]]
       ;; one group: everything here qualifies the query above it, and two
       ;; boxes said that twice. A row each, so the mode a reader is in
       ;; does not run into the options it decides the meaning of.
@@ -393,45 +412,45 @@
       ;; them, and a disabled control is not submitted, so nothing about a
       ;; simple search rides along with a CQP one
       [:fieldset.query-options
-       [:legend (i18n/tr lang :query-options)]
+       [:legend (i18n/tr ui "Query options")]
        ;; the radios are still a group of their own, and still named:
        ;; a fieldset is not the only thing that can say so
-       [:p {:role "radiogroup" :aria-label (i18n/tr lang :query-mode)}
+       [:p {:role "radiogroup" :aria-label (i18n/tr ui "Query mode")}
         [:label [:input {:type    "radio" :name "mode" :value "simple"
                          :checked (not= mode "cqp")
                          :on      {:change [:set-mode "simple"]}}]
-         (i18n/tr lang :simple)]
+         (i18n/tr ui "Simple")]
         " "
         [:label [:input {:type    "radio" :name "mode" :value "cqp"
                          :checked (= mode "cqp")
                          :on      {:change [:set-mode "cqp"]}}]
          "CQP"]]
-       [:p {:role "group" :aria-label (i18n/tr lang :simple-options)}
+       [:p {:role "group" :aria-label (i18n/tr ui "Simple-search options")}
         [:label [:input {:type "checkbox" :name "ci" :value "on"
                          :checked  (some? ci)
                          :disabled (= mode "cqp")}]
-         (i18n/tr lang :ignore-case)]
+         (i18n/tr ui "ignore case")]
         " "
         [:label [:input {:type "checkbox" :name "prefix" :value "on"
                          :checked  (some? prefix)
                          :disabled (= mode "cqp")}]
-         (i18n/tr lang :starts-with)]
+         (i18n/tr ui "starts with")]
         " "
         [:label [:input {:type "checkbox" :name "suffix" :value "on"
                          :checked  (some? suffix)
                          :disabled (= mode "cqp")}]
-         (i18n/tr lang :ends-with)]]]
+         (i18n/tr ui "ends with")]]]
       ;; marks a selection the reader actually made: without it, unticking
       ;; every corpus and submitting is indistinguishable from arriving
       ;; with no corpus named, which searches them all
       [:input {:type "hidden" :name "scope" :value "chosen"}]
-      (corpus-views/chooser lang folders
+      (corpus-views/chooser ui folders
                             {:selected (set corpus)
                              :served   (set (or served-corpus corpus))
                              :client?  client?
                              :filter   corpus-filter
                              :open?    chooser-open?})
-      (filter-fieldset lang filter-controls
+      (filter-fieldset ui filter-controls
                        {:served   served-filter
                         :open?    filters-open?
                         :pending? filters-pending?
@@ -439,57 +458,56 @@
                         :filter   value-filter})]
      ;; only where the client runs: every other navigation is the
      ;; browser's own, and the browser reports those itself
-     (when client? (navigation-status lang pending?))]))
+     (when client? (navigation-status ui pending?))]))
 
 (defn corpora-phrase
-  "The corpus `names` in words in language `lang`: the one name, or how
+  "The corpus `names` in words in `ui`: the one name, or how
   many there were."
-  [lang names]
+  [ui names]
   (if (= 1 (count names))
     (first names)
-    (str (count names) " " (i18n/tr lang :corpora))))
+    (str (count names) " " (i18n/tr ui "corpora"))))
 
 (defn hits-phrase
-  "The number of hits `n` in words in language `lang`."
-  [lang n]
-  (str (i18n/group-digits lang n) " "
-       (i18n/tr lang (if (= 1 n) :hit :hits))))
+  "The number of hits `n` in words in `ui`."
+  [ui n]
+  (str (i18n/group-digits ui n) " "
+       (i18n/trn ui "hit" "hits" n)))
 
 (defn page-phrase
-  "Where in a paged `result` the reader is, in language `lang`."
-  [lang {:keys [page pages] :as result}]
-  (str (i18n/tr lang :page) " " (inc page) " " (i18n/tr lang :of) " " pages))
+  "Where in a paged `result` the reader is, in `ui`."
+  [ui {:keys [page pages] :as result}]
+  (str (i18n/tr ui "page") " " (inc page) " " (i18n/tr ui "of") " " pages))
 
 (defn result-summary
   "The summary text of a concordance `result` page (`:size` hits over
   `:pages`, in the corpora that could be searched, within its metadata
-  `:filter`), used as the heading naming the results region, in language
-  `lang`."
-  [lang {:keys [size counts] :as result}]
-  (str (hits-phrase lang size) " " (i18n/tr lang :in) " "
-       (corpora-phrase lang (map :corpus (filter :size counts)))
-       (within-phrase lang (:filter result))
-       " · " (page-phrase lang result)))
+  `:filter`), used as the heading naming the results region, in `ui`."
+  [ui {:keys [size counts] :as result}]
+  (str (hits-phrase ui size) " " (i18n/tr ui "in") " "
+       (corpora-phrase ui (map :corpus (filter :size counts)))
+       (within-phrase ui (:filter result))
+       " · " (page-phrase ui result)))
 
 (defn counts-table
   "The per-corpus hit `counts` of a search over several corpora as a table,
   each corpus linking to its info page; a corpus whose query failed shows
-  no count (its error is reported separately). The wording is in language
-  `lang`."
-  [lang counts]
+  no count (its error is reported separately). The wording is in `ui`."
+  [ui counts]
   [:table.counts
-   [:caption (i18n/tr lang :hits-per-corpus)]
+   [:caption (i18n/tr ui "Hits per corpus")]
    [:thead
-    [:tr [:th {:scope "col"} (i18n/tr lang :corpus)]
-     [:th {:scope "col"} (i18n/tr lang :hits)]]]
+    [:tr [:th {:scope "col"} (i18n/tr ui "corpus")]
+     ;; a column heading takes the plural form of what it counts
+     [:th {:scope "col"} (i18n/trn ui "hit" "hits" 2)]]]
    [:tbody
     (for [{:keys [corpus size error]} counts]
       [:tr
        [:th {:scope "row"}
-        [:a {:href (corpus-views/corpus-href lang corpus)} [:code corpus]]]
+        [:a {:href (corpus-views/corpus-href ui corpus)} [:code corpus]]]
        [:td.n (if error
-                [:em (i18n/tr lang :error)]
-                (i18n/group-digits lang size))]])]])
+                [:em (i18n/tr ui "error")]
+                (i18n/group-digits ui size))]])]])
 
 (defn error-groups
   "The errors among the per-corpus `counts`, grouped by identical error:
@@ -502,74 +520,87 @@
 
 (defn pager-links
   "The page links of a result around `position` (where in the sequence the
-  reader is), labelled in language `lang`; nil when neither
+  reader is), labelled in `ui`; nil when neither
   `prev-href` nor `next-href` is in range.
 
   A list, so assistive technology can say how many options there are, and
   an absent direction is left out rather than held open by an empty
   element, which nothing positioned. The links carry the `rel` values
   browsers and crawlers use for sequential pages."
-  [lang prev-href next-href position]
+  [ui prev-href next-href position]
   (when (or prev-href next-href)
     [:ul.row.pager
      (when prev-href
        [:li [:a {:href prev-href :rel "prev"}
-             (str "← " (i18n/tr lang :previous))]])
+             (str "← " (i18n/tr ui "previous"))]])
      [:li position]
      (when next-href
        [:li [:a {:href next-href :rel "next"}
-             (str (i18n/tr lang :next) " →")]])]))
+             (str (i18n/tr ui "next") " →")]])]))
 
 (defn pagination
-  "`pager-links` as a navigation landmark named in language `lang`.
+  "`pager-links` as a navigation landmark named in `ui`.
 
   Only one of a result's two pagers is a landmark: the APG asks each
   landmark of a repeated role to carry a name of its own, and two named
   Pagination cannot be told apart. The repeat below the table is the bare
   list, whose links stay operable and stay in the tab order."
-  [lang prev-href next-href position]
-  (when-let [links (pager-links lang prev-href next-href position)]
-    [:nav.pagination {:aria-label (i18n/tr lang :pagination)} links]))
+  [ui prev-href next-href position]
+  (when-let [links (pager-links ui prev-href next-href position)]
+    [:nav.pagination {:aria-label (i18n/tr ui "Pagination")} links]))
 
-(def error-types
-  "The error :types this project reports itself. Each doubles as the
-  dictionary key of its heading; anything else is CQP's own error, headed
-  as such and carrying its message."
-  #{:timeout :no-corpus :unknown-corpus :rejected :misaligned :internal})
+(defn error-heading
+  "What the error of `type` is called, in `ui`: the types this project
+  reports itself, and CQP's own error for anything else, which is headed
+  as such and carries its message."
+  [ui type]
+  (case type
+    :timeout        (i18n/tr ui "The query timed out")
+    :no-corpus      (i18n/tr ui "No corpus selected")
+    :unknown-corpus (i18n/tr ui "Unknown corpus")
+    :rejected       (i18n/tr ui "Request rejected")
+    :misaligned     (i18n/tr ui "CQP output could not be read")
+    :internal       (i18n/tr ui "Unexpected error")
+    (i18n/tr ui "CQP error")))
 
-(def error-explanations
-  "The dictionary key explaining each error type that carries no message
-  of its own."
-  {:no-corpus      :no-corpus-why
-   :unknown-corpus :unknown-corpus-why
-   :misaligned     :misaligned-why
-   :internal       :internal-why})
+(defn error-explanation
+  "What the error of `type` means, in `ui`, for the types that carry no
+  message of their own; nil for the rest, whose message says it."
+  [ui type]
+  (case type
+    :no-corpus      (i18n/tr ui "Select at least one corpus to search.")
+    :unknown-corpus (i18n/tr ui "The registry has no corpus by that name.")
+    :misaligned     (i18n/tr ui (str "CQP printed something other than the "
+                                     "requested rows."))
+    :internal       (i18n/tr ui (str "The search failed on the server; its "
+                                     "log has the details."))
+    nil))
 
 (defn error-body
-  "The parts of an `error` under its heading in language `lang`: the
+  "The parts of an `error` under its heading in `ui`: the
   `corpora` it concerns, the explanation of a type that carries no message,
   and cqp's own message verbatim, its `<--` position pointer included, as
   the sample output of another program."
-  [lang {:keys [type message]} corpora]
+  [ui {:keys [type message]} corpora]
   (list
    (when (seq corpora)
-     [:p (str (i18n/tr lang :in) " ")
+     [:p (str (i18n/tr ui "in") " ")
       (interpose ", " (map (fn [c] [:code c]) corpora))])
-   (when-let [k (error-explanations type)]
-     [:p (i18n/tr lang k)])
+   (when-let [explanation (error-explanation ui type)]
+     [:p explanation])
    ;; the stylesheet scrolls this rather than letting cqp's column-aligned
    ;; pointer reflow, and a scroll container a keyboard cannot reach is
    ;; unreadable in the browsers that do not focus scrollers themselves
    (when message [:pre {:tabindex "0"} [:samp message]])))
 
 (defn error-name
-  "The heading naming `error` in language `lang`: the type this project
-  reports itself, or cqp's own error."
-  [lang {:keys [type] :as error}]
-  (i18n/tr lang (if (error-types type) type :cqp-error)))
+  "The heading naming `error` in `ui`: the type this project reports
+  itself, or cqp's own error."
+  [ui {:keys [type] :as error}]
+  (error-heading ui type))
 
 (defn error-section
-  "An `error` map under a heading of its own in language `lang`, naming
+  "An `error` map under a heading of its own in `ui`, naming
   the `corpora` it concerns when given.
 
   No live region: every error here arrives by a full page reload, where a
@@ -578,20 +609,20 @@
   reaches the error because the search lands on it (see `result-section`).
 
   An h3, since it sits inside a results region already headed by an h2."
-  [lang error corpora]
+  [ui error corpora]
   [:section.error
-   [:h3 (error-name lang error)]
-   (error-body lang error corpora)])
+   [:h3 (error-name ui error)]
+   (error-body ui error corpora)])
 
 (defn download-links
   "Links downloading the current table in each format of `hrefs` (format
   keyword to URL), with `note` (when given) qualifying what the download
-  holds; nil without hrefs, worded in language `lang`. The response itself
+  holds; nil without hrefs, worded in `ui`. The response itself
   asks to be saved (its Content-Disposition), so the links carry no
   download attribute."
-  [lang hrefs note]
+  [ui hrefs note]
   (when (seq hrefs)
-    [:p.downloads (i18n/tr lang :download)
+    [:p.downloads (i18n/tr ui "Download")
      (when note (str " " note))
      ": "
      (interpose " · "
@@ -604,33 +635,42 @@
   [{:keys [counts] :as result}]
   (boolean (some :size counts)))
 
+(defn view-label
+  "What the result view `k` is called, in `ui` (see
+  dk.cst.corpus-probe.api/result-views)."
+  [ui k]
+  (case k
+    :kwic        (i18n/tr ui "Concordance")
+    :frequencies (i18n/tr ui "Frequencies")
+    (name k)))
+
 (defn view-switch
-  "The switch between the views of one result in language `lang`: each of
-  `hrefs` ([view label-key url], see
-  dk.cst.corpus-probe.api/view-hrefs) as a link, `view` marked as the one
-  being shown; nil without hrefs.
+  "The switch between the views of one result in `ui`: each of
+  `hrefs` ([view url], see dk.cst.corpus-probe.api/view-hrefs) as a
+  link named by `view-label`, `view` marked as the one being shown; nil
+  without hrefs.
 
   Links rather than an ARIA tablist: each view is its own URL and its own
   question put to CQP, so following one is a navigation, which is what a
   link means. A tablist would promise a panel that is already loaded."
-  [lang view hrefs]
+  [ui view hrefs]
   (when (seq hrefs)
-    [:nav.views {:aria-label (i18n/tr lang :result-views)}
+    [:nav.views {:aria-label (i18n/tr ui "Result view")}
      [:ul.row
-      (for [[k label href] hrefs]
+      (for [[k href] hrefs]
         [:li [:a (cond-> {:href href}
                    (= k view) (assoc :aria-current "page"))
-              (i18n/tr lang label)]])]]))
+              (view-label ui k)]])]]))
 
 (defn result-heading
-  "The heading naming the results region in language `lang`: the summary
+  "The heading naming the results region in `ui`: the summary
   of the concordance `result` when any corpus could be searched, else the
   name of the error that came instead, so a search that failed everywhere
   is not announced as a count of nothing."
-  [lang {:keys [counts] :as result} error]
+  [ui {:keys [counts] :as result} error]
   (if (searched? result)
-    (result-summary lang result)
-    (error-name lang (or error (some :error counts)))))
+    (result-summary ui result)
+    (error-name ui (or error (some :error counts)))))
 
 (defn results-region
   "The outcome of a search in `state` under `heading`, as a region named by
@@ -644,7 +684,7 @@
 
   Marked busy while a navigation is `pending?`, since until that one
   lands what this holds is the answer to the question before it."
-  [{:keys [lang view view-hrefs result error pending?] :as state} heading body]
+  [{:keys [ui view view-hrefs result error pending?] :as state} heading body]
   [:section.result (cond-> {:id              results-id
                             :tabindex        "-1"
                             :aria-labelledby "results-heading"}
@@ -653,10 +693,10 @@
                      ;; about them says so
                      pending? (assoc :aria-busy "true"))
    [:h2 {:id "results-heading"} heading]
-   (view-switch lang view view-hrefs)
-   (when error (error-body lang error nil))
+   (view-switch ui view view-hrefs)
+   (when error (error-body ui error nil))
    (for [[e corpora] (error-groups (:counts result))]
-     (error-section lang e corpora))
+     (error-section ui e corpora))
    body])
 
 (defn result-section
@@ -665,33 +705,33 @@
   below the table, the concordance with its `:expanded` hits and `:langs`,
   then the per-corpus counts as an aside and the download links
   (`:export-hrefs`, exports holding at most `:export-limit` hits), all
-  worded in the state's `:lang` and wrapped in the shared
+  worded in the state's `:ui` and wrapped in the shared
   `results-region`."
-  [{:keys [lang sort-modes params result error langs expanded client?
+  [{:keys [ui sort-modes params result error langs expanded client?
            export-hrefs export-limit prev-href next-href]
     :as state}]
   (let [{:keys [counts hits size]} result
-        position (when result (page-phrase lang result))]
+        position (when result (page-phrase ui result))]
     (results-region
      state
-     (result-heading lang result error)
+     (result-heading ui result error)
      (when (searched? result)
        ;; a search that found nothing has nothing to page, download or
        ;; count: the table would be a header over no rows and the exports
        ;; header-only files
        (if (zero? size)
-         [:p (i18n/tr lang :no-hits)]
+         [:p (i18n/tr ui "No hits.")]
          (list
-          (view-controls lang client?
-                         (sort-control lang sort-modes (:sort params)))
-          (pagination lang prev-href next-href position)
-          (kwic/concordance hits {:caption  (i18n/tr lang :concordance)
-                                  :lang     lang
+          (view-controls ui client?
+                         (sort-control ui sort-modes (:sort params)))
+          (pagination ui prev-href next-href position)
+          (kwic/concordance hits {:caption  (i18n/tr ui "Concordance")
+                                  :ui       ui
                                   :langs    langs
                                   :expanded expanded
                                   :client?  client?
                                   :cursor   (:cursor state)})
-          (pager-links lang prev-href next-href position)
+          (pager-links ui prev-href next-href position)
           ;; an <aside>, after the hits rather than before them: it is
           ;; about the answer rather than part of it, and where the hits
           ;; came from is a question a reader has once they have read
@@ -700,15 +740,16 @@
           ;; reading reaches. Unnamed, so that inside the results
           ;; <section> it stays a container rather than becoming a second
           ;; complementary landmark: the table's own caption names it
-          (when (next counts) [:aside (counts-table lang counts)])
+          (when (next counts) [:aside (counts-table ui counts)])
           ;; what to do next with these hits, so it follows them: reading
           ;; the concordance is the task, taking it elsewhere is the one
           ;; after
-          (download-links lang export-hrefs
+          (download-links ui export-hrefs
                           (when (and export-limit (> size export-limit))
-                            (str (i18n/tr lang :the-first) " "
-                                 (i18n/group-digits lang export-limit) " "
-                                 (i18n/tr lang :hits))))))))))
+                            (str (i18n/tr ui "the first") " "
+                                 (i18n/group-digits ui export-limit) " "
+                                 (i18n/trn ui "hit" "hits"
+                                           export-limit))))))))))
 
 (defn attribute-list
   "A definition list of the attribute map `m`, each value rendered by
@@ -726,7 +767,7 @@
 
 (defn sidebar
   "The token inspection panel: what the concordance's cursor is on, in
-  language `lang`, from `selected` (its :token, :structs and :corpus);
+  `ui`, from `selected` (its :token, :structs and :corpus);
   nil while nothing is selected.
 
   Above the rail's breakpoint it takes the query column, so it sits beside
@@ -739,17 +780,17 @@
   the grid, and want focus of its own. Escape closes it from the
   concordance.
 
-  The group titles are in `lang`; the attribute names inside them are the
+  The group titles are in `ui`; the attribute names inside them are the
   corpus's own."
-  [lang {:keys [token structs corpus] :as selected}]
+  [ui {:keys [token structs corpus] :as selected}]
   (when selected
-    [:aside.sidebar {:aria-label (i18n/tr lang :token-details)}
-     [:h2 (i18n/tr lang :token-details)]
-     [:button {:type "button" :on {:click [:close]}} (i18n/tr lang :close)]
-     (detail-group (i18n/tr lang :token) (dissoc token :open :close))
-     (detail-group (i18n/tr lang :text) structs)
+    [:aside.sidebar {:aria-label (i18n/tr ui "Token details")}
+     [:h2 (i18n/tr ui "Token details")]
+     [:button {:type "button" :on {:click [:close]}} (i18n/tr ui "Close")]
+     (detail-group (i18n/tr ui "Token") (dissoc token :open :close))
+     (detail-group (i18n/tr ui "Text") structs)
      (when corpus
        [:section
-        [:h3 (i18n/tr lang :corpus-heading)]
-        [:p [:a {:href (corpus-views/corpus-href lang corpus)}
+        [:h3 (i18n/tr ui "Corpus")]
+        [:p [:a {:href (corpus-views/corpus-href ui corpus)}
              [:code corpus]]]])]))

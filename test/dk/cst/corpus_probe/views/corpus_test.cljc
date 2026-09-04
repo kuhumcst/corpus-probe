@@ -1,37 +1,37 @@
 (ns dk.cst.corpus-probe.views.corpus-test
   (:require [clojure.test :refer [deftest is testing]]
-            [dk.cst.corpus-probe.views.hiccup :refer [deep]]
+            [dk.cst.corpus-probe.views.hiccup :refer [da deep en]]
             [dk.cst.corpus-probe.views.corpus :as corpus]))
 
 (deftest corpus-item-test
   (testing "a titled corpus links its title and shows its ID"
-    (let [item (corpus/corpus-item "en" {:id    "VISER"
+    (let [item (corpus/corpus-item en {:id    "VISER"
                                          :title "Folkeviser"
                                          :size  48})]
       (is (= [:a {:href "/corpus/viser"} "Folkeviser"] (second item)))
       (is (some #{[:code "VISER"]} (deep item)))))
   (testing "an untitled corpus links its ID"
     (is (= [:a {:href "/corpus/probe"} "PROBE"]
-           (second (corpus/corpus-item "en" {:id "PROBE" :size 47})))))
+           (second (corpus/corpus-item en {:id "PROBE" :size 47})))))
   (testing "the info link keeps the language"
     (is (= [:a {:href "/corpus/probe"} "PROBE"]
-           (second (corpus/corpus-item "da" {:id "PROBE" :size 47})))))
+           (second (corpus/corpus-item da {:id "PROBE" :size 47})))))
   (testing "an unreadable corpus is marked unavailable in either language"
     (is (some #{[:em "unavailable"]}
-              (deep (corpus/corpus-item "en" {:id "GONE" :size nil}))))
+              (deep (corpus/corpus-item en {:id "GONE" :size nil}))))
     (is (some #{[:em "utilgængelig"]}
-              (deep (corpus/corpus-item "da" {:id "GONE" :size nil}))))))
+              (deep (corpus/corpus-item da {:id "GONE" :size nil}))))))
 
 (deftest token-count-test
   (testing "the digits are grouped as the language groups them"
     (is (= [:data.size {:value "64600000"} "64,600,000 tokens"]
-           (corpus/token-count "en" 64600000)))
+           (corpus/token-count en 64600000)))
     (is (= [:data.size {:value "64600000"} "64.600.000 tokens"]
-           (corpus/token-count "da" 64600000)))))
+           (corpus/token-count da 64600000)))))
 
 (deftest chooser-item-test
   (let [checkbox (fn [selected m]
-                   (second (get-in (corpus/chooser-item "en" selected m)
+                   (second (get-in (corpus/chooser-item en selected m)
                                    [2 1])))]
     (testing "a corpus is a checkbox named corpus, checked when selected"
       (is (= {:type "checkbox" :name "corpus" :value "VISER"
@@ -96,7 +96,7 @@
                 :folders [{:label   "Udvalg"
                            :corpora [{:id "REFERAT" :size 7}]
                            :folders []}]}
-        attrs  (fn [selected] (second (corpus/folder-toggle "en" selected
+        attrs  (fn [selected] (second (corpus/folder-toggle en selected
                                                             folder)))]
     (testing "one control answers for the whole folder, subfolders included"
       (is (= [:toggle-corpora ["TALER" "REFERAT"]]
@@ -113,7 +113,7 @@
     (testing "it names the folder, having no visible label of its own"
       (is (= "All corpora in Folketinget" (:aria-label (attrs #{}))))
       (is (= "Alle korpusser i Folketinget"
-             (:aria-label (second (corpus/folder-toggle "da" #{} folder))))))
+             (:aria-label (second (corpus/folder-toggle da #{} folder))))))
     (testing "a corpus that cannot be read is not something to select"
       (is (= [:toggle-corpora ["TALER"]]
              (get-in (second (corpus/folder-toggle
@@ -126,10 +126,10 @@
     (testing "under a filter it acts on what the reader can see"
       (let [narrowed (corpus/narrow "taler" folder)]
         (is (= [:toggle-corpora ["TALER"]]
-               (get-in (second (corpus/folder-toggle "en" #{} narrowed))
+               (get-in (second (corpus/folder-toggle en #{} narrowed))
                        [:on :change])))))
     (testing "and a folder of nothing selectable has no toggle at all"
-      (is (nil? (corpus/folder-toggle "en" #{}
+      (is (nil? (corpus/folder-toggle en #{}
                                       {:label   "Tom"
                                        :corpora [{:id "GONE" :size nil}]
                                        :folders []}))))))
@@ -169,7 +169,7 @@
       (is (:hidden? (corpus/narrow "zzz" folder))))))
 
 (deftest corpus-filter-test
-  (let [attrs (fn [q] (get-in (corpus/corpus-filter "en" q) [3 1]))]
+  (let [attrs (fn [q] (get-in (corpus/corpus-filter en q) [3 1]))]
     (testing "it is not part of the search: no name to submit under"
       (is (nil? (:name (attrs "vis")))))
     (testing "it holds what was typed and reports every change"
@@ -178,7 +178,7 @@
       (is (= [:filter-corpora] (get-in (attrs nil) [:on :input]))))
     (testing "it says which of the two filters it is"
       (is (= [:label {:for "corpus-filter"} "Filter corpora"]
-             (get-in (corpus/corpus-filter "en" nil) [1]))))
+             (get-in (corpus/corpus-filter en nil) [1]))))
     (testing "and watches for the Enter that would submit the form"
       (is (= [:swallow-enter] (get-in (attrs nil) [:on :keydown]))))))
 
@@ -197,11 +197,11 @@
                                         :corpora [{:id "PROBE" :size 1}]
                                         :folders []}))]
             ;; [:fieldset [:legend] <filter> <status> [:details [:summary]]]
-            (-> (corpus/chooser "en" fs {:selected selected})
+            (-> (corpus/chooser en fs {:selected selected})
                 (get-in [4 2])
                 second)))
         open    (fn [selected]
-                  (->> (deep (corpus/chooser "en" folders {:selected selected :served selected}))
+                  (->> (deep (corpus/chooser en folders {:selected selected :served selected}))
                        (filter #(and (map? %) (contains? % :open)))
                        (map :open)))]
     (testing "the chooser is one disclosure, closed unless nothing is chosen"
@@ -214,16 +214,16 @@
     (testing "nothing selected opens nothing inside either"
       (is (= [true false false false] (open #{}))))
     (testing "the summary says what is selected"
-      (is (some #{"All corpora"} (deep (corpus/chooser "en" folders
+      (is (some #{"All corpora"} (deep (corpus/chooser en folders
                                                        {:selected #{"VISER" "TALER"}}))))
       ;; one corpus is named rather than counted, so a reader sees which
       ;; one it is without opening the tree at all
       (is (= "VISER" (chooser-summary #{"VISER"})))
       (is (some #{"Select at least one corpus"}
-                (deep (corpus/chooser "en" folders {:selected #{}})))))
+                (deep (corpus/chooser en folders {:selected #{}})))))
     (testing "what is open follows the selection served, not the live one"
       (let [open* (fn [selected served]
-                    (->> (deep (corpus/chooser "en" folders
+                    (->> (deep (corpus/chooser en folders
                                                {:selected selected
                                                 :served   served}))
                          (filter #(and (map? %) (contains? % :open)))
@@ -235,21 +235,21 @@
                                                     #{"VISER"})))))
     (testing "no folder toggles without a client to answer them"
       (is (not (some #(and (map? %) (contains? % :replicant/on-render))
-                     (deep (corpus/chooser "en" folders {:selected #{"VISER"}}))))))
+                     (deep (corpus/chooser en folders {:selected #{"VISER"}}))))))
     (testing "with one, each labelled folder carries its own and so does
               the whole registry, which is otherwise a click per folder"
       (is (= ["All corpora" "All corpora in Litteratur"
               "All corpora in Folkeviser" "All corpora in Folketinget"]
-             (->> (deep (corpus/chooser "en" folders {:selected #{"VISER"}
+             (->> (deep (corpus/chooser en folders {:selected #{"VISER"}
                                                       :client?  true}))
                   (filter #(and (map? %) (contains? % :replicant/on-render)))
                   (map :aria-label)))))
     (testing "the root toggle takes the whole registry at once"
       (is (= [:toggle-corpora ["VISER" "TALER"]]
-             (get-in (second (corpus/all-toggle "en" #{} folders))
+             (get-in (second (corpus/all-toggle en #{} folders))
                      [:on :change]))))
     (testing "a filter hides what does not answer it and opens what does"
-      (let [html (deep (corpus/chooser "en" folders {:selected #{}
+      (let [html (deep (corpus/chooser en folders {:selected #{}
                                                      :client?  true
                                                      :filter   "taler"}))]
         ;; VISER's box is still there to be submitted, just not shown
@@ -259,7 +259,7 @@
         (is (some #{"Litteratur · 0 of 1 corpora"} html))))
     (testing "the region saying nothing was found is there before it says it"
       (let [region (fn [opts]
-                     (->> (corpus/chooser "en" folders
+                     (->> (corpus/chooser en folders
                                           (merge {:selected #{"VISER"}
                                                   :client?  true} opts))
                           (tree-seq coll? seq)
@@ -273,7 +273,7 @@
                (region {:filter "zzz"})))))
     (testing "it stands where the tree was, which is hidden rather than gone"
       (let [[_ _ box region disclosure]
-            (corpus/chooser "en" folders {:selected #{"VISER"}
+            (corpus/chooser en folders {:selected #{"VISER"}
                                           :client?  true
                                           :filter   "zzz"})]
         (is (= :p.find (first box)))
@@ -285,7 +285,7 @@
         (is (some #(and (map? %) (= "VISER" (:value %)) (:checked %))
                   (deep disclosure)))))
     (testing "a folder the filter empties is hidden, toggle or no toggle"
-      (let [html (deep (corpus/chooser "en" folders {:selected #{}
+      (let [html (deep (corpus/chooser en folders {:selected #{}
                                                      :client?  true
                                                      :filter   "viser"}))]
         ;; Folketinget holds nothing answering "viser", and having nothing
@@ -294,7 +294,7 @@
                (filter #(and (map? %) (contains? % :open) (:hidden %))
                        html)))))
     (testing "a filter answering nothing says so beside the box, not in it"
-      (let [html (deep (corpus/chooser "en" folders {:selected #{"VISER"}
+      (let [html (deep (corpus/chooser en folders {:selected #{"VISER"}
                                                      :client?  true
                                                      :filter   "zzz"}))]
         (is (some #{[:div.empty {:role "status"} "No corpora found."]} html))
@@ -305,7 +305,7 @@
         (is (some #(and (map? %) (= "VISER" (:value %)) (:checked %)) html))))
     (testing "the filter box is outside the disclosure it narrows"
       (let [[_ _ box region disclosure]
-            (corpus/chooser "en" folders {:selected #{"VISER"} :client? true})]
+            (corpus/chooser en folders {:selected #{"VISER"} :client? true})]
         (is (= :p.find (first box)))
         ;; the region reporting what the box found stands between the two,
         ;; where the tree is when the tree has been hidden
@@ -313,7 +313,7 @@
         ;; the toggle row, holding the root select-all and the tree
         (is (= :div.group (first disclosure)))))
     (testing "a filter opens the tree, and emptying it again leaves it open"
-      (let [open* (fn [opts] (->> (corpus/chooser "en" folders
+      (let [open* (fn [opts] (->> (corpus/chooser en folders
                                                   (merge {:selected #{"VISER"}
                                                           :served   #{"VISER"}}
                                                          opts))
@@ -327,42 +327,42 @@
         (is (false? (open* {:open? false})))))
     (testing "no filter box without a client to narrow anything"
       (is (not (some #(and (map? %) (= "corpus-filter" (:id %)))
-                     (deep (corpus/chooser "en" folders
+                     (deep (corpus/chooser en folders
                                            {:selected #{"VISER"}}))))))
     (testing "the legend is in the chosen language"
       (is (some #{[:legend "Korpusser"]}
-                (deep (corpus/chooser "da" folders {:selected #{}})))))))
+                (deep (corpus/chooser da folders {:selected #{}})))))))
 
 (deftest info-view-navigation-test
-  (let [html (deep (corpus/info-view "en" {:corpus "VISER" :stats {} :info {}}))]
+  (let [html (deep (corpus/info-view en {:corpus "VISER" :stats {} :info {}}))]
     (testing "where the page leads is a named navigation, not a paragraph"
       (is (some #{{:aria-label "This corpus"}} html))
       (is (some #{:ul.row} html))
       (is (= 2 (count (filter #(and (map? %) (:href %)) html)))))
     (testing "a phantom entry cannot be searched, so it is offered nothing"
       (is (not (some #{{:aria-label "This corpus"}}
-                     (deep (corpus/info-view "en" {:corpus   "GONE"
+                     (deep (corpus/info-view en {:corpus   "GONE"
                                                    :error    {}
                                                    :phantom? true}))))))))
 
 (deftest labelled-folders-test
   (testing "a lone label-less folder stays as it is"
-    (is (= [{:label nil}] (corpus/labelled-folders "en" [{:label nil}]))))
+    (is (= [{:label nil}] (corpus/labelled-folders en [{:label nil}]))))
   (testing "among labelled siblings the tail is labelled in the language"
     (is (= ["A" "Other"]
            (map :label
-                (corpus/labelled-folders "en" [{:label "A"} {:label nil}]))))
+                (corpus/labelled-folders en [{:label "A"} {:label nil}]))))
     (is (= ["A" "Andre"]
            (map :label
-                (corpus/labelled-folders "da"
+                (corpus/labelled-folders da
                                          [{:label "A"} {:label nil}]))))))
 
 (deftest count-cell-test
-  (is (= [:td.n "1,000"] (corpus/count-cell "en" 1000)))
-  (is (= [:td.n "1.000"] (corpus/count-cell "da" 1000)))
+  (is (= [:td.n "1,000"] (corpus/count-cell en 1000)))
+  (is (= [:td.n "1.000"] (corpus/count-cell da 1000)))
   (testing "a missing count is the tool's own NO DATA"
-    (is (= [:td.n [:em "no data"]] (corpus/count-cell "en" nil)))
-    (is (= [:td.n [:em "ingen data"]] (corpus/count-cell "da" nil)))))
+    (is (= [:td.n [:em "no data"]] (corpus/count-cell en nil)))
+    (is (= [:td.n [:em "ingen data"]] (corpus/count-cell da nil)))))
 
 (deftest info-view-test
   (let [data {:corpus "VISER"
@@ -376,7 +376,7 @@
                        :a-attrs []}
               :info   {:properties {:language "da" :charset "utf8"}
                        :info       "Om korpusset."}}
-        html (pr-str (corpus/info-view "en" data))]
+        html (pr-str (corpus/info-view en data))]
     (testing "the corpus names the page, the ID its subtitle"
       (is (re-find #":h1 .*\"Folkeviser\"" html))
       (is (re-find #":code \"VISER\"" html)))
@@ -389,42 +389,42 @@
     (testing "an attribute without data is marked as such"
       (is (re-find #"no data" html)))
     (testing "the page is otherwise in the UI language, not the corpus's"
-      (let [da (pr-str (corpus/info-view "da" data))]
+      (let [da (pr-str (corpus/info-view da data))]
         (is (re-find #"Positionelle attributter" da))
         (is (re-find #"Søg i" da))
         (testing "and its own links keep it"
           (is (re-find #"/\?corpus=VISER\"" da)))))
     (testing "an error becomes a fixed alert leaking nothing of its message"
-      (let [html (pr-str (corpus/info-view "en" {:corpus "GONE"
+      (let [html (pr-str (corpus/info-view en {:corpus "GONE"
                                                  :error  {:message
                                                           "/srv/secret"}}))]
         (is (re-find #"Could not read corpus" html))
         (is (not (re-find #"/srv/secret" html)))
         (is (not (re-find #":table" html)))))
     (testing "an entry CWB has no data for says so, not that reading failed"
-      (let [html (pr-str (corpus/info-view "en" {:corpus   "GONE"
+      (let [html (pr-str (corpus/info-view en {:corpus   "GONE"
                                                  :error    {:message "x"}
                                                  :phantom? true}))]
         (is (re-find #"The registry lists this corpus" html))
         (is (not (re-find #"could not read this corpus" html)))
         (testing "and it is not offered for searching either"
-          (is (not (re-find #"Search GONE" html))))))
+          (is (not (re-find #"Search in GONE" html))))))
     (testing "one that failed to be read this time is still offered"
-      (is (re-find #"Search GONE"
+      (is (re-find #"Search in GONE"
                    (pr-str (corpus/info-view
-                            "en" {:corpus "GONE"
-                                  :error  {:message "x"}})))))))
+                            en {:corpus "GONE"
+                                :error  {:message "x"}})))))))
 
 (deftest unreadable-section-test
   (testing "a phantom entry and a failed read are told apart"
     (is (some #{"The registry lists this corpus, but CWB has no data for it."}
-              (deep (corpus/unreadable-section "en" true))))
+              (deep (corpus/unreadable-section en true))))
     (is (some #{"CWB could not read this corpus's data files."}
-              (deep (corpus/unreadable-section "en" false))))
+              (deep (corpus/unreadable-section en false))))
     (is (some #{"Registret har dette korpus, men CWB har ingen data til det."}
-              (deep (corpus/unreadable-section "da" true)))))
+              (deep (corpus/unreadable-section da true)))))
   (testing "both are one section under the same heading"
     (is (some #{[:h2 "Could not read corpus"]}
-              (deep (corpus/unreadable-section "en" true)))))
+              (deep (corpus/unreadable-section en true)))))
   (testing "no live region: it is in the document before the page is parsed"
-    (is (not (some #{"alert"} (deep (corpus/unreadable-section "en" false)))))))
+    (is (not (some #{"alert"} (deep (corpus/unreadable-section en false)))))))

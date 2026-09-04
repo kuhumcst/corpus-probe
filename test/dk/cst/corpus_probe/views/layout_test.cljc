@@ -1,7 +1,7 @@
 (ns dk.cst.corpus-probe.views.layout-test
   (:require [clojure.test :refer [deftest is testing]]
             [dk.cst.corpus-probe.i18n :as i18n]
-            [dk.cst.corpus-probe.views.hiccup :refer [deep]]
+            [dk.cst.corpus-probe.views.hiccup :refer [da deep en]]
             [dk.cst.corpus-probe.views.layout :as layout]))
 
 (def nav
@@ -14,7 +14,7 @@
     (is (= (set i18n/languages) (set (keys layout/language-names))))))
 
 (deftest language-switch-test
-  (let [html    (layout/language-switch "da" "/?q=hund")
+  (let [html    (layout/language-switch da "/?q=hund")
         buttons (filter #(and (map? %) (= "lang" (:name %))) (deep html))]
     (testing "a preference is set, not navigated to: no URL names a language"
       (is (= :form.languages (first html)))
@@ -29,7 +29,7 @@
       (is (= ["en"] (map :value buttons)))
       (is (= ["en"] (map :lang buttons)))
       (testing "and the other way round"
-        (let [en (deep (layout/language-switch "en" "/"))]
+        (let [en (deep (layout/language-switch en "/"))]
           (is (some #{[:span {:lang "en" :aria-current "true"} "English"]} en))
           (is (= ["da"] (map :value (filter #(and (map? %) (= "lang" (:name %)))
                                             en)))))))
@@ -38,7 +38,8 @@
         (is (not (some #{lang}
                        (map :value
                             (filter #(and (map? %) (= "lang" (:name %)))
-                                    (deep (layout/language-switch lang "/")))))))))
+                                    (deep (layout/language-switch
+                                           (i18n/->ui lang) "/")))))))))
     (testing "every language is named in itself, whichever is in use"
       (is (some #{"Dansk"} (deep html)))
       (is (some #{"English"} (deep html))))
@@ -47,28 +48,28 @@
                 (deep html))))
     (testing "the group says what it is about, in the page's own language"
       (is (some #{"Sprog"} (deep html)))
-      (is (some #{"Language"} (deep (layout/language-switch "en" "/")))))))
+      (is (some #{"Language"} (deep (layout/language-switch en "/")))))))
 
 (deftest skip-link-test
   (testing "the bypass link points at the page's own content"
     (is (= [:a.skip {:href "#main"} "Skip to content"]
-           (layout/skip-link "en")))
-    (is (= "Gå til indhold" (last (layout/skip-link "da"))))))
+           (layout/skip-link en)))
+    (is (= "Gå til indhold" (last (layout/skip-link da))))))
 
 (deftest site-footer-test
   (testing "the app says what it is, once, where a reader needs it once"
-    (is (some #{"CWB corpus search"} (deep (layout/site-footer "en"))))
-    (is (some #{"CWB-korpussøgning"} (deep (layout/site-footer "da")))))
+    (is (some #{"CWB corpus search"} (deep (layout/site-footer en))))
+    (is (some #{"CWB-korpussøgning"} (deep (layout/site-footer da)))))
   (testing "and credits what it is a front end for"
     (is (some #{"https://cwb.sourceforge.io/"}
-              (deep (layout/site-footer "en"))))
-    (is (some #{"Powered by"} (deep (layout/site-footer "en"))))
-    (is (some #{"Drevet af"} (deep (layout/site-footer "da"))))))
+              (deep (layout/site-footer en))))
+    (is (some #{"Powered by"} (deep (layout/site-footer en))))
+    (is (some #{"Drevet af"} (deep (layout/site-footer da))))))
 
 (deftest site-header-test
   (let [links (fn [path nav]
                 (filter #(and (map? %) (:href %))
-                        (deep (layout/site-header "en" path nav))))]
+                        (deep (layout/site-header en path nav))))]
     (testing "the navigation carries the search, the site name does not"
       (is (= ["/" "/?q=hund#results" "/corpora"]
              (map :href (links "/" nav))))
@@ -82,7 +83,7 @@
       (testing "a page no nav item names marks nothing"
         (is (= [nil nil nil] (map :aria-current (links "/corpus/viser" nav))))))
     (testing "the masthead is in the page's own language"
-      (let [da (deep (layout/site-header "da" "/" nav))]
+      (let [da (deep (layout/site-header da "/" nav))]
         (is (some #{"Søgning"} da))
         (is (some #{"Korpusser"} da))
         (testing "what the app is belongs in the footer, not over every page"
@@ -90,6 +91,6 @@
         (testing "the frequency table is a view of a result, not a place"
           (is (not (some #{"Frekvenser"} da))))))
     (testing "the masthead claims no heading: each page names itself"
-      (is (not (some #{:h1} (deep (layout/site-header "en" "/" nav))))))
+      (is (not (some #{:h1} (deep (layout/site-header en "/" nav))))))
     (testing "the app's own name is not translated"
-      (is (some #{"corpus-probe"} (deep (layout/site-header "da" "/" nav)))))))
+      (is (some #{"corpus-probe"} (deep (layout/site-header da "/" nav)))))))

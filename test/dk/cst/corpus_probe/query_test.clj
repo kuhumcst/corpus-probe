@@ -97,9 +97,13 @@
     (is (str/includes? (query/sort-command "random") "randomize 1"))))
 
 (deftest sort-modes-test
-  (testing "every sort mode is labelled by a key the dictionary defines"
-    ;; `tr` renders an unknown key as its own name rather than failing
-    (is (empty? (remove i18n/dictionary (map second query/sort-modes))))))
+  (testing "each mode is a param value and the command it runs, no more"
+    ;; what a mode is called is the interface's business rather than this
+    ;; namespace's (see dk.cst.corpus-probe.views.page/sort-label)
+    (is (every? (fn [[value command]]
+                  (and (string? value) (string? command) ))
+                query/sort-modes))
+    (is (every? #(= 2 (count %)) query/sort-modes))))
 
 (deftest page-rows-test
   (is (= [0 24] (query/page-rows 0 25)))

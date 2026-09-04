@@ -35,6 +35,18 @@ No URL names a language, so a shared link does not impose the sharer's on
 whoever opens it. What CWB itself says (query errors, attribute names,
 corpus titles and corpus text) is always shown verbatim.
 
+The translations are [gettext](https://www.gnu.org/software/gettext/) PO
+files under [resources/i18n/](resources/i18n/), read with
+[pottery](https://github.com/brightin/pottery). Every UI string is written
+in the source in English and that English is its own key, so a view reads
+as the sentence it renders and an untranslated string falls back to
+readable English rather than to an identifier. Adding a language is
+dropping a `.po` file in and naming it in
+`dk.cst.corpus-probe.translations/po-files`; nothing else changes.
+Translators work in Poedit or Weblate against
+[the template](resources/i18n/template.pot), which is extracted from the
+source and guarded against drift by the test suite.
+
 At the REPL, one function call in, plain data out:
 
 ```clojure
@@ -59,6 +71,7 @@ Requires [Clojure](https://clojure.org/guides/install_clojure) and CWB
 dev/encode.sh          # encode the dev corpus (PROBE) once
 clojure -M:dev:nrepl   # start a REPL; see dev/user.clj for entry points
 clojure -X:test        # run the tests
+clojure -M:i18n        # re-extract the translation template
 clojure -M:cljs -m shadow.cljs.devtools.cli compile app   # build the client
 clojure -M -m dk.cst.corpus-probe.server                  # serve (config.edn)
 ```
@@ -80,6 +93,10 @@ what [dev/watch.edn](dev/watch.edn) is for, and why it is a file outside
 the jar rather than a default: the strict policy is the one that ships.
 `dk.cst.corpus-probe.ui/reload!` re-renders after each swap, so a saved
 file shows up without losing the search on screen.
+
+After editing a PO file, force a recompile of the client: the
+ClojureScript build inlines the tables through a macro and cannot see
+through it to the file.
 
 Settings come from [resources/config.edn](resources/config.edn), which is
 read from the classpath and so lives inside a packaged jar. An installation

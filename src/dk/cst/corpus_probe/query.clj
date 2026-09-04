@@ -220,16 +220,18 @@
          (when (pos? n) (str " []{" n "}")))))
 
 (def sort-modes
-  "The KWIC sort modes, in display order: each maps to the dictionary key
-  labelling it (see dk.cst.corpus-probe.i18n/dictionary) and the CQP
-  command that reorders the result `Last`. The context sorts order by the
-  words nearest the match (up to five tokens either side)."
+  "The KWIC sort modes, in display order: each mode's `sort` param value
+  and the CQP command that reorders the result `Last`. The context sorts
+  order by the words nearest the match (up to five tokens either side).
+
+  What each mode is called is the interface's business rather than this
+  namespace's (see dk.cst.corpus-probe.views.page/sort-label)."
   (let [external "set ExternalSort on; sort Last by word"]
-    [["corpus" :sort-corpus "sort Last;"]
-     ["word"   :sort-word   (str external ";")]
-     ["left"   :sort-left   (str external " on match[-1] .. match[-5];")]
-     ["right"  :sort-right  (str external " on matchend[1] .. matchend[5];")]
-     ["random" :sort-random "sort Last randomize 1;"]]))
+    [["corpus" "sort Last;"]
+     ["word"   (str external ";")]
+     ["left"   (str external " on match[-1] .. match[-5];")]
+     ["right"  (str external " on matchend[1] .. matchend[5];")]
+     ["random" "sort Last randomize 1;"]]))
 
 (defn sort-command
   "The CQP command that sorts `Last` for sort mode `mode` (see `sort-modes`);
@@ -239,7 +241,7 @@
   process locale (Danish, not byte order); random sort uses a fixed seed so
   pagination is stable across requests."
   [mode]
-  (or (some (fn [[k _ command]] (when (= k mode) command)) sort-modes)
+  (or (some (fn [[k command]] (when (= k mode) command)) sort-modes)
       "sort Last;"))
 
 (defn setup-command

@@ -20,45 +20,45 @@
 
   It names no language: which language the page is read in is the
   reader's own preference, not part of the address of a corpus."
-  [_lang id]
+  [_ui id]
   (str "/corpus/" (str/lower-case id)))
 
 (defn count-cell
-  "A statistics table cell for count `n` in language `lang`, or for the
+  "A statistics table cell for count `n` in `ui`, or for the
   tool's NO DATA when the count is nil because an attribute's data files
   cannot be read."
-  [lang n]
-  [:td.n (if n (i18n/group-digits lang n) [:em (i18n/tr lang :no-data)])])
+  [ui n]
+  [:td.n (if n (i18n/group-digits ui n) [:em (i18n/tr ui "no data")])])
 
 (defn token-count
-  "The token count `n` as a <data> element, in language `lang`: grouped
+  "The token count `n` as a <data> element, in `ui`: grouped
   digits for people, the plain number in `value` for machines."
-  [lang n]
+  [ui n]
   [:data.size {:value (str n)}
-   (str (i18n/group-digits lang n) " " (i18n/tr lang :tokens))])
+   (str (i18n/group-digits ui n) " " (i18n/tr ui "tokens"))])
 
 (defn corpus-details
   "The details following a corpus's name in a tree entry for overview map
   `m`: its ID when the name shown is a title, and its token count in
-  language `lang`, or a mark that the corpus cannot be read."
-  [lang {:keys [id title size] :as m}]
+  `ui`, or a mark that the corpus cannot be read."
+  [ui {:keys [id title size] :as m}]
   (list (when title (list [:code id] " "))
         (if size
-          (token-count lang size)
-          [:em (i18n/tr lang :unavailable)])))
+          (token-count ui size)
+          [:em (i18n/tr ui "unavailable")])))
 
 (defn corpus-item
   "One corpus overview map `m` as an index entry: a link to its info page
   named by its title (falling back to its ID), then its details in
-  language `lang`."
-  [lang {:keys [id title] :as m}]
-  [:li [:a {:href (corpus-href lang id)} (or title id)] " "
-   (corpus-details lang m)])
+  `ui`."
+  [ui {:keys [id title] :as m}]
+  [:li [:a {:href (corpus-href ui id)} (or title id)] " "
+   (corpus-details ui m)])
 
 (defn chooser-item
   "One corpus overview map `m` as a chooser entry: a checkbox labelled by
   its title (falling back to its ID) and its details, checked when its ID
-  is in the set `selected`, its details in language `lang`. A corpus that
+  is in the set `selected`, its details in `ui`. A corpus that
   cannot be read is disabled.
 
   The box reports every change, so that the selection the application
@@ -66,7 +66,7 @@
   form's own controls rather than that state, but the folder toggles and
   the counts in the summaries are computed from it, and a count that
   disagreed with the boxes under it would be worse than no count."
-  [lang selected {:keys [id title size hidden?] :as m}]
+  [ui selected {:keys [id title size hidden?] :as m}]
   [:li (cond-> {} hidden? (assoc :hidden true))
    [:label
     [:input {:type     "checkbox"
@@ -75,7 +75,7 @@
              :checked  (contains? selected id)
              :disabled (nil? size)
              :on       {:change [:toggle-corpora [id]]}}]
-    " " (or title id) " " (corpus-details lang m)]])
+    " " (or title id) " " (corpus-details ui m)]])
 
 (defn folder-corpora
   "Every corpus overview in resolved `folder`, subfolders included."
@@ -139,46 +139,46 @@
       items)))
 
 (defn labelled-folders
-  "Label the label-less tail folder among `folders` \"Other\", in language
-  `lang`, when it has labelled siblings.
+  "Label the label-less tail folder among `folders` \"Other\", in `ui`,
+  when it has labelled siblings.
 
   Otherwise the ungrouped corpora could be mistaken for part of the
   disclosure above them; a lone label-less folder (no grouping configured
   at all) stays a bare list."
-  [lang folders]
+  [ui folders]
   (cond->> folders
     (next folders) (map (fn [f]
-                          (update f :label #(or % (i18n/tr lang :other)))))))
+                          (update f :label #(or % (i18n/tr ui "Other")))))))
 
 (defn corpus-tree
   "The `folders` tree of corpus overviews rendered by `opts` (see
-  `folder-view`), the ungrouped tail labelled in language `lang`."
-  [lang opts folders]
-  (map (partial folder-view opts) (labelled-folders lang folders)))
+  `folder-view`), the ungrouped tail labelled in `ui`."
+  [ui opts folders]
+  (map (partial folder-view opts) (labelled-folders ui folders)))
 
 (defn folder-count
   "The label of `folder` followed by how many corpora it holds, in
-  language `lang`, so a closed folder still says what is inside it, and by
+  `ui`, so a closed folder still says what is inside it, and by
   how many of them are showing when a filter is hiding the rest."
-  [lang folder]
+  [ui folder]
   (let [all   (folder-corpora folder)
         shown (remove :hidden? all)]
     (str (:label folder) " · "
          (when (< (count shown) (count all))
-           (str (count shown) " " (i18n/tr lang :of) " "))
-         (count all) " " (i18n/tr lang :corpora))))
+           (str (count shown) " " (i18n/tr ui "of") " "))
+         (count all) " " (i18n/tr ui "corpora"))))
 
 (defn folder-selection
   "`folder-count` plus how many of the folder's corpora are in the set
   `selected`, so a closed folder says whether the selection is inside it."
-  [lang selected folder]
+  [ui selected folder]
   (let [n (count (filter (comp selected :id) (folder-corpora folder)))]
-    (cond-> (folder-count lang folder)
-      (pos? n) (str " · " n " " (i18n/tr lang :selected)))))
+    (cond-> (folder-count ui folder)
+      (pos? n) (str " · " n " " (i18n/tr ui "selected")))))
 
 (defn chooser-summary
   "What the corpus chooser's disclosure says about the set `selected` out
-  of `corpora`, every overview in the registry, in language `lang`: that
+  of `corpora`, every overview in the registry, in `ui`: that
   it is all of them, which one it is when it is one, how many it is, or
   that none is chosen.
 
@@ -186,18 +186,18 @@
   needs while they are still narrowing; once they are down to one, the
   useful thing to say is which one, and saying it here means the tree does
   not have to be opened to find out."
-  [lang selected corpora]
+  [ui selected corpora]
   (let [n     (count selected)
         total (count corpora)]
     (cond
-      (zero? n)   (i18n/tr lang :pick-a-corpus)
-      (= n total) (i18n/tr lang :all-corpora)
+      (zero? n)   (i18n/tr ui "Select at least one corpus")
+      (= n total) (i18n/tr ui "All corpora")
       (= 1 n)     (or (some #(when (selected (:id %)) (or (:title %) (:id %)))
                             corpora)
                       ;; a URL naming a corpus the registry has lost
                       (first selected))
-      :else       (str n " " (i18n/tr lang :of) " " total " "
-                       (i18n/tr lang :selected)))))
+      :else       (str n " " (i18n/tr ui "of") " " total " "
+                       (i18n/tr ui "selected")))))
 
 (defn selectable-ids
   "The IDs of the corpora in `folder` a reader can actually choose: a
@@ -226,41 +226,41 @@
     (controls/select-all label ids selected [:toggle-corpora (vec ids)])))
 
 (defn folder-toggle
-  "`corpus-toggle` over one `folder`, named for it in language `lang`."
-  [lang selected folder]
-  (corpus-toggle (str (i18n/tr lang :all-in-folder) " " (:label folder))
+  "`corpus-toggle` over one `folder`, named for it in `ui`."
+  [ui selected folder]
+  (corpus-toggle (str (i18n/tr ui "All corpora in") " " (:label folder))
                  selected folder))
 
 (defn all-toggle
-  "`corpus-toggle` over the whole `folders` tree, named for it in language
-  `lang`: the one control that selects or clears the registry, which is
+  "`corpus-toggle` over the whole `folders` tree, named for it in `ui`:
+  the one control that selects or clears the registry, which is
   otherwise a click per folder and, under a filter, the only way to take
   everything the filter found at once."
-  [lang selected folders]
-  (corpus-toggle (i18n/tr lang :all-corpora) selected {:folders folders}))
+  [ui selected folders]
+  (corpus-toggle (i18n/tr ui "All corpora") selected {:folders folders}))
 
 (defn corpus-filter
   "The box narrowing the chooser to the corpora answering what is typed in
-  it, in language `lang`, holding `q`. See
+  it, in `ui`, holding `q`. See
   dk.cst.corpus-probe.views.controls/filter-box."
-  [lang q]
-  (controls/filter-box "corpus-filter" (i18n/tr lang :filter-corpora) q
+  [ui q]
+  (controls/filter-box "corpus-filter" (i18n/tr ui "Filter corpora") q
                        [:filter-corpora]))
 
 (defn index-view
-  "The corpus index page body in language `lang`: the `folders` tree of
+  "The corpus index page body in `ui`: the `folders` tree of
   corpus overviews, every folder open.
 
   The tree is this page's own content rather than navigation inside it, so
   it sits directly in <main> under the page's heading, which the bypass
   link moves the reader to."
-  [lang {:keys [folders]}]
+  [ui {:keys [folders]}]
   [:main layout/main-attrs
-   [:h1 (i18n/tr lang :corpora-heading)]
+   [:h1 (i18n/tr ui "Corpora")]
    [:div.corpora
-    (corpus-tree lang
-                 {:item    (partial corpus-item lang)
-                  :summary (partial folder-count lang)
+    (corpus-tree ui
+                 {:item    (partial corpus-item ui)
+                  :summary (partial folder-count ui)
                   :open?   (constantly true)}
                  folders)]])
 
@@ -276,7 +276,7 @@
   document and still submits them, so folding the tree away never narrows
   a search. Inside it, a folder holding part of the selection starts open,
   and where `:client?` each folder carries a `folder-toggle` selecting or
-  clearing the whole of it. The wording is in language `lang`.
+  clearing the whole of it. The wording is in `ui`.
 
   What is checked follows `:selected`, which is live: it changes under the
   reader as they choose. What is open follows `:served`, the selection the
@@ -297,7 +297,7 @@
   has just finished searching it would be the rudest thing here. Once it
   has been opened or closed at all, `:open?` says which, and the reader
   owns it from then on."
-  [lang folders {:keys [selected served client? open?] q :filter}]
+  [ui folders {:keys [selected served client? open?] q :filter}]
   (let [corpora   (mapcat folder-corpora folders)
         total     (count corpora)
         filtering (not (str/blank? q))
@@ -305,13 +305,13 @@
                     filtering (mapv (partial narrow (str/lower-case q))))
         nothing-found? (and filtering (every? :hidden? folders))]
     [:fieldset.corpora
-     [:legend (i18n/tr lang :corpora-heading)]
-     (when client? (corpus-filter lang q))
+     [:legend (i18n/tr ui "Corpora")]
+     (when client? (corpus-filter ui q))
      (when client?
        (controls/filter-status (when nothing-found?
-                                 (i18n/tr lang :no-corpora-found))))
+                                 (i18n/tr ui "No corpora found."))))
      (controls/toggled
-      (when client? (all-toggle lang selected folders))
+      (when client? (all-toggle ui selected folders))
       [:details (cond-> {:open (or filtering (if (some? open?)
                                                open?
                                                (empty? served)))
@@ -320,12 +320,12 @@
                   ;; where it was; hidden rather than dropped, because its
                   ;; checkboxes are what a search submits
                   nothing-found? (assoc :hidden true))
-       [:summary (chooser-summary lang selected corpora)]
-       (corpus-tree lang
-                    {:item    (partial chooser-item lang selected)
-                     :summary (partial folder-selection lang selected)
+       [:summary (chooser-summary ui selected corpora)]
+       (corpus-tree ui
+                    {:item    (partial chooser-item ui selected)
+                     :summary (partial folder-selection ui selected)
                      :toggle  (when client?
-                                (partial folder-toggle lang selected))
+                                (partial folder-toggle ui selected))
                      :open?   (fn [folder]
                                 (if filtering
                                   (not (:hidden? folder))
@@ -339,64 +339,65 @@
   "The general facts of a corpus as a definition list: its token count and
   charset from describe `stats`, then the registry properties reported by
   `info` (minus the charset property, which would repeat the charset row).
-  The row labels are in language `lang`; the registry property names are
+  The row labels are in `ui`; the registry property names are
   CWB's own and stay as they are."
-  [lang stats info]
+  [ui stats info]
   [:dl.facts
-   [:dt (i18n/tr lang :size)] [:dd (token-count lang (:size stats))]
-   [:dt (i18n/tr lang :charset)] [:dd (:charset stats)]
+   [:dt (i18n/tr ui "size")] [:dd (token-count ui (:size stats))]
+   [:dt (i18n/tr ui "charset")] [:dd (:charset stats)]
    (mapcat (fn [[k v]] [[:dt (name k)] [:dd v]])
            (sort-by key (dissoc (:properties info) :charset)))])
 
 (defn p-attr-table
   "The positional attributes of describe `stats` as a statistics table in
-  language `lang`."
-  [lang {:keys [p-attrs] :as stats}]
+  `ui`."
+  [ui {:keys [p-attrs] :as stats}]
   (when (seq p-attrs)
     [:table.attributes
-     [:caption (i18n/tr lang :p-attrs-heading)]
+     [:caption (i18n/tr ui "Positional attributes")]
      [:thead
-      [:tr [:th {:scope "col"} (i18n/tr lang :attribute)]
-       [:th.n {:scope "col"} (i18n/tr lang :tokens)]
-       [:th.n {:scope "col"} (i18n/tr lang :types)]]]
+      [:tr [:th {:scope "col"} (i18n/tr ui "attribute")]
+       [:th.n {:scope "col"} (i18n/tr ui "tokens")]
+       [:th.n {:scope "col"} (i18n/tr ui "types")]]]
      [:tbody
       (for [{attr :name :keys [tokens types]} p-attrs]
         [:tr [:th {:scope "row"} [:code (name attr)]]
-         (count-cell lang tokens)
-         (count-cell lang types)])]]))
+         (count-cell ui tokens)
+         (count-cell ui types)])]]))
 
 (defn s-attr-table
   "The structural attributes of describe `stats` as a statistics table,
-  marking the annotation-carrying ones, in language `lang`."
-  [lang {:keys [s-attrs] :as stats}]
+  marking the annotation-carrying ones, in `ui`."
+  [ui {:keys [s-attrs] :as stats}]
   (when (seq s-attrs)
     [:table.attributes
-     [:caption (i18n/tr lang :s-attrs-heading)]
+     [:caption (i18n/tr ui "Structural attributes")]
      [:thead
-      [:tr [:th {:scope "col"} (i18n/tr lang :attribute)]
-       [:th.n {:scope "col"} (i18n/tr lang :regions)]
-       [:th {:scope "col"} (i18n/tr lang :annotations)]]]
+      [:tr [:th {:scope "col"} (i18n/tr ui "attribute")]
+       ;; a column heading takes the plural form of what it counts
+       [:th.n {:scope "col"} (i18n/trn ui "region" "regions" 2)]
+       [:th {:scope "col"} (i18n/tr ui "annotations")]]]
      [:tbody
       (for [{attr :name :keys [regions values?]} s-attrs]
         [:tr [:th {:scope "row"} [:code (name attr)]]
-         (count-cell lang regions)
-         [:td (when values? (i18n/tr lang :with-annots))]])]]))
+         (count-cell ui regions)
+         [:td (when values? (i18n/tr ui "with annotations"))]])]]))
 
 (defn a-attr-table
   "The alignment attributes of describe `stats` as a statistics table; no
   KU corpus has any, but hiding one that exists would be unfaithful. The
-  headings are in language `lang`."
-  [lang {:keys [a-attrs] :as stats}]
+  headings are in `ui`."
+  [ui {:keys [a-attrs] :as stats}]
   (when (seq a-attrs)
     [:table.attributes
-     [:caption (i18n/tr lang :a-attrs-heading)]
+     [:caption (i18n/tr ui "Alignment attributes")]
      [:thead
-      [:tr [:th {:scope "col"} (i18n/tr lang :attribute)]
-       [:th.n {:scope "col"} (i18n/tr lang :blocks)]]]
+      [:tr [:th {:scope "col"} (i18n/tr ui "attribute")]
+       [:th.n {:scope "col"} (i18n/tr ui "blocks")]]]
      [:tbody
       (for [{attr :name :keys [blocks]} a-attrs]
         [:tr [:th {:scope "row"} [:code (name attr)]]
-         (count-cell lang blocks)])]]))
+         (count-cell ui blocks)])]]))
 
 (defn lang-attrs
   "The attribute map marking an element's text as being in `lang`, when
@@ -407,16 +408,16 @@
 (defn info-text
   "The free-text content of the corpus's .info file, verbatim from the
   :info key of `info` (the parsed `info;` output), in the corpus's own
-  `corpus-lang`; its heading is in the UI language `lang`."
-  [lang info corpus-lang]
+  `corpus-lang`; its heading is in `ui`."
+  [ui info corpus-lang]
   (when-let [text (:info info)]
     [:section.about
-     [:h2 (i18n/tr lang :info)]
+     [:h2 (i18n/tr ui "Info")]
      ;; the corpus author's own prose, not program output, so a bare <pre>
      [:pre (lang-attrs corpus-lang) text]]))
 
 (defn unreadable-section
-  "The section shown in language `lang` in place of the corpus facts when
+  "The section shown in `ui` in place of the corpus facts when
   CWB cannot read the corpus's data, saying whether CWB has no data for
   the registry entry at all (`phantom?`) or reading it failed this time.
 
@@ -424,13 +425,16 @@
   server paths, which never reach a rendered page. No live region: the
   section is in the document before the page is parsed, where a live
   region announces nothing anyway."
-  [lang phantom?]
+  [ui phantom?]
   [:section.error
-   [:h2 (i18n/tr lang :unreadable)]
-   [:p (i18n/tr lang (if phantom? :undefined-why :unreadable-why))]])
+   [:h2 (i18n/tr ui "Could not read corpus")]
+   [:p (if phantom?
+         (i18n/tr ui (str "The registry lists this corpus, but CWB has "
+                          "no data for it."))
+         (i18n/tr ui "CWB could not read this corpus's data files."))]])
 
 (defn info-view
-  "The corpus info page body for `data` in UI language `lang`: the corpus
+  "The corpus info page body for `data` in `ui`: the corpus
   title and ID, its facts, attribute statistics and .info text, and links
   searching it and listing its word frequencies, which a `:phantom?` entry
   cannot be and so does not get.
@@ -440,7 +444,7 @@
   are in the corpus's own language, the rest of the page is not), and
   either :stats (describe) + :info (`info;`) or an :error, which is
   replaced by a fixed section saying whether the entry is a `:phantom?`."
-  [lang {:keys [corpus title stats info error phantom?]
+  [ui {:keys [corpus title stats info error phantom?]
          corpus-lang :lang :as data}]
   [:main.corpus-info layout/main-attrs
    ;; an <hgroup> groups a heading with its own subheading, so it earns its
@@ -451,13 +455,13 @@
       [:p [:code corpus]]]
      [:h1 corpus])
    (if error
-     (unreadable-section lang phantom?)
+     (unreadable-section ui phantom?)
      (list
-      (facts-list lang stats info)
-      (p-attr-table lang stats)
-      (s-attr-table lang stats)
-      (a-attr-table lang stats)
-      (info-text lang info corpus-lang)))
+      (facts-list ui stats info)
+      (p-attr-table ui stats)
+      (s-attr-table ui stats)
+      (a-attr-table ui stats)
+      (info-text ui info corpus-lang)))
    ;; a corpus CWB has no data for cannot be searched, so it is not
    ;; offered, as the chooser does not offer it either
    ;; where this page leads: the two things a reader does with a corpus
@@ -465,10 +469,10 @@
    ;; views', and named like them, since a page with two navigations owes
    ;; a reader a way of telling them apart
    (when-not phantom?
-     [:nav {:aria-label (i18n/tr lang :this-corpus)}
+     [:nav {:aria-label (i18n/tr ui "This corpus")}
       [:ul.row
        [:li [:a {:href (str "/?corpus=" corpus)}
-             (str (i18n/tr lang :search-in) " " corpus)]]
+             (str (i18n/tr ui "Search in") " " corpus)]]
        [:li [:a {:href (str "/?corpus=" corpus
                             "&view=frequencies&attr=word")}
-             (str (i18n/tr lang :word-freqs) " " corpus)]]]])])
+             (str (i18n/tr ui "Word frequencies of") " " corpus)]]]])])

@@ -6,6 +6,7 @@
             [dk.cst.corpus-probe.corpus :as corpus]
             [dk.cst.corpus-probe.cqp-test :refer [ctx when-cwb]]
             [dk.cst.corpus-probe.frequency :as frequency]
+            [dk.cst.corpus-probe.views.hiccup :refer [da en]]
             [taoensso.telemere :as t])
   (:import [java.io ByteArrayInputStream]))
 
@@ -259,22 +260,21 @@
         result {:size 6 :page 0 :counts [{:corpus "PROBE" :size 6}]}]
     (testing "the concordance names its hit count"
       (is (= "hund · 6 hits · PROBE · corpus-probe"
-             (api/result-title "en" :kwic params result))))
+             (api/result-title en :kwic params result))))
     (testing "a frequency table counts values, so it names what it grouped"
       (is (= "hund · PROBE · by lemma · Frequencies · corpus-probe"
-             (api/result-title "en" :frequencies params result))))
+             (api/result-title en :frequencies params result))))
     (testing "a whole-corpus table says so rather than naming a query"
       (is (= "All tokens · PROBE · by lemma · Frequencies · corpus-probe"
-             (api/result-title "en" :frequencies (assoc params :q "")
+             (api/result-title en :frequencies (assoc params :q "")
                                result))))))
 
 (deftest view-hrefs-test
   (let [hrefs (api/view-hrefs {:q "hund" :corpus ["PROBE"] :lang "da"})]
     (testing "one entry per view, in display order"
-      (is (= [:kwic :frequencies] (map first hrefs)))
-      (is (= [:concordance :frequencies] (map second hrefs))))
+      (is (= [:kwic :frequencies] (map first hrefs))))
     (testing "every view of one search shares its URL but for the view param"
-      (doseq [[_ _ href] hrefs]
+      (doseq [[_ href] hrefs]
         (is (str/includes? href "q=hund"))
         (is (str/includes? href "corpus=PROBE"))
         (is (str/ends-with? href "#results")))
@@ -289,37 +289,37 @@
 
 (deftest search-title-test
   (testing "no query is just the app name"
-    (is (= "corpus-probe" (api/search-title "en" {}))))
+    (is (= "corpus-probe" (api/search-title en {}))))
   (testing "a search names the query and corpus"
     (is (= "hund · PROBE · corpus-probe"
-           (api/search-title "en" {:q "hund" :corpus ["PROBE"]}))))
+           (api/search-title en {:q "hund" :corpus ["PROBE"]}))))
   (testing "several corpora are counted"
     (is (= "hund · 2 corpora · corpus-probe"
-           (api/search-title "en" {:q "hund" :corpus ["PROBE" "VISER"]})))
+           (api/search-title en {:q "hund" :corpus ["PROBE" "VISER"]})))
     (is (= "hund · 2 korpusser · corpus-probe"
-           (api/search-title "da" {:q "hund" :corpus ["PROBE" "VISER"]}))))
+           (api/search-title da {:q "hund" :corpus ["PROBE" "VISER"]}))))
   (testing "no corpora are not counted"
     (is (= "hund · corpus-probe"
-           (api/search-title "en" {:q "hund" :corpus []}))))
+           (api/search-title en {:q "hund" :corpus []}))))
   (testing "the outcome rides in the title, which is all a reload announces"
     (is (= "hund · 6 hits · PROBE · corpus-probe"
-           (api/search-title "en" {:q "hund" :corpus ["PROBE"]}
+           (api/search-title en {:q "hund" :corpus ["PROBE"]}
                              {:size 6 :page 0
                               :counts [{:corpus "PROBE" :size 6}]})))
     (testing "with the page number once past the first"
       (is (= "hund · 6 hits · PROBE · page 3 · corpus-probe"
-             (api/search-title "en" {:q "hund" :corpus ["PROBE"]}
+             (api/search-title en {:q "hund" :corpus ["PROBE"]}
                                {:size 6 :page 2
                                 :counts [{:corpus "PROBE" :size 6}]}))))
     (testing "a search no corpus answered reports no count"
       (is (= "hund · PROBE · corpus-probe"
-             (api/search-title "en" {:q "hund" :corpus ["PROBE"]}
+             (api/search-title en {:q "hund" :corpus ["PROBE"]}
                                {:size 0 :page 0
                                 :counts [{:corpus "PROBE"
                                           :error {:type :timeout}}]})))))
   (testing "a metadata filter is named"
     (is (= "hund · PROBE · text_year 1591 · corpus-probe"
-           (api/search-title "en" {:q "hund" :corpus ["PROBE"]
+           (api/search-title en {:q "hund" :corpus ["PROBE"]
                                    :f.text_year ["1591"]})))))
 
 (deftest accept-language-test

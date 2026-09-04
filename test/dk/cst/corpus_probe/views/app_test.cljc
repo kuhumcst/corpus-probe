@@ -1,18 +1,18 @@
 (ns dk.cst.corpus-probe.views.app-test
   (:require [clojure.test :refer [deftest is testing]]
-            [dk.cst.corpus-probe.views.hiccup :refer [deep]]
+            [dk.cst.corpus-probe.views.hiccup :refer [da deep en]]
             [dk.cst.corpus-probe.views.layout :as layout]
             [dk.cst.corpus-probe.views.page :as page]
             [dk.cst.corpus-probe.views.app :as app-views]))
 
 (def base
   "A search page with nothing searched for yet."
-  {:lang "en" :folders [] :params {}})
+  {:ui en :folders [] :params {}})
 
 (def views
   "The two views of one result, as api/view-hrefs builds them."
-  [[:kwic :concordance "/?q=hund&view=kwic#results"]
-   [:frequencies :frequencies "/?q=hund&view=frequencies#results"]])
+  [[:kwic "/?q=hund&view=kwic#results"]
+   [:frequencies "/?q=hund&view=frequencies#results"]])
 
 (deftest search-view-test
   (testing "the page names itself and the bypass link can reach it"
