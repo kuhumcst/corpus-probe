@@ -72,9 +72,8 @@
 
   The guard every command builder applies before splicing a result name
   into a command, as `valid-corpus-name` does for a corpus name. CQP also
-  rejects a name that is exactly one of its keywords, which no name this
-  application generates can be: they all carry an underscore, and no CQP
-  keyword does (see dk.cst.corpus-probe.cache/result-name)."
+  rejects a name that is exactly one of its keywords, which the underscore
+  every generated name carries rules out."
   [nqr]
   (when-not (re-matches #"[a-zA-Z_][a-zA-Z0-9_-]*" (str nqr))
     (throw (ex-info "Invalid query result name" {:nqr nqr})))
@@ -88,7 +87,7 @@
   A newline is the one that matters most: it ends the quoted string, and
   CQP reads the rest of the line as commands. The path is configured
   rather than requested, so this catches a misconfiguration rather than an
-  attacker, but it is the same allowlist discipline as its siblings."
+  attacker."
   [dir]
   (when-not (re-matches #"[^\"\\\p{Cntrl}]*" (str dir))
     (throw (ex-info "Invalid cache directory" {:cache-dir dir})))
@@ -225,11 +224,12 @@
   labelling it (see dk.cst.corpus-probe.i18n/dictionary) and the CQP
   command that reorders the result `Last`. The context sorts order by the
   words nearest the match (up to five tokens either side)."
-  [["corpus" :sort-corpus "sort Last;"]
-   ["word"   :sort-word   "set ExternalSort on; sort Last by word;"]
-   ["left"   :sort-left   "set ExternalSort on; sort Last by word on match[-1] .. match[-5];"]
-   ["right"  :sort-right  "set ExternalSort on; sort Last by word on matchend[1] .. matchend[5];"]
-   ["random" :sort-random "sort Last randomize 1;"]])
+  (let [external "set ExternalSort on; sort Last by word"]
+    [["corpus" :sort-corpus "sort Last;"]
+     ["word"   :sort-word   (str external ";")]
+     ["left"   :sort-left   (str external " on match[-1] .. match[-5];")]
+     ["right"  :sort-right  (str external " on matchend[1] .. matchend[5];")]
+     ["random" :sort-random "sort Last randomize 1;"]]))
 
 (defn sort-command
   "The CQP command that sorts `Last` for sort mode `mode` (see `sort-modes`);
@@ -248,7 +248,7 @@
   directory CQP reads and writes saved query results in.
 
   DataDirectory is set here rather than beside the query because setting
-  it rescans the corpus list, which resets the active corpus, so it has to
+  it rescans the corpus list, resetting the active corpus, so it has to
   come before the activation (docs/research/gap-nqr-persistence.md
   section 1)."
   [context cache-dir]
@@ -291,10 +291,9 @@
   `setup-command` take them.
 
   Given `nqr`, the result is also saved under that name for
-  `stored-kwic-batch` to page later without running the query again. It is
-  given the name only after being sorted, since the sort order travels
-  with the result into the save file, which is what makes a stored result
-  worth having (docs/research/gap-nqr-persistence.md section 2)."
+  `stored-kwic-batch` to page later. It is named only after being sorted,
+  since the sort order travels with the result into the save file, which
+  is what makes a stored result worth having."
   [corpus query {:keys [p-attrs struct-attrs context rows sort filter
                         cache-dir nqr]
                  :or   {context (:context kwic-defaults)

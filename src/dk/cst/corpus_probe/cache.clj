@@ -4,15 +4,10 @@
 
   `save` writes a named query result to `<data directory>/<CORPUS>:<name>`,
   and a later process reads it back with the matches in the order they were
-  saved in, so a page costs one `cat` rather than a query and a sort
-  (docs/research/gap-nqr-persistence.md section 2; the comment block at the
-  end of this namespace measures it here).
-
-  Each corpus gets a data directory of its own, because CQP registers every
-  file of the one it is given on startup, at roughly 17 microseconds each:
-  one flat directory of 20000 results costs a quarter of a second on every
-  process, hit or miss, while a per-corpus one holds only the results that
-  process could want.
+  saved in, so a page costs one `cat` rather than a query and a sort. Each
+  corpus gets a directory of its own, because CQP registers every file of
+  the one it is given on every startup (docs/research/gap-nqr-persistence.md
+  section 2; the comment block at the end measures both).
 
   Invalidation is entirely this application's job, because CQP does none of
   it and fails silently when a file is wrong: a save file written against an
@@ -21,15 +16,10 @@
   name of a result carries a build stamp of the corpus, and CQP saves under
   a name nothing looks up, the file being renamed into place afterwards.
 
-  How many matches a query has is kept separately, in memory (see
-  `count!`): it is one number rather than a result, it is the same however
-  the matches are ordered, and a search over several corpora asks for it
-  again on every page for every corpus that contributes no rows.
-
-  Nothing here is ever run twice at once. A caller that wants what another
-  caller is already fetching waits for that one instead of starting a
-  second (see `share!`), which on a large corpus is the difference between
-  one sort of several minutes and two."
+  How many matches a query has is kept in memory instead (see `count!`),
+  being one number rather than a result and the same however they are
+  ordered. Nothing here is ever run twice at once: a caller that wants what
+  another is already fetching waits for it (see `share!`)."
   (:require [clojure.core.cache :as c]
             [clojure.core.cache.wrapped :as cw]
             [clojure.java.io :as io]
@@ -47,23 +37,18 @@
   1200000)
 
 (defn ttl-ms
-  "How long `ctx` keeps a saved query result nobody reads (its
-  :cache-ttl-ms, default `default-ttl-ms`)."
+  "How long `ctx` keeps a saved query result nobody reads."
   [ctx]
   (:cache-ttl-ms ctx default-ttl-ms))
 
 (def default-max-bytes
   "How much disk the saved query results may take up together, when `ctx`
-  sets no :cache-max-bytes: two gigabytes.
-
-  A result costs 12 bytes per match sorted and 8 unsorted, so this holds
-  thousands of ordinary ones, or about three whole-corpus sorted results
-  of a corpus the size of the largest at KU."
+  sets no :cache-max-bytes. The arithmetic for sizing it is in
+  resources/config.edn."
   2147483648)
 
 (defn max-bytes
-  "How much disk `ctx` lets its saved query results take up together (its
-  :cache-max-bytes, default `default-max-bytes`)."
+  "How much disk `ctx` lets its saved query results take up together."
   [ctx]
   (:cache-max-bytes ctx default-max-bytes))
 
@@ -103,14 +88,10 @@
   when that is there to read.
 
   Part of every result name, and it has to cover both. cwb-encode rewrites
-  the entry only when it is passed -R, so the ordinary way of rebuilding a
-  corpus in place leaves the entry byte-identical while every word changes
-  underneath it: a saved result whose positions no longer fit the corpus
-  at least kills CQP outright, but one whose positions still fit is served
-  as a correct-looking page of the wrong words. The entry counts too,
-  because it declares the charset every command and every result is read
-  in, and correcting a mis-declared charset changes which matches exist
-  without touching a byte of the data."
+  the entry only when passed -R, so rebuilding a corpus in place leaves the
+  entry byte-identical while every word changes underneath it. The entry
+  counts too, declaring the charset everything is read in, so correcting a
+  mis-declared one changes which matches exist without touching the data."
   [ctx corpus]
   (let [^File entry (corpus/registry-file ctx corpus)
         ^File data  (data-file ctx corpus)]
@@ -122,8 +103,8 @@
   how many of them: the registry, the corpus and its `build-stamp`, the
   query itself and the metadata filter of `opts`.
 
-  The registry is there because two of them can define one corpus name.
-  The filter's values are sorted, since it holds them in sets, whose
+  The registry is there because two of them can define one corpus name,
+  and the filter's values are sorted because it holds them in sets, whose
   printed order is no part of their value. Nothing about ordering or
   display belongs here."
   [ctx corpus query {filter-by :filter}]
@@ -139,11 +120,9 @@
   collation.
 
   The sorting is the CQP command rather than the mode that names it, so
-  that the modes which all mean corpus order share one result. The
-  collation is `ctx`'s :sort-locale, which is what CQP's ExternalSort
-  follows: under `C` a sorted result puts every capital first, under
-  `da_DK.UTF-8` it folds case and puts ae, oe and aa after z, and the
-  order a result was saved in is the order it is later paged in.
+  that the modes which all mean corpus order share one result, and the
+  collation is there because a result is paged in the order it was saved
+  in, which is the order :sort-locale gave it.
 
   What the display does with the matches is deliberately absent: the
   context width, the attributes shown and the rows asked for are all
@@ -157,15 +136,13 @@
   "The name of the saved query result of `query` in `corpus` under `opts`
   via `ctx`: `q_` followed by the digest of its `result-key`.
 
-  A CQP result name may not begin with a digit and may not be one of CQP's
-  own keywords, both of which the prefix settles: a digest can begin with a
-  digit, and no keyword contains an underscore
-  (docs/research/gap-nqr-persistence.md section 1)."
+  The `q_` prefix is what keeps the name inside CQP's rule for one (see
+  dk.cst.corpus-probe.query/valid-result-name)."
   [ctx corpus query opts]
   (str "q_" (digest (pr-str (result-key ctx corpus query opts)))))
 
-(defonce ^{:doc "The calls in flight right now, one delay per key, shared
-  by every caller waiting on it (see `share!`)."}
+(defonce ^{:doc "The calls in flight right now, one promise per key, which
+  every caller waiting on that key parks on (see `share!`)."}
   in-flight
   (atom {}))
 
@@ -173,30 +150,21 @@
   "Call no-arg `f` for key `k`, sharing the one call with every caller
   asking for the same `k` while it runs.
 
-  A cache miss on a large corpus costs minutes, not milliseconds: sorting
-  all of a sixty-five million token corpus by its left context held a core
-  for over thirteen minutes at four gigabytes of memory, and wrote a
-  2.3 GB temp file to /tmp. A reader who reloads while waiting would
-  otherwise start a second one beside the first, on a machine already busy
-  with theirs.
+  A cache miss on a large corpus costs minutes, so a reader who reloads
+  while waiting would otherwise start a second one beside the first.
 
   A failure is shared like a value: every waiter gets the exception the
-  first caller got. That is deliberate. The alternative is for each waiter
-  to run the same failing query itself, failing the same way after
-  spending the same minutes again, and a waiter is asking exactly the
-  question that has just been answered.
+  first caller got. That is deliberate, the alternative being for each to
+  run the same failing query itself and fail the same way minutes later.
 
-  Waiters park on a promise rather than blocking on a delay's monitor,
-  which matters because the server answers requests on virtual threads: a
-  virtual thread blocked on a monitor holds its carrier before JDK 24, so
-  a handful of readers waiting on one long sort could take out the whole
-  carrier pool. The promise is delivered from a `finally` as well, so a
-  caller that dies without finishing releases its waiters instead of
-  leaving them there."
+  Waiters park on a promise rather than on a delay's monitor, because a
+  virtual thread blocked on a monitor holds its carrier before JDK 24 and
+  the server answers requests on virtual threads. The promise is delivered
+  from a `finally` as well, so a caller that dies frees its waiters."
   [k f]
-  (let [mine (promise)
-        take (fn [m] (if (contains? m k) m (assoc m k mine)))
-        held (get (swap! in-flight take) k)]
+  (let [mine  (promise)
+        claim (fn [m] (if (contains? m k) m (assoc m k mine)))
+        held  (get (swap! in-flight claim) k)]
     (if (identical? held mine)
       (try
         (let [value (f)]
@@ -216,11 +184,9 @@
         (if error (throw error) value)))))
 
 (def max-counts
-  "How many match counts are kept in memory at once.
-
-  Each is a small key and a number, so the bound is generous; it is there
-  so that a server running for months cannot accumulate one entry per
-  query ever asked."
+  "How many match counts are kept in memory at once: a generous bound, so
+  that a long-running server cannot accumulate one entry per query ever
+  asked."
   10000)
 
 (defonce ^{:doc "The match counts remembered so far, as a bounded
@@ -238,14 +204,10 @@
   `opts`: remembered from an earlier count when there is one, else counted
   by calling no-arg `f` and remembered.
 
-  Kept without a time limit, since a count cannot go stale while the
-  corpus data behind it are the same, and the corpus build stamp is part
-  of the key (see `match-key`). It is bounded by number of entries
-  instead, the least recently used going first.
-
-  Kept whatever :cache-dir says, too. This is a number in memory rather
-  than a result on disk, so running without the disk cache does not turn
-  it off; `forget-counts!` is what empties it."
+  Kept without a time limit, since a count cannot go stale while the build
+  stamp in its key holds (see `match-key`), and bounded by entry count
+  instead. Kept whatever :cache-dir says, too, being memory rather than
+  disk; `forget-counts!` is what empties it."
   [ctx corpus query opts f]
   (let [k (match-key ctx corpus query opts)]
     ;; lookup-or-miss guarantees one call per caller, not one per key, so
@@ -316,19 +278,17 @@
   "Give the saved query result `pending` of `corpus` under `ctx` its final
   name `nqr`, replacing whatever was stored under it.
 
-  The rename is atomic, so a reader sees either the previous result or
-  this one and never the file CQP was writing, which would be read back as
-  garbage without an error. Failing to store a result is no reason to fail
-  the request that produced it, so a rename that cannot be made is logged
-  and left at that; the pending file it leaves behind is reaped like any
-  other, no lookup ever naming it.
+  The rename is atomic, so a reader sees either the previous result or this
+  one and never the file CQP was writing. Failing to store a result is no
+  reason to fail the request that produced it, so a rename that cannot be
+  made is logged and left at that.
 
   A file too small to hold `matches` is thrown away rather than named. CQP
   does not report a save it could write only part of, so a full disk
   otherwise leaves a short file that reads back without complaint and
-  serves zero-filled rows for everything past the cut. Whatever else a
-  save file holds, it carries every match as two 32-bit positions, so
-  anything under eight bytes a match was truncated."
+  serves zero-filled rows past the cut. Every save file carries its matches
+  as two 32-bit positions each, so anything under eight bytes a match was
+  truncated."
   [ctx corpus pending nqr matches]
   (let [^File from (result-file ctx corpus pending)
         ^File to   (result-file ctx corpus nqr)]
@@ -364,14 +324,12 @@
 
   Least recently read rather than oldest, because the result worth keeping
   is the one somebody is still paging through, however long ago they
-  searched: reading one touches it (see `touch!`). So the most recently
-  read are kept while they fit, and everything from the first that does
-  not fit onwards goes.
+  searched: reading one touches it (see `touch!`).
 
   A result larger than the whole budget is deleted on its own account and
   taken out of the reckoning first. Left in, it would never fit however
-  much was deleted around it, so every other result would be evicted to
-  make room for one that cannot be kept anyway."
+  much was deleted around it, so everything else would be evicted to make
+  room for one that cannot be kept anyway."
   [budget files]
   (let [recent   (sort-by (fn [^File f] (.lastModified f)) > files)
         too-big? (fn [^File f] (> (.length f) budget))
@@ -387,13 +345,12 @@
   "Delete the saved query results under `ctx` that no longer belong there,
   and return how many were deleted.
 
-  First those nobody has read for its `ttl-ms`, then as many of the rest
-  as it takes to fit the whole within its `max-bytes`. Age alone does not
-  bound the disk: during a busy `ttl-ms` every result
-  is fresh and nothing at all is old enough to delete, which is exactly
-  when the disk is filling. A result deleted while a request is about to
-  read it costs that request a re-run rather than a failure, so nothing
-  has to be locked."
+  First those nobody has read for its `ttl-ms`, then as many of the rest as
+  it takes to fit the whole within its `max-bytes`. Age alone does not bound
+  the disk: during a busy `ttl-ms` nothing is old enough to delete, which is
+  exactly when the disk is filling. A result deleted while a request is
+  about to read it costs that request a re-run rather than a failure, so
+  nothing has to be locked."
   [ctx]
   (let [stale? (partial stale? (ttl-ms ctx) (System/currentTimeMillis))
         by-age (group-by stale? (result-files ctx))
@@ -402,12 +359,12 @@
     (reduce (fn [n ^File f] (if (.delete f) (inc n) n)) 0 gone)))
 
 (def reap-interval-ms
-  "How often at most the cache is reaped: one second.
+  "How often at most the cache is reaped.
 
-  Reaping reads every corpus directory, which is not free (about 50
-  milliseconds for eight thousand results), so it does not run on every
-  save. But it has to run far more often than `ttl-ms`, or a burst of
-  searches writes past `max-bytes` faster than it can reclaim."
+  Reading every corpus directory is not free (about 50 milliseconds for
+  eight thousand results), so it does not run on every save; but it has to
+  run far more often than `ttl-ms`, or a burst of searches writes past
+  `max-bytes` faster than it can reclaim."
   1000)
 
 (defonce ^{:doc "When the cache was last reaped, as a millisecond
@@ -485,10 +442,7 @@
       (quot (- (System/nanoTime) started) 1000000)))
 
   (page-ms big "left" 100)
-  ;; => 18462   (no cache: every page re-runs the query and the sort)
-
   (page-ms (assoc big :cache-dir (str (fs/create-temp-dir))) "left" 100)
-  ;; => 26      (second and later pages, read from the save file)
 
   ;;   sort mode | uncached page | cached page | save file
   ;;   corpus    |         77 ms |       16 ms |     16 MB

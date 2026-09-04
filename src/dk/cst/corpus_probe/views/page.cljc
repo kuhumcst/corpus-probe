@@ -92,7 +92,7 @@
 
 (defn filter-fieldset
   "The metadata filter fieldset of the search form from `filters` (see
-  dk.cst.corpus-probe.search/filter-options!); nil without metadata.
+  dk.cst.corpus-probe.frequency/filter-options!); nil without metadata.
 
   A disclosure per listed attribute (`:attrs`) holds a checkbox per value
   (see `filter-details`), followed by one per `:selected` attribute the

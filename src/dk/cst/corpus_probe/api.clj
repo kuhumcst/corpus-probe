@@ -18,6 +18,7 @@
             [cognitect.transit :as transit]
             [dk.cst.corpus-probe.corpus :as corpus]
             [dk.cst.corpus-probe.export :as export]
+            [dk.cst.corpus-probe.frequency :as frequency]
             [dk.cst.corpus-probe.i18n :as i18n]
             [dk.cst.corpus-probe.query :as query]
             [dk.cst.corpus-probe.search :as search]
@@ -424,23 +425,44 @@
 (defn filter-controls!
   "The metadata filter controls of the search form over the `known`
   corpora via `ctx`: the filters they offer (see
-  dk.cst.corpus-probe.search/filter-options!) plus the `:selected`
+  dk.cst.corpus-probe.frequency/filter-options!) plus the `:selected`
   values of `params` (see `filter-params`)."
   [ctx known params]
-  (assoc (search/filter-options! ctx known)
+  (assoc (frequency/filter-options! ctx known)
          :selected (filter-params params)))
 
-(defn search-page
-  "Handle a search-page `request` against `ctx`: render the form, and when
-  the query params describe a search, its concordance or the reason there
-  is none."
+(defn search-request
+  "What `request` asks of `ctx`: its scalar query params, the registry's
+  corpora, the corpus names selected, those split into the `known` and the
+  `unknown` (see `split-known`) and the CQP query the params compile to
+  (see `->cqp`).
+
+  Every handler that answers a search starts from this."
   [ctx request]
-  (let [lang    (request-language request)
-        params  (scalar-params (:query-params request))
-        corpora (corpus/corpora ctx)
+  (let [params   (scalar-params (:query-params request))
+        corpora  (corpus/corpora ctx)
         selected (corpora-param (:corpus params))
-        [known unknown] (split-known corpora selected)
-        cqp     (->cqp params)
+        [known unknown] (split-known corpora selected)]
+    {:params   params
+     :corpora  corpora
+     :selected selected
+     :known    known
+     :unknown  unknown
+     :cqp      (->cqp params)}))
+
+(defn search-view-data
+  "The data dk.cst.corpus-probe.views.page/app-view renders one search
+  page for `request` against `ctx` from: the state of the form, the
+  outcome of the search when the params describe one, and the links out
+  of it.
+
+  The same map is embedded as transit for the client to take over from,
+  so it holds corpus overviews only: the full registry maps carry
+  absolute server paths and stay here."
+  [ctx request]
+  (let [{:keys [params corpora selected known unknown cqp]}
+        (search-request ctx request)
+        lang    (request-language request)
         page-n  (page-param (:page params))
         outcome (when cqp
                   (search-outcome! ctx known unknown cqp
@@ -448,11 +470,8 @@
                                     :sort   (:sort params)
                                     :filter (filter-params params)}))
         pages   (some-> outcome :result :pages)
-        ;; the page (and the embedded payload) exposes only corpus overviews;
-        ;; the full registry maps carry absolute server paths and stay
-        ;; server-side
-        params* (assoc params :corpus selected :lang lang)
-        view-data {:lang       lang
+        params* (assoc params :corpus selected :lang lang)]
+    {:lang       lang
                    :folders    (corpus-tree! ctx corpora)
                    :filter-controls (filter-controls! ctx known params)
                    :sort-modes (mapv (fn [[value label _]] [value label])
@@ -476,8 +495,16 @@
                    :export-limit export/hit-limit
                    :prev-href  (when (pos? page-n)
                                  (page-href params* (dec page-n)))
-                   :next-href  (when (and pages (< (inc page-n) pages))
-                                 (page-href params* (inc page-n)))}]
+     :next-href  (when (and pages (< (inc page-n) pages))
+                   (page-href params* (inc page-n)))}))
+
+(defn search-page
+  "Handle a search-page `request` against `ctx`: render the form, and when
+  the query params describe a search, its concordance or the reason there
+  is none."
+  [ctx request]
+  (let [view-data (search-view-data ctx request)
+        lang      (:lang view-data)]
     (html-response
      (document lang
                (language-hrefs request)
@@ -497,7 +524,7 @@
   asked."
   [ctx corpora]
   (let [attrs (->> corpora
-                   (mapcat (fn [c] (try (search/groupable-attrs! ctx c)
+                   (mapcat (fn [c] (try (frequency/groupable-attrs! ctx c)
                                         (catch Exception _ nil))))
                    (map #(select-keys % [:type :name]))
                    (distinct)
@@ -508,14 +535,14 @@
 (defn frequency-outcome!
   "Table the `known` corpora for `cqp` (nil for the whole corpora) by
   `attr` via `ctx` with `opts` (the :filter of
-  dk.cst.corpus-probe.search/frequency-table!): {:result ...}, the
+  dk.cst.corpus-probe.frequency/frequency-table!): {:result ...}, the
   `unknown` corpus names reported among its counts, or {:error ...} when
   no corpus was selected at all. Per-corpus errors travel inside the
   result."
   [ctx known unknown cqp attr opts]
   (if (and (empty? known) (empty? unknown))
     {:error {:type :no-corpus}}
-    {:result (-> (search/frequency-table! ctx known (or cqp "") attr opts)
+    {:result (-> (frequency/frequency-table! ctx known (or cqp "") attr opts)
                  (update :counts into (unknown-counts unknown))
                  (public-counts))}))
 
@@ -525,12 +552,9 @@
   of the query's hits, or of the whole selected corpora when the query is
   blank, by the chosen attribute."
   [ctx request]
-  (let [lang      (request-language request)
-        params    (scalar-params (:query-params request))
-        corpora   (corpus/corpora ctx)
-        selected  (corpora-param (:corpus params))
-        [known unknown] (split-known corpora selected)
-        cqp       (->cqp params)
+  (let [{:keys [params corpora selected known unknown cqp]}
+        (search-request ctx request)
+        lang      (request-language request)
         attr      (attr-param (:attr params))
         submitted (contains? params :attr)
         outcome   (when submitted
@@ -604,11 +628,8 @@
   a TSV or CSV download; 400 without a query, known corpora or a known
   format, or when no corpus could be searched."
   [ctx request]
-  (let [params   (scalar-params (:query-params request))
-        [known]  (split-known (corpus/corpora ctx)
-                              (corpora-param (:corpus params)))
-        cqp      (->cqp params)
-        format   (:format params)]
+  (let [{:keys [params known cqp]} (search-request ctx request)
+        format (:format params)]
     (if-not (and cqp (seq known) (export/formats format))
       {:status 400 :body "bad request"}
       (let [result (search/concordance! ctx known cqp
@@ -625,14 +646,11 @@
   param as a TSV or CSV download; 400 without known corpora or a known
   format, or when no corpus could be counted."
   [ctx request]
-  (let [params   (scalar-params (:query-params request))
-        [known]  (split-known (corpus/corpora ctx)
-                              (corpora-param (:corpus params)))
-        cqp      (->cqp params)
-        format   (:format params)]
+  (let [{:keys [params known cqp]} (search-request ctx request)
+        format (:format params)]
     (if-not (and (seq known) (export/formats format))
       {:status 400 :body "bad request"}
-      (let [table (search/frequency-table! ctx known (or cqp "")
+      (let [table (frequency/frequency-table! ctx known (or cqp "")
                                            (attr-param (:attr params))
                                            {:filter (filter-params params)})]
         (export-response format "frequencies" :tokens table

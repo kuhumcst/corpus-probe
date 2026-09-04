@@ -4,12 +4,13 @@
   Composes query generation (dk.cst.corpus-probe.query), the child-process
   driver (dk.cst.corpus-probe.cqp) and the output parsers
   (dk.cst.corpus-probe.parse) into complete round trips: a KWIC page or a
-  match count for one corpus, a concordance over several corpora, the
-  frequency breakdown of a query (or, from the lexicon, of whole corpora)
-  merged over several corpora into one table, and the metadata filters
-  those corpora offer. Every search takes a :filter option, a metadata
-  filter (see dk.cst.corpus-probe.query/filter-query) restricting it to
-  the matching regions of each corpus.
+  match count for one corpus, and a concordance over several. Breakdowns
+  of those matches are dk.cst.corpus-probe.frequency, composed on the
+  corpus context, the bounded fan-out and the collator this owns.
+
+  Every search takes a :filter option, a metadata filter (see
+  dk.cst.corpus-probe.query/filter-query) restricting it to the matching
+  regions of each corpus.
 
   These functions are the trust boundary for the web layer: only the CQP
   query itself is protected by the QueryLock sandbox, so every other
@@ -110,10 +111,10 @@
   `corpus` is saved under, when `ctx` keeps a cache and `opts` does not
   turn it off with a false :cache?.
 
-  Creates the corpus's cache directory, CQP given a data directory that
-  does not exist saving nothing and reporting nothing. The name is taken
-  from the filter the corpus was given rather than the one the request
-  asked for, so that two spellings of one filter share a saved result."
+  Creates the corpus's cache directory, CQP given one that does not exist
+  saving nothing and reporting nothing. The name is taken from the filter
+  the corpus was given rather than the one the request asked for, so that
+  two spellings of one filter share a saved result."
   [ctx corpus query opts]
   (if-let [dir (and (:cache? opts true)
                     (cache/corpus-directory! ctx corpus))]
@@ -130,8 +131,8 @@
   attributes to fetch per hit, its metadata filter as
   dk.cst.corpus-probe.query/filter-query takes it, and whatever the cache
   adds (see `cache-opts`). Requested structural attributes are checked
-  against the corpus's own inventory first, since their names are spliced
-  into a command."
+  against the corpus's inventory first, since their names are spliced into
+  a command."
   [ctx corpus query opts]
   (let [attributes (corpus/attributes! ctx corpus)
         annotated  (attr-names annotated-s-attr? attributes)
@@ -169,11 +170,11 @@
   "True when the `sections` of a KWIC batch describe a page that could
   have come from a real query result.
 
-  A saved result that was truncated is not reported as an error when it is
-  read: the pages past the cut are zero-filled, so every row in them comes
-  back at corpus position 0. No two matches of one query share a position,
-  in any sort order, so a page whose positions repeat did not come from
-  the result it claims to."
+  A truncated save file is not reported as an error when it is read: the
+  pages past the cut are zero-filled, so every row in them comes back at
+  corpus position 0. No two matches of one query share a position, in any
+  sort order, so a page whose positions repeat did not come from the
+  result it claims to."
   [{[dump-lines] :dump}]
   (let [positions (map :match (parse/dump->anchors dump-lines))]
     (or (empty? positions) (apply distinct? positions))))
@@ -189,14 +190,11 @@
   of `opts`, or nil when none is stored or the stored one does not read.
 
   A stored result CQP cannot read is discarded, leaving the caller to run
-  the query: a save file left from an earlier build of the corpus kills
-  CQP outright, one reaped between the check and the read leaves the
-  batch reporting an undefined corpus, and one that was truncated reads
-  back without complaint but is caught by `intact?`.
-
-  A timeout is not treated that way and the result is kept, since it says
-  the machine is busy rather than that the file is bad, and re-running the
-  query would be the most expensive possible answer to that."
+  the query: one left from an earlier build of the corpus kills CQP
+  outright, one reaped between the check and the read leaves the batch
+  reporting an undefined corpus, and a truncated one is caught by
+  `intact?`. A timeout is not treated that way and the result is kept,
+  since it says the machine is busy rather than that the file is bad."
   [ctx corpus query {:keys [nqr] :as opts}]
   (when (and nqr (cache/stored? ctx corpus nqr))
     (try
@@ -224,16 +222,12 @@
   :query-timeout-ms), leaving batches that only read a result already
   saved on the ordinary :timeout-ms.
 
-  The two are orders of magnitude apart: reading a page out of a saved
-  result takes milliseconds, and running the query can take minutes on a
-  large corpus (the figures are in resources/config.edn beside the two
-  settings).
-
-  Counting and displaying run the same query, so they get the same
-  budget. Giving counting less would let a corpus time out while being
-  counted and succeed while being shown, and a count that fails is left
-  out of the total, which quietly costs the search pages of hits it
-  actually has."
+  The two are orders of magnitude apart, the figures being in
+  resources/config.edn beside the settings. Counting and displaying run
+  the same query, so they get the same budget: giving counting less would
+  let a corpus time out while being counted and succeed while being shown,
+  and a count that fails is left out of the total, quietly costing the
+  search pages of hits it has."
   [ctx]
   (cond-> ctx
     (:query-timeout-ms ctx) (assoc :timeout-ms (:query-timeout-ms ctx))))
@@ -242,10 +236,9 @@
   "`ctx` with its timeouts cut down to the time left before `deadline`.
 
   Without this, :search-budget-ms bounds only how many corpora a search
-  starts, not how long the last one may run: a corpus started just before
-  the deadline gets a whole timeout of its own on top of the budget, and
-  the retry in `fresh-sections!` another, so the real ceiling on a request
-  is the budget plus two timeouts rather than the budget."
+  starts, not how long the last one may run: one started just before the
+  deadline would get a whole timeout of its own on top of the budget, and
+  the retry in `fresh-sections!` another."
   [ctx deadline]
   (let [left (max 1000 (- deadline (System/currentTimeMillis)))]
     (cond-> ctx
@@ -260,15 +253,15 @@
   failure could be either, and CQP reports a directory it cannot write to
   like any other error. When the cache is on, the batch is therefore run
   once more without it before the failure is reported: a cache that has
-  stopped working is no reason to stop answering, and the page itself was
-  never the problem. A timeout is not retried, having spent its whole
-  budget already. Both runs get the query timeout (see `running-ctx`),
-  the retry doing the same work as the batch it replaces."
+  stopped working is no reason to stop answering. A timeout is not
+  retried, having spent its whole budget already. Both runs get the query
+  timeout (see `running-ctx`)."
   [ctx corpus query {:keys [nqr] :as opts}]
-  (let [pending (when nqr (cache/pending-name nqr))]
+  (let [pending (when nqr (cache/pending-name nqr))
+        run     #(run-kwic-batch! (running-ctx ctx) corpus query
+                                  (query/kwic-batch corpus query %))]
     (try
-      (let [batch    (query/kwic-batch corpus query (assoc opts :nqr pending))
-            sections (run-kwic-batch! (running-ctx ctx) corpus query batch)]
+      (let [sections (run (assoc opts :nqr pending))]
         (when nqr
           (cache/commit! ctx corpus pending nqr (batch-matches sections))
           ;; after the save rather than before, so the result just written
@@ -278,9 +271,7 @@
       (catch Exception e
         (when (or (nil? nqr) (timeout? e))
           (throw e))
-        (let [batch    (query/kwic-batch corpus query
-                                         (dissoc opts :nqr :cache-dir))
-              sections (run-kwic-batch! (running-ctx ctx) corpus query batch)]
+        (let [sections (run (dissoc opts :nqr :cache-dir))]
           ;; logged only once the retry has answered, which is what says
           ;; the cache was at fault rather than the query
           (t/event! ::cache-bypassed
@@ -297,13 +288,10 @@
   Requests that want the same page of the same search share one run of it
   while it is in flight (see dk.cst.corpus-probe.cache/share!), so that a
   reader who reloads during a long sort waits for the sort already running
-  rather than starting a second one.
-
-  They are the same page when they would run the same batch, so the batch
-  is what they share by: it names the stored result and spells out every
-  row, attribute and width that decides what CQP prints. Anything a future
-  option changes about the output changes the batch, and so changes the
-  key, without anyone having to remember to add it."
+  rather than starting a second one. They want the same page when they
+  would run the same batch, so the batch is the key: anything a future
+  option changes about the output changes it too, without anyone having to
+  remember to add it."
   [ctx corpus query {:keys [nqr] :as opts}]
   (let [fetch #(or (stored-sections! ctx corpus query opts)
                    (fresh-sections! ctx corpus query opts))]
@@ -488,70 +476,6 @@
       :size      (reduce + (keep :size counts))
       :hits      hits})))
 
-(defn groupable-attrs!
-  "The attribute descriptions of `corpus` via `ctx` that a frequency
-  breakdown can group by: its positional attributes and its annotated
-  s-attributes, in registry order (a CQP round trip on a cache miss)."
-  [ctx corpus]
-  (filter #(or (= :positional (:type %)) (annotated-s-attr? %))
-          (corpus/attributes! ctx corpus)))
-
-(defn frequencies!
-  "Group the matches of CQP `query` in `corpus` by `attr` at the match
-  position via the installation described by `ctx`, within the :filter of
-  `opts` when there is one, returning [{:values [...] :freq <n>} ...]
-  sorted by frequency.
-
-  A thin wrapper over CQP's `group`; `attr` must name one of the corpus's
-  `groupable-attrs!`. Anything else is rejected, since attribute names are
-  spliced into the command outside the QueryLock sandbox."
-  ([ctx corpus query attr]
-   (frequencies! ctx corpus query attr {}))
-  ([ctx corpus query attr {:keys [filter]}]
-   (let [ctx (corpus-ctx ctx corpus)]
-     (when-not (some #(= (keyword attr) (:name %))
-                     (groupable-attrs! ctx corpus))
-       (throw (ex-info "Not a groupable attribute of this corpus"
-                       {:corpus corpus :attr attr})))
-     (let [commands [(str corpus ";")
-                     (query/restricted-query
-                      query (corpus-filter! ctx corpus filter))
-                     (str "group Last match " (name attr) ";")]
-           ;; a frequency breakdown runs the user's query like any other
-           {:keys [results error]} (cqp/run-batch! (running-ctx ctx) commands)]
-       (when error
-         (throw (ex-info "Frequency query failed"
-                         {:corpus corpus :query query :error error})))
-       (parse/group->freqs (last results))))))
-
-(defn corpus-frequencies!
-  "Break the matches of CQP `query` in `corpus` down by `attr` via `ctx`
-  (`opts` as for `frequencies!`) without failing: {:corpus ... :tokens
-  <corpus size> :size <matches> :freqs [...]} (the maps of
-  `frequencies!`), or {:corpus ... :error ...} when the breakdown cannot
-  be made there.
-
-  A blank `query` breaks the whole corpus down, read from its lexicon
-  (dk.cst.corpus-probe.tools/lexicon!, positional attributes only) rather
-  than by matching every token. Under a :filter it breaks down every
-  token of the filtered regions instead, and the :tokens are theirs, so
-  the rates per million stay relative to what was counted."
-  [ctx corpus query attr {:keys [filter] :as opts}]
-  (try
-    (let [blank? (str/blank? query)
-          freqs  (if (and blank? (empty? filter))
-                   (tools/lexicon! ctx corpus attr)
-                   (frequencies! ctx corpus (if blank? "[]" query) attr opts))
-          tokens (if (empty? filter)
-                   (:size (corpus/info! ctx corpus))
-                   (size! ctx corpus "[]" opts))]
-      {:corpus corpus
-       :tokens tokens
-       :size   (reduce + (map :freq freqs))
-       :freqs  freqs})
-    (catch Exception e
-      {:corpus corpus :error (error-map e)})))
-
 (defn locale
   "The java.util.Locale named by LC_ALL value `s` (\"da_DK.UTF-8\"), or the
   root locale when it names none.
@@ -575,106 +499,3 @@
   so each caller gets its own."
   [ctx]
   (Collator/getInstance (locale (:sort-locale ctx))))
-
-(defn row-order
-  "A comparator putting merged frequency rows in display order: the
-  largest total first, ties broken by value in the collation of
-  `collator`."
-  [^Comparator collator]
-  (fn [a b]
-    (let [c (compare (:total b) (:total a))]
-      (if (zero? c)
-        (.compare collator (:value a) (:value b))
-        c))))
-
-(defn frequency-rows
-  "Merge the per-corpus breakdowns `results` (as from `corpus-frequencies!`,
-  failures excluded) into the rows of one table, in no order: [{:value <s>
-  :freqs {corpus <n>} :total <n>} ...]."
-  [results]
-  (->> (for [{:keys [corpus freqs]} results
-             {:keys [values freq]}  freqs]
-         [(first values) corpus freq])
-       (reduce (fn [acc [value corpus freq]]
-                 (assoc-in acc [value corpus] freq))
-               {})
-       (map (fn [[value freqs]]
-              {:value value :freqs freqs :total (reduce + (vals freqs))}))))
-
-(defn merge-frequencies
-  "The `frequency-rows` of `results` in display order (see `row-order`,
-  which orders by descending total and breaks ties with `collator`)."
-  [collator results]
-  (vec (sort (row-order collator) (frequency-rows results))))
-
-(defn frequency-table!
-  "Break the matches of CQP `query` in each of `corpora` (uppercase names,
-  in display order) down by `attr` via `ctx`, in parallel, and merge the
-  breakdowns into one table (see `parallelism`).
-
-  Returns {:query ... :attr ... :counts [{:corpus ... :tokens ... :size
-  ...} ...] :rows [{:value ... :freqs {corpus <n>} :total ...} ...]}; a
-  corpus whose breakdown fails carries its :error instead of its counts
-  and contributes no rows, like a failing corpus of `concordance!`. A blank
-  `query` tables the whole corpora, or their filtered regions under the
-  :filter of `opts`."
-  ([ctx corpora query attr]
-   (frequency-table! ctx corpora query attr {}))
-  ([ctx corpora query attr opts]
-   (let [results (vec (pmap-n (parallelism ctx)
-                              #(corpus-frequencies! ctx % query attr opts)
-                              corpora))]
-     {:query  query
-      :filter (:filter opts)
-      :attr   (keyword attr)
-      :counts (mapv #(dissoc % :freqs) results)
-      :rows   (merge-frequencies (->collator ctx) (remove :error results))})))
-
-(defn corpus-filters!
-  "The metadata filters `corpus` offers via `ctx` without failing: one
-  {:corpus ... :attr ... :freqs ...} per annotated s-attribute, in
-  registry order, with the value list of
-  dk.cst.corpus-probe.tools/annotation-values! (nil for an attribute with
-  too many values to list); nothing, logged, when the corpus cannot be
-  read."
-  [ctx corpus]
-  (try
-    (vec (for [{attr :name} (filter annotated-s-attr?
-                                    (corpus/attributes! ctx corpus))]
-           {:corpus corpus
-            :attr   attr
-            :freqs  (tools/annotation-values! ctx corpus attr)}))
-    (catch Exception e
-      (t/event! ::filters-unavailable
-                {:level :warn :error e :data {:corpus corpus}})
-      nil)))
-
-(defn filter-rows
-  "The values of metadata attribute `attr` among the `entries` of
-  `corpus-filters!`, merged over their corpora like a frequency table
-  (the counts are regions) and sorted by value in the collation of
-  `collator` (see `->collator`)."
-  [collator attr entries]
-  (->> (filter #(= attr (:attr %)) entries)
-       (frequency-rows)
-       (sort-by :value collator)
-       (vec)))
-
-(defn filter-options!
-  "The metadata filters available over `corpora` via `ctx`, read in
-  parallel (see `parallelism`): {:attrs [{:name <kw> :rows [{:value <s>
-  :freqs {corpus <n>} :total <n>} ...]} ...] :unlisted [<kw> ...]}.
-
-  The attributes keep the registry order of the first corpus reporting
-  each, with the values of `filter-rows`; an attribute with too many
-  values to list in any of the corpora is named under :unlisted instead."
-  [ctx corpora]
-  (let [entries  (->> (pmap-n (parallelism ctx) #(corpus-filters! ctx %)
-                              corpora)
-                      (apply concat))
-        attrs    (distinct (map :attr entries))
-        unlisted (set (map :attr (remove :freqs entries)))
-        collator (->collator ctx)]
-    {:attrs    (vec (for [attr (remove unlisted attrs)]
-                      {:name attr :rows (filter-rows collator attr entries)}))
-     :unlisted (vec (filter unlisted attrs))}))
