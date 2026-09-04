@@ -1,6 +1,7 @@
 (ns dk.cst.corpus-probe.views.page-test
   (:require [clojure.test :refer [deftest is testing]]
             [dk.cst.corpus-probe.views.hiccup :refer [deep]]
+            [dk.cst.corpus-probe.views.layout :as layout]
             [dk.cst.corpus-probe.views.page :as page]))
 
 (deftest search-form-test
@@ -87,24 +88,72 @@
     (testing "unlisted attributes are named"
       (is (some #{[:code "text_title"]} (deep html))))))
 
-(deftest pagination-test
+(deftest page-phrase-test
+  (is (= "page 3 of 6" (page/page-phrase "en" {:page 2 :pages 6})))
+  (is (= "side 3 af 6" (page/page-phrase "da" {:page 2 :pages 6}))))
+
+(deftest results-fragment-test
+  (testing "the fragment names the region the search lands on"
+    (is (= (str "#" page/results-id) page/results-fragment))))
+
+(deftest pager-links-test
   (testing "no links renders nothing"
-    (is (nil? (page/pagination "en" nil nil))))
-  (testing "links carry rel and the nav is labelled"
-    (let [html (page/pagination "en" "/?page=0" "/?page=2")]
-      (is (= "Pagination" (:aria-label (second html))))
+    (is (nil? (page/pager-links "en" nil nil "page 1 of 1"))))
+  (testing "links carry the rel values browsers use for a sequence"
+    (let [html (page/pager-links "en" "/?page=0" "/?page=2" "page 2 of 3")]
       (is (some #{"prev"} (deep html)))
       (is (some #{"next"} (deep html)))
       (is (some #{"next →"} (deep html)))))
+  (testing "the position rides between the two directions"
+    (let [html (page/pager-links "en" "/?page=0" "/?page=2" "page 2 of 3")]
+      (is (= [:li "page 2 of 3"]
+             (second (filter #(and (vector? %) (= :li (first %)))
+                             (deep html)))))))
+  (testing "a direction that is out of range is left out, not held open"
+    (let [html (page/pager-links "en" nil "/?page=1" "page 1 of 3")]
+      (is (= 2 (count (filter #(and (vector? %) (= :li (first %)))
+                              (deep html)))))
+      (is (not (some #{"prev"} (deep html))))))
   (testing "in Danish"
-    (let [html (page/pagination "da" "/?page=0" "/?page=2")]
-      (is (= "Sidenavigation" (:aria-label (second html))))
+    (let [html (page/pager-links "da" "/?page=0" "/?page=2" "side 2 af 3")]
       (is (some #{"← forrige"} (deep html)))
       (is (some #{"næste →"} (deep html))))))
 
+(deftest pagination-test
+  (testing "nothing to page is no landmark at all"
+    (is (nil? (page/pagination "en" nil nil "page 1 of 1"))))
+  (testing "the links are wrapped in a navigation landmark, named"
+    (let [html (page/pagination "en" "/?page=0" "/?page=2" "page 2 of 3")]
+      (is (= :nav.pagination (first html)))
+      (is (= "Pagination" (:aria-label (second html))))
+      (is (= "Sidenavigation"
+             (:aria-label (second (page/pagination "da" "/?page=0" nil "x")))))
+      (is (some #{:ul.pager} (deep html))))))
+
+(deftest searched?-test
+  (testing "a corpus that answered makes the counts an answer"
+    (is (page/searched? {:counts [{:corpus "PROBE" :size 5}]}))
+    (testing "including an answer of none"
+      (is (page/searched? {:counts [{:corpus "PROBE" :size 0}]}))))
+  (testing "a search every corpus refused is not an answer"
+    (is (not (page/searched?
+              {:counts [{:corpus "X" :error {:type :timeout}}]})))
+    (is (not (page/searched? nil)))))
+
+(deftest error-name-test
+  (is (= "CQP error" (page/error-name "en" {:type :cqp})))
+  (is (= "The query timed out" (page/error-name "en" {:type :timeout})))
+  (is (= "Forespørgslen tog for lang tid"
+         (page/error-name "da" {:type :timeout}))))
+
 (deftest error-section-test
   (let [html (page/error-section "en" {:type :cqp :message "boom"} ["TALER"])]
-    (is (= "alert" (:role (second html))))
+    (testing "no live region: it is in the document before the page is parsed"
+      (is (not (some #{"alert"} (deep html)))))
+    (testing "it heads itself below the region's own h2"
+      (is (some #{[:h3 "CQP error"]} (deep html))))
+    (testing "cqp's message is the sample output of another program"
+      (is (some #{[:samp "boom"]} (deep html))))
     (is (some #{"boom"} (deep html)))
     (testing "an error CQP itself reported is headed as such"
       (is (some #{"CQP error"} (deep html))))
@@ -195,10 +244,29 @@
       (is (some #{"/frequencies?q=x"} (deep html))))
     (testing "a cut export is announced"
       (is (some #{" the first 5 hits"} (deep html))))
-    (testing "errors come as alerts before the counts and concordance"
-      (is (= "alert" (get-in (vec (nth html 2)) [0 1 :role])))
+    (testing "the region names itself and can be landed on"
+      (is (= {:id              "results"
+              :tabindex        "-1"
+              :aria-labelledby "results-heading"}
+             (second html))))
+    (testing "its heading is the summary the caption used to carry"
+      (is (some #{[:h2 {:id "results-heading"}
+                   "6 hits in 2 corpora · page 1 of 1"]}
+                (deep html))))
+    (testing "errors are headed sections before the counts and concordance"
+      (is (some #{[:h3 "CQP error"]} (deep html)))
       (is (some #{[:caption "Hits per corpus"]} (deep html)))
       (is (some #{:table.kwic} (deep html))))
+    (testing "the page links are rendered above the table as well as below"
+      (is (= 2 (count (filter #(and (vector? %) (= :ul.pager (first %)))
+                              (deep html))))))
+    (testing "but only the first is a landmark, since both would share a name"
+      (is (= 1 (count (filter #(and (vector? %) (= :nav.pagination (first %)))
+                              (deep html))))))
+    (testing "the errors come before the counts and the concordance"
+      (let [order (fn [x] (.indexOf (vec (deep html)) x))]
+        (is (< (order [:h3 "CQP error"]) (order :table.counts)))
+        (is (< (order [:h3 "CQP error"]) (order :table.kwic)))))
     (testing "an erroring corpus shows no count in the table"
       (is (some #{[:em "error"]} (deep html))))
     (testing "a single corpus gets no counts table"
@@ -207,12 +275,31 @@
                    :result (assoc sample-result
                                   :counts [{:corpus "PROBE" :size 5}])})]
         (is (not (some #{[:caption "Hits per corpus"]} (deep html)))))))
-  (testing "nothing searchable means only the alerts"
+  (testing "nothing searchable means only the errors, and the heading names one"
     (let [html (page/result-section
                 {:lang   "en"
-                 :result {:counts [{:corpus "X" :error {:type :timeout}}]
-                          :hits   []}})]
-      (is (not (some #{:table.kwic} (deep html)))))))
+                 :result {:page   0 :pages 1 :hits []
+                          :counts [{:corpus "X" :error {:type :timeout}}]}})]
+      (is (not (some #{:table.kwic} (deep html))))
+      (is (some #{[:h2 {:id "results-heading"} "The query timed out"]}
+                (deep html)))))
+  (testing "a search that failed outright is a results region too"
+    (let [html (page/result-section {:lang  "en"
+                                     :error {:type :no-corpus}})]
+      (is (some #{[:h2 {:id "results-heading"} "No corpus selected"]}
+                (deep html)))
+      (is (some #{"Select at least one corpus to search."} (deep html)))))
+  (testing "a search that found nothing offers no table and no downloads"
+    (let [html (page/result-section
+                {:lang         "en"
+                 :result       {:size   0 :page 0 :pages 1 :hits []
+                                :counts [{:corpus "PROBE" :size 0}]}
+                 :freq-href    "/frequencies?q=x"
+                 :export-hrefs {:tsv "/e?format=tsv"}})]
+      (is (some #{"No hits."} (deep html)))
+      (is (not (some #{:table.kwic} (deep html))))
+      (is (not (some #{"/e?format=tsv"} (deep html))))
+      (is (not (some #{"/frequencies?q=x"} (deep html)))))))
 
 (deftest attribute-value-test
   (testing "a title is a cited work"
@@ -245,9 +332,19 @@
         (is (not (some #{"open"} (deep html))))))))
 
 (deftest app-view-test
-  (testing "an error hides the result and shows the CQP message"
+  (testing "the page names itself and the bypass link can reach it"
+    (let [html (page/app-view {:lang "en" :folders [] :params {}})]
+      (is (= layout/main-attrs (second html)))
+      (is (some #{[:h1 "Search"]} (deep html)))))
+  (testing "the form submits to the results, so a search lands on its answer"
+    (let [html (page/app-view {:lang "en" :folders [] :params {}})]
+      (is (= (str "/" page/results-fragment)
+             (get-in html [3 1 1 :action])))))
+  (testing "an error is shown as the outcome of the search"
     (let [html (page/app-view {:lang "en" :folders [] :params {}
                                :error {:type :cqp :message "boom"}})]
-      (is (some #{"boom"} (flatten html)))))
-  (testing "no query renders just the form"
-    (is (nil? (nth (page/app-view {:lang "en" :folders [] :params {}}) 2)))))
+      (is (some #{"boom"} (deep html)))
+      (is (some #{"results"} (deep html)))))
+  (testing "no query renders no results region at all"
+    (let [html (page/app-view {:lang "en" :folders [] :params {}})]
+      (is (not (some #{"results"} (deep html)))))))

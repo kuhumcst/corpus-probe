@@ -1,7 +1,53 @@
 (ns dk.cst.corpus-probe.views.frequencies-test
   (:require [clojure.test :refer [deftest is testing]]
             [dk.cst.corpus-probe.views.hiccup :refer [deep]]
-            [dk.cst.corpus-probe.views.frequencies :as freq]))
+            [dk.cst.corpus-probe.views.frequencies :as freq]
+            [dk.cst.corpus-probe.views.layout :as layout]
+            [dk.cst.corpus-probe.views.page :as page]))
+
+(def counted
+  "A frequency result of one corpus that could be counted."
+  {:attr   :word
+   :query  "\"hund\""
+   :counts [{:corpus "PROBE" :tokens 47 :size 5}]
+   :rows   [{:value "hund" :freqs {"PROBE" 3} :total 3}]})
+
+(deftest counted?-test
+  (is (freq/counted? counted))
+  (is (not (freq/counted? {:counts [{:corpus "X" :error {:type :timeout}}]})))
+  (is (not (freq/counted? nil))))
+
+(deftest frequency-heading-test
+  (testing "a table that could be counted is headed by its summary"
+    (is (= "5 hits in PROBE by word · 1 value"
+           (freq/frequency-heading "en" counted nil 1))))
+  (testing "a request no corpus answered is headed by its error instead"
+    (is (= "The query timed out"
+           (freq/frequency-heading
+            "en" {:counts [{:corpus "X" :error {:type :timeout}}]} nil 0)))
+    (is (= "No corpus selected"
+           (freq/frequency-heading "en" nil {:type :no-corpus} 0)))))
+
+(deftest frequency-section-test
+  (let [html (freq/frequency-section {:lang "en" :result counted})]
+    (testing "the region names itself and can be landed on"
+      (is (= {:id              page/results-id
+              :tabindex        "-1"
+              :aria-labelledby "results-heading"}
+             (second html))))
+    (testing "its heading is the summary the caption used to carry"
+      (is (some #{[:h2 {:id "results-heading"}
+                   "5 hits in PROBE by word · 1 value"]}
+                (deep html))))))
+
+(deftest frequencies-view-test
+  (let [html (freq/frequencies-view {:lang "en" :folders [] :params {}})]
+    (testing "the page names itself and the bypass link can reach it"
+      (is (= layout/main-attrs (second html)))
+      (is (some #{[:h1 "Frequencies"]} (deep html))))
+    (testing "the form submits to the results"
+      (is (= (str "/frequencies" page/results-fragment)
+             (get-in html [3 1 1 :action]))))))
 
 (deftest attr-control-test
   (let [html (freq/attr-control "en"

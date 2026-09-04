@@ -11,7 +11,8 @@
   definition list and per-attribute statistics tables, following PLAN.md
   §7."
   (:require [clojure.string :as str]
-            [dk.cst.corpus-probe.i18n :as i18n]))
+            [dk.cst.corpus-probe.i18n :as i18n]
+            [dk.cst.corpus-probe.views.layout :as layout]))
 
 (defn corpus-href
   "The URL of the info page of the corpus named `id`, in language `lang`."
@@ -103,11 +104,15 @@
 
 (defn index-view
   "The corpus index page body in language `lang`: the `folders` tree of
-  corpus overviews as navigation, every folder open."
+  corpus overviews, every folder open.
+
+  The tree is this page's own content rather than navigation inside it, so
+  it sits directly in <main> under the page's heading, which the bypass
+  link moves the reader to."
   [lang {:keys [folders]}]
-  [:main
-   [:nav.corpora {:aria-label (i18n/tr lang :corpus-index)}
-    [:h2 (i18n/tr lang :corpora-heading)]
+  [:main layout/main-attrs
+   [:h1 (i18n/tr lang :corpora-heading)]
+   [:div.corpora
     (corpus-tree lang (partial corpus-item lang) (constantly true) folders)]])
 
 (defn chooser
@@ -147,8 +152,8 @@
      [:caption (i18n/tr lang :p-attrs-heading)]
      [:thead
       [:tr [:th {:scope "col"} (i18n/tr lang :attribute)]
-       [:th {:scope "col"} (i18n/tr lang :tokens)]
-       [:th {:scope "col"} (i18n/tr lang :types)]]]
+       [:th.n {:scope "col"} (i18n/tr lang :tokens)]
+       [:th.n {:scope "col"} (i18n/tr lang :types)]]]
      [:tbody
       (for [{attr :name :keys [tokens types]} p-attrs]
         [:tr [:th {:scope "row"} [:code (name attr)]]
@@ -164,7 +169,7 @@
      [:caption (i18n/tr lang :s-attrs-heading)]
      [:thead
       [:tr [:th {:scope "col"} (i18n/tr lang :attribute)]
-       [:th {:scope "col"} (i18n/tr lang :regions)]
+       [:th.n {:scope "col"} (i18n/tr lang :regions)]
        [:th {:scope "col"} (i18n/tr lang :annotations)]]]
      [:tbody
       (for [{attr :name :keys [regions values?]} s-attrs]
@@ -182,7 +187,7 @@
      [:caption (i18n/tr lang :a-attrs-heading)]
      [:thead
       [:tr [:th {:scope "col"} (i18n/tr lang :attribute)]
-       [:th {:scope "col"} (i18n/tr lang :blocks)]]]
+       [:th.n {:scope "col"} (i18n/tr lang :blocks)]]]
      [:tbody
       (for [{attr :name :keys [blocks]} a-attrs]
         [:tr [:th {:scope "row"} [:code (name attr)]]
@@ -201,19 +206,22 @@
   [lang info corpus-lang]
   (when-let [text (:info info)]
     [:section.about
-     [:h3 (i18n/tr lang :info)]
+     [:h2 (i18n/tr lang :info)]
+     ;; the corpus author's own prose, not program output, so a bare <pre>
      [:pre (lang-attrs corpus-lang) text]]))
 
 (defn unreadable-section
-  "The alert shown in language `lang` in place of the corpus facts when CWB
-  cannot read the corpus's data, saying whether CWB has no data for the
-  registry entry at all (`phantom?`) or reading it failed this time.
+  "The section shown in language `lang` in place of the corpus facts when
+  CWB cannot read the corpus's data, saying whether CWB has no data for
+  the registry entry at all (`phantom?`) or reading it failed this time.
 
   Deliberately detail-free otherwise: the underlying tool output can name
-  server paths, which never reach a rendered page."
+  server paths, which never reach a rendered page. No live region: the
+  section is in the document before the page is parsed, where a live
+  region announces nothing anyway."
   [lang phantom?]
-  [:section.error {:role "alert"}
-   [:h3 (i18n/tr lang :unreadable)]
+  [:section.error
+   [:h2 (i18n/tr lang :unreadable)]
    [:p (i18n/tr lang (if phantom? :undefined-why :unreadable-why))]])
 
 (defn info-view
@@ -226,30 +234,31 @@
   set), :lang (its language code, when known: the title and the .info text
   are in the corpus's own language, the rest of the page is not), and
   either :stats (describe) + :info (`info;`) or an :error, which is
-  replaced by a fixed alert saying whether the entry is a `:phantom?`."
+  replaced by a fixed section saying whether the entry is a `:phantom?`."
   [lang {:keys [corpus title stats info error phantom?]
          corpus-lang :lang :as data}]
-  [:main
-   [:article.corpus-info
-    [:hgroup
-     (if title
-       [:h2 (lang-attrs corpus-lang) title]
-       [:h2 corpus])
-     (when title [:p [:code corpus]])]
-    (if error
-      (unreadable-section lang phantom?)
-      (list
-       (facts-list lang stats info)
-       (p-attr-table lang stats)
-       (s-attr-table lang stats)
-       (a-attr-table lang stats)
-       (info-text lang info corpus-lang)))
-    ;; a corpus CWB has no data for cannot be searched, so it is not
-    ;; offered, as the chooser does not offer it either
-    (when-not phantom?
-      [:p
-       [:a {:href (str "/?corpus=" corpus "&lang=" lang)}
-        (str (i18n/tr lang :search-in) " " corpus)]
-       " · "
-       [:a {:href (str "/frequencies?corpus=" corpus "&attr=word&lang=" lang)}
-        (str (i18n/tr lang :word-freqs) " " corpus)]])]])
+  [:main.corpus-info layout/main-attrs
+   ;; an <hgroup> groups a heading with its own subheading, so it earns its
+   ;; place only when the registry NAME gives the ID one to be grouped with
+   (if title
+     [:hgroup
+      [:h1 (lang-attrs corpus-lang) title]
+      [:p [:code corpus]]]
+     [:h1 corpus])
+   (if error
+     (unreadable-section lang phantom?)
+     (list
+      (facts-list lang stats info)
+      (p-attr-table lang stats)
+      (s-attr-table lang stats)
+      (a-attr-table lang stats)
+      (info-text lang info corpus-lang)))
+   ;; a corpus CWB has no data for cannot be searched, so it is not
+   ;; offered, as the chooser does not offer it either
+   (when-not phantom?
+     [:p
+      [:a {:href (str "/?corpus=" corpus "&lang=" lang)}
+       (str (i18n/tr lang :search-in) " " corpus)]
+      " · "
+      [:a {:href (str "/frequencies?corpus=" corpus "&attr=word&lang=" lang)}
+       (str (i18n/tr lang :word-freqs) " " corpus)]])])

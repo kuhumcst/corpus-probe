@@ -114,11 +114,11 @@
               :info   {:properties {:language "da" :charset "utf8"}
                        :info       "Om korpusset."}}
         html (pr-str (corpus/info-view "en" data))]
-    (testing "the title is the registry name, the ID its subtitle"
-      (is (re-find #":h2 .*\"Folkeviser\"" html))
+    (testing "the corpus names the page, the ID its subtitle"
+      (is (re-find #":h1 .*\"Folkeviser\"" html))
       (is (re-find #":code \"VISER\"" html)))
     (testing "the corpus's language marks the title and the .info text only"
-      (is (re-find #"\[:h2 \{:lang \"da\"\} \"Folkeviser\"\]" html))
+      (is (re-find #"\[:h1 \{:lang \"da\"\} \"Folkeviser\"\]" html))
       (is (re-find #"\[:pre \{:lang \"da\"\} \"Om korpusset.\"\]" html))
       (is (not (re-find #":article.corpus-info \{" html))))
     (testing "the duplicate charset property is not repeated in the facts"
@@ -160,7 +160,8 @@
               (deep (corpus/unreadable-section "en" false))))
     (is (some #{"Registret har dette korpus, men CWB har ingen data til det."}
               (deep (corpus/unreadable-section "da" true)))))
-  (testing "both are one alert under the same heading"
-    (is (some #{[:h3 "Could not read corpus"]}
-              (deep (corpus/unreadable-section "en" true))))
-    (is (some #{"alert"} (deep (corpus/unreadable-section "en" false))))))
+  (testing "both are one section under the same heading"
+    (is (some #{[:h2 "Could not read corpus"]}
+              (deep (corpus/unreadable-section "en" true)))))
+  (testing "no live region: it is in the document before the page is parsed"
+    (is (not (some #{"alert"} (deep (corpus/unreadable-section "en" false)))))))

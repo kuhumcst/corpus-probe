@@ -1,21 +1,33 @@
 (ns dk.cst.corpus-probe.views.page
   "Hiccup for the search page: the result summary, per-corpus counts,
   pagination and the inspection sidebar, plus the pieces shared with the
-  frequency page: the search form, the error alerts and the download
+  frequency page: the search form, the error sections and the download
   links.
 
   `app-view` is the page's main content (the site header around it is the
   document's). The server renders it for first paint with no selection;
   the client renders the same view from the same state, so clicking a
   token reveals the sidebar without a round trip. The markup uses the
-  elements HTML provides for each part -- <search> for the query form, a
-  table <caption> for the result summary, <nav> for pagination, an alert
-  for errors, an <aside> for the inspector -- so the document is
-  meaningful without the stylesheet."
+  element HTML provides for each part: <search> for the query form, a
+  named region for the outcome, <nav> for pagination, headings for errors
+  and an <aside> for the inspector, so the document is meaningful without
+  the stylesheet."
   (:require [clojure.string :as str]
             [dk.cst.corpus-probe.i18n :as i18n]
             [dk.cst.corpus-probe.views.corpus :as corpus-views]
-            [dk.cst.corpus-probe.views.kwic :as kwic]))
+            [dk.cst.corpus-probe.views.kwic :as kwic]
+            [dk.cst.corpus-probe.views.layout :as layout]))
+
+(def results-id
+  "The id of the results region a search lands on."
+  "results")
+
+(def results-fragment
+  "The fragment every form action and every link to a result ends in, so a
+  submit or a page turn lands the reader on the answer rather than at the
+  top of the form that asked for it. Named once, so the URLs and the
+  region they name cannot drift apart."
+  (str "#" results-id))
 
 (defn sort-control
   "The sort control of the concordance in language `lang`: a select over
@@ -173,17 +185,21 @@
   (str (i18n/group-digits lang n) " "
        (i18n/tr lang (if (= 1 n) :hit :hits))))
 
+(defn page-phrase
+  "Where in a paged `result` the reader is, in language `lang`."
+  [lang {:keys [page pages] :as result}]
+  (str (i18n/tr lang :page) " " (inc page) " " (i18n/tr lang :of) " " pages))
+
 (defn result-summary
   "The summary text of a concordance `result` page (`:size` hits over
   `:pages`, in the corpora that could be searched, within its metadata
-  `:filter`), used as the concordance table's caption, in language
+  `:filter`), used as the heading naming the results region, in language
   `lang`."
-  [lang {:keys [size counts page pages] :as result}]
+  [lang {:keys [size counts] :as result}]
   (str (hits-phrase lang size) " " (i18n/tr lang :in) " "
        (corpora-phrase lang (map :corpus (filter :size counts)))
        (within-phrase lang (:filter result))
-       " · " (i18n/tr lang :page) " " (inc page)
-       " " (i18n/tr lang :of) " " pages))
+       " · " (page-phrase lang result)))
 
 (defn counts-table
   "The per-corpus hit `counts` of a search over several corpora as a table,
@@ -214,26 +230,41 @@
     (for [error (distinct (map :error failed))]
       [error (map :corpus (filter #(= error (:error %)) failed))])))
 
-(defn pagination
-  "Prev/next navigation for a result page; `prev-href`/`next-href` are
-  computed server-side and are nil when out of range, labelled in language
-  `lang`. The links carry the `rel` values browsers and crawlers use for
-  sequential pages."
-  [lang prev-href next-href]
+(defn pager-links
+  "The page links of a result around `position` (where in the sequence the
+  reader is), labelled in language `lang`; nil when neither
+  `prev-href` nor `next-href` is in range.
+
+  A list, so assistive technology can say how many options there are, and
+  an absent direction is left out rather than held open by an empty
+  element, which nothing positioned. The links carry the `rel` values
+  browsers and crawlers use for sequential pages."
+  [lang prev-href next-href position]
   (when (or prev-href next-href)
-    [:nav.pagination {:aria-label (i18n/tr lang :pagination)}
-     (if prev-href
-       [:a {:href prev-href :rel "prev"}
-        (str "← " (i18n/tr lang :previous))]
-       [:span])
-     (if next-href
-       [:a {:href next-href :rel "next"} (str (i18n/tr lang :next) " →")]
-       [:span])]))
+    [:ul.pager
+     (when prev-href
+       [:li [:a {:href prev-href :rel "prev"}
+             (str "← " (i18n/tr lang :previous))]])
+     [:li position]
+     (when next-href
+       [:li [:a {:href next-href :rel "next"}
+             (str (i18n/tr lang :next) " →")]])]))
+
+(defn pagination
+  "`pager-links` as a navigation landmark named in language `lang`.
+
+  Only one of a result's two pagers is a landmark: the APG asks each
+  landmark of a repeated role to carry a name of its own, and two named
+  Pagination cannot be told apart. The repeat below the table is the bare
+  list, whose links stay operable and stay in the tab order."
+  [lang prev-href next-href position]
+  (when-let [links (pager-links lang prev-href next-href position)]
+    [:nav.pagination {:aria-label (i18n/tr lang :pagination)} links]))
 
 (def error-types
   "The error :types this project reports itself. Each doubles as the
-  dictionary key of its alert heading; anything else is CQP's own error,
-  headed as such and carrying its message."
+  dictionary key of its heading; anything else is CQP's own error, headed
+  as such and carrying its message."
   #{:timeout :no-corpus :unknown-corpus :rejected :misaligned :internal})
 
 (def error-explanations
@@ -244,20 +275,43 @@
    :misaligned     :misaligned-why
    :internal       :internal-why})
 
-(defn error-section
-  "An `error` map rendered as an alert in language `lang`, naming the
-  `corpora` it concerns when given. cqp's own messages, including the `<--`
-  position pointer, are shown to the user unchanged in a <pre>; errors
-  without a message are explained instead."
+(defn error-body
+  "The parts of an `error` under its heading in language `lang`: the
+  `corpora` it concerns, the explanation of a type that carries no message,
+  and cqp's own message verbatim, its `<--` position pointer included, as
+  the sample output of another program."
   [lang {:keys [type message]} corpora]
-  [:section.error {:role "alert"}
-   [:h2 (i18n/tr lang (if (error-types type) type :cqp-error))]
+  (list
    (when (seq corpora)
      [:p (str (i18n/tr lang :in) " ")
       (interpose ", " (map (fn [c] [:code c]) corpora))])
    (when-let [k (error-explanations type)]
      [:p (i18n/tr lang k)])
-   (when message [:pre message])])
+   ;; the stylesheet scrolls this rather than letting cqp's column-aligned
+   ;; pointer reflow, and a scroll container a keyboard cannot reach is
+   ;; unreadable in the browsers that do not focus scrollers themselves
+   (when message [:pre {:tabindex "0"} [:samp message]])))
+
+(defn error-name
+  "The heading naming `error` in language `lang`: the type this project
+  reports itself, or cqp's own error."
+  [lang {:keys [type] :as error}]
+  (i18n/tr lang (if (error-types type) type :cqp-error)))
+
+(defn error-section
+  "An `error` map under a heading of its own in language `lang`, naming
+  the `corpora` it concerns when given.
+
+  No live region: every error here arrives by a full page reload, where a
+  region that is already populated announces nothing, while the alert role
+  costs the section its own semantics and flattens its heading. The reader
+  reaches the error because the search lands on it (see `result-section`).
+
+  An h3, since it sits inside a results region already headed by an h2."
+  [lang error corpora]
+  [:section.error
+   [:h3 (error-name lang error)]
+   (error-body lang error corpora)])
 
 (defn download-links
   "Links downloading the current table in each format of `hrefs` (format
@@ -274,35 +328,65 @@
                 (for [[format href] (sort hrefs)]
                   [:a {:href href} (str/upper-case (name format))]))]))
 
+(defn searched?
+  "True when any corpus of `result` could be searched, so its counts are an
+  answer rather than a report of failure."
+  [{:keys [counts] :as result}]
+  (boolean (some :size counts)))
+
+(defn result-heading
+  "The heading naming the results region in language `lang`: the summary
+  of the concordance `result` when any corpus could be searched, else the
+  name of the error that came instead, so a search that failed everywhere
+  is not announced as a count of nothing."
+  [lang {:keys [counts] :as result} error]
+  (if (searched? result)
+    (result-summary lang result)
+    (error-name lang (or error (some :error counts)))))
+
 (defn result-section
-  "The results of the concordance `:result` in `state`: an alert per
-  distinct error among its corpora, then (when any corpus could be
-  searched) the per-corpus counts, a link to the frequencies of the same
-  hits (`:freq-href`), the download links (`:export-hrefs`, exports holding
-  at most `:export-limit` hits), the concordance with its `:expanded` hits
-  and `:langs`, and the pagination links `:prev-href`/`:next-href`, all
-  worded in the state's `:lang`."
-  [{:keys [lang result langs expanded freq-href export-hrefs export-limit
-           prev-href next-href] :as state}]
-  (let [{:keys [counts hits size]} result]
-    [:section.result {:aria-label (i18n/tr lang :results)}
-     (for [[error corpora] (error-groups counts)]
-       (error-section lang error corpora))
-     (when (some :size counts)
-       (list
-        (when (next counts) (counts-table lang counts))
-        (when freq-href
-          [:p [:a {:href freq-href} (i18n/tr lang :these-freqs)]])
-        (download-links lang export-hrefs
-                        (when (and export-limit (> size export-limit))
-                          (str (i18n/tr lang :the-first) " "
-                               (i18n/group-digits lang export-limit) " "
-                               (i18n/tr lang :hits))))
-        (kwic/concordance hits {:caption  (result-summary lang result)
-                                :lang     lang
-                                :langs    langs
-                                :expanded expanded})
-        (pagination lang prev-href next-href)))]))
+  "The outcome of a search in `state`, as a region named by its own
+  visible heading and focusable, so a GET search can land on it.
+
+  Holds either the concordance `:result` or the `:error` that came
+  instead: the errors of individual corpora, then, when any corpus could
+  be searched and found something, the pagination above and below the
+  table, the per-corpus counts, a link to the frequencies of the same hits
+  (`:freq-href`), the download links (`:export-hrefs`, exports holding at
+  most `:export-limit` hits) and the concordance with its `:expanded` hits
+  and `:langs`, all worded in the state's `:lang`."
+  [{:keys [lang result error langs expanded freq-href export-hrefs
+           export-limit prev-href next-href] :as state}]
+  (let [{:keys [counts hits size]} result
+        position (when result (page-phrase lang result))]
+    [:section.result {:id              results-id
+                      :tabindex        "-1"
+                      :aria-labelledby "results-heading"}
+     [:h2 {:id "results-heading"} (result-heading lang result error)]
+     (when error (error-body lang error nil))
+     (for [[e corpora] (error-groups counts)]
+       (error-section lang e corpora))
+     (when (searched? result)
+       ;; a search that found nothing has nothing to page, download or
+       ;; count: the table would be a header over no rows and the exports
+       ;; header-only files
+       (if (zero? size)
+         [:p (i18n/tr lang :no-hits)]
+         (list
+          (pagination lang prev-href next-href position)
+          (when (next counts) (counts-table lang counts))
+          (when freq-href
+            [:p [:a {:href freq-href} (i18n/tr lang :these-freqs)]])
+          (download-links lang export-hrefs
+                          (when (and export-limit (> size export-limit))
+                            (str (i18n/tr lang :the-first) " "
+                                 (i18n/group-digits lang export-limit) " "
+                                 (i18n/tr lang :hits))))
+          (kwic/concordance hits {:caption  (i18n/tr lang :concordance)
+                                  :lang     lang
+                                  :langs    langs
+                                  :expanded expanded})
+          (pager-links lang prev-href next-href position))))]))
 
 (defn attribute-value
   "Render attribute value `v` semantically by its key `k`: a text title as
@@ -357,13 +441,17 @@
 (defn app-view
   "The search page's main content from application `state`, in its
   `:lang`: the search form (see `search-form`) with the `:sort-modes`
-  control, then either the `:error`, the concordance `:result` (see
-  `result-section`) or nothing, plus the inspection `:selected` sidebar."
+  control, the results region when the params described a search (see
+  `result-section`, which holds the `:error` as well as the `:result`),
+  and the inspection `:selected` sidebar.
+
+  The form submits to the results fragment, so a search lands the reader
+  on its own answer rather than at the top of the form that asked for it.
+  The <main> is focusable so the bypass link can move the reader into it."
   [{:keys [lang sort-modes params result error selected] :as state}]
-  [:main
-   (search-form state "/" (sort-control lang sort-modes (:sort params)))
-   (cond
-     error  (error-section lang error nil)
-     result (result-section state)
-     :else  nil)
+  [:main layout/main-attrs
+   [:h1 (i18n/tr lang :search)]
+   (search-form state (str "/" results-fragment)
+                (sort-control lang sort-modes (:sort params)))
+   (when (or result error) (result-section state))
    (sidebar lang selected)])

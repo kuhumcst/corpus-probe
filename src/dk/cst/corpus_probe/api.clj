@@ -105,18 +105,21 @@
 
 (defn document
   "The complete HTML document in UI language `lang` titled `title`: the
-  site header with its language `switch` (see
-  dk.cst.corpus-probe.views.layout/site-header), then the rendered `body`
-  hiccup (the page's <main>) in #app; a transit `payload`, when given, is
-  embedded as the #bootstrap script along with the client script that
-  takes over from it.
+  bypass link, the site header with its language `switch` (see
+  dk.cst.corpus-probe.views.layout/site-header), the rendered `body`
+  hiccup (the page's <main>) and the site footer; a transit `payload`,
+  when given, wraps the body in #app and is embedded as the #bootstrap
+  script along with the client script that takes over from it.
 
-  The site header sits outside #app, so it is the document's banner rather
-  than part of the main content, and the client never re-renders it. The
-  document shell and the bootstrap script are emitted as strings rather
-  than through Replicant, so the transit payload's double quotes are not
-  mangled by the renderer bug (see `correct-quote-escaping`). The document
-  language is the UI language; corpus text carries its own `lang`."
+  The masthead and the footer sit outside #app, so they are the document's
+  banner and contentinfo rather than part of the main content, and the
+  client never re-renders them. #app is the client's mount point, so only
+  a page served the bootstrap gets one; the rest emit their <main>
+  directly. The document shell and the bootstrap script are emitted as
+  strings rather than through Replicant, so the transit payload's double
+  quotes are not mangled by the renderer bug (see
+  `correct-quote-escaping`). The document language is the UI language;
+  corpus text carries its own `lang`."
   ([lang switch title body]
    (document lang switch title body nil))
   ([lang switch title body payload]
@@ -131,11 +134,15 @@
         (alternate-links switch)
         "<link rel=\"stylesheet\" href=\"/css/style.css\">"
         "</head><body>"
+        (correct-quote-escaping (replicant/render (layout/skip-link lang)))
         (correct-quote-escaping
          (replicant/render (layout/site-header lang switch)))
-        "<div id=\"app\">"
-        (correct-quote-escaping (replicant/render body))
-        "</div>"
+        (if payload
+          (str "<div id=\"app\">"
+               (correct-quote-escaping (replicant/render body))
+               "</div>")
+          (correct-quote-escaping (replicant/render body)))
+        (correct-quote-escaping (replicant/render (layout/site-footer lang)))
         (when payload
           (str "<script type=\"application/transit+json\" id=\"bootstrap\">"
                (script-safe payload)
@@ -239,22 +246,42 @@
 
 (defn search-title
   "The document title of the search page for `params` in language `lang`:
-  the query, the selected corpora (`:corpus`, a vector of names, when any)
-  and the metadata filter when a search was made, else just the app name."
-  [lang {:keys [q corpus] :as params}]
-  (if (str/blank? q)
-    (page-title)
-    (page-title q
-                (when (seq corpus) (page/corpora-phrase lang corpus))
-                (page/filter-phrase (filter-params params)))))
+  the query, how many hits it found (from `result`, when given), the
+  selected corpora (`:corpus`, a vector of names, when any), the metadata
+  filter and the page number when past the first; just the app name when
+  nothing was searched for.
+
+  The hit count is in the title because a full page reload announces the
+  title and nothing else, so the title is where the outcome of a search
+  first reaches a screen reader. It is left out when no corpus could be
+  searched, since then there is no count to report."
+  ([lang params]
+   (search-title lang params nil))
+  ([lang {:keys [q corpus] :as params} result]
+   (if (str/blank? q)
+     (page-title)
+     (let [page-n (:page result 0)]
+       (page-title q
+                   ;; a search every corpus refused still has a result, of
+                   ;; size 0; titling that "0 hits" reports an answer the
+                   ;; search never got, and contradicts the results heading
+                   (when (page/searched? result)
+                     (page/hits-phrase lang (:size result)))
+                   (when (seq corpus) (page/corpora-phrase lang corpus))
+                   (page/filter-phrase (filter-params params))
+                   (when (pos? page-n)
+                     (str (i18n/tr lang :page) " " (inc page-n))))))))
 
 (defn page-href
   "The URL of page `page` of the search described by `params`.
 
-  Drops `expand`, which names corpus positions on the current page and does
-  not carry to another page's hits."
+  Ends in the results fragment, so a page turn lands on the hits rather
+  than at the top of the query form. Drops `expand`, which names corpus
+  positions on the current page and does not carry to another page's
+  hits."
   [params page]
-  (str "/?" (query-string (assoc (dissoc params :expand) :page page))))
+  (str "/?" (query-string (assoc (dissoc params :expand) :page page))
+       page/results-fragment))
 
 (defn search-params
   "The `params` that identify a search (its corpora, query, metadata
@@ -487,7 +514,8 @@
                                  (str "/frequencies?"
                                       (query-string
                                        (assoc (search-params params*)
-                                              :attr (attr-param nil)))))
+                                              :attr (attr-param nil)))
+                                      page/results-fragment))
                    :export-hrefs (when (:result outcome)
                                    (export-hrefs "/export/kwic"
                                                  (assoc (search-params params*)
@@ -508,7 +536,7 @@
     (html-response
      (document lang
                (language-hrefs request)
-               (search-title lang (:params view-data))
+               (search-title lang (:params view-data) (:result view-data))
                (page/app-view view-data)
                (->transit view-data)))))
 
@@ -570,7 +598,8 @@
                    :error     (:error outcome)
                    :kwic-href (when cqp
                                 (str "/?"
-                                     (query-string (search-params params*))))
+                                     (query-string (search-params params*))
+                                     page/results-fragment))
                    :export-hrefs (when (:result outcome)
                                    (export-hrefs "/export/frequencies"
                                                  (assoc (search-params params*)

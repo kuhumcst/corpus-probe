@@ -11,11 +11,12 @@
             [dk.cst.corpus-probe.i18n :as i18n]
             [dk.cst.corpus-probe.stats :as stats]
             [dk.cst.corpus-probe.views.corpus :as corpus-views]
+            [dk.cst.corpus-probe.views.layout :as layout]
             [dk.cst.corpus-probe.views.page :as page]))
 
 (def row-limit
   "The most values a frequency table shows; a breakdown by word of a large
-  corpus has hundreds of thousands, and the caption says how many were
+  corpus has hundreds of thousands, and the heading says how many were
   cut."
   500)
 
@@ -43,10 +44,10 @@
          (map (partial attr-option selected) s)])]]))
 
 (defn frequency-summary
-  "The caption of the table of frequency `result` showing `shown` of its
-  rows: what was counted, in the corpora that could be counted and within
-  the metadata filter, by what, and how many values there are, in language
-  `lang`."
+  "The summary of frequency `result` showing `shown` of its rows, used as
+  the heading naming the results region: what was counted, in the corpora
+  that could be counted and within the metadata filter, by what, and how
+  many values there are, in language `lang`."
   [lang {:keys [query attr counts rows] :as result} shown]
   (let [n        (count rows)
         readable (filter :tokens counts)]
@@ -83,7 +84,7 @@
         shown    (take row-limit rows)
         groups   (cond-> readable total? (concat [:total]))]
     [:table.frequencies
-     [:caption (frequency-summary lang result (count shown))]
+     [:caption (i18n/tr lang :frequencies)]
      [:colgroup]
      (for [_ groups] [:colgroup {:span 2}])
      [:thead
@@ -107,35 +108,62 @@
            (frequency-cells lang (get freqs corpus 0) tokens))
          (when total? (frequency-cells lang total tokens))])]]))
 
+(defn counted?
+  "True when any corpus of frequency `result` could be counted, so its
+  rows are an answer rather than a report of failure."
+  [{:keys [counts] :as result}]
+  (boolean (some :tokens counts)))
+
+(defn frequency-heading
+  "The heading naming the results region in language `lang`: the summary
+  of the frequency `result` showing `shown` of its rows when any corpus
+  could be counted, else the name of the `error` that came instead."
+  [lang {:keys [counts] :as result} error shown]
+  (if (counted? result)
+    (frequency-summary lang result shown)
+    (page/error-name lang (or error (some :error counts)))))
+
 (defn frequency-section
-  "The frequency `:result` in `state`: an alert per distinct error among
-  its corpora, then, when any corpus could be counted, a link to the
-  concordance of the same hits (`:kwic-href`, absent for a whole-corpus
-  table), the download links (`:export-hrefs`, exports holding every row)
-  and the table, in the state's `:lang`."
-  [{:keys [lang result kwic-href export-hrefs] :as state}]
-  [:section.result {:aria-label (i18n/tr lang :frequencies)}
-   (for [[error corpora] (page/error-groups (:counts result))]
-     (page/error-section lang error corpora))
-   (when (some :tokens (:counts result))
-     (list
-      (when kwic-href
-        [:p [:a {:href kwic-href} (i18n/tr lang :this-concordance)]])
-      (page/download-links lang export-hrefs
-                           (when (< row-limit (count (:rows result)))
-                             (i18n/tr lang :all-values)))
-      (frequency-table lang result)))])
+  "The outcome of a frequency request in `state`, as a region named by its
+  own visible heading and focusable, so a GET search can land on it.
+
+  Holds the frequency `:result` or the `:error` that came instead: the
+  errors of individual corpora, then, when any corpus could be counted, a
+  link to the concordance of the same hits (`:kwic-href`, absent for a
+  whole-corpus table), the download links (`:export-hrefs`, exports
+  holding every row) and the table, in the state's `:lang`."
+  [{:keys [lang result error kwic-href export-hrefs] :as state}]
+  (let [shown (min row-limit (count (:rows result)))]
+    [:section.result {:id              page/results-id
+                      :tabindex        "-1"
+                      :aria-labelledby "results-heading"}
+     [:h2 {:id "results-heading"}
+      (frequency-heading lang result error shown)]
+     (when error (page/error-body lang error nil))
+     (for [[e corpora] (page/error-groups (:counts result))]
+       (page/error-section lang e corpora))
+     (when (counted? result)
+       (list
+        (when kwic-href
+          [:p [:a {:href kwic-href} (i18n/tr lang :this-concordance)]])
+        (page/download-links lang export-hrefs
+                             (when (< row-limit (count (:rows result)))
+                               (i18n/tr lang :all-values)))
+        (frequency-table lang result)))]))
 
 (defn frequencies-view
   "The frequency page's main content from `state`: the search form (see
   dk.cst.corpus-probe.views.page/search-form) with the grouping control
-  over `:attrs`, then either the `:error`, the frequency `:result` (see
-  `frequency-section`) or nothing, all in the state's `:lang`."
+  over `:attrs`, and the results region when the params described a
+  request (see `frequency-section`, which holds the `:error` as well as
+  the `:result`), all in the state's `:lang`.
+
+  The form submits to the results fragment, so a request lands the reader
+  on its own answer rather than at the top of the form that asked for it.
+  The <main> is focusable so the bypass link can move the reader into it."
   [{:keys [lang params attrs result error] :as state}]
-  [:main
-   (page/search-form state "/frequencies"
+  [:main layout/main-attrs
+   [:h1 (i18n/tr lang :frequencies)]
+   (page/search-form state (str "/frequencies" page/results-fragment)
                      (attr-control lang attrs (:attr params)))
-   (cond
-     error  (page/error-section lang error nil)
-     result (frequency-section state)
-     :else  nil)])
+   (when (or result error) (frequency-section state))])

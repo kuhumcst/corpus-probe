@@ -34,6 +34,26 @@
       (is (= "Language"
              (:aria-label (second (layout/language-switch "en" switch))))))))
 
+(deftest skip-link-test
+  (testing "the bypass link points at the page's own content"
+    (is (= [:a.skip {:href "#main"} "Skip to content"]
+           (layout/skip-link "en")))
+    (is (= "Gå til indhold" (last (layout/skip-link "da"))))))
+
+(deftest current-path-test
+  (testing "the served path is read back out of the language switch"
+    (is (= "/" (layout/current-path switch)))
+    (is (= "/frequencies"
+           (layout/current-path {"da" "/frequencies?lang=da"})))
+    (is (nil? (layout/current-path nil)))))
+
+(deftest site-footer-test
+  (testing "the app credits what it is a front end for"
+    (is (some #{"https://cwb.sourceforge.io/"}
+              (deep (layout/site-footer "en"))))
+    (is (some #{"Powered by"} (deep (layout/site-footer "en"))))
+    (is (some #{"Drevet af"} (deep (layout/site-footer "da"))))))
+
 (deftest site-header-test
   (let [hrefs (fn [lang]
                 (keep #(when (and (map? %) (:href %)) (:href %))
@@ -49,4 +69,19 @@
         (is (some #{"Korpusser"} da))
         (is (some #{"CWB-korpussøgning"} da))))
     (testing "the app's own name is not translated"
-      (is (some #{"corpus-probe"} (deep (layout/site-header "da" switch)))))))
+      (is (some #{"corpus-probe"} (deep (layout/site-header "da" switch)))))
+    (testing "the masthead claims no heading: each page names itself"
+      (is (not (some #{:h1} (deep (layout/site-header "en" switch))))))
+    (testing "the nav marks the page being served, and only it"
+      (let [nav-links (fn [sw]
+                        (filter #(and (map? %) (:href %) (not (:hreflang %)))
+                                (deep (layout/site-header "en" sw))))]
+        (is (= [nil "page" nil nil]
+               (map :aria-current (nav-links switch))))
+        (is (= [nil nil "page" nil]
+               (map :aria-current
+                    (nav-links {"en" "/frequencies?lang=en"}))))
+        (testing "a page no nav item names marks nothing"
+          (is (= [nil nil nil nil]
+                 (map :aria-current
+                      (nav-links {"en" "/corpus/viser?lang=en"})))))))))

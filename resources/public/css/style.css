@@ -1,6 +1,39 @@
-/* Barebones structural CSS only: enough for the KWIC columns to line up and
-   the match to be visible. No palette, no theming; styling proper comes
-   later, once the app's shape is settled. */
+/* Barebones structural CSS only: it positions the page's landmarks,
+   contains what would otherwise scroll the whole document sideways, and
+   lines the KWIC columns up. No palette, no theming: every rule either
+   positions a landmark or corrects a measured failure, and says which. */
+
+/* Nothing here is a reset: no rule removes a user agent default, because
+   the user agent stylesheet is this app's whole visual system. */
+
+/* controls inherit the page's font: Mobile Safari zooms the viewport when
+   a focused field is under 16px and never zooms back, and the UA default
+   left the query field at 13.3px Arial */
+:where(input, button, select, textarea) { font: inherit; }
+
+/* a GET search lands on #results: keep it clear of the viewport edge */
+:target { scroll-margin-block-start: 1rem; }
+
+/* the bypass link, off screen until a keyboard reaches it, then laid out
+   normally so it pushes the masthead down rather than covering it */
+.skip { position: absolute; inset-inline-start: -100vw; }
+.skip:focus { position: static; }
+
+/* the masthead is one row, not four stacked blocks */
+header { display: flex; flex-wrap: wrap; align-items: baseline;
+         column-gap: 1.5rem; row-gap: 0.25rem; }
+header .sitename, header .subtitle { margin-block: 0.5rem; }
+header nav.languages { margin-inline-start: auto; }
+
+/* prev, the page position and next as one row: the position sits between
+   the two directions wherever both exist, and does not move when one of
+   them is out of range */
+ul.pager { list-style: none; display: flex; gap: 1.5em; padding: 0; }
+
+/* cqp's error text carries a <-- pointer aligned by column, so it scrolls
+   rather than reflowing; a corpus .info file is prose, so it wraps */
+pre { overflow-x: auto; }
+.about pre { white-space: pre-wrap; }
 
 .kwic {
   border-collapse: collapse;
@@ -22,7 +55,7 @@
 .kwic .expanded td { white-space: normal; text-align: left; }
 
 /* the site nav is a horizontal link list; the page you are on is marked */
-header nav ul { list-style: none; display: flex; gap: 1em; padding: 0; }
+header nav ul { list-style: none; display: flex; gap: 1.5em; padding: 0; }
 header nav [aria-current] { font-weight: bold; }
 
 /* statistics tables (attributes, hit counts, frequencies): separated

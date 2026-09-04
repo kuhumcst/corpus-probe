@@ -32,7 +32,10 @@
   "Every user interface string, keyed by what it names, in each of the
   `languages`. A word that differs by role (the noun heading the search
   page, the verb on its button) is a key of its own."
-  {;; the site header, its navigation and the document metadata
+  {;; the bypass link, the site header, its navigation, the footer and the
+   ;; document metadata
+   :skip-to-content {:da "Gå til indhold" :en "Skip to content"}
+   :powered-by      {:da "Drevet af" :en "Powered by"}
    :subtitle        {:da "CWB-korpussøgning" :en "CWB corpus search"}
    :site            {:da "Websted" :en "Site"}
    :language        {:da "Sprog" :en "Language"}
@@ -74,7 +77,8 @@
    :sort-random     {:da "tilfældig" :en "random"}
 
    ;; the concordance and its summary
-   :results         {:da "Resultater" :en "Results"}
+   :concordance     {:da "Konkordans" :en "Concordance"}
+   :no-hits         {:da "Ingen træf." :en "No hits."}
    :hit             {:da "træf" :en "hit"}
    :hits            {:da "træf" :en "hits"}
    :in              {:da "i" :en "in"}
@@ -121,7 +125,6 @@
                      :en "structural attributes"}
 
    ;; the corpus index and info pages
-   :corpus-index    {:da "Korpusoversigt" :en "Corpus index"}
    :other           {:da "Andre" :en "Other"}
    :tokens          {:da "tokens" :en "tokens"}
    :no-data         {:da "ingen data" :en "no data"}
@@ -151,7 +154,7 @@
    :search-in       {:da "Søg i" :en "Search"}
    :word-freqs      {:da "Ordfrekvenser i" :en "Word frequencies of"}
 
-   ;; the error alerts (see dk.cst.corpus-probe.views.page/error-types)
+   ;; the error headings (see dk.cst.corpus-probe.views.page/error-types)
    :cqp-error       {:da "CQP-fejl" :en "CQP error"}
    :timeout         {:da "Forespørgslen tog for lang tid"
                      :en "The query timed out"}

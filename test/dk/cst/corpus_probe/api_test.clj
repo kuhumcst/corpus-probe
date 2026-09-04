@@ -24,6 +24,15 @@
     (is (nil? (api/->cqp {:q "   " :mode "cqp"})))
     (is (nil? (api/->cqp {:mode "simple"})))))
 
+(deftest results-fragment-hrefs-test
+  (testing "a page turn lands on the results, not the top of the form"
+    (is (str/ends-with? (api/page-href {:q "hund"} 1) "#results")))
+  (testing "so does the link to the frequencies of the same hits"
+    (is (str/ends-with? (:freq-href (api/search-view-data
+                                     {:registry "nonesuch"}
+                                     {:query-params {:q "hund"}}))
+                        "#results"))))
+
 (deftest page-href-test
   (let [href (api/page-href {:corpus "PROBE" :q "hund" :page "0"} 2)]
     (is (str/starts-with? href "/?"))
@@ -155,6 +164,28 @@
   (testing "blank parts are skipped"
     (is (= "corpus-probe" (api/page-title nil "")))))
 
+(deftest document-test
+  (let [switch {"da" "/?lang=da" "en" "/?lang=en"}
+        plain  (api/document "en" switch "T" [:main {:id "main"} "body"])
+        client (api/document "en" switch "T" [:main {:id "main"} "body"] "[]")
+        ;; nil rather than -1 for absent, so an order assertion cannot
+        ;; pass on a part that is not there at all
+        at     (fn [doc s] (let [i (.indexOf ^String doc ^String s)]
+                             (when-not (neg? i) i)))]
+    (testing "the bypass link is the document's first focusable element"
+      (is (some? (at plain "href=\"#main\"")))
+      (is (< (at plain "href=\"#main\"") (at plain "<header"))))
+    (testing "the footer follows the body, so it is the document's own"
+      (is (some? (at plain "<footer")))
+      (is (< (at plain "<main") (at plain "<footer"))))
+    (testing "#app and the client script are served together, or not at all"
+      (is (not (str/includes? plain "id=\"app\"")))
+      (is (not (str/includes? plain "/js/main.js")))
+      (is (str/includes? client "<div id=\"app\">"))
+      (is (str/includes? client "/js/main.js")))
+    (testing "a page with no payload still gets its <main>"
+      (is (str/includes? plain "<main")))))
+
 (deftest search-title-test
   (testing "no query is just the app name"
     (is (= "corpus-probe" (api/search-title "en" {}))))
@@ -169,6 +200,22 @@
   (testing "no corpora are not counted"
     (is (= "hund · corpus-probe"
            (api/search-title "en" {:q "hund" :corpus []}))))
+  (testing "the outcome rides in the title, which is all a reload announces"
+    (is (= "hund · 6 hits · PROBE · corpus-probe"
+           (api/search-title "en" {:q "hund" :corpus ["PROBE"]}
+                             {:size 6 :page 0
+                              :counts [{:corpus "PROBE" :size 6}]})))
+    (testing "with the page number once past the first"
+      (is (= "hund · 6 hits · PROBE · page 3 · corpus-probe"
+             (api/search-title "en" {:q "hund" :corpus ["PROBE"]}
+                               {:size 6 :page 2
+                                :counts [{:corpus "PROBE" :size 6}]}))))
+    (testing "a search no corpus answered reports no count"
+      (is (= "hund · PROBE · corpus-probe"
+             (api/search-title "en" {:q "hund" :corpus ["PROBE"]}
+                               {:size 0 :page 0
+                                :counts [{:corpus "PROBE"
+                                          :error {:type :timeout}}]})))))
   (testing "a metadata filter is named"
     (is (= "hund · PROBE · text_year 1591 · corpus-probe"
            (api/search-title "en" {:q "hund" :corpus ["PROBE"]
