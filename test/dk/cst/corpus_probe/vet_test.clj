@@ -1,7 +1,8 @@
 (ns dk.cst.corpus-probe.vet-test
   "The startup self-checks: the CWB programs, the sort collation, and what
   the registry's corpora actually read as."
-  (:require [clojure.test :refer [deftest is testing]]
+  (:require [babashka.fs :as fs]
+            [clojure.test :refer [deftest is testing]]
             [dk.cst.corpus-probe.corpus-test :refer [fixture]]
             [dk.cst.corpus-probe.cqp-test :refer [ctx temp-registry when-cwb]]
             [dk.cst.corpus-probe.vet :as vet]))
@@ -30,6 +31,45 @@
      (is (empty? (vet/tools! ctx))))
    (testing "a cqp that is not there is named"
      (is (= ["no-such-cqp"] (vet/tools! (assoc ctx :cqp "no-such-cqp")))))))
+
+(deftest cache-problems-test
+  (testing "no cache configured is not a problem"
+    (is (empty? (vet/cache-problems {})))
+    (is (empty? (vet/cache-problems {:cache-dir ""}))))
+  (testing "a directory that is not there yet is created"
+    (let [dir (fs/file (fs/create-temp-dir) "cache")]
+      (is (empty? (vet/cache-problems {:cache-dir (str dir)})))
+      (is (fs/directory? dir))))
+  (testing "a directory that cannot be written fails every search, loudly"
+    (let [dir (fs/create-temp-dir)]
+      (.setWritable (fs/file dir) false)
+      (is (= [:cache-unusable] (vet/cache-problems {:cache-dir (str dir)})))
+      (.setWritable (fs/file dir) true)))
+  (testing "a budget larger than the disk is reported, not fatal"
+    (let [petabyte (* 1024 1024 1024 1024 1024)
+          dir      (str (fs/create-temp-dir))]
+      (is (= [:cache-over-disk]
+             (vet/cache-problems {:cache-dir       dir
+                                  :cache-max-bytes petabyte})))
+      (testing "and an unusable directory outranks it"
+        (let [f (fs/file (fs/create-temp-dir) "cache")]
+          (spit f "x")
+          (is (= [:cache-unusable]
+                 (vet/cache-problems {:cache-dir       (str f)
+                                      :cache-max-bytes petabyte})))))))
+  (testing "a path that is a file rather than a directory"
+    (let [f (fs/file (fs/create-temp-dir) "cache")]
+      (spit f "x")
+      (is (= [:cache-unusable] (vet/cache-problems {:cache-dir (str f)}))))))
+
+(deftest cache!-test
+  (testing "a usable cache is no problem, and a config without one neither"
+    (is (empty? (vet/cache! {:cache-dir (str (fs/create-temp-dir))})))
+    (is (empty? (vet/cache! {}))))
+  (testing "an unusable one is reported, for start! to run without it"
+    (let [f (fs/file (fs/create-temp-dir) "cache")]
+      (spit f "x")
+      (is (= [:cache-unusable] (vet/cache! {:cache-dir (str f)}))))))
 
 (deftest collation-test
   (when-cwb

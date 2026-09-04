@@ -13,10 +13,12 @@
   exists, so the chooser keeps it, disabled, and its info page says CWB
   has no data for it (see dk.cst.corpus-probe.corpus/phantom?)."
   (:require [clojure.string :as str]
+            [dk.cst.corpus-probe.cache :as cache]
             [dk.cst.corpus-probe.corpus :as corpus]
             [dk.cst.corpus-probe.cqp :as cqp]
             [dk.cst.corpus-probe.search :as search]
-            [taoensso.telemere :as t]))
+            [taoensso.telemere :as t])
+  (:import [java.io File]))
 
 (def timeout-ms
   "How long a self-check waits for a command that should answer at once."
@@ -152,6 +154,62 @@
       (t/event! ::collation-fallback
                 {:level :warn
                  :data  {:problem problem :sort-locale sort-locale}}))
+    problems))
+
+(defn writable?
+  "True when a file can be created in directory `dir` and removed again.
+
+  `File.canWrite` answers from the permission bits alone, which a
+  read-only mount or an ACL can contradict. It does not catch a disk that
+  is merely nearly full, an empty file still fitting on one; that case is
+  left to dk.cst.corpus-probe.search/fresh-sections!, which answers the
+  request without the cache when a save fails."
+  [^File dir]
+  (try
+    (.delete (File/createTempFile "probe" nil dir))
+    (catch Exception _ false)))
+
+(defn cache-problems
+  "What would stop `ctx` saving query results in its cache directory:
+  :cache-unusable when the directory is neither there nor creatable, or is
+  there but cannot be written (see `writable?`), and :cache-over-disk when
+  its byte budget is larger than the filesystem has left. Nothing when
+  `ctx` keeps no cache, running without one being a supported setting in
+  which every request queries afresh.
+
+  The two are not equally bad. An unusable directory fails every save; a
+  budget larger than the disk only fails the saves that fill it, and then
+  goes on failing them, since nothing evicts until the budget is reached
+  and it never is. The directory is created when it is missing, since a
+  fresh installation has no reason to have one already."
+  [ctx]
+  (if-let [^File dir (cache/directory ctx)]
+    (do
+      (.mkdirs dir)
+      (cond
+        (not (and (.isDirectory dir) (writable? dir))) [:cache-unusable]
+        (< (.getUsableSpace dir) (cache/max-bytes ctx)) [:cache-over-disk]
+        :else                                          []))
+    []))
+
+(defn cache!
+  "Log the `cache-problems` of `config` and return them.
+
+  An unusable directory is an error, not a warning: CQP reports a `save`
+  it could not make like any other failure, so it would fail every search
+  rather than merely slow one down, and the server drops the cache from
+  its configuration instead. A budget larger than the disk is a warning,
+  the cache still working until the disk runs out."
+  [config]
+  (let [problems (cache-problems config)]
+    (doseq [problem problems]
+      (t/event! ::cache-problem
+                {:level (if (= problem :cache-unusable) :error :warn)
+                 :data  {:problem    problem
+                         :cache-dir  (:cache-dir config)
+                         :max-bytes  (cache/max-bytes config)
+                         :free-bytes (some-> (cache/directory config)
+                                             (.getUsableSpace))}}))
     problems))
 
 (defn corpus!

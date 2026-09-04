@@ -706,9 +706,13 @@
       {:status 400 :body "bad request"}
       (try
         (let [q      (query/position-query cpos* matchend*)
+              ;; one hit at a position nothing will ask for again, so
+              ;; saving it would only fill the cache (see
+              ;; dk.cst.corpus-probe.cache)
               result (search/kwic! ctx corpus q {:context      expanded-context
                                                  :rows         [0 0]
-                                                 :struct-attrs []})]
+                                                 :struct-attrs []
+                                                 :cache?       false})]
           (if-let [hit (first (:hits result))]
             {:status  200
              :headers {"Content-Type"  "application/transit+json; charset=utf-8"

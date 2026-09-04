@@ -42,7 +42,7 @@
     [from (dec (+ from size))]))
 
 (def kwic-defaults
-  "Default KWIC display options, shared by `kwic-commands` and
+  "Default KWIC display options, shared by `kwic-batch` and
   dk.cst.corpus-probe.search so the two cannot disagree: five tokens of
   context and the rows of the default page."
   {:context 5
@@ -64,6 +64,35 @@
   (when-not (corpus-name? corpus)
     (throw (ex-info "Invalid corpus name" {:corpus corpus})))
   corpus)
+
+(defn valid-result-name
+  "Return `nqr` when it is a name CQP accepts for a query result, else
+  throw: a letter or underscore followed by letters, digits, underscores
+  and hyphens, which is CQP's own lexer rule for one.
+
+  The guard every command builder applies before splicing a result name
+  into a command, as `valid-corpus-name` does for a corpus name. CQP also
+  rejects a name that is exactly one of its keywords, which no name this
+  application generates can be: they all carry an underscore, and no CQP
+  keyword does (see dk.cst.corpus-probe.cache/result-name)."
+  [nqr]
+  (when-not (re-matches #"[a-zA-Z_][a-zA-Z0-9_-]*" (str nqr))
+    (throw (ex-info "Invalid query result name" {:nqr nqr})))
+  nqr)
+
+(defn valid-data-directory
+  "Return `dir` when it can be embedded in a `set DataDirectory` command,
+  else throw: no quote or backslash, which the double-quoted CQP string
+  around it has no escape for, and no control character.
+
+  A newline is the one that matters most: it ends the quoted string, and
+  CQP reads the rest of the line as commands. The path is configured
+  rather than requested, so this catches a misconfiguration rather than an
+  attacker, but it is the same allowlist discipline as its siblings."
+  [dir]
+  (when-not (re-matches #"[^\"\\\p{Cntrl}]*" (str dir))
+    (throw (ex-info "Invalid cache directory" {:cache-dir dir})))
+  dir)
 
 (defn escape-literal
   "Escape `s` for embedding inside a double-quoted CQP regular expression:
@@ -213,39 +242,96 @@
   (or (some (fn [[k _ command]] (when (= k mode) command)) sort-modes)
       "sort Last;"))
 
-(defn kwic-commands
-  "Build the command batch for the rows `:rows` of `query` (raw CQP) against
-  `corpus`, returning a vector of command strings.
+(defn setup-command
+  "The command configuring one KWIC batch: the hardened display profile,
+  `context` tokens of context and, when `cache-dir` is given, the
+  directory CQP reads and writes saved query results in.
 
-  Batch order, relied upon by dk.cst.corpus-probe.search:
-  0 display profile + context, 1 corpus activation, 2 locked query,
-  3 `size`, 4 sort, 5 `show` + `cat` rows, 6 `dump` rows, then one `tabulate`
-  per entry of `struct-attrs`.
+  DataDirectory is set here rather than beside the query because setting
+  it rescans the corpus list, which resets the active corpus, so it has to
+  come before the activation (docs/research/gap-nqr-persistence.md
+  section 1)."
+  [context cache-dir]
+  (str (when cache-dir
+         (str "set DataDirectory \"" (valid-data-directory cache-dir) "\"; "))
+       hardened-profile " set Context " (long context) " words;"))
 
-  `p-attrs` are the corpus's positional attributes (registry order) to show;
-  `struct-attrs` the annotated s-attributes to fetch per hit. Each gets its
-  own single-column `tabulate` command so that a whole output line is one
-  annotation value. Annotation values may legally contain TAB, so packing
-  them into one TAB-separated row would misalign the columns. `context` is
-  in tokens; `rows` is the [from to] row range (see `page-rows`) of the hits
-  to fetch, which `cat` clamps to the result silently. `sort` is a sort mode
-  (see `sort-modes`); the `cat`, `dump` and `tabulate` rows then follow the
-  sorted order. `filter` restricts the query to the regions of a metadata
-  filter (see `restricted-query`)."
-  [corpus query {:keys [p-attrs struct-attrs context rows sort filter]
+(defn page-commands
+  "The [section command] pairs displaying the rows `[from to]` of the
+  query result named `nqr`: a `:cat` section, the `:dump` anchors of the
+  same rows and one `:tabulate` section per entry of `struct-attrs`.
+
+  `p-attrs` are the corpus's positional attributes (registry order) to
+  show. Each structural attribute gets its own single-column `tabulate`
+  command so that a whole output line is one annotation value: annotation
+  values may legally contain TAB, so packing them into one TAB-separated
+  row would misalign the columns. `cat` clamps the range to the result
+  silently, so a range past the last row needs no check."
+  [nqr [from to] p-attrs struct-attrs]
+  (let [span (str nqr " " from " " to)
+        show (when (next p-attrs)
+               (str "show " (str/join " " (map #(str "+" (name %))
+                                               (rest p-attrs))) "; "))]
+    (into [[:cat (str show "cat " span ";")]
+           [:dump (str "dump " span ";")]]
+          (map (fn [attr]
+                 [:tabulate (str "tabulate " span " match " (name attr) ";")]))
+          struct-attrs)))
+
+(defn kwic-batch
+  "The batch running `query` (raw CQP) against `corpus` and returning the
+  rows `:rows` of its result: a vector of [section command] pairs, each
+  section naming what its command's output holds (see `batch-sections`).
+
+  `context` is in tokens; `rows` is the [from to] row range (see
+  `page-rows`); `sort` is a sort mode (see `sort-modes`), which the `cat`,
+  `dump` and `tabulate` rows then follow; `filter` restricts the query to
+  the regions of a metadata filter (see `restricted-query`); `p-attrs`,
+  `struct-attrs` and `cache-dir` are as `page-commands` and
+  `setup-command` take them.
+
+  Given `nqr`, the result is also saved under that name for
+  `stored-kwic-batch` to page later without running the query again. It is
+  given the name only after being sorted, since the sort order travels
+  with the result into the save file, which is what makes a stored result
+  worth having (docs/research/gap-nqr-persistence.md section 2)."
+  [corpus query {:keys [p-attrs struct-attrs context rows sort filter
+                        cache-dir nqr]
                  :or   {context (:context kwic-defaults)
                         rows    (:rows kwic-defaults)}}]
-  (let [[from to]  rows
-        page-range (str "Last " from " " to)
-        show       (when (next p-attrs)
-                     (str "show " (str/join " " (map #(str "+" (name %))
-                                                     (rest p-attrs))) "; "))]
-    (into [(str hardened-profile " set Context " (long context) " words;")
-           (str corpus ";")
-           (restricted-query query filter)
-           "size Last;"
-           (sort-command sort)
-           (str show "cat " page-range ";")
-           (str "dump " page-range ";")]
-          (map #(str "tabulate " page-range " match " (name %) ";"))
-          struct-attrs)))
+  (-> [[:setup  (setup-command context cache-dir)]
+       [:corpus (str corpus ";")]
+       [:query  (restricted-query query filter)]
+       [:size   "size Last;"]
+       [:sort   (sort-command sort)]]
+      (cond-> nqr (conj (let [nqr (valid-result-name nqr)]
+                          [:save (str nqr " = Last; save " nqr ";")])))
+      (into (page-commands "Last" rows p-attrs struct-attrs))))
+
+(defn stored-kwic-batch
+  "The batch returning the rows `:rows` of the saved query result named
+  `nqr` of `corpus`: [section command] pairs, as `kwic-batch` returns.
+
+  No query runs and nothing is sorted, the matches and their order both
+  coming from the save file, so the options that decided them (the query,
+  `sort` and `filter`) are none of this one's business."
+  [corpus nqr {:keys [p-attrs struct-attrs context rows cache-dir]
+               :or   {context (:context kwic-defaults)
+                      rows    (:rows kwic-defaults)}}]
+  (into [[:setup  (setup-command context cache-dir)]
+         [:corpus (str corpus ";")]
+         [:size   (str "size " (valid-result-name nqr) ";")]]
+        (page-commands nqr rows p-attrs struct-attrs)))
+
+(defn batch-sections
+  "Group the output `results` of `batch` (its [section command] pairs) by
+  section: a map of section key to the vector of that section's output
+  line vectors, in batch order.
+
+  A section key repeats, `:tabulate` doing so once per structural
+  attribute, so every key holds a vector of sections rather than one."
+  [batch results]
+  (reduce (fn [m [[section _] lines]]
+            (update m section (fnil conj []) lines))
+          {}
+          (map vector batch results)))

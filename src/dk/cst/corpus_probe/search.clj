@@ -16,6 +16,7 @@
   parameter spliced into a command (corpus names and attribute names) is
   validated here against the corpus's own inventory first."
   (:require [clojure.string :as str]
+            [dk.cst.corpus-probe.cache :as cache]
             [dk.cst.corpus-probe.corpus :as corpus]
             [dk.cst.corpus-probe.cqp :as cqp]
             [dk.cst.corpus-probe.parse :as parse]
@@ -104,6 +105,212 @@
                         {:corpus corpus :attrs bad})))
       (vec (sort-by (juxt (comp - regions key) key) filter)))))
 
+(defn cache-opts
+  "`opts` with the cache directory and the name the result of `query` in
+  `corpus` is saved under, when `ctx` keeps a cache and `opts` does not
+  turn it off with a false :cache?.
+
+  Creates the corpus's cache directory, CQP given a data directory that
+  does not exist saving nothing and reporting nothing. The name is taken
+  from the filter the corpus was given rather than the one the request
+  asked for, so that two spellings of one filter share a saved result."
+  [ctx corpus query opts]
+  (if-let [dir (and (:cache? opts true)
+                    (cache/corpus-directory! ctx corpus))]
+    (assoc opts
+           :cache-dir (str dir)
+           :nqr       (cache/result-name ctx corpus query opts))
+    opts))
+
+(defn kwic-opts!
+  "The options one KWIC batch for `corpus` needs, from the `opts` of
+  `kwic!` via `ctx`.
+
+  The KWIC defaults, the corpus's positional attributes and the structural
+  attributes to fetch per hit, its metadata filter as
+  dk.cst.corpus-probe.query/filter-query takes it, and whatever the cache
+  adds (see `cache-opts`). Requested structural attributes are checked
+  against the corpus's own inventory first, since their names are spliced
+  into a command."
+  [ctx corpus query opts]
+  (let [attributes (corpus/attributes! ctx corpus)
+        annotated  (attr-names annotated-s-attr? attributes)
+        requested  (:struct-attrs opts)]
+    (when-let [bad (seq (remove (set annotated) requested))]
+      (throw (ex-info "Unknown struct attributes"
+                      {:corpus corpus :struct-attrs bad})))
+    (cache-opts ctx corpus query
+                (merge query/kwic-defaults
+                       opts
+                       {:p-attrs      (attr-names #(= :positional (:type %))
+                                                  attributes)
+                        :struct-attrs (or requested annotated)
+                        :filter       (corpus-filter! ctx corpus
+                                                      (:filter opts))}))))
+
+(defn run-kwic-batch!
+  "Run KWIC `batch` for `query` in `corpus` via `ctx` and return its
+  sections (see dk.cst.corpus-probe.query/batch-sections).
+
+  Throws ex-info when CQP reports an error, times out or dies."
+  [ctx corpus query batch]
+  (let [{:keys [results error]} (cqp/run-batch! ctx (mapv second batch))]
+    (when error
+      (throw (ex-info "KWIC query failed"
+                      {:corpus corpus :query query :error error})))
+    (query/batch-sections batch results)))
+
+(defn batch-matches
+  "How many matches the `sections` of a KWIC batch report."
+  [{[size-lines] :size}]
+  (parse-long (first size-lines)))
+
+(defn intact?
+  "True when the `sections` of a KWIC batch describe a page that could
+  have come from a real query result.
+
+  A saved result that was truncated is not reported as an error when it is
+  read: the pages past the cut are zero-filled, so every row in them comes
+  back at corpus position 0. No two matches of one query share a position,
+  in any sort order, so a page whose positions repeat did not come from
+  the result it claims to."
+  [{[dump-lines] :dump}]
+  (let [positions (map :match (parse/dump->anchors dump-lines))]
+    (or (empty? positions) (apply distinct? positions))))
+
+(defn timeout?
+  "True when exception `e` reports that CQP was killed for taking too long
+  rather than answering."
+  [e]
+  (= :timeout (get-in (ex-data e) [:error :type])))
+
+(defn stored-sections!
+  "The sections of one KWIC page read from the saved query result `:nqr`
+  of `opts`, or nil when none is stored or the stored one does not read.
+
+  A stored result CQP cannot read is discarded, leaving the caller to run
+  the query: a save file left from an earlier build of the corpus kills
+  CQP outright, one reaped between the check and the read leaves the
+  batch reporting an undefined corpus, and one that was truncated reads
+  back without complaint but is caught by `intact?`.
+
+  A timeout is not treated that way and the result is kept, since it says
+  the machine is busy rather than that the file is bad, and re-running the
+  query would be the most expensive possible answer to that."
+  [ctx corpus query {:keys [nqr] :as opts}]
+  (when (and nqr (cache/stored? ctx corpus nqr))
+    (try
+      (let [batch    (query/stored-kwic-batch corpus nqr opts)
+            sections (run-kwic-batch! ctx corpus query batch)]
+        (when-not (intact? sections)
+          (throw (ex-info "Stored result read back damaged"
+                          {:corpus corpus :error {:type :damaged}})))
+        (cache/touch! ctx corpus nqr)
+        ;; reads reclaim as well as saves, or a server that has stopped
+        ;; saving sits at its high-water mark until it saves again
+        (cache/reap-due! ctx)
+        sections)
+      (catch Exception e
+        (when (timeout? e)
+          (throw e))
+        (t/event! ::stored-result-discarded
+                  {:level :warn
+                   :data  {:corpus corpus :error (ex-message e)}})
+        (cache/discard! ctx corpus nqr)
+        nil))))
+
+(defn running-ctx
+  "`ctx` with the longer timeout a batch that runs the query needs (its
+  :query-timeout-ms), leaving batches that only read a result already
+  saved on the ordinary :timeout-ms.
+
+  The two are orders of magnitude apart: reading a page out of a saved
+  result takes milliseconds, and running the query can take minutes on a
+  large corpus (the figures are in resources/config.edn beside the two
+  settings).
+
+  Counting and displaying run the same query, so they get the same
+  budget. Giving counting less would let a corpus time out while being
+  counted and succeed while being shown, and a count that fails is left
+  out of the total, which quietly costs the search pages of hits it
+  actually has."
+  [ctx]
+  (cond-> ctx
+    (:query-timeout-ms ctx) (assoc :timeout-ms (:query-timeout-ms ctx))))
+
+(defn within-deadline
+  "`ctx` with its timeouts cut down to the time left before `deadline`.
+
+  Without this, :search-budget-ms bounds only how many corpora a search
+  starts, not how long the last one may run: a corpus started just before
+  the deadline gets a whole timeout of its own on top of the budget, and
+  the retry in `fresh-sections!` another, so the real ceiling on a request
+  is the budget plus two timeouts rather than the budget."
+  [ctx deadline]
+  (let [left (max 1000 (- deadline (System/currentTimeMillis)))]
+    (cond-> ctx
+      (:timeout-ms ctx)       (update :timeout-ms min left)
+      (:query-timeout-ms ctx) (update :query-timeout-ms min left))))
+
+(defn fresh-sections!
+  "The sections of one KWIC page of `query` in `corpus` via `ctx`, run
+  afresh and saved under the `:nqr` of `opts` when there is one.
+
+  The batch that saves is the batch that does not plus the save, so a
+  failure could be either, and CQP reports a directory it cannot write to
+  like any other error. When the cache is on, the batch is therefore run
+  once more without it before the failure is reported: a cache that has
+  stopped working is no reason to stop answering, and the page itself was
+  never the problem. A timeout is not retried, having spent its whole
+  budget already. Both runs get the query timeout (see `running-ctx`),
+  the retry doing the same work as the batch it replaces."
+  [ctx corpus query {:keys [nqr] :as opts}]
+  (let [pending (when nqr (cache/pending-name nqr))]
+    (try
+      (let [batch    (query/kwic-batch corpus query (assoc opts :nqr pending))
+            sections (run-kwic-batch! (running-ctx ctx) corpus query batch)]
+        (when nqr
+          (cache/commit! ctx corpus pending nqr (batch-matches sections))
+          ;; after the save rather than before, so the result just written
+          ;; is what the disk budget is measured against
+          (cache/reap-due! ctx))
+        sections)
+      (catch Exception e
+        (when (or (nil? nqr) (timeout? e))
+          (throw e))
+        (let [batch    (query/kwic-batch corpus query
+                                         (dissoc opts :nqr :cache-dir))
+              sections (run-kwic-batch! (running-ctx ctx) corpus query batch)]
+          ;; logged only once the retry has answered, which is what says
+          ;; the cache was at fault rather than the query
+          (t/event! ::cache-bypassed
+                    {:level :warn
+                     :data  {:corpus corpus :error (ex-message e)}})
+          sections)))))
+
+(defn kwic-sections!
+  "The sections of one KWIC page of `query` in `corpus` via `ctx` under
+  `opts` (see `kwic-opts!`): read from the saved query result when one is
+  stored (see `stored-sections!`), and run afresh otherwise (see
+  `fresh-sections!`).
+
+  Requests that want the same page of the same search share one run of it
+  while it is in flight (see dk.cst.corpus-probe.cache/share!), so that a
+  reader who reloads during a long sort waits for the sort already running
+  rather than starting a second one.
+
+  They are the same page when they would run the same batch, so the batch
+  is what they share by: it names the stored result and spells out every
+  row, attribute and width that decides what CQP prints. Anything a future
+  option changes about the output changes the batch, and so changes the
+  key, without anyone having to remember to add it."
+  [ctx corpus query {:keys [nqr] :as opts}]
+  (let [fetch #(or (stored-sections! ctx corpus query opts)
+                   (fresh-sections! ctx corpus query opts))]
+    (if nqr
+      (cache/share! (query/stored-kwic-batch corpus nqr opts) fetch)
+      (fetch))))
+
 (defn kwic!
   "Run CQP `query` against `corpus` (an uppercase CQP corpus name) through
   the installation described by `ctx` (see dk.cst.corpus-probe.cqp) and
@@ -118,74 +325,80 @@
   :struct-attrs (defaults to every annotated s-attribute of the corpus;
   anything not in that inventory is rejected).
 
+  When `ctx` keeps a cache (see dk.cst.corpus-probe.cache), the result is
+  saved there and a later page of the same query, filter and sort mode is
+  read back from it rather than queried and sorted again; a false :cache?
+  in `opts` leaves it out of the cache, for a query nothing will ask for
+  twice.
+
   Throws ex-info when CQP reports an error, times out or dies."
   ([ctx corpus query]
    (kwic! ctx corpus query {}))
   ([ctx corpus query opts]
-   (let [ctx        (corpus-ctx ctx corpus)
-         attributes (corpus/attributes! ctx corpus)
-         p-attrs    (attr-names #(= :positional (:type %)) attributes)
-         annotated  (attr-names annotated-s-attr? attributes)
-         requested  (:struct-attrs opts)
-         _          (when-let [bad (seq (remove (set annotated) requested))]
-                      (throw (ex-info "Unknown struct attributes"
-                                      {:corpus corpus :struct-attrs bad})))
-         opts       (merge query/kwic-defaults
-                           opts
-                           {:p-attrs      p-attrs
-                            :struct-attrs (or requested annotated)
-                            :filter       (corpus-filter! ctx corpus
-                                                          (:filter opts))})
-         commands   (query/kwic-commands corpus query opts)
-         {:keys [results error]} (cqp/run-batch! ctx commands)]
-     (when error
-       (throw (ex-info "KWIC query failed"
-                       {:corpus corpus :query query :error error})))
-     (let [[_ _ _ size-lines _sort cat-lines dump-lines & tab-sections] results
-           {:keys [struct-attrs rows]} opts
-           hits    (parse/kwic->hits p-attrs cat-lines)
-           anchors (parse/dump->anchors dump-lines)
-           structs (when (seq struct-attrs)
-                     ;; one tabulate section per attribute: a whole line is
-                     ;; one annotation value, so embedded TABs survive
-                     (apply mapv
-                            (fn [& values]
-                              (zipmap struct-attrs values))
-                            tab-sections))]
-       (when (not= (count hits) (count anchors))
-         ;; cat and dump disagree only when CQP printed something other
-         ;; than the requested rows, so the page cannot be trusted
-         (throw (ex-info "KWIC output misaligned"
-                         {:corpus corpus
-                          :error  {:type     :misaligned
-                                   :expected (count hits)
-                                   :received (count anchors)}})))
-       {:corpus corpus
-        :query  query
-        :size   (parse-long (first size-lines))
-        :rows   rows
-        :hits   (mapv (fn [hit anchor struct]
-                        (cond-> (assoc hit :anchors anchor)
-                          struct (assoc :structs struct)))
-                      hits anchors (or structs (repeat nil)))}))))
+   (let [ctx      (corpus-ctx ctx corpus)
+         opts     (kwic-opts! ctx corpus query opts)
+         {:keys [p-attrs struct-attrs rows]} opts
+         sections (kwic-sections! ctx corpus query opts)
+         {[cat-lines]  :cat
+          [dump-lines] :dump
+          tab-sections :tabulate} sections
+         hits     (parse/kwic->hits p-attrs cat-lines)
+         anchors  (parse/dump->anchors dump-lines)
+         structs  (when (seq struct-attrs)
+                    ;; one tabulate section per attribute: a whole line is
+                    ;; one annotation value, so embedded TABs survive
+                    (apply mapv
+                           (fn [& values]
+                             (zipmap struct-attrs values))
+                           tab-sections))]
+     (when (not= (count hits) (count anchors))
+       ;; cat and dump disagree only when CQP printed something other
+       ;; than the requested rows, so the page cannot be trusted
+       (throw (ex-info "KWIC output misaligned"
+                       {:corpus corpus
+                        :error  {:type     :misaligned
+                                 :expected (count hits)
+                                 :received (count anchors)}})))
+     {:corpus corpus
+      :query  query
+      :size   (batch-matches sections)
+      :rows   rows
+      :hits   (mapv (fn [hit anchor struct]
+                      (cond-> (assoc hit :anchors anchor)
+                        struct (assoc :structs struct)))
+                    hits anchors (or structs (repeat nil)))})))
+
+(defn run-size!
+  "Count the matches of CQP `query` in `corpus` via `ctx`, within
+  `filter-by` when there is one, by running the query.
+
+  Throws ex-info when CQP reports an error, times out or dies."
+  [ctx corpus query filter-by]
+  (let [{:keys [results error]}
+        (cqp/run-batch! ctx [(str corpus ";")
+                             (query/restricted-query query filter-by)
+                             "size Last;"])]
+    (when error
+      (throw (ex-info "Size query failed"
+                      {:corpus corpus :query query :error error})))
+    (parse-long (first (last results)))))
 
 (defn size!
   "The number of matches of CQP `query` in `corpus` via `ctx`, within the
-  :filter of `opts` when there is one. Throws ex-info when CQP reports an
-  error, times out or dies."
+  :filter of `opts` when there is one.
+
+  Counted once and then remembered (see
+  dk.cst.corpus-probe.cache/count!), because paging a search over several
+  corpora counts the ones contributing no rows to the page again on every
+  page, and that is a whole query each time. Throws ex-info when CQP
+  reports an error, times out or dies."
   ([ctx corpus query]
    (size! ctx corpus query {}))
   ([ctx corpus query {:keys [filter]}]
-   (let [ctx (corpus-ctx ctx corpus)
-         {:keys [results error]}
-         (cqp/run-batch! ctx [(str corpus ";")
-                              (query/restricted-query
-                               query (corpus-filter! ctx corpus filter))
-                              "size Last;"])]
-     (when error
-       (throw (ex-info "Size query failed"
-                       {:corpus corpus :query query :error error})))
-     (parse-long (first (last results))))))
+   (let [ctx       (corpus-ctx ctx corpus)
+         filter-by (corpus-filter! ctx corpus filter)]
+     (cache/count! ctx corpus query {:filter filter-by}
+                   #(run-size! (running-ctx ctx) corpus query filter-by)))))
 
 (defn corpus-size!
   "The size of `query`'s result in `corpus` via `ctx` (`opts` as for
@@ -206,7 +419,8 @@
                (fn [corpus]
                  (if (overdue? deadline)
                    {:corpus corpus :error {:type :timeout}}
-                   (corpus-size! ctx corpus query opts)))
+                   (corpus-size! (within-deadline ctx deadline)
+                                 corpus query opts)))
                corpora)))
 
 (defn fill-page!
@@ -227,7 +441,8 @@
     (if (or (nil? corpus) (> offset to) (overdue? deadline))
       {:counts counts :hits hits :remaining remaining}
       (let [rows [(max 0 (- from offset)) (- to offset)]
-            res  (try (kwic! ctx corpus query (assoc opts :rows rows))
+            res  (try (kwic! (within-deadline ctx deadline) corpus query
+                             (assoc opts :rows rows))
                       (catch Exception e {:error (error-map e)}))]
         (recur more
                (+ offset (:size res 0))
@@ -302,7 +517,8 @@
                      (query/restricted-query
                       query (corpus-filter! ctx corpus filter))
                      (str "group Last match " (name attr) ";")]
-           {:keys [results error]} (cqp/run-batch! ctx commands)]
+           ;; a frequency breakdown runs the user's query like any other
+           {:keys [results error]} (cqp/run-batch! (running-ctx ctx) commands)]
        (when error
          (throw (ex-info "Frequency query failed"
                          {:corpus corpus :query query :error error})))

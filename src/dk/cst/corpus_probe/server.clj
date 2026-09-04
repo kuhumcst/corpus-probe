@@ -7,6 +7,7 @@
   ailing one. None of it stops the server."
   (:require [clojure.edn :as edn]
             [clojure.java.io :as io]
+            [dk.cst.corpus-probe.cache :as cache]
             [io.pedestal.connector :as conn]
             [io.pedestal.http.http-kit :as http-kit]
             [io.pedestal.interceptor :as interceptor]
@@ -36,13 +37,14 @@
                        content-security-policy))}))
 
 (defn read-config
-  "Read config.edn from the classpath, resolving the :registry path to an
-  absolute one so cqp finds it regardless of working directory."
+  "Read config.edn from the classpath, resolving the :registry and
+  :cache-dir paths to absolute ones so cqp finds them regardless of
+  working directory."
   []
-  (-> (io/resource "config.edn")
-      (slurp)
-      (edn/read-string)
-      (update :registry #(.getAbsolutePath (io/file %)))))
+  (let [config   (edn/read-string (slurp (io/resource "config.edn")))
+        absolute #(.getAbsolutePath (io/file %))]
+    (cond-> (update config :registry absolute)
+      (:cache-dir config) (update :cache-dir absolute))))
 
 (defonce ^{:doc "The running Pedestal connector, nil when stopped."}
   server
@@ -52,10 +54,13 @@
   "Start the web server from `config` (default: config.edn); no-op when
   already running. Returns the connector.
 
-  Vets the CWB programs and the sort collation first, so a broken
-  installation is in the log before the port is bound, then vets the
-  registry in the background, since reading every corpus of a large one
-  takes a while and nothing it finds stops the server."
+  Vets the CWB programs, the sort collation and the query result cache
+  first, so a broken installation is in the log before the port is bound,
+  then vets the registry in the background, since reading every corpus of
+  a large one takes a while and nothing it finds stops the server. A
+  cache that cannot be written is dropped from the running configuration
+  rather than left to fail every search, and whatever an earlier run left
+  in it is swept once before the first request rather than after it."
   ([]
    (start! (read-config)))
   ([{:keys [port] :as config}]
@@ -63,7 +68,20 @@
        (do
          (vet/tools! config)
          (vet/collation! config)
-         (let [connector (-> (conn/default-connector-map port)
+         ;; the folder tree is long and says nothing about the
+         ;; installation; everything else is what an operator needs to
+         ;; confirm which config.edn this process actually read
+         (t/event! ::configured
+                   {:data (assoc (dissoc config :folders)
+                                 :java (System/getProperty "java.version"))})
+         (let [config    (cond-> config
+                           (some #{:cache-unusable} (vet/cache! config))
+                           (dissoc :cache-dir))
+               ;; reaping otherwise waits for the first search, so
+               ;; whatever a crash left behind sits there until then
+               _         (t/catch->error! {:id ::reaping-failed :catch-val nil}
+                           (cache/reap! config))
+               connector (-> (conn/default-connector-map port)
                              (conn/with-default-interceptors)
                              (update :interceptors #(into [csp-interceptor] %))
                              (conn/with-routes (api/routes config))

@@ -4,10 +4,57 @@
  ;; app's own collation of metadata and frequency values, so the two agree;
  ;; all KU corpora are Danish, so a single locale suffices for now.
  :sort-locale "da_DK.UTF-8"
- ;; how many cqp processes one request runs at once, and the wall-clock
- ;; budget after which a search stops querying further corpora
+ ;; where CQP saves query results, so that paging or re-sorting a search
+ ;; does not run it again; drop the setting to run without a cache and
+ ;; query afresh every time. A result nobody reads for :cache-ttl-ms is
+ ;; deleted, as are the leftovers of a cqp that died mid-save.
+ ;; A saved result holds the whole result, not the page: 12 bytes per
+ ;; match when sorted and 8 when not, so a whole-corpus result of the
+ ;; largest KU corpus (MEMO_ALL, 64.6M tokens) is 739 MiB sorted and 493
+ ;; unsorted, and each of the five sort modes is a separate file. The
+ ;; budget must therefore be a good multiple of the largest single
+ ;; result: below it, results from that corpus can never be kept at all.
+ ;; The least recently read are deleted to stay under it, and reaping
+ ;; runs after a save and after a cache hit, so an idle server never
+ ;; shrinks: this is a high-water mark, not an average.
+ :cache-dir       "dev/cache"
+ :cache-ttl-ms    1200000
+ :cache-max-bytes 10737418240
+ ;; how many cqp processes one request runs at once
  :parallelism 8
- :search-budget-ms 60000
+ ;; A cqp process is killed after :timeout-ms, which covers reading a page
+ ;; out of a result already saved: milliseconds. Running the query is a
+ ;; different order of magnitude and gets :query-timeout-ms instead.
+ ;; Counting is running the query too, so it gets the same one: giving it
+ ;; less would let a corpus time out while being counted and succeed
+ ;; while being shown, and a count that fails is left out of the total,
+ ;; costing the search pages of hits it has.
+ ;;
+ ;; Measured on a 64.6M token corpus (the size of the largest at KU):
+ ;; counting all of it 2.4 s, a page in corpus order 2.3 s and 0.2 s once
+ ;; saved. Sorting all of it is another matter: the locale-aware sorts go
+ ;; through CQP's ExternalSort, and sorting every match took 650 s by
+ ;; word and over 13 minutes by left context, at 3 to 4 GB of memory and
+ ;; a 1 to 2 GB temp file in /tmp.
+ ;;
+ ;; Five minutes therefore leaves roughly ten times the headroom a real
+ ;; search needs (two million matches sort in 3 s by word and 19 s by
+ ;; left) while refusing to sort a whole large corpus at all. Corpus
+ ;; order and random sorting are unaffected, being internal to CQP.
+ ;; Refusing is not free: the sort is killed after five minutes of work,
+ ;; and CQP leaves its temp file behind when killed, so a reader who
+ ;; keeps retrying a query like that fills /tmp. Sizing /tmp, and giving
+ ;; the service a private one, belongs with the deployment.
+ ;;
+ ;; A sort is paid once: later pages are read from the saved result.
+ ;;
+ ;; :search-budget-ms caps the whole search, and no single batch may
+ ;; outlive it, so this is also the longest a request can take. A reverse
+ ;; proxy in front of the app needs a read timeout above it (nginx
+ ;; proxy_read_timeout and Apache ProxyTimeout both default to 60 s).
+ :timeout-ms       60000
+ :query-timeout-ms 300000
+ :search-budget-ms 300000
  ;; the corpus index grouping: folders may nest and name corpora by their
  ;; uppercase CQP ID; corpora not named anywhere are listed ungrouped, so
  ;; this tree only ever adds structure, never hides a corpus. PROBE is left

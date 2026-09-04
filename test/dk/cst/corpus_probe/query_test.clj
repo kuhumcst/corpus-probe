@@ -112,28 +112,111 @@
       (is (= 24 (- to from))))
     (is (<= (second (query/page-rows Long/MAX_VALUE 25)) query/max-row))))
 
-(deftest kwic-commands-test
-  (let [opts     {:p-attrs      [:word :pos :lemma]
-                  :struct-attrs [:text_id :text_title]
-                  :rows         [20 29]
-                  :sort         "word"}
-        commands (query/kwic-commands "PROBE" "\"hund\"" opts)]
-    (is (= 9 (count commands)))
-    (is (= "PROBE;" (nth commands 1)))
-    (testing "the sort slot precedes the page commands"
-      (is (str/includes? (nth commands 4) "ExternalSort")))
+(defn batch-commands
+  "The commands of `batch` by section, so that a batch reads by name
+  rather than by position."
+  [batch]
+  (query/batch-sections batch (mapv second batch)))
+
+(deftest valid-result-name-test
+  (is (= "q_ab12" (query/valid-result-name "q_ab12")))
+  (testing "CQP cannot parse a name beginning with a digit"
+    (is (thrown? Exception (query/valid-result-name "1abc"))))
+  (testing "nothing outside CQP's own identifier rule"
+    (is (thrown? Exception (query/valid-result-name "q abc")))
+    (is (thrown? Exception (query/valid-result-name "q;drop")))
+    (is (thrown? Exception (query/valid-result-name "")))))
+
+(deftest valid-data-directory-test
+  (is (= "/var/cache/probe" (query/valid-data-directory "/var/cache/probe")))
+  (testing "a quote or backslash would end the quoted CQP string early"
+    (is (thrown? Exception (query/valid-data-directory "/tmp/a\"b")))
+    (is (thrown? Exception (query/valid-data-directory "/tmp/a\\b"))))
+  (testing "a newline would end it and leave CQP reading commands"
+    (is (thrown? Exception (query/valid-data-directory "/tmp/a\nPROBE;")))
+    (is (thrown? Exception (query/valid-data-directory "/tmp/a\tb")))))
+
+(deftest batch-sections-test
+  (is (= {:size [["5"]] :cat [["a"] ["b"]]}
+         (query/batch-sections [[:size "size Last;"]
+                                [:cat "cat Last 0 0;"]
+                                [:cat "cat Last 1 1;"]]
+                               [["5"] ["a"] ["b"]])))
+  (testing "a batch nothing ran has no sections"
+    (is (= {} (query/batch-sections [] [])))))
+
+(deftest kwic-batch-test
+  (let [opts {:p-attrs      [:word :pos :lemma]
+              :struct-attrs [:text_id :text_title]
+              :rows         [20 29]
+              :sort         "word"}
+        b    (batch-commands (query/kwic-batch "PROBE" "\"hund\"" opts))]
+    (is (= ["PROBE;"] (:corpus b)))
+    (is (= ["size Last;"] (:size b)))
+    (is (str/includes? (first (:sort b)) "ExternalSort"))
     (testing "the rows select the cat and dump range"
-      (is (str/includes? (nth commands 5) "cat Last 20 29;"))
-      (is (= "dump Last 20 29;" (nth commands 6))))
+      (is (str/includes? (first (:cat b)) "cat Last 20 29;"))
+      (is (= ["dump Last 20 29;"] (:dump b))))
     (testing "p-attributes beyond word are shown"
-      (is (str/includes? (nth commands 5) "show +pos +lemma; ")))
+      (is (str/includes? (first (:cat b)) "show +pos +lemma; ")))
     (testing "each struct attribute gets its own single-column tabulate"
-      (is (= "tabulate Last 20 29 match text_id;" (nth commands 7)))
-      (is (= "tabulate Last 20 29 match text_title;" (nth commands 8)))))
+      (is (= ["tabulate Last 20 29 match text_id;"
+              "tabulate Last 20 29 match text_title;"]
+             (:tabulate b)))))
   (testing "no tabulate commands without struct attributes"
-    (is (= 7 (count (query/kwic-commands "PROBE" "\"hund\""
-                                         {:p-attrs [:word]})))))
+    (is (nil? (:tabulate (batch-commands
+                          (query/kwic-batch "PROBE" "\"hund\""
+                                            {:p-attrs [:word]}))))))
   (testing "the default rows are the first page"
-    (is (= "dump Last 0 24;"
-           (nth (query/kwic-commands "PROBE" "\"hund\"" {:p-attrs [:word]})
-                6)))))
+    (is (= ["dump Last 0 24;"]
+           (:dump (batch-commands (query/kwic-batch "PROBE" "\"hund\""
+                                                    {:p-attrs [:word]})))))))
+
+(deftest kwic-batch-cache-test
+  (testing "without a cache the batch neither saves nor sets DataDirectory"
+    (let [b (batch-commands (query/kwic-batch "PROBE" "\"hund\""
+                                              {:p-attrs [:word]}))]
+      (is (nil? (:save b)))
+      (is (not (str/includes? (first (:setup b)) "DataDirectory")))))
+  (testing "with a cache the sorted result is saved under the given name"
+    (let [b (batch-commands
+             (query/kwic-batch "PROBE" "\"hund\""
+                               {:p-attrs   [:word]
+                                :cache-dir "/var/cache/probe"
+                                :nqr       "q_abc"}))]
+      (is (str/includes? (first (:setup b))
+                         "set DataDirectory \"/var/cache/probe\"; "))
+      (is (= ["q_abc = Last; save q_abc;"] (:save b)))
+      (testing "the page still comes from Last, which is what was sorted"
+        (is (= ["dump Last 0 24;"] (:dump b))))))
+  (testing "the name is guarded like every other value spliced in"
+    (is (thrown? Exception (query/kwic-batch "PROBE" "\"hund\""
+                                             {:p-attrs [:word] :nqr "1bad"})))))
+
+(deftest kwic-batch-order-test
+  (testing "DataDirectory precedes activation; the name comes after the sort"
+    (is (= [:setup :corpus :query :size :sort :save :cat :dump]
+           (mapv first (query/kwic-batch "PROBE" "\"hund\""
+                                         {:p-attrs   [:word]
+                                          :cache-dir "/var/cache/probe"
+                                          :nqr       "q_abc"}))))))
+
+(deftest stored-kwic-batch-test
+  (let [batch (query/stored-kwic-batch "PROBE" "q_abc"
+                                       {:p-attrs      [:word :pos]
+                                        :struct-attrs [:text_id]
+                                        :rows         [25 49]
+                                        :cache-dir    "/var/cache/probe"})
+        b     (batch-commands batch)]
+    (testing "nothing is queried, sorted or saved"
+      (is (= [:setup :corpus :size :cat :dump :tabulate] (mapv first batch))))
+    (testing "every row command reads the stored result"
+      (is (= ["size q_abc;"] (:size b)))
+      (is (str/includes? (first (:cat b)) "cat q_abc 25 49;"))
+      (is (= ["dump q_abc 25 49;"] (:dump b)))
+      (is (= ["tabulate q_abc 25 49 match text_id;"] (:tabulate b))))
+    (testing "the display profile and context are still set per request"
+      (is (str/includes? (first (:setup b)) "set Context 5 words;"))))
+  (testing "the name is guarded here too"
+    (is (thrown? Exception (query/stored-kwic-batch "PROBE" "1abc"
+                                                    {:p-attrs [:word]})))))

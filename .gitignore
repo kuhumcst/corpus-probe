@@ -5,6 +5,9 @@
 target/
 dev/corpus/data/
 dev/corpus/registry/
+dev/corpus/registry-big/
+dev/corpus/stor.vrt
+dev/cache/
 .shadow-cljs/
 # shadow-cljs compiled client output (built from src by `shadow-cljs compile app`)
 resources/public/js/
