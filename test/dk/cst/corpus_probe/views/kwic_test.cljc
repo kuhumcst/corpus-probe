@@ -203,12 +203,16 @@
     (testing "every column is headed, so a data cell resolves both headers"
       (is (= [:thead
               [:tr
-               [:th {:scope "col"} "position"]
-               [:th {:scope "col"} "source"]
-               [:th {:scope "col"} "left context"]
-               [:th {:scope "col"} "match"]
-               [:th {:scope "col"} "right context"]]]
+               [:th.cpos {:scope "col"} "position"]
+               [:th.structs {:scope "col"} "source"]
+               [:th.left {:scope "col"} "left context"]
+               [:th.match {:scope "col"} "match"]
+               [:th.right {:scope "col"} "right context"]]]
              (nth table 2))))
+    (testing "a heading carries its column's class, so a rule about the
+              column reaches the heading too"
+      (is (= [:th.structs {:scope "col"} "source"]
+             (get-in table [2 1 2]))))
     (testing "hits are grouped by corpus, each group headed by its name"
       (is (= 2 (count groups)))
       (is (= [:th {:scope "rowgroup" :colspan 5}

@@ -36,6 +36,10 @@ header .languages { margin-inline-start: auto; }
    markup above cannot quietly stop it matching */
 ul.row { list-style: none; display: flex; gap: 1.5em; padding: 0; }
 
+/* the user agent gives a link its line box and no more: 19px, under the
+   24px WCAG 2.5.8 asks for */
+ul.row a, .sitename { display: inline-block; padding-block: 0.2rem; }
+
 /* cqp's error text carries a <-- pointer aligned by column, so it scrolls
    rather than reflowing; a corpus .info file is prose, so it wraps */
 pre { overflow-x: auto; }
@@ -59,9 +63,11 @@ pre { overflow-x: auto; }
 /* the row's one control is a target of its own (WCAG 2.5.8) */
 .kwic .cpos button { min-inline-size: 24px; min-block-size: 24px; }
 
-.kwic .left  { text-align: right; }
-.kwic .match { text-align: center; }
-.kwic .right { text-align: left; }
+/* the data cells only: the classes are on the headings too, and a
+   heading reads left to right whatever its column does */
+.kwic td.left  { text-align: right; }
+.kwic td.match { text-align: center; }
+.kwic td.right { text-align: left; }
 
 /* a token is a button once the client runs, so a keyboard can inspect it.
    It must still read as running text */
@@ -82,10 +88,35 @@ pre { overflow-x: auto; }
 /* the page you are on is marked */
 header nav [aria-current] { font-weight: bold; }
 
+/* The sheet, above the wider layout so that it can reset these: at equal
+   specificity the later rule wins. Named because the sheet's height and
+   the room left under it must agree */
+:root { --sheet-block-size: 45vh; }
+
+/* narrow: the panel is a sheet at the foot of the viewport, so it does
+   not push the hits it describes off the screen */
+.sidebar { position: fixed; inset: auto 0 0 0;
+           max-block-size: var(--sheet-block-size);
+           overflow: auto; background: Canvas; }
+
+/* a fixed sheet covers the last screenful whatever the reader does, so
+   the document has to end above it rather than under it */
+body:has(.sidebar) { padding-block-end: var(--sheet-block-size); }
+
+/* Narrow: wrapping shrinks the table to the viewport while leaving it a
+   table, so the match column stays aligned. Unwrapped it is 807px at
+   375px wide, its match off screen at x=473. The source column goes so
+   the contexts have room; it is still on the row as a title */
+@media (max-width: 63.999rem) {
+  .kwic { white-space: normal; }
+  .kwic .structs { display: none; }
+}
+
 /* Once a search has an answer, the query controls become a rail beside it
    rather than a wall above it, so refining a query costs no scroll. Only
    above 64rem: below that the single column is the design, and the
-   results fragment still lands the reader on the answer. */
+   results fragment still lands the reader on the answer. The block above
+   negates this breakpoint; the two are a pair. */
 @media (min-width: 64rem) {
   main:has(> .result) {
     display: grid;
@@ -120,6 +151,9 @@ header nav [aria-current] { font-weight: bold; }
      describes keep their width; the form is still there and still
      submits, it is just not what the column is for right now */
   main:has(> .sidebar) > search { display: none; }
+
+  /* a column here, not a sheet, so nothing is owed under it */
+  body:has(.sidebar) { padding-block-end: 0; }
 }
 
 /* the current view of a result is marked, like the site nav above it */
@@ -154,11 +188,6 @@ summary { cursor: pointer; }
 /* a concordance's corpus header row, its column headings and its position
    column read left to right like the hits themselves */
 .kwic .corpus th, .kwic thead th, .kwic .cpos { text-align: left; }
-
-/* narrow: the panel is a sheet at the foot of the viewport, so it does
-   not push the hits it describes off the screen */
-.sidebar { position: fixed; inset: auto 0 0 0; max-block-size: 45vh;
-           overflow: auto; background: Canvas; }
 
 /* a select-all and the disclosure it governs are one control pair, so
    they share a row rather than stacking; the disclosure takes the rest of

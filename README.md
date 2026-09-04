@@ -28,6 +28,11 @@ result independent of which others were searched beside it. The frequency
 view is never sampled: counting a random hundred hits answers worse than
 counting them all and costs the same query.
 
+On a narrow screen the concordance keeps its columns and lets them wrap,
+so the aligned match column that makes it scannable survives the phone.
+Unwrapped the table is 807px at 375px wide, with the match off screen.
+The source column is dropped so the contexts have room.
+
 Startup vets the installation and logs what it finds. It checks that the
 CWB programs can be launched, and runs CQP's own sort pipeline (`sort ... |
 gawk`) under the configured locale to see whether it collates the way the

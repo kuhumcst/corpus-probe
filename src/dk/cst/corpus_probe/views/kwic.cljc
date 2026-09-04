@@ -288,15 +288,18 @@
 
 (defn column-headers
   "The concordance's column headings in `ui`. The three token
-  columns reuse the words the sort control already uses for them."
+  columns reuse the words the sort control already uses for them.
+
+  Each heading carries its column's class, so that a rule about a column
+  reaches the heading too rather than counting columns."
   [ui]
   [:thead
    [:tr
-    [:th {:scope "col"} (i18n/tr ui "position")]
-    [:th {:scope "col"} (i18n/tr ui "source")]
-    [:th {:scope "col"} (i18n/tr ui "left context")]
-    [:th {:scope "col"} (i18n/tr ui "match")]
-    [:th {:scope "col"} (i18n/tr ui "right context")]]])
+    [:th.cpos {:scope "col"} (i18n/tr ui "position")]
+    [:th.structs {:scope "col"} (i18n/tr ui "source")]
+    [:th.left {:scope "col"} (i18n/tr ui "left context")]
+    [:th.match {:scope "col"} (i18n/tr ui "match")]
+    [:th.right {:scope "col"} (i18n/tr ui "right context")]]])
 
 (def caption-id
   "The id of the concordance's caption, which names its scroll region."
