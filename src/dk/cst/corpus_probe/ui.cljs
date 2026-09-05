@@ -24,6 +24,7 @@
   (:require [clojure.string :as str]
             [cognitect.transit :as transit]
             [dk.cst.corpus-probe.i18n :as i18n]
+            [dk.cst.corpus-probe.query :as query]
             [dk.cst.corpus-probe.url :as url]
             [dk.cst.corpus-probe.views.kwic :as kwic]
             [dk.cst.corpus-probe.views.layout :as layout]
@@ -462,6 +463,16 @@
     (str/replace (str/trim (str q)) #"\s+" "\n")
     (page/one-line q)))
 
+(defn own-rows
+  "The tokens of an extended search as this client shows them: the served
+  `tokens` (see dk.cst.corpus-probe.api/token-fields) less the blank
+  last one the server ends them in for a reader without a client, who
+  has no button to add one. Kept when it is the only one."
+  [tokens]
+  (if (and (next tokens) (not (url/asks? (last tokens))))
+    (vec (butlast tokens))
+    tokens))
+
 (defn focus-field!
   "Move focus to the form control named `name`, once the render that put
   it there has run: a reader who added or took away a token or a
@@ -585,15 +596,16 @@
                            s (cond-> (assoc-in s [:params :mode] arg)
                                q (assoc-in [:params :q] (carried-query arg q)))]
                        ;; entering the mode with nothing asked yet leaves
-                       ;; tokens the handlers below can edit: the seeded
-                       ;; ones, or one blank
+                       ;; tokens the handlers below can edit: the query as
+                       ;; the form the reader left read it, or one blank
                        (if (and (= "extended" arg)
                                 (not (some url/asks? (:tokens s))))
-                         (let [seeded (url/form-tokens
-                                       (url/tokens-from-query live from))]
-                           (assoc s :tokens (if (seq seeded)
-                                              seeded
-                                              [(url/blank-token 1)])))
+                         (assoc s :tokens
+                                (own-rows
+                                 (query/form-rows
+                                  (query/project
+                                   "extended"
+                                   (query/of (assoc live :mode from))))))
                          s)))))
     :add-token        (add-token!)
     :remove-token     (remove-token! arg)
@@ -812,16 +824,6 @@
                         (into {}
                               (map (fn [hit] [(kwic/hit-key hit) ::loading]))
                               hits)))))
-
-(defn own-rows
-  "The tokens of an extended search as this client shows them: the served
-  `tokens` (see dk.cst.corpus-probe.api/token-fields) less the blank
-  last one the server ends them in for a reader without a client, who
-  has no button to add one. Kept when it is the only one."
-  [tokens]
-  (if (and (next tokens) (not (url/asks? (last tokens))))
-    (vec (butlast tokens))
-    tokens))
 
 (defn client-state
   "Server `data` as the state this client renders from: marked as the

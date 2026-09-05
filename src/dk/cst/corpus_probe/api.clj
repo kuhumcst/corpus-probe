@@ -487,29 +487,28 @@
              [(keyword format) (url/export-href view format params)])))
 
 (defn token-fields
-  "The tokens of the extended-search form for `params`: each token that
-  asks for anything (see dk.cst.corpus-probe.url/asks?) with its fields
-  as the URL carries them (see dk.cst.corpus-probe.url/token-rows) and
-  the conditions of it that ask, then one blank token, numbered as the
-  form wants them (see dk.cst.corpus-probe.url/form-tokens).
+  "The tokens of the extended-search form for `params`: the query they
+  carry (see dk.cst.corpus-probe.query/of) as that form holds it (see
+  dk.cst.corpus-probe.query/project), then one blank token, numbered as
+  the form wants them (see dk.cst.corpus-probe.query/form-rows); the
+  blank one alone for any other form.
 
   A form asked for in the extended mode with no token but a query is
-  seeded from that query (see dk.cst.corpus-probe.url/tokens-from-query),
-  read as the mode `from` says it was typed, which the form names in a
-  hidden field (see dk.cst.corpus-probe.views.page/search-form), words in
-  order without one, so a reader switching mode without the client finds
-  what they typed; the search itself waits for them to send it.
+  seeded from that query, read as the mode `from` says it was typed,
+  which the form names in a hidden field (see
+  dk.cst.corpus-probe.views.page/search-form), words in order without
+  one, so a reader switching mode without the client finds what they
+  typed; the search itself waits for them to send it. CQP is not read,
+  so a switch from it finds the blank token.
 
   TODO: the links of such a page cite no query, the URL rule dropping
   what the mode does not read; a switch page will cite the search it was
-  seeded from once the query is one value."
+  seeded from once the switch is one function on both sides."
   [{:keys [mode from] :as params}]
-  (let [asked (for [token (url/token-rows params) :when (url/asks? token)]
-                (update token :conditions #(filterv url/condition-asks? %)))
-        rows  (if (and (empty? asked) (= "extended" mode))
-                (url/tokens-from-query params from)
-                asked)]
-    (url/form-tokens (concat rows [{:conditions [{}]}]))))
+  (let [query (when (= "extended" mode)
+                (or (query/of params)
+                    (query/of (assoc params :mode (or from "simple")))))]
+    (query/form-rows (query/project "extended" query))))
 
 (defn value-lists!
   "The values of each positional attribute among `attrs` (keywords) that
@@ -743,31 +742,34 @@
   "What `request` asks of `ctx`: its scalar query params, the registry's
   corpora, the corpus names `named` in the params, the names `selected`
   to search, those split into the `known` and the `unknown` (see
-  `split-known`), the CQP query the params compile to (see
+  `split-known`), the `query` the params carry (see
+  dk.cst.corpus-probe.query/of), the CQP it compiles to (see
   dk.cst.corpus-probe.query/->cqp) and the `opts` every search of it
   takes: its metadata :filter (see `filter-params`) and the :patterns
   beside it (see `pattern-params`), the unit of text it is kept :within
-  (see dk.cst.corpus-probe.query/within-unit), the :subset of its hits
-  kept (see `subset-param`) and the word its hits are :near (see
+  (see dk.cst.corpus-probe.query/within), the :subset of its hits kept
+  (see `subset-param`) and the word its hits are :near (see
   `near-param`). A request naming no corpus searches every readable one
   (see `selected-corpora`).
 
   Every handler that answers a search starts from this."
   [ctx request]
   (let [params   (scalar-params (:query-params request))
+        query    (query/of params)
         corpora  (corpus/corpora ctx)
         selected (selected-corpora ctx corpora params)
         [known unknown] (split-known corpora selected)]
     {:params   params
+     :query    query
      :corpora  corpora
      :named    (url/corpora-param (:corpus params))
      :selected selected
      :known    known
      :unknown  unknown
-     :cqp      (query/->cqp params)
+     :cqp      (query/->cqp query)
      :opts     {:filter   (filter-params params)
                 :patterns (pattern-params params)
-                :within   (query/within-unit params)
+                :within   (query/within query)
                 :subset   (subset-param params)
                 :near     (near-param (:near params) (:distance params))}}))
 

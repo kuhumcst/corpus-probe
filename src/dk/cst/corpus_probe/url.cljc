@@ -216,7 +216,7 @@
   {:id id :conditions [{:id 1}]})
 
 (defn form-tokens
-  "Token `rows` (see `token-rows` and `tokens-from-query`) as the
+  "Token `rows` (see `token-rows`) as the
   extended-search form shows them: tokens and their conditions numbered
   afresh under :id (see `numbered`), which the client keeps them apart
   by as they are added and taken away."
@@ -231,33 +231,6 @@
   (if-let [[_ _ field] (token-field k)]
     (get token-defaults field)
     (get defaults k)))
-
-(defn tokens-from-query
-  "The extended-search tokens the query of `params` (its :q, :in, :ci and
-  :match, see dk.cst.corpus-probe.query/simple->cqp) amounts to, read as
-  `mode` reads it, as `token-rows` shapes them without their numbers: one
-  token per word, or, for a list, one token whose conditions are the
-  words, each an alternative to the one before. Empty for a blank query,
-  so a reader switching to the extended mode finds what they typed rather
-  than an empty form.
-
-  `mode` is the one the query was typed in, which the params of a form
-  whose mode was changed no longer say (see
-  dk.cst.corpus-probe.api/token-fields): a list when it is list, words
-  in order otherwise."
-  [{:keys [q in ci match]} mode]
-  (let [words     (remove str/blank? (map str/trim (str/split (str q) #"\s+")))
-        condition (fn [word]
-                    (cond-> {:v word}
-                      (not (str/blank? in))          (assoc :attr in)
-                      ci                             (assoc :ci "on")
-                      (#{"prefix" "suffix" "infix"} match) (assoc :op match)))]
-    (cond
-      (empty? words)   []
-      (= mode "list")  [{:conditions (into [(condition (first words))]
-                                           (map #(assoc (condition %) :join "or"))
-                                           (rest words))}]
-      :else            (mapv (fn [word] {:conditions [(condition word)]}) words))))
 
 (def param-order
   "Every param a search URL may carry, in the order it carries them: what

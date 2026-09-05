@@ -15,6 +15,7 @@
   without the stylesheet."
   (:require [clojure.string :as str]
             [dk.cst.corpus-probe.i18n :as i18n]
+            [dk.cst.corpus-probe.query :as query]
             [dk.cst.corpus-probe.url :as url]
             [dk.cst.corpus-probe.views.controls :as controls]
             [dk.cst.corpus-probe.views.corpus :as corpus-views]
@@ -543,8 +544,8 @@
 
 (defn list-words
   "The words of the list `q` a list-mode search asked for, as
-  dk.cst.corpus-probe.query/simple->cqp reads them: one per line, or
-  several to a line."
+  dk.cst.corpus-probe.query/of reads them: one per line, or several to
+  a line."
   [q]
   (remove str/blank? (str/split (str q) #"\s+")))
 
@@ -831,7 +832,7 @@
   "The control choosing the unit of text an extended search of several
   tokens is kept within, in `ui`: a select over the
   dk.cst.corpus-probe.url/units with `within` chosen, the sentence when
-  it names none (see dk.cst.corpus-probe.query/within-unit)."
+  it names none (see dk.cst.corpus-probe.query/within)."
   [ui within]
   [:label (i18n/tr ui "within") " "
    [:select {:name "within"}
@@ -842,7 +843,7 @@
 (defn match-label
   "What the `match` param value is called, in `ui`: how much of the
   form a simple search must cover (see
-  dk.cst.corpus-probe.query/match-param); the whole word for a value
+  dk.cst.corpus-probe.query/match-op); the whole word for a value
   naming none."
   [ui match]
   (case match
@@ -1120,14 +1121,11 @@
     [:q q]))
 
 (defn asked?
-  "True when the search `params` ask for anything: a query, or, for an
-  extended search, tokens that compiled to one (its :cqp, see
-  dk.cst.corpus-probe.api/search-view-data). A search asking nothing
-  counts every token, which only a frequency table wants."
-  [{:keys [q mode cqp]}]
-  (if (= mode "extended")
-    (some? cqp)
-    (not (str/blank? q))))
+  "True when the search `params` ask for anything (see
+  dk.cst.corpus-probe.query/of). A search asking nothing counts every
+  token, which only a frequency table wants."
+  [params]
+  (some? (query/of params)))
 
 (defn hits-heading
   "What a search found, as the heading of its result in `ui`: how many

@@ -758,7 +758,8 @@
 
 (deftest extended-mode-test
   (testing "the titles name the CQP the rows compiled to"
-    (let [params {:mode "extended" :cqp "[lemma = \"hund\"]" :corpus ["PROBE"]}]
+    (let [params {:mode "extended" :t1.attr "lemma" :t1.v "hund"
+                  :cqp "[lemma = \"hund\"]" :corpus ["PROBE"]}]
       (is (str/starts-with? (api/search-title en params {:size   5
                                                           :page   0
                                                           :counts [{:corpus "PROBE"
@@ -766,7 +767,9 @@
                             "[lemma = \"hund\"] · 5 hits"))
       (is (str/starts-with? (api/frequency-title en (assoc params :attr "word"))
                             "[lemma = \"hund\"]"))
-      (is (str/starts-with? (api/search-title en (dissoc params :cqp) nil)
+      (is (str/starts-with? (api/search-title en (dissoc params :cqp :t1.attr
+                                                         :t1.v)
+                                              nil)
                             "Search"))))
   (testing "the tokens identify the search, as the query does"
     (is (= {:mode "extended" :t1.v "a" :t2.op "any"}
@@ -777,10 +780,15 @@
     (is (= [{:id 1 :conditions [{:id 1 :v "a"} {:id 2 :v "c" :join "or"}]}
             {:id 2 :max "2" :conditions [{:id 1 :op "any"}]}
             {:id 3 :conditions [{:id 1}]}]
-           (api/token-fields {:t1.v "a" :t1.2.attr "pos" :t1.2.join "and"
+           (api/token-fields {:mode "extended"
+                              :t1.v "a" :t1.2.attr "pos" :t1.2.join "and"
                               :t1.3.v "c" :t1.3.join "or"
                               :t2.ci "on" :t5.op "any" :t5.max "2"})))
     (is (= [{:id 1 :conditions [{:id 1}]}] (api/token-fields {:q "x"})))
+    (testing "and the blank alone under any other mode, whose form has no
+              tokens, whatever the URL carries"
+      (is (= [{:id 1 :conditions [{:id 1}]}]
+             (api/token-fields {:t1.v "a" :mode "simple"}))))
     (testing "seeded from the query a reader typed before switching mode,
               read as the mode they typed it in"
       (is (= [{:id 1 :conditions [{:id 1 :v "hund" :ci "on"}]}
@@ -878,9 +886,9 @@
 (deftest list-mode-test
   (testing "a list compiles to one token pattern"
     (is (= "[lemma = \"(hund|kat)\"]"
-           (query/->cqp {:q "hund\nkat" :mode "list" :in "lemma"}))))
+           (query/->cqp (query/of {:q "hund\nkat" :mode "list" :in "lemma"})))))
   (testing "a list is one token, so it is kept within nothing"
-    (is (nil? (query/within-unit {:q "hund\nkat" :mode "list"}))))
+    (is (nil? (query/within (query/of {:q "hund\nkat" :mode "list"})))))
   (testing "a list is titled by its length, a title being one line"
     (is (str/starts-with? (api/search-title en {:q "hund\nkat\n" :mode "list"})
                           "2 words"))))

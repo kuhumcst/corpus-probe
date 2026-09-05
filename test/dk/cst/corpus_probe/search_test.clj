@@ -48,9 +48,9 @@
 (deftest simple-search-round-trip-test
   (when-cwb
    (is (= 5 (:size (search/kwic! ctx "PROBE"
-                                 (query/simple->cqp "hund"
-                                                    {:prefix?           true
-                                                     :case-insensitive? true})))))))
+                                 (query/->cqp (query/of {:q     "hund"
+                                                         :match "prefix"
+                                                         :ci    "on"}))))))))
 
 (deftest unit-attr-test
   (let [attrs (fn [& names]

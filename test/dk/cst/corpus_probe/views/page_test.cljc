@@ -258,8 +258,10 @@
       (is (= [:code "[lemma = \"hund\"]"]
              (page/query-mark en {:mode "extended" :cqp "[lemma = \"hund\"]"})))
       (is (= "6 hits for [lemma = \"hund\"]"
-             (text (page/hits-heading en {:mode "extended"
-                                          :cqp  "[lemma = \"hund\"]"}
+             (text (page/hits-heading en {:mode    "extended"
+                                          :t1.attr "lemma"
+                                          :t1.v    "hund"
+                                          :cqp     "[lemma = \"hund\"]"}
                                       6))))
       (testing "and every token when no token asked for anything"
         (is (= "All tokens" (page/hits-heading en {:mode "extended"} 47)))

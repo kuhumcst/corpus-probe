@@ -249,25 +249,10 @@
               :min        (parse-long (:min url/token-defaults))
               :max        (parse-long (:max url/token-defaults))}])))
     (is (= "[a = \"x\" & b = \"y\"]"
-           (query/token->cqp {:conditions [{:attr :a :value "x"}
-                                           {:attr :b :value "y"
-                                            :join (:join url/token-defaults)}]}))))
-  (testing "a simple query seeds one token per word, carrying its options,
-            and a list one token of alternatives, however it is laid out"
-    (is (= [{:conditions [{:v "lille" :attr "lemma" :ci "on" :op "prefix"}]}
-            {:conditions [{:v "hund" :attr "lemma" :ci "on" :op "prefix"}]}]
-           (url/tokens-from-query {:q "lille hund" :in "lemma" :ci "on"
-                                   :match "prefix"}
-                                  "simple")))
-    (is (= [{:conditions [{:v "hund"} {:v "kat" :join "or"}]}]
-           (url/tokens-from-query {:q "hund\nkat"} "list")))
-    (is (= [{:conditions [{:v "hund"} {:v "kat" :join "or"}]}]
-           (url/tokens-from-query {:q "hund kat"} "list")))
-    (testing "read as the mode it was typed in, whatever the params say"
-      (is (= [{:conditions [{:v "hund"}]} {:conditions [{:v "kat"}]}]
-             (url/tokens-from-query {:q "hund\nkat" :mode "extended"} nil))))
-    (is (= [] (url/tokens-from-query {:q "  "} "list")))
-    (is (= [] (url/tokens-from-query {} "simple")))))
+           (query/token->cqp
+            {:conditions [{:attr :a :value "x"}
+                          {:attr :b :value "y"
+                           :join (:join url/token-defaults)}]})))))
 
 (deftest metadata-key?-test
   (is (url/metadata-key? :f.text_year))
