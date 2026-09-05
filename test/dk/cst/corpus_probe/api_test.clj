@@ -765,6 +765,100 @@
                                                    :q "hund"}))))
       (is (= 404 (:status (export nil {:corpus "REGISTRY-PROBE" :q "hund"})))))))
 
+(deftest extended-mode-test
+  (testing "the tokens compile to CQP, defaults applied and bad values read
+            as them"
+    (is (= [{:conditions [{:attr :lemma :op "is" :value "hund" :ci? true}]
+             :min 1 :max 1 :start? false :end? false}
+            {:conditions [{:attr :word :op "any" :value "" :ci? false}]
+             :min 0 :max 2 :start? false :end? true}]
+           (api/token-params {:t1.attr "lemma" :t1.v "hund" :t1.ci "on"
+                              :t2.op   "any" :t2.min "0" :t2.max "2"
+                              :t2.end  "on"
+                              :t3.attr "pos" :t3.op "prefix"})))
+    (is (= [{:conditions [{:attr :word :op "is" :value "x" :ci? false}
+                          {:attr :pos :op "is" :value "N" :ci? false
+                           :join "and"}]
+             :min 2 :max 2 :start? false :end? false}]
+           (api/token-params {:t1.v "x" :t1.attr "no such" :t1.op "nope"
+                              :t1.min "2" :t1.max "1"
+                              :t1.2.attr "pos" :t1.2.v "N" :t1.2.join "nor"
+                              :t1.3.attr "pos" :t1.3.join "or"})))
+    (is (= "[lemma = \"hund\" %c] []{0,2} </s>"
+           (api/->cqp {:mode "extended" :t1.attr "lemma" :t1.v "hund"
+                       :t1.ci "on" :t2.op "any" :t2.min "0" :t2.max "2"
+                       :t2.end "on"})))
+    (is (nil? (api/->cqp {:mode "extended" :q "hund"}))))
+  (testing "several tokens are kept within the unit the params name, the
+            sentence by default; one is not, unless it opens or closes a
+            sentence"
+    (is (= :sentence (api/within-unit {:mode "extended" :t1.v "a" :t2.v "b"})))
+    (is (= :paragraph (api/within-unit {:mode "extended" :t1.v "a" :t2.v "b"
+                                        :within "paragraph"})))
+    (is (= :paragraph (api/within-unit {:q "a b" :within "paragraph"})))
+    (is (= :sentence (api/within-unit {:q "a b" :within "nonesuch"})))
+    (is (nil? (api/within-unit {:mode "extended" :t1.v "a"})))
+    (is (= :sentence (api/within-unit {:mode "extended" :t1.v "a"
+                                       :t1.start "on"}))))
+  (testing "the titles name the CQP the rows compiled to"
+    (let [params {:mode "extended" :cqp "[lemma = \"hund\"]" :corpus ["PROBE"]}]
+      (is (str/starts-with? (api/search-title en params {:size   5
+                                                          :page   0
+                                                          :counts [{:corpus "PROBE"
+                                                                    :size   5}]})
+                            "[lemma = \"hund\"] · 5 hits"))
+      (is (str/starts-with? (api/frequency-title en (assoc params :attr "word"))
+                            "[lemma = \"hund\"]"))
+      (is (str/starts-with? (api/search-title en (dissoc params :cqp) nil)
+                            "Search"))))
+  (testing "the tokens identify the search, as the query does"
+    (is (= {:mode "extended" :t1.v "a" :t2.op "any"}
+           (api/search-params {:mode "extended" :t1.v "a" :t2.op "any"
+                               :page "2"}))))
+  (testing "the form's tokens are those asked for, their conditions
+            likewise, and one blank, numbered afresh"
+    (is (= [{:id 1 :conditions [{:id 1 :v "a"} {:id 2 :v "c" :join "or"}]}
+            {:id 2 :max "2" :conditions [{:id 1 :op "any"}]}
+            {:id 3 :conditions [{:id 1}]}]
+           (api/token-fields {:t1.v "a" :t1.2.attr "pos" :t1.2.join "and"
+                              :t1.3.v "c" :t1.3.join "or"
+                              :t2.ci "on" :t5.op "any" :t5.max "2"})))
+    (is (= [{:id 1 :conditions [{:id 1}]}] (api/token-fields {:q "x"})))
+    (testing "seeded from the query a reader typed before switching mode"
+      (is (= [{:id 1 :conditions [{:id 1 :v "hund" :ci "on"}]}
+              {:id 2 :conditions [{:id 1}]}]
+             (api/token-fields {:q "hund" :ci "on" :mode "extended"})))))
+  (when-cwb
+   (testing "an extended search runs, and the page knows its CQP, its
+             tokens and the values its fields suggest"
+     (let [{:keys [result params tokens value-lists]}
+           (api/search-view-data ctx {:query-params {:mode    "extended"
+                                                     :corpus  "PROBE"
+                                                     :t1.attr "lemma"
+                                                     :t1.v    "hund"}})]
+       (is (= 5 (:size result)))
+       (is (= "[lemma = \"hund\"]" (:cqp params)))
+       (is (= [{:id 1 :conditions [{:id 1 :attr "lemma" :v "hund"}]}
+               {:id 2 :conditions [{:id 1}]}]
+              tokens))
+       (is (= 15 (count (:pos value-lists))))
+       (is (some #{"NCSD"} (:pos value-lists)))))
+   (testing "a sentence edge runs, its tags named for the corpus"
+     (let [size (fn [cqp]
+                  (get-in (api/search-outcome! ctx ["PROBE"] [] cqp
+                                               {:page 0 :within :sentence})
+                          [:result :size]))]
+       (is (= 1 (size "<s> [word = \"Hunden\"]")))
+       (is (= 6 (size "<s> []")))
+       (is (= 6 (size "[] </s>")))))
+   (testing "an attribute one corpus lacks, or cannot list, has no value list"
+     (is (= [:lemma :pos :word]
+            (sort (keys (api/value-lists! ctx ["PROBE" "VISER"]
+                                          [:word :pos :lemma])))))
+     (is (= [:word]
+            (sort (keys (api/value-lists! ctx ["PROBE" "TALER"]
+                                          [:word :pos :lemma]))))))))
+
 (deftest export-hrefs-test
   (testing "the view of the search as a file, one URL per format"
     (is (= {:csv "/search/kwic.csv?q=hund&corpus=PROBE"

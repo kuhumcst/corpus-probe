@@ -393,8 +393,8 @@
   searched, since then there is no count to report."
   ([ui params]
    (search-title ui params nil))
-  ([ui {:keys [q corpus] :as params} result]
-   (if (str/blank? q)
+  ([ui {:keys [corpus] :as params} result]
+   (if-not (page/asked? params)
      (page-title (i18n/tr ui "Search"))
      (let [page-n (:page result 0)
            ;; a search every corpus refused still has a result, of size
@@ -420,10 +420,10 @@
 
   A frequency result counts values rather than hits, so it cannot borrow
   the concordance's title: there is no hit count to report."
-  [ui {:keys [q corpus attr by] :as params}]
-  (page-title (if (str/blank? q)
-                (i18n/tr ui "All tokens")
-                (page/query-phrase ui params))
+  [ui {:keys [corpus attr by] :as params}]
+  (page-title (if (page/asked? params)
+                (page/query-phrase ui params)
+                (i18n/tr ui "All tokens"))
               (when (seq corpus) (page/corpora-phrase ui corpus))
               (page/filter-phrase (filter-params params)
                                   (pattern-params params))
@@ -453,10 +453,11 @@
   (url/results-href (assoc (dissoc params :expand) :page (inc page))))
 
 (defn search-params
-  "The `params` that identify a search (its corpora, query, metadata
-  filter, the narrowings of its hits, the sample of them), for linking
-  the views of the same hits. The interface language is not among them:
-  it is the reader's preference, not part of the search.
+  "The `params` that identify a search (its corpora, query or the
+  tokens of an extended one, metadata filter, the narrowings of its
+  hits, the sample of them), for linking the views of the same hits.
+  The interface language is not among them: it is the reader's
+  preference, not part of the search.
 
   The narrowings and the sample are here and the sort is not, because
   which hits there are is part of the search while the order they are
@@ -467,7 +468,7 @@
   (into (select-keys params [:corpus :q :mode :in :ci :match
                              :subset :subset-at :subset-attr
                              :near :distance :sample])
-        (filter (comp url/metadata-key? key))
+        (filter (comp (some-fn url/metadata-key? url/token-key?) key))
         params))
 
 (defn export-hrefs
@@ -493,19 +494,117 @@
     "infix"  {:prefix? true :suffix? true}
     {}))
 
+(defn repeat-param
+  "The repeat query param value `v` as a number of tokens: an integer
+  from 0 to 99, else `default`."
+  [v default]
+  (let [n (some-> v str parse-long)]
+    (if (and n (<= 0 n 99)) n default)))
+
+(defn within-param
+  "The unit of text the `within` query param value `v` names (see
+  dk.cst.corpus-probe.url/units): the sentence unless it names another."
+  [v]
+  (if (some #{v} url/units) (keyword v) :sentence))
+
+(defn condition-params
+  "The condition `row` of an extended-search token (see
+  dk.cst.corpus-probe.url/token-rows) as
+  dk.cst.corpus-probe.query/condition->cqp takes it: its :attr (a
+  keyword; word unless the name is a plausible attribute name, since it
+  is spliced into the query), its :op (one of
+  dk.cst.corpus-probe.url/operators, equality otherwise), its :value as
+  typed, :ci? for its ignore-case box and, when it has one, its :join
+  (one of dk.cst.corpus-probe.url/joins, and otherwise)."
+  [{:keys [attr op v ci join]}]
+  (cond-> {:attr  (keyword (if (query/attribute-name? (str attr)) attr "word"))
+           :op    (if (some #{op} url/operators) op "is")
+           :value (str v)
+           :ci?   (some? ci)}
+    (some? join) (assoc :join (if (some #{join} url/joins) join "and"))))
+
+(defn token-params
+  "The tokens of the extended search `params` describe, as
+  dk.cst.corpus-probe.query/extended->cqp takes them: each token asking
+  for anything (see dk.cst.corpus-probe.url/asks?), in order, with the
+  :conditions of it that ask (see dk.cst.corpus-probe.url/condition-asks?
+  and `condition-params`), its repeat as :min and :max (see
+  `repeat-param`), the most never below the least, and :start? and :end?
+  for the sentence edges it stands at."
+  [params]
+  (into []
+        (comp (filter url/asks?)
+              (map (fn [{:keys [conditions start end] lo :min hi :max}]
+                     (let [lo (repeat-param lo 1)]
+                       {:conditions (mapv condition-params
+                                          (filter url/condition-asks?
+                                                  conditions))
+                        :min        lo
+                        :max        (max lo (repeat-param hi lo))
+                        :start?     (some? start)
+                        :end?       (some? end)}))))
+        (url/token-rows params)))
+
+(defn token-fields
+  "The tokens of the extended-search form for `params`: each token that
+  asks for anything (see dk.cst.corpus-probe.url/asks?) with its fields
+  as the URL carries them (see dk.cst.corpus-probe.url/token-rows) and
+  the conditions of it that ask, then one blank token, numbered as the
+  form wants them (see dk.cst.corpus-probe.url/form-tokens).
+
+  A form asked for in the extended mode with no token but a query is
+  seeded from that query (see dk.cst.corpus-probe.url/tokens-from-query),
+  so a reader switching mode without the client finds what they typed;
+  the search itself waits for them to send it."
+  [{:keys [mode] :as params}]
+  (let [asked (for [token (url/token-rows params) :when (url/asks? token)]
+                (update token :conditions #(filterv url/condition-asks? %)))
+        rows  (if (and (empty? asked) (= "extended" mode))
+                (url/tokens-from-query params)
+                asked)]
+    (url/form-tokens (concat rows [{:conditions [{}]}]))))
+
+(defn value-lists!
+  "The values of each positional attribute among `attrs` (keywords) that
+  every one of `corpora` via `ctx` can list (see
+  dk.cst.corpus-probe.tools/attribute-values!): attribute to its values
+  over all of them, collated. An attribute one corpus cannot list, or
+  lacks, has no entry, since a list missing part of what a reader may
+  search for would mislead. The value fields of the extended search
+  offer them as suggestions."
+  [ctx corpora attrs]
+  (let [collator (search/->collator ctx)
+        lists    (search/pmap-n (search/parallelism ctx)
+                                (fn [corpus]
+                                  (into {}
+                                        (for [attr attrs]
+                                          [attr (try (tools/attribute-values!
+                                                      ctx corpus attr)
+                                                     (catch Exception _ nil))])))
+                                corpora)]
+    (into {}
+          (for [attr attrs
+                :let [values (map #(get % attr) lists)]
+                :when (and (seq values) (every? some? values))]
+            [attr (vec (sort collator (distinct (apply concat values))))]))))
+
 (defn ->cqp
-  "The CQP query for `params`, compiling simple-mode input, or a list of
-  words in list mode (see dk.cst.corpus-probe.query/simple->cqp); nil
-  when there is nothing to search for.
+  "The CQP query for `params`: CQP-mode input as typed, an extended
+  search compiled from its tokens (see `token-params` and
+  dk.cst.corpus-probe.query/extended->cqp), and simple-mode input, or a
+  list of words in list mode, compiled (see
+  dk.cst.corpus-probe.query/simple->cqp); nil when there is nothing to
+  search for.
 
   Simple is the default and CQP mode is opt-in: a request naming no mode
   is read as a plain word search, since CQP mode answers a bare word with
   a parse error naming a corpus the reader never mentioned. Every URL the
   form builds names its mode, so only a hand-written one changes meaning."
-  [{:keys [q mode ci match in]}]
-  (when-not (str/blank? q)
-    (if (= mode "cqp")
-      q
+  [{:keys [q mode ci match in] :as params}]
+  (case mode
+    "cqp"      (when-not (str/blank? q) q)
+    "extended" (query/extended->cqp (token-params params))
+    (when-not (str/blank? q)
       (query/simple->cqp q (assoc (match-param match)
                                   :case-insensitive? (some? ci)
                                   :attr              (keyword (attr-param in))
@@ -513,16 +612,23 @@
 
 (defn within-unit
   "The unit of text the search `params` describe is kept within (see
-  dk.cst.corpus-probe.search/units): the sentence, for a simple search of
-  several words, which should not be matched across a boundary.
+  dk.cst.corpus-probe.search/units): the one the `within` param names,
+  the sentence by default (see `within-param`), for a simple or an
+  extended search of several tokens, which should not be matched across
+  a boundary, and for an extended search of a token that opens or
+  closes a sentence.
 
-  Nil for one word, which cannot straddle a boundary and could only be
+  Nil for one token, which cannot straddle a boundary and could only be
   refused, where it stands outside every sentence; nil for a list, which
   is one token; and nil for CQP, which says so itself."
-  [{:keys [q mode]}]
-  (when (and (not (#{"cqp" "list"} mode))
-             (next (str/split (str/trim (str q)) #"\s+")))
-    :sentence))
+  [{:keys [q mode within] :as params}]
+  (when (case mode
+          ("cqp" "list") false
+          "extended"     (let [tokens (token-params params)]
+                           (or (next tokens)
+                               (some #(or (:start? %) (:end? %)) tokens)))
+          (next (str/split (str/trim (str q)) #"\s+")))
+    (within-param within)))
 
 (def follow-on-errors
   "The errors CQP adds for the later commands of a batch once an earlier
@@ -879,7 +985,11 @@
   names every corpus searched, or only what the URL named when nothing
   was searched: a reader arriving at the form starts with no corpus
   selected, while a URL naming no corpus still searches every readable
-  one and shows them all.
+  one and shows them all. It also carries `:cqp`, the CQP the params
+  compiled to, which the heading and the title of an extended search
+  show; no URL carries it, the URL rule not knowing it. The tokens of an
+  extended search's form are `:tokens` (see `token-fields`) and the
+  values its fields suggest `:value-lists` (see `value-lists!`).
 
   The same map is embedded as transit for the client to take over from,
   so it holds corpus overviews only: the full registry maps carry
@@ -923,7 +1033,8 @@
         params* (assoc params
                        :corpus (if outcome selected named)
                        :attr   attr
-                       :at     at)
+                       :at     at
+                       :cqp    cqp)
         cited   (url/canonical params* (set (readable-corpora ctx corpora)))
         attrs   (attr-options! ctx known)
         ;; what a simple search may match, and a concordance sort by: the
@@ -935,6 +1046,8 @@
       :folders         (corpus-tree! ctx corpora)
       :filter-controls (filter-controls! ctx known params)
       :search-attrs    p-attrs
+      :tokens          (token-fields params)
+      :value-lists     (value-lists! ctx known p-attrs)
       :params          params*
       :cited           cited
       :result          (:result outcome)
@@ -1422,7 +1535,7 @@
     (if-not cqp
       {:status 400 :body "bad request"}
       (let [page-n  (page-param (:page params))
-            params* (assoc params :corpus selected)
+            params* (assoc params :corpus selected :cqp cqp)
             counts  (-> (search/corpus-sizes!
                          ctx known cqp (search/deadline ctx)
                          (assoc opts :sample (sample-param (:sample params))))

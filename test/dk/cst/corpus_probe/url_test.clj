@@ -82,6 +82,7 @@
     (is (= (:view url/defaults) (second (first api/result-views))))
     (is (= (:attr url/defaults) (api/attr-param nil)))
     (is (= (:in url/defaults) (api/attr-param nil)))
+    (is (= (:within url/defaults) (name (api/within-param nil))))
     (is (= (:subset-attr url/defaults) (api/attr-param nil)))
     (is (= (:at url/defaults) (api/position-param nil)))
     (is (= (:subset-at url/defaults) (api/position-param nil)))
@@ -138,6 +139,72 @@
   (testing "names are uppercased and deduplicated, blanks dropped"
     (is (= ["PROBE"] (url/corpora-param ["probe" "PROBE" ""]))))
   (is (= [] (url/corpora-param nil))))
+
+(deftest tokens-test
+  (testing "a token's fields are known, and sort together after the mode"
+    (is (= [2 1 :v] (url/token-field :t2.v)))
+    (is (= [2 3 :join] (url/token-field :t2.3.join)))
+    (is (nil? (url/token-field :t2.x)))
+    (is (nil? (url/token-field :tv)))
+    (is (url/known? :t1.attr))
+    (is (= ["mode" "t1.attr" "t1.v" "t2.op" "within" "corpus"]
+           (map first (url/pairs {:corpus "A" :t2.op "any" :t1.v "x"
+                                  :within "paragraph"
+                                  :t1.attr "lemma" :mode "extended"})))))
+  (testing "a key is built as it is read"
+    (is (= "t2.v" (url/token-key 2 1 :v)))
+    (is (= "t2.3.join" (url/token-key 2 3 :join)))
+    (is (= [2 3 :join] (url/token-field (keyword (url/token-key 2 3 :join)))))
+    (is (= {:id 4 :conditions [{:id 1}]} (url/blank-token 4))))
+  (testing "the tokens in order, each with its own fields and its
+            conditions in order"
+    (is (= [{:n 1 :conditions [{:c 1 :v "hund" :ci "on"}]}
+            {:n 3 :max "2" :start "on" :conditions [{:c 1 :op "any"}]}]
+           (url/token-rows {:t3.op "any" :t1.v "hund" :t3.max "2" :t3.start "on"
+                            :t1.ci "on" :q "x"})))
+    (is (= [{:n 1 :conditions [{:c 1 :v "a"} {:c 2 :v "b" :join "or"}]}]
+           (url/token-rows {:t1.2.join "or" :t1.v "a" :t1.2.v "b"}))))
+  (testing "a token asks for something when one of its conditions does:
+            with a value, or as any word"
+    (is (url/asks? {:conditions [{:v "hund"}]}))
+    (is (url/asks? {:conditions [{:op "any"}]}))
+    (is (url/asks? {:conditions [{:v ""} {:v "b" :join "or"}]}))
+    (is (not (url/asks? {:conditions [{:op "prefix" :ci "on"}]})))
+    (is (not (url/asks? {:conditions [{:v ""}]}))))
+  (testing "the URL drops a field at its default, a token asking nothing
+            and a condition asking nothing"
+    (is (= {:mode "extended" :t1.v "hund" :t1.3.v "kat"
+            :t2.op "any" :t2.max "3"}
+           (url/canonical {:mode "extended"
+                           :t1.attr "word" :t1.op "is" :t1.v "hund"
+                           :t1.min "1" :t1.max "1"
+                           :t1.2.attr "pos" :t1.2.join "or"
+                           :t1.3.v "kat" :t1.3.join "and"
+                           :t2.op "any" :t2.min "1" :t2.max "3"
+                           :t3.attr "lemma" :t3.op "prefix" :t3.v ""
+                           :t3.ci "on"}))))
+  (testing "the defaults are the compiler's"
+    (is (= "[word = \"x\"]"
+           (query/extended->cqp
+            [{:conditions [{:attr  (keyword (:attr url/token-defaults))
+                            :op    (:op url/token-defaults)
+                            :value "x"}]
+              :min        (parse-long (:min url/token-defaults))
+              :max        (parse-long (:max url/token-defaults))}])))
+    (is (= "[a = \"x\" & b = \"y\"]"
+           (query/token->cqp {:conditions [{:attr :a :value "x"}
+                                           {:attr :b :value "y"
+                                            :join (:join url/token-defaults)}]}))))
+  (testing "a simple query seeds one token per word, carrying its options,
+            and a list one token of alternatives"
+    (is (= [{:conditions [{:v "lille" :attr "lemma" :ci "on" :op "prefix"}]}
+            {:conditions [{:v "hund" :attr "lemma" :ci "on" :op "prefix"}]}]
+           (url/tokens-from-query {:q "lille hund" :in "lemma" :ci "on"
+                                   :match "prefix"})))
+    (is (= [{:conditions [{:v "hund"} {:v "kat" :join "or"}]}]
+           (url/tokens-from-query {:q "hund\nkat" :mode "list"})))
+    (is (= [] (url/tokens-from-query {:q "  " :mode "list"})))
+    (is (= [] (url/tokens-from-query {})))))
 
 (deftest metadata-key?-test
   (is (url/metadata-key? :f.text_year))

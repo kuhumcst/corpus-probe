@@ -222,6 +222,10 @@ summary .count { color: GrayText; }
    user agent's lists */
 .corpora ul, .filters ul { list-style: none; padding-left: 1em; }
 
+/* each token of an extended search is a group whose legend numbers it,
+   so the list's own numbering said it twice */
+.tokens ol { list-style: none; padding: 0; }
+
 /* a concordance's corpus header row, its column headings and its position
    column read left to right like the hits themselves */
 .kwic .corpus th, .kwic thead th, .kwic .cpos { text-align: left; }

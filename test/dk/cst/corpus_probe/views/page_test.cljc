@@ -125,6 +125,156 @@
         (is (some #{"Søgeudtryk"} da))
         (is (not (some #(and (map? %) (= "lang" (:name %))) da)))))))
 
+(deftest extended-form-test
+  (let [state {:lang         "en"
+               :folders      [{:label nil :folders []
+                               :corpora [{:id "PROBE" :size 47}]}]
+               :search-attrs [:word :pos :lemma]
+               :value-lists  {:pos ["N" "V"]}
+               :params       {:corpus ["PROBE"] :mode "extended" :q "hund"}
+               :tokens       [{:id 1 :conditions [{:id 1 :attr "lemma" :v "hund"
+                                                   :ci "on"}
+                                                  {:id 2 :join "or" :attr "pos"
+                                                   :v "N"}]}
+                              {:id 2 :min "0" :max "2" :start "on"
+                               :conditions [{:id 1 :op "any"}]}
+                              {:id 3 :conditions [{:id 1}]}]}
+        html  (page/search-form state "/" nil)
+        named (fn [html n]
+                (some #(when (and (map? %) (= n (:name %))) %) (deep html)))
+        options (fn [html n]
+                  (->> (deep (some #(when (and (vector? %) (= :select (first %))
+                                               (= n (:name (second %))))
+                                      %)
+                                   (deep html)))
+                       (filter #(and (map? %) (contains? % :selected)))))
+        chosen (fn [html n]
+                 (map :value (filter :selected (options html n))))]
+    (testing "the tokens stand where the query field would, their fields
+              numbered by token and, after the first, by condition"
+      (is (not (some #(and (map? %) (= "q" (:id %))) (deep html))))
+      (is (= "hund" (:value (named html "t1.v"))))
+      (is (:checked (named html "t1.ci")))
+      (is (= "N" (:value (named html "t1.2.v"))))
+      (is (= ["or"] (chosen html "t1.2.join")))
+      (is (nil? (named html "t1.join")))
+      (is (= "0" (:value (named html "t2.min"))))
+      (is (:checked (named html "t2.start")))
+      (is (not (:checked (named html "t2.end"))))
+      (is (= "1" (:value (named html "t3.min")))))
+    (testing "the tokens are an ordered list of groups, each named by its
+              number, each keyed by its token rather than its place, and
+              so are the conditions within one"
+      (is (some #{:ol} (deep html)))
+      (is (= [1 1 2 2 1 3 1]
+             (keep #(when (and (vector? %) (= :li (first %)))
+                      (:replicant/key (second %)))
+                   (deep html))))
+      (is (= [[:legend "Token 1"] [:legend "Token 2"] [:legend "Token 3"]]
+             (filter #(and (vector? %) (= :legend (first %))
+                           (str/starts-with? (str (second %)) "Token"))
+                     (deep html)))))
+    (testing "a value field suggests the values of an attribute that has a
+              list of them"
+      (is (some #(and (vector? %) (= :datalist (first %))
+                      (= "values-pos" (:id (second %))))
+                (deep html)))
+      (is (some #{[:option {:value "V"}]} (deep html)))
+      (is (= "values-pos" (:list (named html "t1.2.v"))))
+      (is (nil? (:list (named html "t1.v")))))
+    (testing "every token must be filled but the blank last one, and never
+              an any-word token, whose value is dead"
+      (let [required (fn [state]
+                       (->> (deep (page/search-form state "/" nil))
+                            (filter #(and (map? %) (:name %)
+                                          (str/ends-with? (:name %) ".v")))
+                            (map (comp boolean :required))))]
+        (is (= [true false false false] (required state)))
+        (testing "a lone token must be, or nothing could be asked"
+          (is (= [true] (required (assoc state :tokens
+                                         [{:id 1 :conditions [{:id 1}]}]))))
+          (is (= [true] (required (dissoc state :tokens)))))
+        (testing "except from the frequency view, which counts every token"
+          (is (= [false false false false]
+                 (required (assoc state :view :frequencies)))))
+        (testing "with the client, which shows no blank token and adds
+                  tokens and conditions by a button, every one must be"
+          (is (= [true true false true]
+                 (required (assoc state :client? true)))))))
+    (testing "an any-word token has nothing to say beyond its first operator"
+      (is (:disabled (named html "t2.v")))
+      (is (:disabled (named html "t2.attr")))
+      (is (not (:disabled (named html "t2.op"))))
+      (is (not (:disabled (named html "t1.v")))))
+    (testing "the operators are offered by name, the condition's chosen, and
+              any word only to a token's first condition"
+      (is (= ["is"] (chosen html "t1.op")))
+      (is (= ["any"] (chosen html "t2.op")))
+      (is (some #{"starts with"} (deep html)))
+      (is (some #{"any word"} (deep html)))
+      (is (some #{"any"} (map :value (options html "t1.op"))))
+      (is (not (some #{"any"} (map :value (options html "t1.2.op"))))))
+    (testing "the repeat pair is a group, so its second number, labelled
+              only to, is heard in context"
+      (is (some #{{:role "group" :aria-label "repeat"}} (deep html))))
+    (testing "the unit the tokens are kept within is chosen beside them"
+      (is (= ["sentence"] (chosen html "within")))
+      (is (= ["paragraph"]
+             (chosen (page/search-form (assoc-in state [:params :within]
+                                                 "paragraph")
+                                       "/" nil)
+                     "within"))))
+    (testing "the simple options are dead, as for a CQP query"
+      (is (= [true true true]
+             (->> (deep html)
+                  (filter #(and (map? %) (#{"in" "ci" "match"} (:name %))))
+                  (map :disabled)))))
+    (testing "the mode is marked"
+      (is (some #(and (map? %) (= "mode" (:name %)) (= "extended" (:value %))
+                      (:checked %))
+                (deep html))))
+    (testing "no buttons to add or take away a token or a condition without
+              the client"
+      (is (not (some #{"Add token"} (deep html))))
+      (is (not (some #{"Add condition"} (deep html))))
+      (is (not (some #{"×"} (deep html)))))
+    (testing "with it, all of them, and the search button after the tokens"
+      (let [live (deep (page/search-form (assoc state :client? true) "/" nil))]
+        (is (some #{"Add token"} live))
+        (is (= 3 (count (filter #{"Add condition"} live))))
+        (is (some #{"Remove token 2"} live))
+        (testing "a condition can be taken away while its token has another"
+          (is (= ["Remove condition 1" "Remove condition 2"]
+                 (filter #(and (string? %)
+                               (str/starts-with? % "Remove condition"))
+                         live))))
+        (is (< (.indexOf (vec live) :fieldset.tokens)
+               (.indexOf (vec live) "Search")))))
+    (testing "a client that just switched to the mode gets one blank token"
+      (is (= 1 (count (filter #(and (vector? %) (= :fieldset.token (first %)))
+                              (deep (page/search-form
+                                     (dissoc state :tokens) "/" nil)))))))
+    (testing "the heading names the CQP the tokens compiled to"
+      (is (= [:code "[lemma = \"hund\"]"]
+             (page/query-mark en {:mode "extended" :cqp "[lemma = \"hund\"]"})))
+      (is (= "6 hits for [lemma = \"hund\"]"
+             (text (page/hits-heading en {:mode "extended"
+                                          :cqp  "[lemma = \"hund\"]"}
+                                      6))))
+      (testing "and every token when no token asked for anything"
+        (is (= "All tokens" (page/hits-heading en {:mode "extended"} 47)))
+        (is (page/asked? {:q "hund"}))
+        (is (not (page/asked? {:q "hund" :mode "extended"}))))
+      (is (= "[lemma = \"hund\"]"
+             (page/query-phrase en {:mode "extended" :cqp "[lemma = \"hund\"]"}))))
+    (testing "in Danish"
+      (let [da (deep (page/search-form (assoc state :ui da) "/" nil))]
+        (is (some #{"Udvidet"} da))
+        (is (some #{"begynder med"} da))
+        (is (some #{"ethvert ord"} da))
+        (is (some #{"eller"} da))
+        (is (some #{"sætningsbegyndelse"} da))))))
+
 (deftest guide-test
   (let [blocks [[:h1 {:id "query-help"} "Query help"]
                 [:ul [:li [:code "\"hund\""] " finds a word form."]]]
@@ -334,19 +484,23 @@
                              {:ui en :folders [] :params params} "/" nil))
                       (filter #(and (map? %) (= "mode" (:name %))))))]
     (testing "Simple comes first, since it is what most searches want"
-      (is (= ["simple" "list" "cqp"] (map :value (radios {})))))
+      (is (= ["simple" "list" "extended" "cqp"] (map :value (radios {})))))
     (testing "and it is the default, so a bare word is not a parse error"
-      (is (= [true false false] (map (comp boolean :checked) (radios {}))))
-      (is (= [true false false] (map (comp boolean :checked)
-                                     (radios {:mode "simple"})))))
-    (testing "the list and CQP modes are opt-in and stay selected once chosen"
-      (is (= [false true false] (map (comp boolean :checked)
-                                     (radios {:mode "list"}))))
-      (is (= [false false true] (map (comp boolean :checked)
-                                     (radios {:mode "cqp"})))))
+      (is (= [true false false false]
+             (map (comp boolean :checked) (radios {}))))
+      (is (= [true false false false]
+             (map (comp boolean :checked) (radios {:mode "simple"})))))
+    (testing "the other modes are opt-in and stay selected once chosen"
+      (is (= [false true false false]
+             (map (comp boolean :checked) (radios {:mode "list"}))))
+      (is (= [false false true false]
+             (map (comp boolean :checked) (radios {:mode "extended"}))))
+      (is (= [false false false true]
+             (map (comp boolean :checked) (radios {:mode "cqp"})))))
     (testing "each radio dispatches the mode it selects, so the client can
               swap the example without a round trip"
-      (is (= [[:set-mode "simple"] [:set-mode "list"] [:set-mode "cqp"]]
+      (is (= [[:set-mode "simple"] [:set-mode "list"] [:set-mode "extended"]
+              [:set-mode "cqp"]]
              (map (comp :change :on) (radios {})))))))
 
 (deftest query-example-test

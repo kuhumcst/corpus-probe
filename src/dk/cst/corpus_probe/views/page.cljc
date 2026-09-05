@@ -551,11 +551,14 @@
 (defn query-phrase
   "The query of `params` in words for a title, in `ui`: the query as
   typed, or, for a list, how many words it holds, a title being one
-  line and a list not."
-  [ui {:keys [q mode]}]
-  (if (= mode "list")
-    (let [n (count (list-words q))]
-      (str n " " (i18n/trn ui "word" "words" n)))
+  line and a list not, or, for an extended search, the CQP its tokens
+  compiled to (its :cqp, see dk.cst.corpus-probe.api/search-view-data),
+  which is what CQP mode shows too."
+  [ui {:keys [q mode cqp]}]
+  (case mode
+    "list"     (let [n (count (list-words q))]
+                 (str n " " (i18n/trn ui "word" "words" n)))
+    "extended" cqp
     q))
 
 (defn query-field
@@ -584,23 +587,243 @@
       [:textarea (assoc attrs :rows 4) (or q "")]
       [:input (assoc attrs :type "search" :value (or q ""))])))
 
-(defn attribute-control
-  "The control choosing which positional attribute a simple search
-  matches, in `ui`: a select over `attrs` (attribute keywords, word
-  first) with `selected` (a string, word when blank) chosen, `disabled?`
-  while the query is CQP, which names its own.
+(defn attribute-options
+  "The options of a select over the positional `attrs` (attribute
+  keywords, word first) with `selected` (a string, word when blank)
+  chosen.
 
   An attribute the list lacks is offered after them, so a hand-written
   URL shows what it searches rather than something else."
-  [ui attrs selected disabled?]
+  [attrs selected]
   (let [selected (if (str/blank? selected) "word" selected)
         names    (map name attrs)
         offered  (cond-> names
                    (not (some #{selected} names)) (concat [selected]))]
-    [:label (i18n/tr ui "attribute") " "
-     [:select {:name "in" :disabled disabled?}
-      (for [n offered]
-        [:option {:value n :selected (= n selected)} n])]]))
+    (for [n offered]
+      [:option {:value n :selected (= n selected)} n])))
+
+(defn attribute-control
+  "The control choosing which positional attribute a simple search
+  matches, in `ui`: a select over `attrs` with `selected` chosen (see
+  `attribute-options`), `disabled?` while the query names its own
+  attributes."
+  [ui attrs selected disabled?]
+  [:label (i18n/tr ui "attribute") " "
+   [:select {:name "in" :disabled disabled?}
+    (attribute-options attrs selected)]])
+
+(defn operator-label
+  "What the operator `op` of an extended-search token is called, in `ui`
+  (see dk.cst.corpus-probe.url/operators); equality for one it does not
+  know."
+  [ui op]
+  (case op
+    "not"       (i18n/tr ui "is not")
+    "prefix"    (i18n/tr ui "starts with")
+    "suffix"    (i18n/tr ui "ends with")
+    "infix"     (i18n/tr ui "contains")
+    "regex"     (i18n/tr ui "matches regex")
+    "not-regex" (i18n/tr ui "does not match regex")
+    "any"       (i18n/tr ui "any word")
+    (i18n/tr ui "is")))
+
+(defn value-list-id
+  "The id of the datalist holding the values of positional attribute
+  `attr` (a keyword or its name), which a value field offers as
+  suggestions (see `token-fieldset`)."
+  [attr]
+  (str "values-" (name attr)))
+
+(defn condition-row
+  "One condition of the extended search in `ui`: condition `c`, counted
+  from one, holding `condition` (see
+  dk.cst.corpus-probe.url/form-tokens), of `token`, the facts of the
+  token it belongs to: its number `:i`, the `:attrs` a condition may
+  name (see `attribute-options`), the `:value-lists` some of them offer
+  (see `value-list-id`), `:any?` when the token's first condition
+  matches any word, and `:removable?` when a button may take the
+  condition away. The attribute, the operator, the value and the
+  ignore-case box, headed by how it joins the conditions before it when
+  it is not the first.
+
+  Its fields carry the token's number and, after the first, its own
+  (see dk.cst.corpus-probe.url/token-key). The value is required when
+  `required?`. Under `:any?` every control but that first operator is
+  disabled: an any-word token has nothing else to say, and without the
+  client they are as the search was submitted. The client re-renders the
+  token when an operator or an attribute changes, the one to disable,
+  the other to switch the value list."
+  [ui {:keys [i attrs value-lists any? removable?]} required? c
+   {:keys [id attr op v ci join]}]
+  (let [param  (fn [field] (url/token-key i c field))
+        first? (= 1 c)
+        op     (or op "is")
+        dead?  (and any? (not first?))
+        attr*  (keyword (if (str/blank? attr) "word" attr))]
+    [:li {:replicant/key id}
+     (when-not first?
+       (list [:select {:name       (param :join)
+                       :aria-label (i18n/tr ui "joined by")
+                       :disabled   dead?}
+              (for [j url/joins]
+                [:option {:value j :selected (= j (or join "and"))}
+                 (case j "or" (i18n/tr ui "or") (i18n/tr ui "and"))])]
+             " "))
+     [:select {:name       (param :attr)
+               :aria-label (i18n/tr ui "attribute")
+               :disabled   any?
+               :on         {:change [:set-condition [i id :attr]]}}
+      (attribute-options attrs attr)]
+     " "
+     [:select {:name       (param :op)
+               :aria-label (i18n/tr ui "operator")
+               :disabled   dead?
+               :on         {:change [:set-condition [i id :op]]}}
+      (for [o (cond->> url/operators (not first?) (remove #{"any"}))]
+        [:option {:value o :selected (= o op)} (operator-label ui o)])]
+     " "
+     [:input (cond-> {:type         "text"
+                      :name         (param :v)
+                      :value        (or v "")
+                      :aria-label   (i18n/trx ui "field" "value")
+                      :autocomplete "off"
+                      :spellcheck   "false"
+                      :required     (and required? (not any?))
+                      :disabled     any?}
+               (contains? value-lists attr*)
+               (assoc :list (value-list-id attr*)))]
+     " "
+     [:label [:input {:type     "checkbox" :name (param :ci) :value "on"
+                      :checked  (some? ci)
+                      :disabled any?}]
+      (i18n/tr ui "ignore case")]
+     (when removable?
+       (list " "
+             [:button {:type       "button"
+                       :aria-label (str (i18n/tr ui "Remove condition") " " c)
+                       :on         {:click [:remove-condition [i id]]}}
+              "×"]))]))
+
+(defn token-row
+  "One token of the extended search in `ui`: token `i`, counted from
+  one, which is the number its fields carry in the URL, holding `token`
+  (see dk.cst.corpus-probe.url/form-tokens) over `attrs` and
+  `value-lists` (see `condition-row`). A group of its own, named by
+  number: its conditions as an ordered list, since each joins the ones
+  before it, then the repeat as least and most, in a group named for
+  what the pair is, whether it opens or closes a sentence, and, where
+  `client?`, buttons adding a condition and taking the token away.
+
+  The first condition's value is required when `required?`; the others'
+  only where the client runs, which is where a condition is added, so a
+  reader without it can empty a condition to be rid of it. A condition
+  can be taken away while the token has another."
+  [ui attrs value-lists client? required? i
+   {:keys [id conditions start end] lo :min hi :max}]
+  (let [param      (fn [field] (url/token-key i 1 field))
+        conditions (or (seq conditions) [{:id 1}])
+        any?       (= "any" (:op (first conditions)))
+        token      {:i           i
+                    :attrs       attrs
+                    :value-lists value-lists
+                    :any?        any?
+                    :removable?  (and client? (boolean (next conditions)))}]
+    [:fieldset.token
+     [:legend (str (i18n/tr ui "Token") " " i)]
+     [:ol
+      (map-indexed (fn [j condition]
+                     (let [c (inc j)]
+                       (condition-row ui token
+                                      (and required? (or (= 1 c) client?))
+                                      c condition)))
+                   conditions)]
+     [:p
+      ;; the second number is labelled "to", which says nothing on its
+      ;; own; the group says what the pair is
+      [:span {:role "group" :aria-label (i18n/tr ui "repeat")}
+       [:label (i18n/tr ui "repeat") " "
+        [:input {:type "number" :name (param :min) :value (or lo "1")
+                 :min  0 :max 99}]]
+       " "
+       [:label (i18n/tr ui "to") " "
+        [:input {:type "number" :name (param :max) :value (or hi "1")
+                 :min  0 :max 99}]]]
+      " "
+      [:label [:input {:type    "checkbox" :name (param :start) :value "on"
+                       :checked (some? start)}]
+       (i18n/tr ui "sentence start")]
+      " "
+      [:label [:input {:type    "checkbox" :name (param :end) :value "on"
+                       :checked (some? end)}]
+       (i18n/tr ui "sentence end")]
+      (when client?
+        (list " "
+              [:button {:type     "button"
+                        :disabled any?
+                        :on       {:click [:add-condition i]}}
+               (i18n/tr ui "Add condition")]
+              " "
+              [:button {:type       "button"
+                        :aria-label (str (i18n/tr ui "Remove token") " " i)
+                        :on         {:click [:remove-token id]}}
+               "×"]))]]))
+
+(defn token-fieldset
+  "The tokens of the extended search in `ui`: one group per token of
+  `tokens` (see `token-row`) over `attrs` and `value-lists`, as an
+  ordered list inside a group of their own, since a token is one of a
+  sequence and a screen reader says which, with the datalists the value
+  fields draw on (see `value-list-id`). One blank token when there are
+  none, since the client may have just switched to the mode; otherwise
+  the tokens are the search's own plus the blank one the server ends
+  them in (see dk.cst.corpus-probe.api/token-fields), so a reader
+  without the client adds a token by filling it and searching again.
+
+  When `required?`, every token must be filled but that blank last one,
+  which only a reader without the client sees: the client drops it (see
+  dk.cst.corpus-probe.ui/own-rows) and adds tokens by a button, so with
+  it every token must be filled, and a token added and left empty is
+  reported rather than silently dropped. A lone token must always be, or
+  an extended search of nothing could be sent.
+
+  Each list item is keyed by the token's :id rather than its place, so
+  that taking a token away leaves what was typed in the ones after it."
+  [ui attrs value-lists client? required? tokens]
+  (let [rows (or (seq tokens) [(url/blank-token 1)])
+        n    (count rows)]
+    [:fieldset.tokens {:aria-label (i18n/tr ui "Extended search")}
+     (for [[attr values] (sort value-lists)]
+       [:datalist {:id (value-list-id attr)}
+        (for [value values] [:option {:value value}])])
+     [:ol
+      (map-indexed (fn [i {:keys [id] :as token}]
+                     (let [i (inc i)]
+                       [:li {:replicant/key id}
+                        (token-row ui attrs value-lists client?
+                                   (and required? (or client? (= n 1) (< i n)))
+                                   i token)]))
+                   rows)]]))
+
+(defn unit-label
+  "What the unit of text `unit` a search is kept within is called, in
+  `ui` (see dk.cst.corpus-probe.url/units)."
+  [ui unit]
+  (case unit
+    "paragraph" (i18n/tr ui "paragraph")
+    "text"      (i18n/tr ui "text")
+    (i18n/tr ui "sentence")))
+
+(defn within-control
+  "The control choosing the unit of text an extended search of several
+  tokens is kept within, in `ui`: a select over the
+  dk.cst.corpus-probe.url/units with `within` chosen, the sentence when
+  it names none (see dk.cst.corpus-probe.api/within-unit)."
+  [ui within]
+  [:label (i18n/tr ui "within") " "
+   [:select {:name "within"}
+    (for [unit url/units]
+      [:option {:value unit :selected (= unit (or within "sentence"))}
+       (unit-label ui unit)])]])
 
 (defn match-label
   "What the `match` param value is called, in `ui`: how much of the
@@ -691,10 +914,13 @@
   :match), submitted as GET to `action`, with the page's own `extra`
   hidden inputs.
 
-  The query field comes first (see `query-field`), then everything that
-  decides how it is read, in one group: the mode, under it the options
-  that only a simple query or a list has, what it matches on one row and
-  how loosely on the next.
+  The query field comes first (see `query-field`), or the tokens of an
+  extended search (see `token-fieldset`, over the `:tokens` and
+  `:value-lists` of `state`) with the unit they are kept within (see
+  `within-control`), then everything that decides how it is read, in
+  one group:
+  the mode, under it the options that only a simple query or a list has,
+  what it matches on one row and how loosely on the next.
   Then the scope of the search, the corpus chooser and the metadata
   filter, each behind one disclosure. So the field the reader reaches for
   is the first control in the form, whatever the registry holds, and what
@@ -708,8 +934,10 @@
   submitted.
 
   The query is required, except when the form is submitted from the
-  frequency view (its `:view`), which counts every token of a blank one;
-  the corpus chooser requires a corpus where the client runs. Both are
+  frequency view (its `:view`), which counts every token of a blank one,
+  and so is every token row of an extended search but the blank last
+  one (see `token-fieldset`); the corpus chooser requires a corpus where
+  the client runs. All of these are
   the browser's own checks, so missing input is reported before it is
   sent, in the browser's words, and the server's own answers stand for a
   request that never passed through the form.
@@ -729,21 +957,33 @@
   the button they asked it with, and `:served-corpus`, the corpora this
   page was served for, decides which folders of the chooser start open
   while `:params` follows what the reader is choosing now."
-  [{:keys [ui view folders filter-controls search-attrs params client?
-           pending? served-corpus served-filter corpus-filter value-filter
-           chooser-open? filters-open? filters-pending?]
+  [{:keys [ui view folders filter-controls search-attrs params tokens
+           value-lists client? pending? served-corpus served-filter
+           corpus-filter value-filter chooser-open? filters-open?
+           filters-pending?]
     :as state}
    action extra]
-  (let [{:keys [corpus q mode in ci match]} params]
+  (let [{:keys [corpus q mode in ci match within]} params
+        ;; a CQP query and an extended search name their own attributes,
+        ;; so the simple options mean nothing to them
+        simple? (not (#{"cqp" "extended"} mode))
+        button  [:button {:type "submit"} (i18n/trx ui "button" "Search")]]
     [:search
      [:form.search {:id form-id :method "get" :action action}
       extra
       ;; the button belongs against the field it submits, not at the foot
       ;; of every control that qualifies it
-      [:p
-       (query-field ui mode q (not= :frequencies view))
-       " "
-       [:button {:type "submit"} (i18n/trx ui "button" "Search")]]
+      (if (= mode "extended")
+        (list (token-fieldset ui search-attrs value-lists client?
+                              (not= :frequencies view) tokens)
+              [:p (within-control ui within)]
+              [:p
+               (when client?
+                 (list [:button {:type "button" :on {:click [:add-token]}}
+                        (i18n/tr ui "Add token")]
+                       " "))
+               button])
+        [:p (query-field ui mode q (not= :frequencies view)) " " button])
       ;; one group: everything here qualifies the query above it, and two
       ;; boxes said that twice. A row each, so the mode a reader is in
       ;; does not run into the options it decides the meaning of.
@@ -761,7 +1001,7 @@
        ;; a fieldset is not the only thing that can say so
        [:p {:role "radiogroup" :aria-label (i18n/tr ui "Query mode")}
         [:label [:input {:type    "radio" :name "mode" :value "simple"
-                         :checked (not (#{"cqp" "list"} mode))
+                         :checked (not (#{"cqp" "list" "extended"} mode))
                          :on      {:change [:set-mode "simple"]}}]
          (i18n/tr ui "Simple")]
         " "
@@ -769,6 +1009,11 @@
                          :checked (= mode "list")
                          :on      {:change [:set-mode "list"]}}]
          (i18n/tr ui "List")]
+        " "
+        [:label [:input {:type    "radio" :name "mode" :value "extended"
+                         :checked (= mode "extended")
+                         :on      {:change [:set-mode "extended"]}}]
+         (i18n/tr ui "Extended")]
         " "
         ;; an abbreviation and no link: the click on a label belongs to
         ;; its radio, and the glossary is in the masthead
@@ -779,13 +1024,13 @@
        ;; two rows: what a simple search matches, then how loosely. One
        ;; row of four ran the attribute into the options it governs
        [:div {:role "group" :aria-label (i18n/tr ui "Simple-search options")}
-        [:p (attribute-control ui search-attrs in (= mode "cqp"))]
+        [:p (attribute-control ui search-attrs in (not simple?))]
         [:p
-         (match-control ui match (= mode "cqp"))
+         (match-control ui match (not simple?))
          " "
          [:label [:input {:type "checkbox" :name "ci" :value "on"
                           :checked  (some? ci)
-                          :disabled (= mode "cqp")}]
+                          :disabled (not simple?)}]
           (i18n/tr ui "ignore case")]]]]
       ;; marks a selection the reader actually made: without it, unticking
       ;; every corpus and submitting is indistinguishable from arriving
@@ -844,28 +1089,38 @@
 
 (defn query-mark
   "The query of `params` as a heading names it, in `ui`: a CQP query as
-  the code it is, a list as how many words it holds (see
-  `query-phrase`), and a simple search quoted, being a word spoken of
-  rather than used."
-  [ui {:keys [q mode] :as params}]
+  the code it is, and so an extended search, as the CQP it compiled to
+  (see `query-phrase`), a list as how many words it holds, and a simple
+  search quoted, being a word spoken of rather than used."
+  [ui {:keys [q mode cqp] :as params}]
   (case mode
-    "cqp"  [:code q]
-    "list" (query-phrase ui params)
+    "cqp"      [:code q]
+    "extended" [:code cqp]
+    "list"     (query-phrase ui params)
     [:q q]))
+
+(defn asked?
+  "True when the search `params` ask for anything: a query, or, for an
+  extended search, tokens that compiled to one (its :cqp, see
+  dk.cst.corpus-probe.api/search-view-data). A search asking nothing
+  counts every token, which only a frequency table wants."
+  [{:keys [q mode cqp]}]
+  (if (= mode "extended")
+    (some? cqp)
+    (not (str/blank? q))))
 
 (defn hits-heading
   "What a search found, as the heading of its result in `ui`: how many
   hits, `size`, for the query of `params` (see `query-mark`), at least
-  that many while `counting?`; every token when the query is blank,
-  which only a frequency table asks for."
+  that many while `counting?`; every token when nothing was `asked?`."
   ([ui params size]
    (hits-heading ui params size false))
-  ([ui {:keys [q] :as params} size counting?]
-   (if (str/blank? q)
-     (i18n/tr ui "All tokens")
+  ([ui params size counting?]
+   (if (asked? params)
      (concat (when counting? [(i18n/tr ui "at least") " "])
              (list (hits-phrase ui size) " " (i18n/tr ui "for") " "
-                   (query-mark ui params))))))
+                   (query-mark ui params)))
+     (i18n/tr ui "All tokens"))))
 
 (defn counting?
   "True while the corpora of `result` are still being counted: some of

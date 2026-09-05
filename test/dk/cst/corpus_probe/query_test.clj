@@ -14,6 +14,65 @@
   (testing "ordinary text passes through"
     (is (= "København" (query/escape-literal "København")))))
 
+(deftest extended->cqp-test
+  (testing "each operator against the attribute, the literal escaped"
+    (is (= "word = \"hund\"" (query/condition->cqp {:value "hund"})))
+    (is (= "lemma != \"hund\""
+           (query/condition->cqp {:attr :lemma :op "not" :value "hund"})))
+    (is (= "word = \"hu\\.\\*.*\""
+           (query/condition->cqp {:op "prefix" :value "hu.*"})))
+    (is (= "word = \".*nd\"" (query/condition->cqp {:op "suffix" :value "nd"})))
+    (is (= "word = \".*un.*\"" (query/condition->cqp {:op "infix" :value "un"})))
+    (is (= "pos = \"N\" %c"
+           (query/condition->cqp {:attr :pos :op "is" :value "N" :ci? true}))))
+  (testing "a regex is kept as written, but for the quotes it cannot hold"
+    (is (= "pos = \"N.*|V.*\""
+           (query/condition->cqp {:attr :pos :op "regex" :value "N.*|V.*"})))
+    (is (= "word != \"a\"\"b\""
+           (query/condition->cqp {:op "not-regex" :value "a\"b"})))
+    (is (= "word = \"a b\"" (query/condition->cqp {:op "regex" :value "a\nb"}))))
+  (testing "a token's conditions, grouped as KORP reads them: ors within
+            a group, ands between groups"
+    (is (= "[word = \"hund\"]" (query/token->cqp {:conditions [{:value "hund"}]})))
+    (is (= "[lemma = \"hund\" | lemma = \"kat\"]"
+           (query/token->cqp {:conditions [{:attr :lemma :value "hund"}
+                                           {:attr :lemma :value "kat"
+                                            :join "or"}]})))
+    (is (= "[lemma = \"hund\" & pos = \"N.*\"]"
+           (query/token->cqp {:conditions [{:attr :lemma :value "hund"}
+                                           {:attr :pos :op "prefix" :value "N"
+                                            :join "and"}]})))
+    (is (= "[(lemma = \"hund\" | lemma = \"kat\") & pos = \"N.*\"]"
+           (query/token->cqp {:conditions [{:attr :lemma :value "hund"}
+                                           {:attr :lemma :value "kat"
+                                            :join "or"}
+                                           {:attr :pos :op "prefix" :value "N"
+                                            :join "and"}]}))))
+  (testing "an any token, repeats that are not once, and the sentence edges"
+    (is (= "[]" (query/token->cqp {:conditions [{:op "any"}]})))
+    (is (= "[]{0,2}" (query/token->cqp {:conditions [{:op "any"}] :min 0 :max 2})))
+    (is (= "[word = \"x\"]{2,2}"
+           (query/token->cqp {:conditions [{:value "x"}] :min 2 :max 2})))
+    (is (= "<s> [word = \"x\"]{1,3} </s>"
+           (query/token->cqp {:conditions [{:value "x"}] :max 3
+                              :start? true :end? true}))))
+  (testing "the tokens in order, none being no query"
+    (is (= "[pos = \"N.*\"] []{1,2} [word = \"hund\"]"
+           (query/extended->cqp
+            [{:conditions [{:attr :pos :op "prefix" :value "N"}]}
+             {:conditions [{:op "any"}] :max 2}
+             {:conditions [{:attr :word :op "is" :value "hund"}]}])))
+    (is (nil? (query/extended->cqp []))))
+  (testing "the sentence tags take each corpus's own name for a sentence"
+    (is (= "<sentence> [word = \"x\"] </sentence>"
+           (query/sentence-tags "<s> [word = \"x\"] </s>" :sentence)))
+    (is (= "<s> [word = \"x\"] </s>"
+           (query/sentence-tags "<s> [word = \"x\"] </s>" :s)))
+    (is (= "<s> [word = \"x\"]" (query/sentence-tags "<s> [word = \"x\"]" nil)))
+    (testing "but leave a literal alone"
+      (is (= "[word = \"<s>\"] </sentence>"
+             (query/sentence-tags "[word = \"<s>\"] </s>" :sentence))))))
+
 (deftest simple->cqp-test
   (is (= "[word = \"hund\"]" (query/simple->cqp "hund")))
   (is (= "[word = \"lille\" %c] [word = \"hund\" %c]"

@@ -186,8 +186,7 @@
    (frequencies! ctx corpus query attr {}))
   ([ctx corpus query attr {:keys [within] :as opts}]
    (let [ctx   (search/corpus-ctx ctx corpus)
-         query (query/within-query query
-                                   (search/within-attr! ctx corpus within))]
+         query (search/corpus-query! ctx corpus query within)]
      (if (search/narrowing-nothing? ctx corpus query (dissoc opts :within))
        []
        (breakdown! ctx corpus query attr opts)))))

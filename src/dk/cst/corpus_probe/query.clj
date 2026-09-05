@@ -168,6 +168,111 @@
               (map (comp pattern escape-literal))
               (str/join " ")))))))
 
+(defn regex-value
+  "The regular expression `value` as a reader wrote it, made safe for a
+  double-quoted CQP literal: quotes doubled and line breaks and TABs
+  flattened (see `flatten-whitespace`). Backslashes are the reader's own,
+  so a regex ending in one is CQP's to refuse, as it is in CQP mode."
+  [value]
+  (str/replace (flatten-whitespace (str value)) "\"" "\"\""))
+
+(defn condition->cqp
+  "The CQP condition of extended-search `condition`: its :attr (a
+  positional attribute name, word by default) related by :op (see
+  dk.cst.corpus-probe.url/operators) to its :value, the literal escaped
+  (see `escape-value`) or, under a regex operator, kept as written (see
+  `regex-value`), with the %c flag under :ci?.
+
+  (condition->cqp {:attr :lemma :op \"is\" :value \"hund\" :ci? true})
+  ;; => lemma = \"hund\" %c"
+  [{:keys [attr op value ci?] :or {attr :word op "is"}}]
+  (let [literal (escape-value (str value))
+        pattern (case op
+                  "prefix"              (str literal ".*")
+                  "suffix"              (str ".*" literal)
+                  "infix"               (str ".*" literal ".*")
+                  ("regex" "not-regex") (regex-value value)
+                  literal)]
+    (str (name attr)
+         (if (#{"not" "not-regex"} op) " != \"" " = \"")
+         pattern "\""
+         (when ci? " %c"))))
+
+(defn condition-groups
+  "The `conditions` of a token in the groups their :join makes (see
+  dk.cst.corpus-probe.url/joins): the first opens the first group, each
+  `or` adds an alternative to the current one and anything else opens a
+  new one."
+  [conditions]
+  (reduce (fn [groups {:keys [join] :as condition}]
+            (if (and (seq groups) (= "or" join))
+              (update groups (dec (count groups)) conj condition)
+              (conj groups [condition])))
+          []
+          conditions))
+
+(defn token->cqp
+  "The CQP token pattern of extended-search `token`: its :conditions (see
+  `condition->cqp`) in the groups their joins make (see
+  `condition-groups`), the alternatives of a group joined by | and the
+  groups by &, in parentheses where both occur, so that KORP's reading
+  holds: the ors bind tighter than the ands, the reverse of CQP's own.
+  Any word when the first condition is `any`. Repeated :min to :max
+  times when that is not once, and opening a sentence under :start? and
+  closing one under :end? as `<s>` tags, which each corpus then names
+  after its own sentence attribute (see `sentence-tags`).
+
+  (token->cqp {:conditions [{:attr :lemma :op \"is\" :value \"hund\"}
+                            {:join \"or\" :attr :lemma :op \"is\" :value \"kat\"}
+                            {:join \"and\" :attr :pos :op \"prefix\" :value \"N\"}]})
+  ;; => [(lemma = \"hund\" | lemma = \"kat\") & pos = \"N.*\"]
+
+  (token->cqp {:conditions [{:op \"any\"}] :min 0 :max 2})
+  ;; => []{0,2}"
+  [{:keys [conditions start? end?] lo :min hi :max :or {lo 1 hi 1}}]
+  (let [groups (map #(map condition->cqp %) (condition-groups conditions))
+        body   (when-not (= "any" (:op (first conditions)))
+                 (str/join " & " (for [alts groups
+                                       :let [alt (str/join " | " alts)]]
+                                   (if (and (next groups) (next alts))
+                                     (str "(" alt ")")
+                                     alt))))]
+    (str (when start? "<s> ")
+         "[" body "]"
+         (when-not (= [1 1] [lo hi])
+           (str "{" lo "," hi "}"))
+         (when end? " </s>"))))
+
+(defn extended->cqp
+  "Compile the extended-search `tokens` (see `token->cqp`) into a CQP
+  query string: one token pattern each, in order; nil without tokens.
+
+  (extended->cqp [{:conditions [{:attr :pos :op \"prefix\" :value \"N\"}]}
+                  {:conditions [{:op \"any\"}] :max 2}
+                  {:conditions [{:attr :word :op \"is\" :value \"hund\"}]}])
+  ;; => [pos = \"N.*\"] []{1,2} [word = \"hund\"]"
+  [tokens]
+  (when (seq tokens)
+    (str/join " " (map token->cqp tokens))))
+
+(defn sentence-tags
+  "`query` with its sentence tags, `<s>` and `</s>` standing between
+  tokens, named after s-attribute `attr`: a compiled extended search
+  opens and closes a sentence by CWB's usual name for one (see
+  `token->cqp`), which is not every corpus's (see
+  dk.cst.corpus-probe.search/units). `query` itself when `attr` is nil
+  or `s`. A tag inside a quoted literal is left alone, standing after a
+  quote rather than a space.
+
+  (sentence-tags \"<s> [word = \\\"x\\\"] </s>\" :sentence)
+  ;; => <sentence> [word = \"x\"] </sentence>"
+  [query attr]
+  (if (and attr (not= :s (keyword attr)))
+    (-> query
+        (str/replace #"(^|\s)<s>(?=\s)" (str "$1<" (name attr) ">"))
+        (str/replace #"(?<=\s)</s>(?=\s|$)" (str "</" (name attr) ">")))
+    query))
+
 (defn within-query
   "`query` with its matches kept within one region of s-attribute `attr`,
   or `query` itself when `attr` is nil.

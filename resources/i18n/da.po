@@ -4,6 +4,12 @@ msgstr ""
 "Plural-Forms: nplurals=2; plural=(n != 1);\n"
 "Language: da\n"
 
+msgid "Add condition"
+msgstr "Tilføj betingelse"
+
+msgid "Add token"
+msgstr "Tilføj token"
+
 msgid "Alignment attributes"
 msgstr "Alignment-attributter"
 
@@ -27,6 +33,9 @@ msgstr "og"
 
 msgid "annotations"
 msgstr "annotationer"
+
+msgid "any word"
+msgstr "ethvert ord"
 
 msgid "Apply"
 msgstr "Anvend"
@@ -63,6 +72,9 @@ msgid_plural "columns"
 msgstr[0] "kolonne"
 msgstr[1] "kolonner"
 
+msgid "contains"
+msgstr "indeholder"
+
 msgid "corpora"
 msgstr "korpusser"
 
@@ -84,11 +96,26 @@ msgstr "CQP-fejl"
 msgid "Search CWB corpora and read KWIC concordances."
 msgstr "Søg i CWB-korpusser og læs KWIC-konkordanser."
 
+msgid "does not match regex"
+msgstr "matcher ikke regex"
+
 msgid "Download"
 msgstr "Hent"
 
+msgid "ends with"
+msgstr "slutter med"
+
 msgid "error"
 msgstr "fejl"
+
+msgid "Extended"
+msgstr "Udvidet"
+
+msgid "Extended search"
+msgstr "Udvidet søgning"
+
+msgid "field|value"
+msgstr "værdi"
 
 msgid "Frequencies"
 msgstr "Frekvenser"
@@ -107,6 +134,15 @@ msgstr "ignorer store/små bogstaver"
 
 msgid "in"
 msgstr "i"
+
+msgid "joined by"
+msgstr "forbundet med"
+
+msgid "is"
+msgstr "er"
+
+msgid "is not"
+msgstr "er ikke"
 
 msgid "Info"
 msgstr "Info"
@@ -159,6 +195,12 @@ msgstr "Ingen værdier fundet."
 msgid "of"
 msgstr "af"
 
+msgid "operator"
+msgstr "operator"
+
+msgid "or"
+msgstr "eller"
+
 msgid "Other"
 msgstr "Andre"
 
@@ -203,6 +245,15 @@ msgstr "Søgetype"
 
 msgid "Query options"
 msgstr "Søgeindstillinger"
+
+msgid "Remove condition"
+msgstr "Fjern betingelse"
+
+msgid "Remove token"
+msgstr "Fjern token"
+
+msgid "repeat"
+msgstr "gentag"
 
 msgid "Request rejected"
 msgstr "Afvist anmodning"
@@ -273,6 +324,9 @@ msgstr "Korpusset opmærker ingen tekster"
 msgid "Without a text attribute there is nothing to read as one text."
 msgstr "Uden en tekstattribut er der intet at læse som én tekst."
 
+msgid "matches regex"
+msgstr "matcher regex"
+
 msgid "match from the end"
 msgstr "match bagfra"
 
@@ -287,6 +341,9 @@ msgstr "Søg"
 
 msgid "CWB corpus search"
 msgstr "CWB-korpussøgning"
+
+msgid "text"
+msgstr "tekst"
 
 msgid "Text"
 msgstr "Tekst"
@@ -389,6 +446,12 @@ msgstr[1] "ord"
 msgid "Context"
 msgstr "Kontekst"
 
+msgid "sentence end"
+msgstr "sætningsslutning"
+
+msgid "sentence start"
+msgstr "sætningsbegyndelse"
+
 msgid "sentence"
 msgstr "sætning"
 
@@ -461,6 +524,9 @@ msgstr "et helt tal"
 
 msgid "whole word"
 msgstr "hele ordet"
+
+msgid "starts with"
+msgstr "begynder med"
 
 msgid "start of word"
 msgstr "ordets begyndelse"

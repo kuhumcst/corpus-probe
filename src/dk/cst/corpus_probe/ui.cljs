@@ -458,6 +458,67 @@
     (str/replace (str/trim (str q)) #"\s+" "\n")
     (str/replace (str q) #"\s*[\r\n]+\s*" " ")))
 
+(defn focus-field!
+  "Move focus to the form control named `name`, once the render that put
+  it there has run: a reader who added or took away a token or a
+  condition is left on what is now there rather than on the body, which
+  is where focus falls when the button under it goes."
+  [name]
+  (some-> (.querySelector js/document (str "[name=\"" name "\"]"))
+          (.focus)))
+
+(defn place
+  "Where the item with `id` stands among `items`, counted from one."
+  [items id]
+  (inc (count (take-while #(not= id (:id %)) items))))
+
+(defn without
+  "`items` less the one with `id`; `fallback` alone when that was the
+  last, since neither the tokens nor a token's conditions may run out."
+  [items id fallback]
+  (let [left (vec (remove #(= id (:id %)) items))]
+    (if (seq left) left [fallback])))
+
+(defn add-token!
+  "Add a blank token after the last and focus its attribute."
+  []
+  (swap! state update :tokens
+         (fn [tokens]
+           (conj (vec tokens)
+                 (url/blank-token (inc (reduce max 0 (map :id tokens)))))))
+  (focus-field! (url/token-key (count (:tokens @state)) 1 :attr)))
+
+(defn remove-token!
+  "Take the token with `id` away and focus the attribute of the token now
+  in its place, or of the last."
+  [id]
+  (let [k (place (:tokens @state) id)]
+    (swap! state update :tokens without id (url/blank-token (inc id)))
+    (focus-field! (url/token-key (min k (count (:tokens @state))) 1 :attr))))
+
+(defn add-condition!
+  "Add a blank condition to token `i`, counted from one, and focus its
+  join."
+  [i]
+  (swap! state update-in [:tokens (dec i) :conditions]
+         (fn [conditions]
+           (conj (vec conditions)
+                 {:id (inc (reduce max 0 (map :id conditions)))})))
+  (focus-field! (url/token-key i (count (get-in @state [:tokens (dec i)
+                                                        :conditions]))
+                               :join)))
+
+(defn remove-condition!
+  "Take the condition with `id` away from token `i`, counted from one,
+  and focus the condition now in its place, or the last: its join, or
+  the attribute of a first condition, which has none."
+  [i id]
+  (let [path [:tokens (dec i) :conditions]
+        k    (place (get-in @state path) id)]
+    (swap! state update-in path without id {:id (inc id)})
+    (let [c (min k (count (get-in @state path)))]
+      (focus-field! (url/token-key i c (if (= 1 c) :attr :join))))))
+
 (defn handle!
   "Apply an `action` to the state, using `data` (the Replicant dispatch
   data) for the key a token was pressed with.
@@ -471,7 +532,14 @@
   reader picked, which swaps the query example the placeholder shows and
   the shape of the field, keeping what was typed in it.
   `:apply-view` submits the search again with a result control as it now
-  stands, so choosing an order is asking for it.
+  stands, so choosing an order is asking for it. `:add-token` and
+  `:remove-token` add a token to the extended search and take one away,
+  `:add-condition` and `:remove-condition` do the same to a token's
+  conditions (see `add-token!` and the others, which also move focus),
+  and `:set-condition` records a condition's operator or attribute,
+  which decide which of its controls are live and which values its
+  field suggests; the values typed stay in the DOM, which a re-render
+  leaves alone, since tokens and conditions are keyed by their ids.
   `:toggle-corpora` records a corpus box or a whole folder being selected
   or cleared, and `:set-checkbox-state`, a render hook rather than an
   event, writes the states of a checkbox that no attribute carries: partly
@@ -496,16 +564,38 @@
   (case action
     ;; the field changes shape between the modes (a list is a text
     ;; area), so what was typed is carried into the new element rather
-    ;; than left behind in the old one
+    ;; than left behind in the old one; the extended mode has no field,
+    ;; so leaving it keeps the query the state already holds, and
+    ;; entering it with nothing asked yet seeds the tokens from the query
     :set-mode (swap! state (fn [s]
-                             (-> s
-                                 (assoc-in [:params :mode] arg)
-                                 (assoc-in [:params :q]
-                                           (carried-query
-                                            arg
-                                            (some-> (.getElementById
-                                                     js/document "q")
-                                                    (.-value)))))))
+                             (let [q (some-> (.getElementById js/document "q")
+                                             (.-value))
+                                   s (cond-> (assoc-in s [:params :mode] arg)
+                                       q (assoc-in [:params :q]
+                                                   (carried-query arg q)))]
+                               ;; entering the mode with nothing asked yet
+                               ;; leaves tokens the handlers below can
+                               ;; edit: the seeded ones, or one blank
+                               (if (and (= "extended" arg)
+                                        (not (some url/asks? (:tokens s))))
+                                 (let [seeded (url/form-tokens
+                                               (url/tokens-from-query
+                                                (:params s)))]
+                                   (assoc s :tokens (if (seq seeded)
+                                                      seeded
+                                                      [(url/blank-token 1)])))
+                                 s))))
+    :add-token        (add-token!)
+    :remove-token     (remove-token! arg)
+    :add-condition    (add-condition! arg)
+    :remove-condition (let [[i id] arg] (remove-condition! i id))
+    :set-condition
+    (let [[i id field] arg
+          value (.-value (.-target (:replicant/dom-event data)))]
+      (swap! state update-in [:tokens (dec i) :conditions]
+             (fn [conditions]
+               (mapv #(cond-> % (= id (:id %)) (assoc field value))
+                     conditions))))
     :apply-view (apply-view!)
     :toggle-corpora (do (toggle-corpora! arg) (refresh-filters!))
     ;; what metadata a selection offers is the server's to say, so it is
@@ -705,6 +795,16 @@
                               (map (fn [hit] [(kwic/hit-key hit) ::loading]))
                               hits)))))
 
+(defn own-rows
+  "The tokens of an extended search as this client shows them: the served
+  `tokens` (see dk.cst.corpus-probe.api/token-fields) less the blank
+  last one the server ends them in for a reader without a client, who
+  has no button to add one. Kept when it is the only one."
+  [tokens]
+  (if (and (next tokens) (not (url/asks? (last tokens))))
+    (vec (butlast tokens))
+    tokens))
+
 (defn client-state
   "Server `data` as the state this client renders from: marked as the
   client's, seeded with the expansions the URL names, and remembering the
@@ -726,6 +826,7 @@
              ;; what the filters on screen describe, so that a selection
              ;; that has changed can be told from one that has not
              :filters-for   (vec (sort (get-in data [:params :corpus]))))
+      (update :tokens own-rows)
       (with-expansions)))
 
 (defn fetch-expansions!

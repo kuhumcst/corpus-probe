@@ -4,6 +4,16 @@ To do a simple search, type one word or several words in order. A
 simple search needs no syntax. To find any word of a list, select List
 as the query mode and type one word per line.
 
+An extended search builds a query from [tokens](/glossary#token). Select
+Extended as the query mode. Each token has one or more conditions. A
+condition has an attribute, an operator and a value. The operator "any
+word" matches any token. A condition after the first is joined to the
+conditions before it by "and" or by "or". The repeat fields set how many
+times in a row the token can occur. A token can be the first word of a
+sentence or the last. A search of several tokens stays within one
+sentence, one paragraph or one text. To add a token, fill in the empty
+row.
+
 The examples below are [CQP](/glossary#cqp) queries. To use one, select
 CQP as the query mode. Replace x and y with your own words.
 

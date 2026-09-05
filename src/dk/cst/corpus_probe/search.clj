@@ -111,6 +111,16 @@
   (when unit
     (unit-attr (corpus/attributes! ctx corpus) unit)))
 
+(defn corpus-query!
+  "CQP `query` as `corpus` via `ctx` runs it: kept within `unit` (see
+  `within-attr!`; nil for no unit), and its sentence tags named after
+  the corpus's own sentence attribute (see
+  dk.cst.corpus-probe.query/sentence-tags)."
+  [ctx corpus query unit]
+  (-> query
+      (query/sentence-tags (within-attr! ctx corpus :sentence))
+      (query/within-query (within-attr! ctx corpus unit))))
+
 (defn countable-attr?
   "True when attribute description `m` is one whose values a result can
   be counted or narrowed by: a positional attribute, or a structural one
@@ -454,8 +464,7 @@
    (kwic! ctx corpus query {}))
   ([ctx corpus query opts]
    (let [ctx   (corpus-ctx ctx corpus)
-         query (query/within-query query
-                                   (within-attr! ctx corpus (:within opts)))]
+         query (corpus-query! ctx corpus query (:within opts))]
      (if (narrowing-nothing? ctx corpus query (dissoc opts :within))
        {:corpus corpus
         :query  query
@@ -573,9 +582,7 @@
   ex-info when CQP reports an error, times out or dies."
   [ctx corpus query opts]
   (let [ctx         (corpus-ctx ctx corpus)
-        query       (query/within-query query
-                                        (within-attr! ctx corpus
-                                                      (:within opts)))
+        query       (corpus-query! ctx corpus query (:within opts))
         nothing?    (narrowing-nothing? ctx corpus query
                                         (dissoc opts :within))
         opts        (update (kwic-opts! ctx corpus query opts) :context
@@ -652,7 +659,7 @@
   [ctx corpus query {:keys [filter patterns sample within near subset]}]
   (let [ctx (corpus-ctx ctx corpus)]
     [ctx
-     (query/within-query query (within-attr! ctx corpus within))
+     (corpus-query! ctx corpus query within)
      {:filter (corpus-filter! ctx corpus filter patterns)
       :subset (corpus-subset! ctx corpus subset)
       :near   near

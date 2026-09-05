@@ -96,6 +96,22 @@
   all but always exceeds `value-limit`, and decoding it costs seconds."
   1000000)
 
+(defn attribute-values!
+  "The values of positional attribute `attr` of `corpus` (an uppercase
+  CQP corpus name) via `ctx`, in lexicon order, cached until the corpus
+  is re-encoded; nil when the attribute has more than `value-limit`
+  types (see `describe-corpus!`), which are not decoded, being no list a
+  reader could pick from, or when the corpus lacks it. Both names are
+  checked as `lexicon!` checks them."
+  [ctx corpus attr]
+  (corpus/with-facts-cache!
+    ctx corpus (str "cwb-lexdecode " (name attr))
+    (fn []
+      (let [types (some #(when (= (keyword attr) (:name %)) (:types %))
+                        (:p-attrs (describe-corpus! ctx corpus)))]
+        (when (and types (<= types value-limit))
+          (mapv (comp first :values) (lexicon! ctx corpus attr)))))))
+
 (defn annotated-stats!
   "The describe statistics of annotated s-attribute `attr` of `corpus`
   (an uppercase CQP corpus name) via `ctx`: its name and its region

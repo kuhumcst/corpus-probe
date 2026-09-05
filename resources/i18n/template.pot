@@ -119,10 +119,6 @@ msgstr ""
 msgid "by"
 msgstr ""
 
-#: src/dk/cst/corpus_probe/api.clj src/dk/cst/corpus_probe/views/frequencies.cljc
-msgid "and"
-msgstr ""
-
 #: src/dk/cst/corpus_probe/views/frequencies.cljc
 msgid "value"
 msgid_plural "values"
@@ -416,6 +412,98 @@ msgid "attribute"
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/page.cljc
+msgid "is not"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/page.cljc
+msgid "starts with"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/page.cljc
+msgid "ends with"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/page.cljc
+msgid "contains"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/page.cljc
+msgid "matches regex"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/page.cljc
+msgid "does not match regex"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/page.cljc
+msgid "any word"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/page.cljc
+msgid "is"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/page.cljc
+msgid "joined by"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/page.cljc
+msgid "or"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/api.clj src/dk/cst/corpus_probe/views/frequencies.cljc src/dk/cst/corpus_probe/views/page.cljc
+msgid "and"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/page.cljc
+msgid "operator"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/page.cljc
+msgid "field|value"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/page.cljc
+msgid "ignore case"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/page.cljc
+msgid "Remove condition"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/page.cljc
+msgid "Token"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/page.cljc
+msgid "repeat"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/page.cljc
+msgid "sentence start"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/page.cljc
+msgid "sentence end"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/page.cljc
+msgid "Add condition"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/page.cljc
+msgid "Remove token"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/page.cljc
+msgid "Extended search"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/page.cljc
+msgid "text"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/page.cljc
 msgid "start of word"
 msgstr ""
 
@@ -440,6 +528,10 @@ msgid "button|Search"
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/page.cljc
+msgid "Add token"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/page.cljc
 msgid "Query options"
 msgstr ""
 
@@ -456,11 +548,11 @@ msgid "List"
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/page.cljc
-msgid "Simple-search options"
+msgid "Extended"
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/page.cljc
-msgid "ignore case"
+msgid "Simple-search options"
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/frequencies.cljc src/dk/cst/corpus_probe/views/page.cljc
@@ -489,16 +581,16 @@ msgstr ""
 msgid "per corpus"
 msgstr ""
 
-#: src/dk/cst/corpus_probe/api.clj src/dk/cst/corpus_probe/views/page.cljc
-msgid "All tokens"
+#: src/dk/cst/corpus_probe/views/page.cljc
+msgid "at least"
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/page.cljc
 msgid "for"
 msgstr ""
 
-#: src/dk/cst/corpus_probe/views/page.cljc
-msgid "at least"
+#: src/dk/cst/corpus_probe/api.clj src/dk/cst/corpus_probe/views/page.cljc
+msgid "All tokens"
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/page.cljc
@@ -607,10 +699,6 @@ msgstr ""
 
 #: src/dk/cst/corpus_probe/views/page.cljc
 msgid "Close"
-msgstr ""
-
-#: src/dk/cst/corpus_probe/views/page.cljc
-msgid "Token"
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/page.cljc

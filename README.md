@@ -70,6 +70,27 @@ alternation, so the attribute, the case and affix options, the
 metadata filter and every view work as for a simple search. The list
 stays in the URL, so a search for a list can be shared like any other.
 
+### Extended search
+
+An extended search builds a query from tokens, as KORP does. Each token
+is one group of the form. It holds one or more conditions, each with an
+attribute of the searched corpora, an operator, a value and a case
+option, joined by "and" or "or" as KORP joins them. A token also has a
+repeat range and can be made the first or the last word of a sentence.
+The operator "any word" matches any token. A value field suggests the
+values of an attribute with few of them, such as pos. A search of
+several tokens is kept within a sentence, a paragraph or a text, as the
+reader chooses. The tokens compile to CQP on the server, and the result
+heading shows that CQP, as it does for a CQP query. Each token travels
+in the URL as its own fields, `t1.attr=lemma&t1.v=hund`, a second
+condition as `t1.2.v=kat&t1.2.join=or`, and a field with its default
+value is left out. Without a script, the form
+always ends in one empty row, and a reader adds a token by filling it
+and searching again. With a script, a button adds a row and another
+removes one, and the form shows no empty row of its own. Every row a
+reader is asked to fill is required, and the browser reports an empty
+one before the search is sent, as it reports an empty query.
+
 ### Documents
 
 The frontpage, the guide and the glossary are Markdown. There is one

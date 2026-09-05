@@ -5,6 +5,16 @@ rækkefølge. En simpel søgning kræver ingen syntaks. For at finde et
 hvilket som helst ord fra en liste skal du vælge Liste som søgetype og
 skrive ét ord pr. linje.
 
+En udvidet søgning bygger en forespørgsel af [tokens](/glossary#token).
+Vælg Udvidet som søgetype. Hvert token har en eller flere betingelser.
+En betingelse har en attribut, en operator og en værdi. Operatoren
+"ethvert ord" matcher et hvilket som helst token. En betingelse efter
+den første er forbundet med betingelserne før den med "og" eller med
+"eller". Gentag-felterne angiver, hvor mange gange i træk tokenet kan
+forekomme. Et token kan være det første ord i en sætning eller det
+sidste. En søgning med flere tokens holder sig inden for én sætning, ét
+afsnit eller én tekst. Udfyld den tomme række for at tilføje et token.
+
 Eksemplerne nedenfor er [CQP](/glossary#cqp)-forespørgsler. Vælg CQP
 som søgetype for at bruge dem. Erstat x og y med dine egne ord.
 
