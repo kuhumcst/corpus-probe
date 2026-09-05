@@ -53,8 +53,9 @@ main:not(:has(> search)) { margin-inline: auto; }
 /* Voices */
 
 /* the apparatus speaks in sans, set on the containers so a control
-   inside the concordance keeps the concordance's face */
-header, footer, search, .sidebar, .viewctl, nav, summary {
+   inside the concordance keeps the concordance's face; the answer's own
+   header keeps the page's voice for its heading */
+#masthead, footer, search, .sidebar, .viewctl, nav, summary {
   font-family: var(--sans);
 }
 
@@ -111,10 +112,10 @@ header [aria-current], nav.views [aria-current] {
 /* Masthead and footer: two bars framing the page, each with its parts
    at the start, the middle and the end */
 
-header { display: flex; flex-wrap: wrap; align-items: baseline;
-         justify-content: space-between; column-gap: 1.5rem;
-         row-gap: 0.25rem; padding-block: 0.75rem;
-         border-block-end: 1px solid var(--rule); }
+#masthead header { display: flex; flex-wrap: wrap; align-items: baseline;
+                   justify-content: space-between; column-gap: 1.5rem;
+                   row-gap: 0.25rem; padding-block: 0.75rem;
+                   border-block-end: 1px solid var(--rule); }
 .sitename { font-weight: bold; }
 .languages p { margin-block: 0.5rem; }
 
@@ -259,12 +260,15 @@ form.search [role="radiogroup"] { display: flex; flex-wrap: wrap;
 
 /* the tokens of an extended search stand directly in the form, a box
    each: the group around them is named for a screen reader, and a box
-   around boxes said it twice */
+   around boxes said it twice. The boxes fill the row and wrap, in the
+   order the tokens match, so a query reads across like the text it
+   matches; each keeps its own height */
 .tokens { border: 0; padding: 0; }
-.tokens ol { list-style: none; padding: 0; margin-block: 0;
-             display: flex; flex-direction: column; }
-.tokens > ol { gap: 1rem; }
-.token > ol { gap: 0.75rem; }
+.token { margin-block: 0; }  /* the grid's gap is their rhythm */
+.tokens ol { list-style: none; padding: 0; margin-block: 0; }
+.tokens > ol { display: grid; gap: 1rem; align-items: start;
+               grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr)); }
+.token > ol { display: flex; flex-direction: column; gap: 0.75rem; }
 
 /* a condition: attribute and operator on the first row, the value on
    the next, the case box last from the edge, the button that removes it
@@ -309,6 +313,13 @@ form.search [role="radiogroup"] { display: flex; flex-wrap: wrap;
 .result > * { margin-block: 0; }
 .result > * + * { margin-block-start: 1rem; }
 .result > .status:empty { margin-block-start: 0; }
+
+/* the answer's head: what was found at the start and the views at the
+   end, on one baseline like the masthead, closed off by a hairline */
+.result > header { display: flex; flex-wrap: wrap; align-items: baseline;
+                   justify-content: space-between; column-gap: 1.5rem;
+                   row-gap: 0.25rem; padding-block-end: 0.5rem;
+                   border-block-end: 1px solid var(--rule); }
 hgroup { display: flex; flex-direction: column; gap: 0.25rem; }
 hgroup > * { margin-block: 0; }
 
@@ -506,6 +517,11 @@ ul.index .size, ul.index em { grid-column: 3; justify-self: end; }
   main:has(> .result, > .help) .query { grid-area: query;
                                         max-inline-size: 40rem;
                                         margin-block: 0.75rem 1rem; }
+  /* the tokens are boxes like the rail's: their border line is the
+     rail's already, and a row of them wants the column */
+  main:has(> .result, > .help) .query:has(> .tokens) {
+    max-inline-size: none; margin-block-start: 0;
+  }
   main:has(> .result, > .help) > search > .status { grid-area: status; }
   main:has(> .result, > .help) > search > .status:not(:empty) {
     margin-block-end: 1rem;

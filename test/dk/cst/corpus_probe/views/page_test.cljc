@@ -287,7 +287,7 @@
       (is (= [:code "[lemma = \"hund\"]"]
              (page/query-mark en {:mode "extended" :t1.attr "lemma"
                                   :t1.v "hund"})))
-      (is (= "6 hits for [lemma = \"hund\"]"
+      (is (= "6 hits"
              (text (page/hits-heading en {:mode    "extended"
                                           :t1.attr "lemma"
                                           :t1.v    "hund"}
@@ -325,23 +325,30 @@
       (is (nil? (button {:ui en :folders [] :params {} :client? true}))))))
 
 (deftest cqp-line-test
-  (testing "what the words run as, under the field, as its output"
-    (is (= [:p "As CQP" ": " [:output {:for "q"} [:code "[lemma = \"hund\"]"]]]
-           (page/cqp-line en "simple" {:q "hund" :in "lemma"} nil)))
-    (is (= [:p "Som CQP" ": "
-            [:output {:for "q"} [:code "[word = \"(a|b)\"]"]]]
-           (page/cqp-line da "list" {:list "a\nb"} nil))))
-  (testing "the tokens too, which are no one field, as the form holds them
+  (testing "what the tokens run as, under them, as the form holds them
             rather than as the params say"
     (is (= [:p "As CQP" ": " [:output [:code "[word = \"x\"] []"]]]
-           (page/cqp-line en "extended" {:mode "extended" :t1.v "y"}
+           (page/cqp-line en {:mode "extended" :t1.v "y"}
                           [{:id 1 :conditions [{:id 1 :v "x"}]}
-                           {:id 2 :conditions [{:id 1 :op "any"}]}]))))
-  (testing "nothing under the CQP field, which holds it, and for no query"
-    (is (nil? (page/cqp-line en "cqp" {:cqp "[]"} nil)))
-    (is (nil? (page/cqp-line en "simple" {:q "  "} nil)))
-    (is (nil? (page/cqp-line en "extended" {:mode "extended"}
-                             [{:id 1 :conditions [{:id 1}]}])))))
+                           {:id 2 :conditions [{:id 1 :op "any"}]}])))
+    (is (= "Som CQP: [word = \"x\"]"
+           (text (page/cqp-line da {:mode "extended"}
+                                [{:id 1 :conditions [{:id 1 :v "x"}]}])))))
+  (testing "nothing for no query"
+    (is (nil? (page/cqp-line en {:mode "extended"}
+                             [{:id 1 :conditions [{:id 1}]}]))))
+  (testing "and no line under the field of a simple search or a list: the
+            CQP radio shows what they run as"
+    (let [outputs (fn [state]
+                    (filter #(and (vector? %) (= :output (first %)))
+                            (deep (page/search-form
+                                   (assoc state :ui en :folders [])
+                                   "/" nil))))]
+      (is (empty? (outputs {:params {:q "hund"}})))
+      (is (empty? (outputs {:params {:list "a\nb" :mode "list"}})))
+      (is (= 1 (count (outputs {:params {:mode "extended"}
+                                :tokens [{:id 1 :conditions
+                                          [{:id 1 :v "hund"}]}]})))))))
 
 (deftest not-cqp-test
   (testing "a word under the CQP mode is refused as a corpus, which the
@@ -1012,11 +1019,32 @@
     (is (= "1.000 forekomster" (page/hits-phrase da 1000)))))
 
 (deftest hits-heading-test
-  (testing "the heading is the answer, with the query as its subject"
-    (is (= (list "6 hits" " " "for" " " [:q "hund"])
-           (page/hits-heading en {:q "hund"} 6)))
-    (is (= "6 forekomster af hund"
-           (text (page/hits-heading da {:q "hund"} 6)))))
+  (testing "the heading is the answer alone, how many: the field above
+            holds the query"
+    (is (= "6 hits" (page/hits-heading en {:q "hund"} 6)))
+    (is (= "6 forekomster" (page/hits-heading da {:q "hund"} 6))))
+  (testing "which the line under it names only once the form has moved
+            on from it"
+    (let [asked {:q "hund" :mode "simple"}]
+      (is (nil? (page/question en {:asked asked :params asked})))
+      (is (nil? (page/question en {:asked  asked
+                                   :params {:q "hund " :mode "simple"}})))
+      (is (= [:q "hund"]
+             (page/question en {:asked  asked
+                                :params {:q "hunde" :mode "simple"}})))
+      (testing "a switch that kept the query whole is no move, one that
+                dropped part of it is"
+        (is (nil? (page/question en {:asked  asked
+                                     :params {:mode "extended"}
+                                     :tokens [{:id 1 :conditions
+                                               [{:id 1 :v "hund"}]}]})))
+        (is (= [:q "hund"]
+               (page/question en {:asked  asked
+                                  :params {:mode "extended"}
+                                  :tokens [{:id 1 :conditions
+                                            [{:id 1 :v "kat"}]}]}))))
+      (testing "and a page with no answer yet asks nothing"
+        (is (nil? (page/question en {:params {:q ""}}))))))
   (testing "a CQP query is code, a list is its length, a word is quoted"
     (is (= [:code "[lemma = \"hund\"]"]
            (page/query-mark en {:cqp "[lemma = \"hund\"]"})))
@@ -1082,6 +1110,7 @@
                               [:frequencies "/?v=f"]]
                :sort-modes   ["corpus" "word"]
                :asked        {:q "hund"}
+               :params       {:q "hund"}
                :result       example-result
                :next-href    "/?page=1"
                :export-hrefs {:tsv "/e?format=tsv"}
@@ -1104,14 +1133,16 @@
     (testing "and is busy while the answer to the next question is coming"
       (is (= "true" (:aria-busy (second (page/result-section
                                          (assoc state :pending? true)))))))
-    (testing "its heading is the answer, the page's own h1, and the question
-              stands under it as a subheading"
-      (let [[tag h1 sub] (nth html 2)]
-        (is (= :hgroup tag))
+    (testing "its head holds the heading, the page's own h1, with the rest
+              of the question under it as a subheading, and the views"
+      (let [[tag [group h1 sub] views] (nth html 2)]
+        (is (= :header tag))
+        (is (= :hgroup group))
         (is (= [:h1 {:id "results-heading"}] (subvec h1 0 2)))
-        (is (= "6 hits for hund" (text (drop 2 h1))))
+        (is (= "6 hits" (text (drop 2 h1))))
         (is (= :p (first sub)))
-        (is (= "in 2 corpora" (text sub)))))
+        (is (= "in 2 corpora" (text sub)))
+        (is (= :nav.views (first views)))))
     (testing "errors are headed sections before the counts and concordance"
       (is (some #{[:h2 "CQP error"]} (deep html)))
       (is (some #{[:caption "Hits per corpus"]} (deep html)))
@@ -1187,10 +1218,8 @@
     (is (not (page/counting? {:remaining []})))
     (is (not (page/counting? {}))))
   (testing "the heading gives the hits counted so far as a floor"
-    (is (= "at least 6 hits for hund"
-           (text (page/hits-heading en {:q "hund"} 6 true))))
-    (is (= "mindst 6 forekomster af hund"
-           (text (page/hits-heading da {:q "hund"} 6 true)))))
+    (is (= "at least 6 hits" (page/hits-heading en {:q "hund"} 6 true)))
+    (is (= "mindst 6 forekomster" (page/hits-heading da {:q "hund"} 6 true))))
   (testing "the page is placed without a last page"
     (is (= "page 3" (page/page-phrase en {:page 2})))
     (is (= "side 3" (page/page-phrase da {:page 2}))))
@@ -1202,6 +1231,7 @@
   (let [state {:ui        en
                :view      :kwic
                :asked     {:q "hund"}
+               :params    {:q "hund"}
                :next-href "/?page=2"}
         html  (page/result-section
                (assoc state :result (assoc example-result
@@ -1209,8 +1239,8 @@
                                            :remaining ["X" "Y"])))]
     (testing "the heading says at least, and a status line says what is
               still being counted"
-      (is (= "at least 6 hits for hund"
-             (text (drop 2 (second (nth html 2))))))
+      (is (= "at least 6 hits"
+             (text (drop 2 (second (second (nth html 2)))))))
       (is (some #{[:p "Counting hits in 2 corpora …"]} (deep html)))
       (is (some #{[:li "page 1"]} (deep html))))
     (testing "the status line is a live region that stands even when silent"

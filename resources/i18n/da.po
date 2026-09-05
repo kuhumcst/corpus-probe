@@ -534,8 +534,6 @@ msgstr "del af ordet"
 msgid "None selected"
 msgstr "Ingen valgt"
 
-msgid "for"
-msgstr "af"
 
 msgid "condition {c} of token {n}"
 msgstr "betingelse {c} i token {n}"

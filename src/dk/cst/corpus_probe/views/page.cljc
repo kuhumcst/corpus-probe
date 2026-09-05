@@ -581,9 +581,9 @@
   No visible label: a field with a search button beside it needs none
   to say what it is, so the name it keeps is the one only a screen
   reader reads. Every key dispatches `:set-query`, so the state holds
-  the text as typed and the CQP line under the field follows it (see
-  `cqp-line`); the text is rendered as it is, a line break aside, so
-  that the render never moves what the reader is typing.
+  the text as typed and the answer can tell when the form has moved on
+  from what ran (see `question`); the text is rendered as it is, a line
+  break aside, so that the render never moves what the reader is typing.
 
   Required when `required?`: a search of nothing is then reported by the
   browser before it is sent, rather than answered with the guide again.
@@ -941,27 +941,32 @@
    ;; (see `results-region`), and the three should be answered together.
    (when pending? [:p (i18n/tr ui "Loading …")])])
 
+(defn form-query
+  "The query the search form holds (see dk.cst.corpus-probe.query/of):
+  that of its `params`, or, in the extended mode, of its `tokens` as the
+  client keeps them (see dk.cst.corpus-probe.url/rows->params), kept
+  within the unit the params name."
+  [params tokens]
+  (let [mode (url/mode params)]
+    (query/of (if (= "extended" mode)
+                (assoc (url/rows->params tokens)
+                       :mode mode :within (:within params))
+                params))))
+
 (defn cqp-line
-  "The CQP the query of `params` compiles to (see
-  dk.cst.corpus-probe.query/of), or of the `tokens` of the extended form
-  in `mode` (see dk.cst.corpus-probe.url/rows->params), under the field
-  in `ui`, so that a reader sees what the words or the tokens run as,
-  which is what a switch to the CQP mode would hand them, and as they
-  type, since every control records itself in the state; nothing under
-  the CQP field, which holds it, and nothing for no query. An output of
-  the field where there is one field."
-  [ui mode params tokens]
-  (when-let [cqp (and (not= "cqp" mode)
-                      (query/->cqp
-                       (query/of (if (= "extended" mode)
-                                   ;; the tokens as the form holds them,
-                                   ;; not as the params say
-                                   (assoc (url/rows->params tokens) :mode mode)
-                                   params))))]
-    [:p (i18n/tr ui "As CQP") ": "
-     (if (= "extended" mode)
-       [:output [:code cqp]]
-       [:output {:for "q"} [:code cqp]])]))
+  "The CQP the extended form's `tokens` compile to (see `form-query`,
+  with the `params`), under them in `ui`, so that a reader sees how the
+  conditions' joins and repeats came out before a search is spent on
+  them, and as they edit, since every control records itself in the
+  state; nothing for no query.
+
+  TODO: is the line worth its place even here? The CQP radio hands the
+  same text to the field, with the unit, and switching back restores
+  the tokens; the words of a simple search and a list lost their line
+  for that reason. Drop it if nobody reads it."
+  [ui params tokens]
+  (when-let [cqp (query/->cqp (form-query params tokens))]
+    [:p (i18n/tr ui "As CQP") ": " [:output [:code cqp]]]))
 
 (defn mode-label
   "What the query `mode` (see dk.cst.corpus-probe.url/modes) is called,
@@ -1141,9 +1146,9 @@
                   (list [:button {:type "button" :on {:click [:add-token]}}
                          (i18n/tr ui "Add token")]
                         " "))
-                button])
-         [:p (query-field ui mode text (not= :frequencies view)) " " button])
-       (cqp-line ui mode params tokens)]
+                button]
+               (cqp-line ui params tokens))
+         [:p (query-field ui mode text (not= :frequencies view)) " " button])]
       ;; one wrapper, which the wide layout makes a rail beside the answer
       [:div.rail
        ;; one group: everything here qualifies the query above it, and two
@@ -1252,7 +1257,7 @@
          (when (next corpora) (str " " (i18n/tr ui "per corpus"))))))
 
 (defn query-mark
-  "The query of `params` as a heading names it, in `ui`: a CQP query as
+  "The query of `params` as the answer names it, in `ui`: a CQP query as
   the code it is, and so an extended search, as the CQP it compiles to
   (see `query-phrase`), a list as how many words it holds, and a simple
   search quoted, being a word spoken of rather than used."
@@ -1272,16 +1277,29 @@
 
 (defn hits-heading
   "What a search found, as the heading of its result in `ui`: how many
-  hits, `size`, for the query of `params` (see `query-mark`), at least
-  that many while `counting?`; every token when nothing was `asked?`."
+  hits, `size`, at least that many while `counting?`; every token when
+  nothing was `asked?` of `params`. Not the query: the field above the
+  answer holds it (see `question` for when it does not)."
   ([ui params size]
    (hits-heading ui params size false))
   ([ui params size counting?]
    (if (asked? params)
-     (concat (when counting? [(i18n/tr ui "at least") " "])
-             (list (hits-phrase ui size) " " (i18n/tr ui "for") " "
-                   (query-mark ui params)))
+     (str (when counting? (str (i18n/tr ui "at least") " "))
+          (hits-phrase ui size))
      (i18n/tr ui "All tokens"))))
+
+(defn question
+  "The query the result of `state` answered, named as `query-mark` names
+  it, once the form above has moved on from it: retyped, or switched to
+  a mode that could not keep it, so that the answer still says what it
+  is of. Its `:asked` params are what ran (see
+  dk.cst.corpus-probe.api/search-view-data); the form's query is read
+  from its `:params` and `:tokens` (see `form-query`). Nil while the
+  form holds the query, which then says it, and the answer names only
+  how many."
+  [ui {:keys [asked params tokens]}]
+  (when (not= (query/of asked) (form-query params tokens))
+    (query-mark ui asked)))
 
 (defn counting?
   "True while the corpora of `result` are still being counted: some of
@@ -1527,20 +1545,23 @@
   "The outcome of a search in `state` under `heading`, as a region named by
   that heading and focusable, so a GET search can land on it.
 
-  Every view of a result shares this: the heading, with the `subheading`
-  phrases (see `qualifiers`) under it, a status line while the result is
-  still being counted (see `counting?`), the switch between the views,
-  the error that replaced the result or the errors of individual
-  corpora, and then `body`, the view's own content. The two views differ
-  only in what they say about the same hits, so they differ only in what
-  they pass here.
+  Every view of a result shares this: a header holding the heading, the
+  `subheading` phrases (see `qualifiers`) under it and the switch
+  between the views at its end; a status line while the result is still
+  being counted (see `counting?`); the error that replaced the result or
+  the errors of individual corpora; and then `body`, the view's own
+  content. The two views differ only in what they say about the same
+  hits, so they differ only in what they pass here.
 
   The heading is the page's h1: the search page has no other, so what a
   search found, or why it found nothing, is what the page is about. It
-  is the answer alone. The question is the line under it, grouped with
-  it as heading and subheading, and the region is named by the heading
-  alone, so a screen reader landing here hears the count and not the
-  whole question, which the controls below restate anyway.
+  is the answer alone, how many: the query is in the field above, which
+  is the page's headline, and the answer repeats it only once the form
+  has moved on from it (see `question`), at the head of the line under
+  the heading. That line is the rest of the question, grouped with the
+  heading as heading and subheading, and the region is named by the
+  heading alone, so a screen reader landing here hears the count and not
+  the whole question, which the controls below restate anyway.
 
   Marked busy while a navigation is `pending?`, since until that one
   lands what this holds is the answer to the question before it."
@@ -1553,17 +1574,19 @@
                      ;; are still the previous one's answer, and nothing
                      ;; about them says so
                      pending? (assoc :aria-busy "true"))
-   [:hgroup
-    [:h1 {:id "results-heading"} heading]
-    (when (seq subheading)
-      [:p (interpose " · " subheading)])]
+   [:header
+    [:hgroup
+     [:h1 {:id "results-heading"} heading]
+     (when-let [phrases (seq (remove nil? (cons (question ui state)
+                                                subheading)))]
+       [:p (interpose " · " phrases)])]
+    (view-switch ui view view-hrefs)]
    ;; always rendered, and before anything whose kind can change (see
    ;; `navigation-status`)
    [:div.status {:role "status"}
     (when (counting? result)
       [:p (str (i18n/tr ui "Counting hits in") " "
                (corpora-phrase ui (:remaining result)) " …")])]
-   (view-switch ui view view-hrefs)
    (when error (error-body ui error nil))
    (for [[e corpora] (error-groups (:counts result))]
      (error-section ui e corpora))

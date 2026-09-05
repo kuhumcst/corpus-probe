@@ -24,9 +24,8 @@
 
 (deftest frequency-heading-test
   (testing "a table that could be counted is headed by what was found,
-            the hits it counted, for the query"
-    (is (= (list "5 hits" " " "for" " " [:q "hund"])
-           (freq/frequency-heading en {:q "hund"} counted nil)))
+            the hits it counted"
+    (is (= "5 hits" (freq/frequency-heading en {:q "hund"} counted nil)))
     (is (= "All tokens"
            (freq/frequency-heading en {:q ""} counted nil))))
   (testing "a request no corpus answered is headed by its error instead"
@@ -50,6 +49,7 @@
   (let [html (freq/frequency-section
               {:lang       "en"
                :asked      {:q "hund"}
+               :params     {:q "hund"}
                :result     counted
                :view       :frequencies
                :view-hrefs [[:kwic "/?view=kwic"]
@@ -61,9 +61,10 @@
              (second html))))
     (testing "its heading is the answer, and under it how the table counted
               comes before the rest of the question"
-      (let [[tag h1 sub] (nth html 2)]
-        (is (= :hgroup tag))
-        (is (= "5 hits for hund" (text (drop 2 h1))))
+      (let [[tag [group h1 sub]] (nth html 2)]
+        (is (= :header tag))
+        (is (= :hgroup group))
+        (is (= "5 hits" (text (drop 2 h1))))
         (is (= "by word · in PROBE" (text sub)))))
     (testing "the table's size is its caption's to say"
       (is (some #(and (vector? %) (= :caption (first %))
@@ -167,8 +168,8 @@
                    (text (freq/table-caption da cut))))))
   (testing "only the corpora that could be counted are counted, in the
             heading"
-    (is (= "31 hits for hund"
-           (text (freq/frequency-heading en {:q "hund"} sample-result nil))))))
+    (is (= "31 hits"
+           (freq/frequency-heading en {:q "hund"} sample-result nil)))))
 
 (deftest frequency-table-test
   (let [table (freq/frequency-table en sample-result)

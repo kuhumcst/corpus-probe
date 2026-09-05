@@ -657,10 +657,6 @@ msgstr ""
 msgid "at least"
 msgstr ""
 
-#: src/dk/cst/corpus_probe/views/page.cljc
-msgid "for"
-msgstr ""
-
 #: src/dk/cst/corpus_probe/api.clj src/dk/cst/corpus_probe/views/page.cljc
 msgid "All tokens"
 msgstr ""

@@ -606,7 +606,9 @@
   field as the reader sets it, so the state holds the tokens as typed
   and the CQP line under them follows (see
   dk.cst.corpus-probe.views.page/cqp-line), a checkbox as its `on` or
-  nothing; `:set-query` records the query field likewise.
+  nothing; `:set-query` records the query field likewise, so the answer
+  can tell when the form has moved on from what ran (see
+  dk.cst.corpus-probe.views.page/question).
   `:toggle-corpora` records a corpus box or a whole folder being selected
   or cleared, and `:set-checkbox-state`, a render hook rather than an
   event, writes the states of a checkbox that no attribute carries: partly
