@@ -56,10 +56,6 @@ msgid "Positional attributes"
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/corpus.cljc
-msgid "attribute"
-msgstr ""
-
-#: src/dk/cst/corpus_probe/views/corpus.cljc
 msgid "types"
 msgstr ""
 
@@ -123,6 +119,10 @@ msgstr ""
 msgid "structural attributes"
 msgstr ""
 
+#: src/dk/cst/corpus_probe/views/frequencies.cljc
+msgid "Position"
+msgstr ""
+
 #: src/dk/cst/corpus_probe/api.clj src/dk/cst/corpus_probe/views/frequencies.cljc
 msgid "All tokens"
 msgstr ""
@@ -146,6 +146,10 @@ msgid "most frequent shown"
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/frequencies.cljc
+msgid "count texts"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/frequencies.cljc
 msgid "total"
 msgstr ""
 
@@ -155,6 +159,10 @@ msgstr ""
 
 #: src/dk/cst/corpus_probe/views/frequencies.cljc
 msgid "per million"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/frequencies.cljc
+msgid "texts"
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/frequencies.cljc
@@ -238,11 +246,61 @@ msgid "all hits"
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/page.cljc
-msgid "Apply"
+msgid "sentence"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/page.cljc
+msgid "paragraph"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/page.cljc
+msgid "word"
+msgid_plural "words"
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/dk/cst/corpus_probe/views/page.cljc
+msgid "Context"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/page.cljc
+msgid "Near"
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/page.cljc
 msgid "within"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/page.cljc
+msgid "Apply"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/page.cljc
+msgid "Narrow the result"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/page.cljc
+msgid "before the match"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/page.cljc
+msgid "at the start of the match"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/page.cljc
+msgid "over the whole match"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/page.cljc
+msgid "at the end of the match"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/page.cljc
+msgid "after the match"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/page.cljc
+msgid "near"
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/corpus.cljc src/dk/cst/corpus_probe/views/page.cljc
@@ -250,6 +308,18 @@ msgid "region"
 msgid_plural "regions"
 msgstr[0] ""
 msgstr[1] ""
+
+#: src/dk/cst/corpus_probe/views/page.cljc
+msgid "pattern"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/page.cljc
+msgid "from"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/page.cljc
+msgid "to"
+msgstr ""
 
 #: src/dk/cst/corpus_probe/views/page.cljc
 msgid "All values of"
@@ -285,6 +355,70 @@ msgstr ""
 
 #: src/dk/cst/corpus_probe/views/page.cljc
 msgid "hund, or several words in order"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/corpus.cljc src/dk/cst/corpus_probe/views/page.cljc
+msgid "attribute"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/page.cljc
+msgid "Query help"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/page.cljc
+msgid "a word form; the quoted string is a regular expression"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/page.cljc
+msgid "forms starting with hund, in any case"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/page.cljc
+msgid "either word"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/page.cljc
+msgid "every form of a lemma; any attribute of the corpus goes in the brackets"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/page.cljc
+msgid "anything but; the value is a regular expression too"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/page.cljc
+msgid "both at once; | for either, ! for not"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/page.cljc
+msgid "a sequence, one pattern per token"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/page.cljc
+msgid "with up to two tokens between"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/page.cljc
+msgid "both in one sentence, in that order"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/page.cljc
+msgid "@ marks a token as the target, shown in bold and counted at its own position"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/page.cljc
+msgid "labels name tokens, and the constraint after :: relates them: the same word on both sides of og"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/page.cljc
+msgid "tokens of twelve characters or more"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/page.cljc
+msgid "The CQP manual"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/page.cljc
+msgid "has the rest."
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/kwic.cljc src/dk/cst/corpus_probe/views/page.cljc

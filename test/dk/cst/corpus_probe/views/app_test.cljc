@@ -22,8 +22,14 @@
   (testing "the form submits to the results, so a search lands on its answer"
     (is (= (str "/" page/results-fragment)
            (get-in (app-views/search-view base) [3 1 1 :action]))))
-  (testing "no query renders no results region at all"
-    (is (not (some #{"results"} (deep (app-views/search-view base))))))
+  (testing "no query renders no results region at all, but the query help
+            where the results will be"
+    (is (not (some #{"results"} (deep (app-views/search-view base)))))
+    (is (= :section.help (first (last (app-views/search-view base))))))
+  (testing "and the help gives way to an answer"
+    (is (not (some #{:section.help}
+                   (deep (app-views/search-view
+                          (assoc base :error {:type :timeout})))))))
   (testing "an error is shown as the outcome of the search"
     (let [html (app-views/search-view (assoc base :error {:type :cqp
                                                        :message "boom"}))]

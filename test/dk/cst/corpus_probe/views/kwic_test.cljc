@@ -59,7 +59,14 @@
                                       hit source 1 m))))))
     (testing "a corpus that annotates nothing gets no empty tooltip"
       (is (not (contains? (second (kwic/token {} hit source 0 {:word "hund"}))
-                          :title))))))
+                          :title))))
+    (testing "the token an anchor falls on is marked and named as such"
+      (let [[_ attrs] (kwic/token {:anchored {0 :target}} hit source 0 m)]
+        (is (= "target" (:class attrs)))
+        (is (= "target · NCSI" (:title attrs))))
+      (is (= "keyword" (:title (second (kwic/token {:anchored {0 :keyword}}
+                                                   hit source 0
+                                                   {:word "hund"}))))))))
 
 (deftest source-label-test
   (testing "a text title is a cited work"
@@ -88,6 +95,15 @@
 (def client
   "Concordance options as the client renders them."
   {:ui en :client? true})
+
+(deftest anchored-tokens-test
+  (let [hit (assoc sample-hit :anchors {:matchend 9 :target 8 :keyword 10})]
+    (testing "an anchor is found by its distance from the match"
+      (is (= {0 :target 2 :keyword} (kwic/anchored-tokens hit))))
+    (testing "an anchor beyond the row, or unset, marks nothing"
+      (is (= {} (kwic/anchored-tokens sample-hit)))
+      (is (= {} (kwic/anchored-tokens
+                 (assoc sample-hit :anchors {:target 20 :keyword nil})))))))
 
 (deftest hit-row-test
   (let [row (kwic/hit-row client sample-hit false)]
@@ -123,7 +139,14 @@
                                2) 2)
                      [1 :aria-label]))))
     (testing "the match is wrapped in a mark element"
-      (is (= :mark (get-in row [4 1 0]))))))
+      (is (= :mark (get-in row [4 1 0]))))
+    (testing "the anchors mark their tokens"
+      (let [row (kwic/hit-row client
+                              (assoc sample-hit
+                                     :anchors {:matchend 9 :target 8})
+                              false)]
+        (is (some #(and (map? %) (= "target" (:class %)))
+                  (tree-seq coll? seq (nth row 3))))))))
 
 (deftest hit-rows-test
   (testing "a hit is always two children, the second nil without an expansion"

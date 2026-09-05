@@ -7,6 +7,7 @@
             [dk.cst.corpus-probe.cqp-test :refer [ctx when-cwb]]
             [dk.cst.corpus-probe.frequency :as frequency]
             [dk.cst.corpus-probe.views.hiccup :refer [da en]]
+            [dk.cst.corpus-probe.views.page :as page]
             [taoensso.telemere :as t])
   (:import [java.io ByteArrayInputStream]))
 
@@ -23,6 +24,9 @@
   (testing "simple mode compiles the query"
     (is (= "[word = \"hund.*\" %c]"
            (api/->cqp {:q "hund" :mode "simple" :prefix "on" :ci "on"}))))
+  (testing "the in param names the attribute matched, word when blank"
+    (is (= "[lemma = \"hund\"]" (api/->cqp {:q "hund" :in "lemma"})))
+    (is (= "[word = \"hund\"]" (api/->cqp {:q "hund" :in ""}))))
   (testing "blank input yields nil"
     (is (nil? (api/->cqp {:q "   " :mode "cqp"})))
     (is (nil? (api/->cqp {:mode "simple"}))))
@@ -32,6 +36,72 @@
     (testing "and its options still apply"
       (is (= "[word = \"hund.*\" %c]"
              (api/->cqp {:q "hund" :prefix "on" :ci "on"}))))))
+
+(deftest within-unit-test
+  (testing "a simple search of several words is kept within a sentence"
+    (is (= :sentence (api/within-unit {:q "lille hund"})))
+    (is (= :sentence (api/within-unit {:q " lille  hund " :mode "simple"}))))
+  (testing "one word cannot straddle a boundary"
+    (is (nil? (api/within-unit {:q "hund"})))
+    (is (nil? (api/within-unit {:q "  "})))
+    (is (nil? (api/within-unit {}))))
+  (testing "CQP says so itself"
+    (is (nil? (api/within-unit {:q "[] []" :mode "cqp"})))))
+
+(deftest position-param-test
+  (is (= "match[-1]" (api/position-param "match[-1]")))
+  (testing "anything but CQP's four positions is the start of the match"
+    (is (= "match" (api/position-param nil)))
+    (is (= "match" (api/position-param "target")))))
+
+(deftest subset-param-test
+  (is (= {:anchor "matchend[1]" :attr :lemma :value "kat"}
+         (api/subset-param {:subset      "kat"
+                            :subset-at   "matchend[1]"
+                            :subset-attr "lemma"})))
+  (testing "the anchor and attribute fall back as their params do"
+    (is (= {:anchor "match" :attr :word :value "kat"}
+           (api/subset-param {:subset "kat"}))))
+  (testing "no value, no narrowing"
+    (is (nil? (api/subset-param {:subset "" :subset-attr "lemma"})))
+    (is (nil? (api/subset-param {})))))
+
+(deftest subset-href-test
+  (let [href (api/subset-href {:q "hund" :corpus ["PROBE"] :attr "lemma"
+                               :at "match[-1]" :sort "word"}
+                              :lemma "match[-1]" "en kat")]
+    (testing "the concordance of the same search, kept to the row's hits"
+      (is (str/starts-with? href "/?"))
+      (is (str/includes? href "view=kwic"))
+      (is (str/includes? href "subset=en+kat"))
+      (is (str/includes? href "subset-at=match%5B-1%5D"))
+      (is (str/includes? href "subset-attr=lemma"))
+      (is (str/ends-with? href "#results")))
+    (testing "the grouping and the order are the table's, not the hits'"
+      (is (not (str/includes? href "attr=lemma&")))
+      (is (not (str/includes? href "sort="))))))
+
+(deftest context-param-test
+  (is (= 10 (api/context-param "10")))
+  (is (= :sentence (api/context-param "sentence")))
+  (testing "anything else is the usual width"
+    (is (= 5 (api/context-param nil)))
+    (is (= 5 (api/context-param "0")))
+    (is (= 5 (api/context-param "chapter")))))
+
+(deftest near-param-test
+  (testing "a word and how far away it may be"
+    (is (= {:word "kat" :distance 3} (api/near-param " kat " "3"))))
+  (testing "a distance that is not a positive integer is the default"
+    (is (= {:word "kat" :distance page/near-distance}
+           (api/near-param "kat" nil)))
+    (is (= {:word "kat" :distance page/near-distance}
+           (api/near-param "kat" "0")))
+    (is (= {:word "kat" :distance page/near-distance}
+           (api/near-param "kat" "x"))))
+  (testing "no word, nothing to be near"
+    (is (nil? (api/near-param "" "5")))
+    (is (nil? (api/near-param nil nil)))))
 
 (deftest selected-corpora-test
   (let [corpora [{:id "probe"} {:id "viser"}]]
@@ -69,8 +139,10 @@
 
 (deftest query-string-test
   (is (= "a=1&b=2" (api/query-string {:a 1 :b 2})))
-  (testing "nil values are dropped"
-    (is (= "a=1" (api/query-string {:a 1 :b nil}))))
+  (testing "nil and blank values are dropped: a field left empty says
+            nothing, and a citation should not carry forty of them"
+    (is (= "a=1" (api/query-string {:a 1 :b nil})))
+    (is (= "a=1" (api/query-string {:a 1 :fp.text_year "" :sample " "}))))
   (testing "a vector value repeats its key"
     (is (= "corpus=A&corpus=B&q=x"
            (api/query-string {:corpus ["A" "B"] :q "x"})))))
@@ -448,11 +520,44 @@
     (is (= {} (api/filter-params {:f. "x"}))))
   (is (= {} (api/filter-params {:q "hund" :corpus ["A"]}))))
 
+(deftest pattern-params-test
+  (testing "a pattern param is kept as the reader wrote it"
+    (is (= {:text_title ["Hav.*"]}
+           (api/pattern-params {:q "x" :fp.text_title "Hav.*"}))))
+  (testing "a range of integers is spelt out"
+    (is (= {:text_year ["1590|1591|1592"]}
+           (api/pattern-params {:ff.text_year "1590" :ft.text_year "1592"})))
+    (is (= "1583" (api/range-pattern "1583" "1583")))
+    (testing "and not at all when either end is missing, or out of order"
+      (is (= {} (api/pattern-params {:ff.text_year "1590"})))
+      (is (nil? (api/range-pattern "1592" "1590")))
+      (is (nil? (api/range-pattern "1590" "many"))))
+    (testing "only so far"
+      (is (= api/range-limit
+             (count (str/split (api/range-pattern "0" "5000") #"\|"))))))
+  (testing "both together, blanks and nameless params dropped"
+    (is (= {:text_year ["15.." "1590|1591"]}
+           (api/pattern-params {:fp.text_year "15.." :ff.text_year "1590"
+                                :ft.text_year "1591" :fp.text_title " "
+                                :fp. "x"})))))
+
+(deftest pattern-fields-test
+  (is (= {:patterns {:text_title "Hav.*"}
+          :ranges   {:text_year ["1590" nil] :text_pages [nil "5"]}}
+         (api/pattern-fields {:fp.text_title "Hav.*" :ff.text_year "1590"
+                              :ft.text_pages "5" :q "x"}))))
+
 (deftest search-params-test
   (testing "the filter params identify a search along with the query"
     (is (= {:q "hund" :corpus ["A"] :f.text_year ["1591"]}
            (api/search-params {:q "hund" :corpus ["A"] :page "2" :sort "word"
-                               :f.text_year ["1591"]}))))
+                               :f.text_year ["1591"]})))
+    (testing "and so do its patterns and ranges"
+      (is (= {:q "hund" :fp.text_title "Hav.*" :ff.text_year "1590"
+              :ft.text_year "1592"}
+             (api/search-params {:q "hund" :fp.text_title "Hav.*"
+                                 :ff.text_year "1590" :ft.text_year "1592"
+                                 :page "2"})))))
   (testing "so does the sample, which decides which hits there are; the
             sort, which only decides their order, still does not"
     (is (= {:q "hund" :sample "100"}

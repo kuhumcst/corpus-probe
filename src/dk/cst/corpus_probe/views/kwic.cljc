@@ -63,6 +63,18 @@
   [{:keys [left match right] :as hit}]
   (+ (count left) (count match) (count right)))
 
+(defn anchored-tokens
+  "Which tokens of `hit` its target and keyword anchors fall on: token
+  index to anchor name, for each anchor that is set and within the row.
+  The match anchors are not among them, the match being marked as a
+  whole."
+  [{:keys [cpos left anchors] :as hit}]
+  (into {}
+        (for [k     [:target :keyword]
+              :let  [i (some-> (get anchors k) (- cpos) (+ (count left)))]
+              :when (and i (< -1 i (token-count hit)))]
+          [i k])))
+
 (defn token-offset
   "How far token `i` of `hit` is from the start of its match: negative in
   the left context, zero at the first token of the match, positive after
@@ -118,13 +130,22 @@
   stops: only the token at `:cursor` is tabbable, and the arrow keys move
   the cursor between neighbours, as the APG asks of a grid of controls.
   Inspecting follows focus rather than waiting for a press, so moving the
-  cursor moves what the panel describes."
-  [{:keys [client? cursor] :as opts} hit source i m]
+  cursor moves what the panel describes.
+
+  Under `:anchored` (see `anchored-tokens`), the token an anchor falls on
+  carries the anchor's name as its class and in its title, as cqp marks a
+  target in bold and a keyword underlined (manual section 3.3)."
+  [{:keys [client? cursor anchored] :as opts} hit source i m]
   (let [k       [(hit-key hit) i]
         inspect [:inspect (assoc source :token m)]
-        title   (token-title m)
+        anchor  (get anchored i)
+        title   (->> [(some-> anchor name) (token-title m)]
+                     (remove nil?)
+                     (str/join " · ")
+                     (not-empty))
         attrs   (cond-> (token-data m)
-                  title (assoc :title title))]
+                  title  (assoc :title title)
+                  anchor (assoc :class (name anchor)))]
     (if-not client?
       ;; no handler: nothing answers a click here, and the string renderer
       ;; would drop one anyway
@@ -202,7 +223,8 @@
 
 (defn hit-row
   "One KWIC `hit` as a table row under the concordance `opts`, the row
-  carrying its corpus positions and `expanded?` its disclosure state.
+  carrying its corpus positions, its anchored tokens marked (see
+  `anchored-tokens`) and `expanded?` its disclosure state.
 
   The corpus position is the row's header and its first cell, so every
   other cell resolves a row header as well as a column one. The source
@@ -210,6 +232,7 @@
   middle of the line a reader is there to read."
   [{:keys [ui client?] :as opts} hit expanded?]
   (let [source (hit-source hit)
+        opts   (assoc opts :anchored (anchored-tokens hit))
         {:keys [left match right structs anchors cpos]} hit
         nl     (count left)]
     [:tr.hit (position-data cpos anchors)

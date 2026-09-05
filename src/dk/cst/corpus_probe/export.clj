@@ -57,27 +57,33 @@
 
 (defn frequency-table
   "The merged frequency `result` as rows of strings: a header, then one row
-  per value with, for every readable corpus, its frequency and its rate
-  per million tokens, plus the totals over several corpora, as the HTML
-  table shows them but with every row."
-  [{:keys [attr counts rows] :as result}]
+  per value with, for every readable corpus, its frequency, its rate per
+  million tokens and, when the result counts `:docs`, the texts it occurs
+  in, plus the totals over several corpora, as the HTML table shows them
+  but with every row."
+  [{:keys [attr counts rows docs] :as result}]
   (let [readable (filter :tokens counts)
         total?   (boolean (next readable))
         tokens   (reduce + (map :tokens readable))
-        pair     (fn [n t] [(str n) (str (stats/per-million n t))])]
+        cells    (fn [n t d]
+                   (cond-> [(str n) (str (stats/per-million n t))]
+                     docs (conj (str d))))
+        heads    (fn [group]
+                   (cond-> [(str group " frequency")
+                            (str group " per million")]
+                     docs (conj (str group " texts"))))]
     (into [(-> [(name attr)]
-               (into (mapcat (fn [{:keys [corpus]}]
-                               [(str corpus " frequency")
-                                (str corpus " per million")]))
-                     readable)
-               (cond-> total? (into ["total frequency"
-                                     "total per million"])))]
-          (map (fn [{:keys [value freqs total]}]
+               (into (mapcat (comp heads :corpus)) readable)
+               (cond-> total? (into (heads "total"))))]
+          (map (fn [{:keys [value freqs total] doc-freqs :docs}]
                  (-> [value]
                      (into (mapcat (fn [{:keys [corpus tokens]}]
-                                     (pair (get freqs corpus 0) tokens)))
+                                     (cells (get freqs corpus 0) tokens
+                                            (get doc-freqs corpus 0))))
                            readable)
-                     (cond-> total? (into (pair total tokens))))))
+                     (cond-> total?
+                       (into (cells total tokens
+                                    (reduce + (vals doc-freqs))))))))
           rows)))
 
 (defn tsv-value

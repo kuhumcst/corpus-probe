@@ -113,31 +113,63 @@
   [s]
   (str/replace s #"[\n\r\t]+" " "))
 
+(defn escape-value
+  "Escape `value` for a double-quoted regex on a command line: its
+  metacharacters and quotes as `escape-literal` does, and the control
+  characters a command line cannot carry, TAB (which the hardened profile
+  frames its output with) and the line breaks that end a command, as
+  their regex escapes, which match the same bytes."
+  [value]
+  (-> (escape-literal value)
+      (str/replace "\t" "\\t")
+      (str/replace "\n" "\\n")
+      (str/replace "\r" "\\r")))
+
 (defn simple->cqp
   "Compile simple-search `input` into a CQP query string.
 
   Each whitespace-separated word becomes one token pattern, following
   Korp's simple search: `[word = \"<escaped>\"]` with `.*` affixes for
-  :prefix?/:suffix? and the %c flag for :case-insensitive?. A :within
-  s-attribute name appends a `within` clause. Returns nil for blank input
-  rather than a match-everything query.
+  :prefix?/:suffix? and the %c flag for :case-insensitive?, matching the
+  positional attribute :attr (default word) rather than the surface form
+  when one is given. Returns nil for blank input rather than a
+  match-everything query. The region the words are kept within is each
+  corpus's own business (see `within-query`).
 
   (simple->cqp \"lille hund\" {:case-insensitive? true})
-  ;; => [word = \"lille\" %c] [word = \"hund\" %c]"
+  ;; => [word = \"lille\" %c] [word = \"hund\" %c]
+
+  (simple->cqp \"hund\" {:attr :lemma})
+  ;; => [lemma = \"hund\"]"
   ([input]
    (simple->cqp input {}))
-  ([input {:keys [case-insensitive? prefix? suffix? within]}]
+  ([input {:keys [case-insensitive? prefix? suffix? attr] :or {attr :word}}]
    (when-not (str/blank? input)
      (let [pattern (fn [word]
-                     (str "[word = \""
+                     (str "[" (name attr) " = \""
                           (when suffix? ".*")
                           (escape-literal word)
                           (when prefix? ".*")
                           "\"" (when case-insensitive? " %c") "]"))]
-       (str (->> (str/split (str/trim input) #"\s+")
-                 (map pattern)
-                 (str/join " "))
-            (when within (str " within " (name within))))))))
+       (->> (str/split (str/trim input) #"\s+")
+            (map pattern)
+            (str/join " "))))))
+
+(defn within-query
+  "`query` with its matches kept within one region of s-attribute `attr`,
+  or `query` itself when `attr` is nil.
+
+  The clause a compiled simple search of several words takes, so that
+  they cannot be matched across a sentence boundary. It is never appended
+  to CQP a reader wrote: that may carry a within clause already, and CQP
+  allows one.
+
+  (within-query \"[] []\" :s)
+  ;; => [] [] within s"
+  [query attr]
+  (if attr
+    (str query " within " (name attr))
+    query))
 
 (defn locked-query
   "Wrap user-supplied CQP `query` in a QueryLock sandbox, returning one
@@ -156,33 +188,44 @@
                   (str/replace #";+\s*$" ""))]
     (str "set QueryLock " key ";\n" query "\n;\nunlock " key ";")))
 
-(defn filter-query
-  "The CQP query matching every region accepted by `filter`: pairs of
-  annotated s-attribute name and the values accepted, finest regions first.
+(defn escape-pattern
+  "Escape `pattern`, a regex a reader wrote, for a double-quoted CQP
+  string: its quotes doubled, which is all it needs, its metacharacters
+  being the point of it."
+  [pattern]
+  (str/replace pattern "\"" "\"\""))
 
-  [[:text_year #{\"1591\" \"1583\"}]] matches the texts of either year;
-  several attributes must all hold. The values are escaped and matched
-  literally, those of one attribute as an alternation. The match is
+(defn filter-query
+  "The CQP query matching every region accepted by `filter`: triples of
+  annotated s-attribute name, the values accepted and the patterns
+  accepted (nil for none), finest regions first.
+
+  [[:text_year #{\"1591\" \"1583\"}]] matches the texts of either year,
+  and [[:text_year #{} [\"15..\"]]] those of any year the pattern
+  matches; several attributes must all hold. The values are escaped and
+  matched literally, the patterns as the regexes they are, each in a
+  group of its own, all of one attribute as an alternation. The match is
   anchored at a region start of the first attribute, tests the others at
   that token (their regions containing it, hence the first attribute must
   have the finest regions) and expands to the first attribute's region, so
   that the result activated as a subcorpus restricts later queries to
   those regions: the CQP tutorial's metadata subcorpus idiom.
 
-  (filter-query [[:s_id #{\"2\"}] [:text_year #{\"1591\"}]])
-  ;; => <s_id = \"2\"> [_.text_year = \"1591\"] expand to s_id"
+  (filter-query [[:s_id #{\"2\"}] [:text_year #{\"1591\"} [\"16..\"]]])
+  ;; => <s_id = \"2\"> [_.text_year = \"1591|(16..)\"] expand to s_id"
   [filter]
-  (let [[[attr values] & more] filter
-        ;; a TAB in a value would be flattened with the rest of the
-        ;; command, so it goes in as the regex escape instead
-        escape   (fn [value] (str/replace (escape-literal value) "\t" "\\t"))
-        accepted (fn [values]
-                   (str "\"" (str/join "|" (map escape (sort values))) "\""))]
-    (str "<" (name attr) " = " (accepted values) "> "
+  (let [[[attr values patterns] & more] filter
+        group    (fn [pattern] (str "(" (escape-pattern pattern) ")"))
+        accepted (fn [values patterns]
+                   (str "\""
+                        (str/join "|" (concat (map escape-value (sort values))
+                                              (map group patterns)))
+                        "\""))]
+    (str "<" (name attr) " = " (accepted values patterns) "> "
          (if (seq more)
-           (str "[" (str/join " & " (for [[attr values] more]
+           (str "[" (str/join " & " (for [[attr values patterns] more]
                                       (str "_." (name attr) " = "
-                                           (accepted values))))
+                                           (accepted values patterns))))
                 "]")
            "[]")
          " expand to " (name attr))))
@@ -248,6 +291,117 @@
   (when (and n (pos? n))
     (str "randomize " sample-seed "; reduce Last to " (long n) ";")))
 
+(defn near-command
+  "The commands keeping only the matches of Last that have a token
+  matching `word` within `distance` tokens of them, on either side, and
+  marking that token as their keyword anchor; nil without a word.
+
+  The manual's own way of finding a word near a hit (section 3.7): the
+  search runs from both ends of the match and never inside it, and a
+  match left without a keyword is deleted. The word is matched literally
+  and regardless of case, as a simple search matches one. Both commands
+  run outside the QueryLock, being no queries, so the word is escaped as
+  every spliced value is (see `escape-value`).
+
+  (near-command {:word \"kat\" :distance 5})
+  ;; => set Last keyword nearest [word = \"kat\" %c] within 5 words from
+  ;;    match; delete Last without keyword;"
+  ;; TODO: `delete ... without keyword` is in CQP's grammar and not in
+  ;; its manual, and is verified on 3.5.0 only; check it on the
+  ;; production 3.4.27 before relying on it there (PLAN.md appendix B).
+  [{:keys [word distance]}]
+  (when-not (str/blank? word)
+    (str "set Last keyword nearest [word = \"" (escape-value word) "\" %c]"
+         " within " (long distance) " words from match;"
+         " delete Last without keyword;")))
+
+(def positions
+  "The positions of a match a result is counted or narrowed at, as CQP
+  names them (manual sections 3.3 and 3.4): the token before the match,
+  its first token, the whole of it as a range, its last token, and the
+  token after it."
+  ["match[-1]" "match" "match..matchend" "matchend" "matchend[1]"])
+
+(defn valid-position
+  "Return `position` when it is one of the `positions`, else throw: the
+  guard every command builder applies before splicing one into a
+  command."
+  [position]
+  (when-not (some #{position} positions)
+    (throw (ex-info "Invalid position" {:position position})))
+  position)
+
+(defn whole-match?
+  "True when `position` (see `positions`) is the whole match rather than
+  one token of it, which CQP counts with `count` rather than `group` and
+  prints differently."
+  [position]
+  (= "match..matchend" position))
+
+(defn count-command
+  "The command counting the values of `attr` at `position` (see
+  `positions`) over the matches of Last: CQP's `count` over the whole
+  match, whose output dk.cst.corpus-probe.parse/count->freqs reads, and
+  its `group` at one token, read by group->freqs.
+
+  Given the s-attribute `within`, `group` counts the regions of it each
+  value occurs in rather than the matches (manual section 3.4): a
+  document frequency, which `count` cannot give, so it is the caller's
+  to ask for one token only."
+  ([position attr]
+   (count-command position attr nil))
+  ([position attr within]
+   (if (whole-match? (valid-position position))
+     (str "count Last by " (name attr) ";")
+     (str "group Last " position " " (name attr)
+          (when within (str " within " (name within))) ";"))))
+
+(defn subset-command
+  "The commands keeping only the matches of Last whose token at `anchor`
+  (see `positions`) has `value` as its `attr`: the hits one row of a
+  frequency table counted.
+
+  CQP's own subset at the ends of the match. Beside it, where subset
+  cannot reach (its anchors take no offset), the keyword anchor is set on
+  the one token there and the matches without one deleted, as
+  `near-command` does, so that token is marked. The attribute is read
+  through the this label, which reaches the value of a structural
+  attribute as well as a positional one. Over the whole match, whose
+  value is the string CQP's `count` printed, one token per space, the
+  result is intersected with the query matching exactly that sequence,
+  which keeps the matches that are it. All of it runs outside the
+  QueryLock but the sequence query, so `attr` is checked against the
+  corpus by the caller and `value` escaped here."
+  [{:keys [anchor attr value]}]
+  (let [pattern (str "[_." (name attr) " = \"" (escape-value value) "\"]")
+        beside  (fn [side from]
+                  (str "set Last keyword nearest " pattern " within " side
+                       " 1 words from " from "; delete Last without keyword;"))
+        ;; not `pattern`: CQP refuses the this label in query-initial
+        ;; position, and the sequence query opens with its first token
+        token   (fn [s] (str "[" (name attr) " = \"" (escape-value s) "\"]"))]
+    (case (valid-position anchor)
+      "match"       (str "Last = subset Last where match: " pattern ";")
+      "matchend"    (str "Last = subset Last where matchend: " pattern ";")
+      "match[-1]"   (beside "left" "match")
+      "matchend[1]" (beside "right" "matchend")
+      "match..matchend"
+      (str "Q = Last;\n"
+           (locked-query (str/join " " (map token (str/split value #" "))))
+           "\nLast = intersection Q Last;"))))
+
+(defn narrowing
+  "The [section command] pairs narrowing the result Last as `opts` ask:
+  to the matches with a value at an anchor (:subset, see
+  `subset-command`), then to those with a word nearby (:near, see
+  `near-command`), in that order, so that the word is looked for beside
+  the hits that are kept. Empty when neither is asked for."
+  [{:keys [subset near]}]
+  (let [nearing (near-command near)]
+    (cond-> []
+      subset  (conj [:subset (subset-command subset)])
+      nearing (conj [:near nearing]))))
+
 (def sort-modes
   "The KWIC sort modes, in display order: each mode's `sort` param value
   and the CQP command that reorders the result `Last`. The context sorts
@@ -273,10 +427,26 @@
   (or (some (fn [[k command]] (when (= k mode) command)) sort-modes)
       "sort Last;"))
 
+(defn context-spec
+  "The width of context as CQP's Context option takes it: `context` as a
+  number of words either side of the match, or as an s-attribute
+  keyword, one region of which is shown either side.
+
+  (context-spec 5)
+  ;; => 5 words
+
+  (context-spec :s)
+  ;; => 1 s"
+  [context]
+  (if (keyword? context)
+    (str "1 " (name context))
+    (str (long context) " words")))
+
 (defn setup-command
   "The command configuring one KWIC batch: the hardened display profile,
-  `context` tokens of context and, when `cache-dir` is given, the
-  directory CQP reads and writes saved query results in.
+  `context` (see `context-spec`) either side of the match and, when
+  `cache-dir` is given, the directory CQP reads and writes saved query
+  results in.
 
   DataDirectory is set here rather than beside the query because setting
   it rescans the corpus list, resetting the active corpus, so it has to
@@ -285,7 +455,7 @@
   [context cache-dir]
   (str (when cache-dir
          (str "set DataDirectory \"" (valid-data-directory cache-dir) "\"; "))
-       hardened-profile " set Context " (long context) " words;"))
+       hardened-profile " set Context " (context-spec context) ";"))
 
 (defn page-commands
   "The [section command] pairs displaying the rows `[from to]` of the
@@ -314,16 +484,18 @@
   rows `:rows` of its result: a vector of [section command] pairs, each
   section naming what its command's output holds (see `batch-sections`).
 
-  `context` is in tokens; `rows` is the [from to] row range (see
+  `context` is a number of tokens or an s-attribute keyword (see
+  `context-spec`); `rows` is the [from to] row range (see
   `page-rows`); `sort` is a sort mode (see `sort-modes`), which the `cat`,
   `dump` and `tabulate` rows then follow; `filter` restricts the query to
   the regions of a metadata filter (see `restricted-query`); `p-attrs`,
   `struct-attrs` and `cache-dir` are as `page-commands` and
   `setup-command` take them.
 
-  `sample` reduces the result to that many random matches before
-  anything is counted or ordered (see `sample-command`), so that the
-  size reported and the rows paged are the sample's.
+  `subset` and `near` narrow the result (see `narrowing`), and `sample`
+  then reduces what is left to that many random matches (see
+  `sample-command`), all before anything is counted or ordered, so that
+  the size reported and the rows paged are those of the hits kept.
 
   Given `nqr`, the result is also saved under that name for
   `stored-kwic-batch` to page later. It is named only after being sorted,
@@ -332,11 +504,13 @@
   [corpus query {:keys [p-attrs struct-attrs context rows sort filter
                         sample cache-dir nqr]
                  :or   {context (:context kwic-defaults)
-                        rows    (:rows kwic-defaults)}}]
+                        rows    (:rows kwic-defaults)}
+                 :as   opts}]
   (let [sampling (sample-command sample)]
     (-> [[:setup  (setup-command context cache-dir)]
          [:corpus (str corpus ";")]
          [:query  (restricted-query query filter)]]
+        (into (narrowing opts))
         (cond-> sampling (conj [:sample sampling]))
         (into [[:size "size Last;"]
                [:sort (sort-command sort)]])
@@ -350,7 +524,8 @@
 
   No query runs and nothing is sorted, the matches and their order both
   coming from the save file, so the options that decided them (the query,
-  `sort`, `filter` and `sample`) are none of this one's business."
+  `sort`, `filter`, `subset`, `near` and `sample`) are none of this one's
+  business."
   [corpus nqr {:keys [p-attrs struct-attrs context rows cache-dir]
                :or   {context (:context kwic-defaults)
                       rows    (:rows kwic-defaults)}}]

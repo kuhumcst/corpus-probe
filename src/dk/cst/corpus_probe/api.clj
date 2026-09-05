@@ -24,6 +24,7 @@
             [dk.cst.corpus-probe.search :as search]
             [dk.cst.corpus-probe.tools :as tools]
             [dk.cst.corpus-probe.views.corpus :as corpus-views]
+            [dk.cst.corpus-probe.views.frequencies :as freq-views]
             [dk.cst.corpus-probe.views.layout :as layout]
             [dk.cst.corpus-probe.views.page :as page]
             [dk.cst.corpus-probe.views.app :as app-views]
@@ -209,15 +210,18 @@
    :body    html})
 
 (defn query-string
-  "Encode map `m` as a URL query string, skipping nil values and repeating
-  the key of a vector value once per element.
+  "Encode map `m` as a URL query string, skipping nil and blank values and
+  repeating the key of a vector value once per element.
 
   A query param written without a `=` arrives under a nil key, which names
-  nothing and is skipped too."
+  nothing and is skipped too. A blank value is a field left empty, which
+  says nothing either, and a URL that is a citation should not carry one
+  per metadata attribute of the corpus."
   [m]
   (->> (remove (fn [[k v]] (or (nil? k) (nil? v))) m)
        (mapcat (fn [[k v]]
-                 (for [v (if (vector? v) v [v])]
+                 (for [v (if (vector? v) v [v])
+                       :when (not (str/blank? (str v)))]
                    (str (name k) "=" (URLEncoder/encode (str v) "UTF-8")))))
        (str/join "&")))
 
@@ -246,19 +250,65 @@
                   [k (if (or (multi-param? k) (not (vector? v))) v (first v))]))
         params))
 
+(defn prefixed-params
+  "The params of `params` whose key opens with `prefix`, as a map of the
+  attribute the rest of the key names to the value; a key that is the
+  prefix alone names no attribute and is dropped."
+  [params prefix]
+  (into {} (for [[k v] params
+                 :when (and k (str/starts-with? (name k) prefix)
+                            (< (count prefix) (count (name k))))]
+             [(keyword (subs (name k) (count prefix))) v])))
+
 (defn filter-params
   "The metadata filter selected by `params`: a map of attribute name to
   the set of non-blank values of its `f.<attribute>` params (see
   `filter-key?`), as dk.cst.corpus-probe.search/concordance! takes it;
-  empty when nothing is selected. A param naming no attribute is dropped
-  like a blank value."
+  empty when nothing is selected."
   [params]
-  (into {} (for [[k v] params
-                 :when (filter-key? k)
-                 :let  [attr   (subs (name k) (count page/filter-prefix))
-                        values (set (remove str/blank? (if (vector? v) v [v])))]
-                 :when (and (seq attr) (seq values))]
-             [(keyword attr) values])))
+  (into {} (for [[attr v] (prefixed-params params page/filter-prefix)
+                 :let  [values (set (remove str/blank? (if (vector? v) v [v])))]
+                 :when (seq values)]
+             [attr values])))
+
+(defn pattern-key?
+  "True when query param key `k` names a pattern or a range over a
+  metadata attribute: `fp.`, `ff.` or `ft.` followed by the attribute
+  name (see `pattern-params`)."
+  [k]
+  (boolean (and k (re-matches #"f[pft]\..+" (name k)))))
+
+(def range-limit
+  "The most values a range of integers is spelt out as: enough for the
+  years any corpus spans, and a bound on the query it becomes."
+  1000)
+
+(defn range-pattern
+  "The pattern matching every integer from `from` to `to` inclusive (both
+  query param values): an alternation of them, the first `range-limit`
+  of them at most; nil unless both are integers in order."
+  [from to]
+  (let [a (some-> from parse-long)
+        b (some-> to parse-long)]
+    (when (and a b (<= a b))
+      (str/join "|" (take range-limit (range a (inc b)))))))
+
+(defn pattern-params
+  "The patterns `params` ask each metadata attribute's values to match
+  instead of, or beside, the values chosen: the regex of its
+  `fp.<attribute>` param as a reader wrote it, and the integers from its
+  `ff.<attribute>` to its `ft.<attribute>` param (see `range-pattern`).
+  A map of attribute to its patterns; empty when there are none."
+  [params]
+  (let [to (prefixed-params params "ft.")]
+    (reduce (fn [m [attr pattern]] (update m attr (fnil conj []) pattern))
+            {}
+            (concat (remove (comp str/blank? val)
+                            (prefixed-params params "fp."))
+                    (keep (fn [[attr from]]
+                            (some->> (range-pattern from (get to attr))
+                                     (vector attr)))
+                          (prefixed-params params "ff."))))))
 
 (defn page-param
   "The page number named by the `page` query param value `v`: the first
@@ -275,6 +325,56 @@
   [v]
   (when-let [n (some-> v parse-long)]
     (when (pos? n) n)))
+
+(defn attr-param
+  "The attribute the query param value `v` names, word when it names
+  none: the one attribute every corpus has."
+  [v]
+  (if (str/blank? v) "word" v))
+
+(defn position-param
+  "The position of the match the `at` query param value `v` names, among
+  dk.cst.corpus-probe.query/positions; the start of the match for
+  anything else."
+  [v]
+  (if (some #{v} query/positions) v "match"))
+
+(defn subset-param
+  "The narrowing the `subset`, `subset-at` and `subset-attr` query params
+  of `params` ask for: {:anchor ... :attr ... :value ...} as
+  dk.cst.corpus-probe.query/subset-command takes it, or nil without a
+  value. The attribute is checked against each corpus by the search, as
+  every attribute is."
+  [{:keys [subset subset-at subset-attr]}]
+  (when-not (str/blank? subset)
+    {:anchor (position-param subset-at)
+     :attr   (keyword (attr-param subset-attr))
+     :value  subset}))
+
+(defn context-param
+  "The width of context the `context` query param value `v` asks for: a
+  positive number of words, or the unit of text it names (a key of
+  dk.cst.corpus-probe.search/units); the default width for anything
+  else."
+  [v]
+  (let [n (some-> v parse-long)]
+    (cond
+      (and n (pos? n))                             n
+      (and v (contains? search/units (keyword v))) (keyword v)
+      :else                                        (:context
+                                                    query/kwic-defaults))))
+
+(defn near-param
+  "The word the `near` query param value `word` asks every hit to have
+  nearby, at most `distance` (the query param value) words away: {:word
+  ... :distance ...} as dk.cst.corpus-probe.query/near-command takes it,
+  or nil for a blank word. A distance that is not a positive integer is
+  dk.cst.corpus-probe.views.page/near-distance."
+  [word distance]
+  (when-not (str/blank? word)
+    {:word     (str/trim word)
+     :distance (let [n (some-> distance parse-long)]
+                 (if (and n (pos? n)) n page/near-distance))}))
 
 (defn corpora-param
   "The corpus names selected by the `corpus` query param value `v`: a string
@@ -319,7 +419,8 @@
                    (when (and hits (pos? (:size result 0)))
                      (page/sample-phrase ui (:sample result) corpus))
                    (when (seq corpus) (page/corpora-phrase ui corpus))
-                   (page/filter-phrase (filter-params params))
+                   (page/filter-phrase (filter-params params)
+                                       (pattern-params params))
                    (when (pos? page-n)
                      (str (i18n/tr ui "page") " " (inc page-n))))))))
 
@@ -332,7 +433,8 @@
   [ui {:keys [q corpus attr] :as params}]
   (page-title (if (str/blank? q) (i18n/tr ui "All tokens") q)
               (when (seq corpus) (page/corpora-phrase ui corpus))
-              (page/filter-phrase (filter-params params))
+              (page/filter-phrase (filter-params params)
+                                  (pattern-params params))
               (str (i18n/tr ui "by") " " attr)
               (i18n/tr ui "Frequencies")))
 
@@ -358,17 +460,20 @@
 
 (defn search-params
   "The `params` that identify a search (its corpora, query, metadata
-  filter, the sample of its hits), for linking the views of the same
-  hits. The interface language is not among them: it is the reader's
-  preference, not part of the search.
+  filter, the narrowings of its hits, the sample of them), for linking
+  the views of the same hits. The interface language is not among them:
+  it is the reader's preference, not part of the search.
 
-  The sample is here and the sort is not, because which hits there are is
-  part of the search while the order they are read in is not. The
-  frequency view draws no sample, but carries the param so that returning
-  to the concordance returns to the sample it was left in."
+  The narrowings and the sample are here and the sort is not, because
+  which hits there are is part of the search while the order they are
+  read in is not. The frequency view draws no sample, but carries the
+  param so that returning to the concordance returns to the sample it
+  was left in."
   [params]
-  (into (select-keys params [:corpus :q :mode :ci :prefix :suffix :sample])
-        (filter (comp filter-key? key))
+  (into (select-keys params [:corpus :q :mode :in :ci :prefix :suffix
+                             :subset :subset-at :subset-attr
+                             :near :distance :sample])
+        (filter (comp #(or (filter-key? %) (pattern-key? %)) key))
         params))
 
 (defn export-hrefs
@@ -379,12 +484,6 @@
              [(keyword format)
               (str path "?" (query-string (assoc params :format format)))])))
 
-(defn attr-param
-  "The grouping attribute named by the `attr` query param value `v`,
-  defaulting to word, the one attribute every corpus has."
-  [v]
-  (if (str/blank? v) "word" v))
-
 (defn ->cqp
   "The CQP query for `params`, compiling simple-mode input; nil when there
   is nothing to search for.
@@ -393,13 +492,26 @@
   is read as a plain word search, since CQP mode answers a bare word with
   a parse error naming a corpus the reader never mentioned. Every URL the
   form builds names its mode, so only a hand-written one changes meaning."
-  [{:keys [q mode ci prefix suffix]}]
+  [{:keys [q mode ci prefix suffix in]}]
   (when-not (str/blank? q)
     (if (= mode "cqp")
       q
       (query/simple->cqp q {:case-insensitive? (some? ci)
                             :prefix?           (some? prefix)
-                            :suffix?           (some? suffix)}))))
+                            :suffix?           (some? suffix)
+                            :attr              (keyword (attr-param in))}))))
+
+(defn within-unit
+  "The unit of text the search `params` describe is kept within (see
+  dk.cst.corpus-probe.search/units): the sentence, for a simple search of
+  several words, which should not be matched across a boundary.
+
+  Nil for one word, which cannot straddle a boundary and could only be
+  refused, where it stands outside every sentence; and nil for CQP, which
+  says so itself."
+  [{:keys [q mode]}]
+  (when (and (not= mode "cqp") (next (str/split (str/trim (str q)) #"\s+")))
+    :sentence))
 
 (def follow-on-errors
   "The errors CQP adds for the later commands of a batch once an earlier
@@ -522,7 +634,8 @@
 
 (defn search-outcome!
   "Search the `known` corpora for `cqp` via `ctx` with `opts` (the :page,
-  :sort and :filter of dk.cst.corpus-probe.search/concordance!): {:result
+  :sort, :context, :sample, :filter, :near and :within of
+  dk.cst.corpus-probe.search/concordance!): {:result
   <concordance with its :pages>}, the `unknown` corpus names reported
   among its counts, or {:error ...} when no corpus was selected at all.
   Per-corpus errors travel inside the result."
@@ -533,14 +646,28 @@
                      (update :counts into (unknown-counts unknown)))]
       {:result (assoc (public-counts result) :pages (page-count result))})))
 
+(defn pattern-fields
+  "What the pattern and range fields of the metadata filter hold, from
+  `params`: the `:patterns`, attribute to its `fp.` param, and the
+  `:ranges`, attribute to its [`ff.` `ft.`] params, as the form shows
+  them back (see dk.cst.corpus-probe.views.page/pattern-row)."
+  [params]
+  (let [from (prefixed-params params "ff.")
+        to   (prefixed-params params "ft.")]
+    {:patterns (prefixed-params params "fp.")
+     :ranges   (into {} (for [attr (distinct (concat (keys from) (keys to)))]
+                          [attr [(get from attr) (get to attr)]]))}))
+
 (defn filter-controls!
   "The metadata filter controls of the search form over the `known`
   corpora via `ctx`: the filters they offer (see
   dk.cst.corpus-probe.frequency/filter-options!) plus the `:selected`
-  values of `params` (see `filter-params`)."
+  values of `params` (see `filter-params`) and what its pattern and range
+  fields hold (see `pattern-fields`)."
   [ctx known params]
-  (assoc (frequency/filter-options! ctx known)
-         :selected (filter-params params)))
+  (merge (frequency/filter-options! ctx known)
+         {:selected (filter-params params)}
+         (pattern-fields params)))
 
 (defn readable-corpora
   "The names of the registry `corpora` CWB can read right now, via `ctx`,
@@ -572,9 +699,13 @@
 (defn search-request
   "What `request` asks of `ctx`: its scalar query params, the registry's
   corpora, the corpus names selected, those split into the `known` and the
-  `unknown` (see `split-known`) and the CQP query the params compile to
-  (see `->cqp`). A request naming no corpus searches every readable one
-  (see `selected-corpora`).
+  `unknown` (see `split-known`), the CQP query the params compile to (see
+  `->cqp`) and the `opts` every search of it takes: its metadata :filter
+  (see `filter-params`) and the :patterns beside it (see
+  `pattern-params`), the unit of text it is kept :within (see
+  `within-unit`), the :subset of its hits kept (see `subset-param`) and
+  the word its hits are :near (see `near-param`). A request naming no
+  corpus searches every readable one (see `selected-corpora`).
 
   Every handler that answers a search starts from this."
   [ctx request]
@@ -587,7 +718,12 @@
      :selected selected
      :known    known
      :unknown  unknown
-     :cqp      (->cqp params)}))
+     :cqp      (->cqp params)
+     :opts     {:filter   (filter-params params)
+                :patterns (pattern-params params)
+                :within   (within-unit params)
+                :subset   (subset-param params)
+                :near     (near-param (:near params) (:distance params))}}))
 
 (defn attr-options!
   "The attribute descriptions ({:type :name}) offered for grouping the
@@ -609,13 +745,38 @@
                    (vec))]
     (if (seq attrs) attrs [{:type :positional :name :word}])))
 
+(defn subset-href
+  "The URL of the concordance of the search described by `params` kept to
+  the hits whose token at `anchor` has `value` as its `attr`: what one
+  row of the frequency table grouped by `attr` at `anchor` counted."
+  [params attr anchor value]
+  (str "/?" (query-string (assoc (search-params params)
+                                 :view        "kwic"
+                                 :subset      value
+                                 :subset-at   anchor
+                                 :subset-attr (name attr)))
+       page/results-fragment))
+
+(defn linked-rows
+  "The frequency `result` with a `subset-href` on each of the rows the
+  table shows (its first dk.cst.corpus-probe.views.frequencies/row-limit),
+  for the search described by `params`: the rows past those go
+  unlinked, since the table does not show them and an export reads no
+  links."
+  [params {:keys [attr at] :as result}]
+  (update result :rows
+          (fn [rows]
+            (into (mapv #(assoc % :href (subset-href params attr at (:value %)))
+                        (take freq-views/row-limit rows))
+                  (drop freq-views/row-limit rows)))))
+
 (defn frequency-outcome!
   "Table the `known` corpora for `cqp` (nil for the whole corpora) by
-  `attr` via `ctx` with `opts` (the :filter of
-  dk.cst.corpus-probe.frequency/frequency-table!): {:result ...}, the
-  `unknown` corpus names reported among its counts, or {:error ...} when
-  no corpus was selected at all. Per-corpus errors travel inside the
-  result."
+  `attr` via `ctx` with `opts` (the :at, :docs, :filter, :within, :subset
+  and :near of dk.cst.corpus-probe.frequency/frequency-table!): {:result
+  ...}, the `unknown` corpus names reported among its counts, or {:error
+  ...} when no corpus was selected at all. Per-corpus errors travel
+  inside the result."
   [ctx known unknown cqp attr opts]
   (if (and (empty? known) (empty? unknown))
     {:error {:type :no-corpus}}
@@ -651,9 +812,12 @@
   [params]
   (for [[k value] result-views]
     [k (str "/?" (query-string (assoc (search-params params)
-                                      :view  value
-                                      :attr  (:attr params)
-                                      :sort  (:sort params)))
+                                      :view    value
+                                      :attr    (:attr params)
+                                      :at      (:at params)
+                                      :docs    (:docs params)
+                                      :sort    (:sort params)
+                                      :context (:context params)))
             page/results-fragment)]))
 
 (defn search-view-data
@@ -671,31 +835,41 @@
   so it holds corpus overviews only: the full registry maps carry
   absolute server paths and stay here."
   [ctx request]
-  (let [{:keys [params corpora selected known unknown cqp]}
+  (let [{:keys [params corpora selected known unknown cqp opts]}
         (search-request ctx request)
         lang    (request-language request)
         view    (view-param (:view params))
         attr    (attr-param (:attr params))
+        at      (position-param (:at params))
+        docs    (some? (:docs params))
         page-n  (page-param (:page params))
         freq?   (= :frequencies view)
         outcome (cond
                   (and freq? (or cqp (seq known) (seq unknown)))
-                  (frequency-outcome! ctx known unknown cqp attr
-                                      {:filter (filter-params params)})
+                  (-> (frequency-outcome! ctx known unknown cqp attr
+                                          (assoc opts :at at :docs docs))
+                      (update :result #(some->> % (linked-rows params))))
 
                   cqp
                   (search-outcome! ctx known unknown cqp
-                                   {:page   page-n
-                                    :sort   (:sort params)
-                                    :filter (filter-params params)
-                                    :sample (sample-param (:sample params))}))
+                                   (assoc opts
+                                          :page    page-n
+                                          :sort    (:sort params)
+                                          :context (context-param
+                                                    (:context params))
+                                          :sample  (sample-param
+                                                    (:sample params)))))
         pages   (some-> outcome :result :pages)
-        params* (assoc params :corpus selected :lang lang :attr attr)]
+        params* (assoc params :corpus selected :lang lang :attr attr :at at)
+        attrs   (attr-options! ctx known)]
     (cond->
      {:lang            lang
       :view            view
       :folders         (corpus-tree! ctx corpora)
       :filter-controls (filter-controls! ctx known params)
+      ;; what a simple search may match: the positional attributes of
+      ;; the corpora it is over
+      :search-attrs    (search/attr-names #(= :positional (:type %)) attrs)
       :params          params*
       :result          (:result outcome)
       :error           (:error outcome)
@@ -705,11 +879,14 @@
                                         #(content-lang corpora %)))
                              selected)}
       freq?
-      (assoc :attrs        (attr-options! ctx known)
+      (assoc :attrs        attrs
+             :positions    query/positions
              :export-hrefs (when (:result outcome)
                              (export-hrefs "/export/frequencies"
                                            (assoc (search-params params*)
-                                                  :attr attr))))
+                                                  :attr attr
+                                                  :at   at
+                                                  :docs (:docs params)))))
 
       (not freq?)
       (assoc :sort-modes   (mapv first query/sort-modes)
@@ -717,7 +894,8 @@
              :export-hrefs (when (:result outcome)
                              (export-hrefs "/export/kwic"
                                            (assoc (search-params params*)
-                                                  :sort (:sort params))))
+                                                  :sort    (:sort params)
+                                                  :context (:context params))))
              :prev-href    (when (pos? page-n)
                              (page-href params* (dec page-n)))
              :next-href    (when (and pages (< (inc page-n) pages))
@@ -840,17 +1018,18 @@
   a TSV or CSV download; 400 without a query, known corpora or a known
   format, or when no corpus could be searched."
   [ctx request]
-  (let [{:keys [params known cqp]} (search-request ctx request)
+  (let [{:keys [params known cqp opts]} (search-request ctx request)
         format (:format params)]
     (if-not (and cqp (seq known) (export/formats format))
       {:status 400 :body "bad request"}
       (let [result (search/concordance!
                     ctx known cqp
-                    {:page      0
-                     :page-size export/hit-limit
-                     :sort      (:sort params)
-                     :filter    (filter-params params)
-                     :sample    (sample-param (:sample params))})]
+                    (assoc opts
+                           :page      0
+                           :page-size export/hit-limit
+                           :sort      (:sort params)
+                           :context   (context-param (:context params))
+                           :sample    (sample-param (:sample params))))]
         (export-response format "kwic" :size result
                          (export/kwic-table result))))))
 
@@ -860,13 +1039,15 @@
   param as a TSV or CSV download; 400 without known corpora or a known
   format, or when no corpus could be counted."
   [ctx request]
-  (let [{:keys [params known cqp]} (search-request ctx request)
+  (let [{:keys [params known cqp opts]} (search-request ctx request)
         format (:format params)]
     (if-not (and (seq known) (export/formats format))
       {:status 400 :body "bad request"}
       (let [table (frequency/frequency-table!
                    ctx known (or cqp "") (attr-param (:attr params))
-                   {:filter (filter-params params)})]
+                   (assoc opts
+                          :at   (position-param (:at params))
+                          :docs (some? (:docs params))))]
         (export-response format "frequencies" :tokens table
                          (export/frequency-table table))))))
 

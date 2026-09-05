@@ -135,7 +135,15 @@
                 kept and how many, so a count of one is not a count of
                 the whole result"
         (is (not= (k "[]" {}) (k "[]" {:sample 100})))
-        (is (not= (k "[]" {:sample 100}) (k "[]" {:sample 500})))))
+        (is (not= (k "[]" {:sample 100}) (k "[]" {:sample 500}))))
+      (testing "and a narrowing to a value at an anchor"
+        (is (not= (k "[]" {})
+                  (k "[]" {:subset {:anchor "match" :attr :lemma
+                                    :value  "hund"}}))))
+      (testing "and a nearby word, which decides which matches are kept"
+        (is (not= (k "[]" {}) (k "[]" {:near {:word "kat" :distance 5}})))
+        (is (not= (k "[]" {:near {:word "kat" :distance 5}})
+                  (k "[]" {:near {:word "kat" :distance 2}})))))
     (testing "how they are ordered or displayed does not, since the count
               is the same either way"
       (is (= (k "[]" {}) (k "[]" {:sort "word"})))

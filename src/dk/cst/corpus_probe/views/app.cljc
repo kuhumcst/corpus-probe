@@ -30,7 +30,8 @@
   dk.cst.corpus-probe.views.page/search-form, carrying the `:view` as a
   hidden input so that a control applied from one view answers in that
   view), the inspection panel while a token is `:selected`, and the
-  results region when the params described a search.
+  results region when the params described a search, or the query help
+  (see dk.cst.corpus-probe.views.page/query-help) where they did not.
 
   The form submits to the results fragment, so a search lands the reader
   on its own answer rather than at the top of the form that asked for it.
@@ -49,7 +50,11 @@
    ;; to the hits it describes; it comes before them in the document so
    ;; reading order and visual order agree at every width
    (when client? (page/sidebar ui selected))
-   (when (or result error) (result-view state))])
+   ;; the help stands where the answer will, until there is one: the
+   ;; reader who has not searched yet is the one with room to read it
+   (if (or result error)
+     (result-view state)
+     (page/query-help ui))])
 
 (defn page
   "The main content of the page `state` describes, by its `:route`; nil

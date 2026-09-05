@@ -22,40 +22,73 @@
 
 (defn groupable-attrs!
   "The attribute descriptions of `corpus` via `ctx` that a frequency
-  breakdown can group by: its positional attributes and its annotated
-  s-attributes, in registry order (a CQP round trip on a cache miss)."
+  breakdown can group by (see dk.cst.corpus-probe.search/countable-attr?),
+  in registry order (a CQP round trip on a cache miss)."
   [ctx corpus]
-  (filter #(or (= :positional (:type %)) (search/annotated-s-attr? %))
-          (corpus/attributes! ctx corpus)))
+  (filter search/countable-attr? (corpus/attributes! ctx corpus)))
+
+(defn with-docs
+  "The frequency maps `freqs` each given, as :docs, the frequency of
+  their value among `doc-freqs`, the same values counted by the regions
+  they occur in; none for a value counted in no region."
+  [freqs doc-freqs]
+  (let [docs (into {} (map (juxt (comp first :values) :freq)) doc-freqs)]
+    (mapv #(assoc % :docs (get docs (first (:values %)) 0)) freqs)))
 
 (defn frequencies!
-  "Group the matches of CQP `query` in `corpus` by `attr` at the match
-  position via the installation described by `ctx`, within the :filter of
-  `opts` when there is one, returning [{:values [...] :freq <n>} ...]
-  sorted by frequency.
+  "Count the matches of CQP `query` in `corpus` by `attr` at the :at
+  position of `opts` (a dk.cst.corpus-probe.query/positions entry; the
+  start of the match by default) via the installation described by `ctx`,
+  within the :filter of `opts` when there is one, kept within its :within
+  unit (see dk.cst.corpus-probe.search/within-attr!) and narrowed to its
+  :subset and :near (see dk.cst.corpus-probe.query/narrowing), returning
+  [{:values [...] :freq <n>} ...] sorted by frequency. Under :docs, each
+  map also carries the number of texts the value occurs in (its document
+  frequency, see dk.cst.corpus-probe.query/count-command) as :docs, where
+  the corpus marks texts and the position is one token: `count` gives
+  none for the whole match.
 
-  A thin wrapper over CQP's `group`; `attr` must name one of the corpus's
-  `groupable-attrs!`. Anything else is rejected, since attribute names are
-  spliced into the command outside the QueryLock sandbox."
+  A thin wrapper over CQP's `group`, or its `count` over the whole match
+  (see dk.cst.corpus-probe.query/count-command); `attr` must name one of
+  the corpus's `groupable-attrs!`. Anything else is rejected, since
+  attribute names are spliced into the command outside the QueryLock
+  sandbox."
   ([ctx corpus query attr]
    (frequencies! ctx corpus query attr {}))
-  ([ctx corpus query attr {:keys [filter]}]
-   (let [ctx (search/corpus-ctx ctx corpus)]
+  ([ctx corpus query attr {:keys [filter patterns within subset at docs]
+                           :or   {at "match"}
+                           :as   opts}]
+   (let [ctx   (search/corpus-ctx ctx corpus)
+         query (query/within-query query
+                                   (search/within-attr! ctx corpus within))]
      (when-not (some #(= (keyword attr) (:name %))
                      (groupable-attrs! ctx corpus))
        (throw (ex-info "Not a groupable attribute of this corpus"
                        {:corpus corpus :attr attr})))
-     (let [commands [(str corpus ";")
-                     (query/restricted-query
-                      query (search/corpus-filter! ctx corpus filter))
-                     (str "group Last match " (name attr) ";")]
+     (let [opts     (assoc opts :subset
+                           (search/corpus-subset! ctx corpus subset))
+           text     (when (and docs (not (query/whole-match? at)))
+                      (search/within-attr! ctx corpus :text))
+           commands (-> [(str corpus ";")
+                         (query/restricted-query
+                          query (search/corpus-filter! ctx corpus filter
+                                                       patterns))]
+                        (into (map second (query/narrowing opts)))
+                        (conj (query/count-command at attr))
+                        (cond-> text (conj (query/count-command at attr text))))
+           parse    (if (query/whole-match? at)
+                      parse/count->freqs
+                      parse/group->freqs)
            ;; a frequency breakdown runs the user's query like any other
            {:keys [results error]} (cqp/run-batch! (search/running-ctx ctx)
                                                    commands)]
        (when error
          (throw (ex-info "Frequency query failed"
                          {:corpus corpus :query query :error error})))
-       (parse/group->freqs (last results))))))
+       (if text
+         (with-docs (parse (nth results (- (count results) 2)))
+                    (parse (last results)))
+         (parse (last results)))))))
 
 (defn corpus-frequencies!
   "Break the matches of CQP `query` in `corpus` down by `attr` via `ctx`
@@ -66,18 +99,19 @@
 
   A blank `query` breaks the whole corpus down, read from its lexicon
   (dk.cst.corpus-probe.tools/lexicon!, positional attributes only) rather
-  than by matching every token. Under a :filter it breaks down every
-  token of the filtered regions instead, and the :tokens are theirs, so
-  the rates per million stay relative to what was counted."
-  [ctx corpus query attr {:keys [filter] :as opts}]
+  than by matching every token. Under a :filter or :patterns it breaks
+  down every token of the filtered regions instead, and the :tokens are
+  theirs, so the rates per million stay relative to what was counted."
+  [ctx corpus query attr {:keys [filter patterns] :as opts}]
   (try
-    (let [blank? (str/blank? query)
-          freqs  (if (and blank? (empty? filter))
-                   (tools/lexicon! ctx corpus attr)
-                   (frequencies! ctx corpus (if blank? "[]" query) attr opts))
-          tokens (if (empty? filter)
-                   (:size (corpus/info! ctx corpus))
-                   (search/size! ctx corpus "[]" opts))]
+    (let [blank?  (str/blank? query)
+          whole?  (and (empty? filter) (empty? patterns))
+          freqs   (if (and blank? whole?)
+                    (tools/lexicon! ctx corpus attr)
+                    (frequencies! ctx corpus (if blank? "[]" query) attr opts))
+          tokens  (if whole?
+                    (:size (corpus/info! ctx corpus))
+                    (search/size! ctx corpus "[]" opts))]
       {:corpus corpus
        :tokens tokens
        :size   (reduce + (map :freq freqs))
@@ -99,16 +133,21 @@
 (defn frequency-rows
   "Merge the per-corpus breakdowns `results` (as from `corpus-frequencies!`,
   failures excluded) into the rows of one table, in no order: [{:value <s>
-  :freqs {corpus <n>} :total <n>} ...]."
+  :freqs {corpus <n>} :total <n>} ...], each row also carrying :docs
+  {corpus <n>} where the breakdowns counted texts (see `frequencies!`)."
   [results]
   (->> (for [{:keys [corpus freqs]} results
-             {:keys [values freq]}  freqs]
-         [(first values) corpus freq])
-       (reduce (fn [acc [value corpus freq]]
-                 (assoc-in acc [value corpus] freq))
+             {:keys [values freq docs]} freqs]
+         [(first values) corpus freq docs])
+       (reduce (fn [acc [value corpus freq docs]]
+                 (cond-> (assoc-in acc [value :freqs corpus] freq)
+                   docs (assoc-in [value :docs corpus] docs)))
                {})
-       (map (fn [[value freqs]]
-              {:value value :freqs freqs :total (reduce + (vals freqs))}))))
+       (map (fn [[value {:keys [freqs docs]}]]
+              (cond-> {:value value
+                       :freqs freqs
+                       :total (reduce + (vals freqs))}
+                docs (assoc :docs docs))))))
 
 (defn merge-frequencies
   "The `frequency-rows` of `results` in display order (see `row-order`,
@@ -122,8 +161,10 @@
   breakdowns into one table, in parallel (see
   `dk.cst.corpus-probe.search/parallelism`).
 
-  Returns {:query ... :attr ... :counts [{:corpus ... :tokens ... :size
-  ...} ...] :rows [{:value ... :freqs {corpus <n>} :total ...} ...]}; a
+  Returns {:query ... :filter ... :subset ... :near ... :attr ... :at ...
+  :docs <whether the rows count texts too> :counts [{:corpus ... :tokens
+  ... :size ...} ...] :rows [{:value ... :freqs {corpus <n>} :total ...}
+  ...]}; a
   corpus whose breakdown fails carries its :error instead of its counts
   and contributes no rows, like a failing corpus of `concordance!`. A blank
   `query` tables the whole corpora, or their filtered regions under the
@@ -135,12 +176,18 @@
                        (search/parallelism ctx)
                        #(corpus-frequencies! ctx % query attr opts)
                        corpora))]
-     {:query  query
-      :filter (:filter opts)
-      :attr   (keyword attr)
-      :counts (mapv #(dissoc % :freqs) results)
-      :rows   (merge-frequencies (search/->collator ctx)
-                                 (remove :error results))})))
+     {:query    query
+      :filter   (:filter opts)
+      :patterns (:patterns opts)
+      :subset   (:subset opts)
+      :near     (:near opts)
+      :attr     (keyword attr)
+      :at       (:at opts "match")
+      :docs     (boolean (and (:docs opts)
+                              (not (query/whole-match? (:at opts)))))
+      :counts   (mapv #(dissoc % :freqs) results)
+      :rows     (merge-frequencies (search/->collator ctx)
+                                   (remove :error results))})))
 
 (defn corpus-filters!
   "The metadata filters `corpus` offers via `ctx` without failing: one

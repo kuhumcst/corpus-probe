@@ -51,6 +51,138 @@
                                                     {:prefix?           true
                                                      :case-insensitive? true})))))))
 
+(deftest unit-attr-test
+  (let [attrs (fn [& names]
+                (mapv (fn [n] {:type :structural :name n}) names))]
+    (testing "a sentence is s in CWB's own corpora, sentence at KU"
+      (is (= :s (search/unit-attr (attrs :text :s) :sentence)))
+      (is (= :sentence (search/unit-attr (attrs :sentence :text) :sentence))))
+    (testing "a corpus marking no sentences restricts nothing"
+      (is (nil? (search/unit-attr (attrs :text) :sentence))))
+    (testing "a positional attribute by the same name does not count"
+      (is (nil? (search/unit-attr [{:type :positional :name :s}] :sentence))))))
+
+(deftest within-test
+  (when-cwb
+   ;; a full stop ends one sentence and Hunde opens the next
+   (let [q "[word = \"\\.\"] [word = \"Hunde\"]"]
+     (testing "the two words match across the boundary unless kept within
+               a sentence, in the count as in the concordance"
+       (is (= 1 (search/size! ctx "PROBE" q)))
+       (is (= 0 (search/size! ctx "PROBE" q {:within :sentence})))
+       (is (= 0 (:size (search/kwic! ctx "PROBE" q {:within :sentence})))))
+     (testing "the clause names the corpus's own sentence attribute"
+       (is (= (str q " within s")
+              (:query (search/kwic! ctx "PROBE" q {:within :sentence})))))
+     (testing "and a breakdown is of the same matches"
+       (is (empty? (frequency/frequencies! ctx "PROBE" q :word
+                                           {:within :sentence})))))))
+
+(deftest pattern-filter-test
+  (when-cwb
+   (let [q "[word = \".*\"]"]
+     (testing "a pattern accepts every value it matches, beside the values"
+       (is (= (search/size! ctx "VISER" q {:filter {:text_year #{"1583"}}})
+              (search/size! ctx "VISER" q {:patterns {:text_year ["158."]}})))
+       (is (= (search/size! ctx "VISER" q)
+              (search/size! ctx "VISER" q {:patterns {:text_year ["15.."]}})
+              (search/size! ctx "VISER" q {:filter   {:text_year #{"1583"}}
+                                           :patterns {:text_year ["1591"]}}))))
+     (testing "the triples the filter query takes, patterns beside values"
+       (is (= [[:text_title #{} ["Hav.*"]] [:text_year #{"1583"} ["1591"]]]
+              (search/corpus-filter! ctx "VISER" {:text_year #{"1583"}}
+                                     {:text_year  ["1591"]
+                                      :text_title ["Hav.*"]}))))
+     (testing "and a breakdown of the whole corpus under a pattern counts
+               the filtered regions"
+       (is (= (search/size! ctx "VISER" q {:patterns {:text_year ["158."]}})
+              (:tokens (frequency/corpus-frequencies!
+                        ctx "VISER" "" :word
+                        {:patterns {:text_year ["158."]}}))))))))
+
+(deftest corpus-context-test
+  (let [attrs [{:type :structural :name :s} {:type :structural :name :text}]]
+    (testing "a number of words is what it is"
+      (is (= 10 (search/corpus-context attrs 10))))
+    (testing "a unit is the corpus's own attribute for it"
+      (is (= :s (search/corpus-context attrs :sentence))))
+    (testing "or the usual width where the corpus marks none"
+      (is (= 5 (search/corpus-context attrs :paragraph))))))
+
+(deftest context-unit-test
+  (when-cwb
+   (let [hit (fn [context]
+               (first (:hits (search/kwic! ctx "PROBE" "[word = \"hund\"]"
+                                           {:rows [0 0] :context context}))))]
+     (testing "a hit shown with its sentence: the whole of it, however long"
+       (let [{:keys [left right]} (hit :sentence)]
+         (is (= ["Katten" "jagter" "en" "lille"] (mapv :word left)))
+         (is (= ["i" "haven" "."] (mapv :word right)))))
+     (testing "a unit the corpus lacks shows the usual width instead"
+       (is (= 5 (count (:left (hit :paragraph)))))))))
+
+(deftest subset-test
+  (when-cwb
+   (let [q    "[pos = \"N.*\"]"
+         size (fn [subset] (search/size! ctx "PROBE" q {:subset subset}))
+         page (fn [subset] (search/kwic! ctx "PROBE" q {:subset subset}))]
+     (is (= 15 (search/size! ctx "PROBE" q)))
+     (testing "kept to a value at the start or the end of the match, of a
+               positional or a structural attribute"
+       (is (= 5 (size {:anchor "match" :attr :lemma :value "hund"})))
+       (is (= 7 (size {:anchor "matchend" :attr :text_year :value "2024"}))))
+     (testing "kept to a value on the token beside the match, which is
+               then marked as the keyword"
+       (let [{:keys [size hits]}
+             (page {:anchor "match[-1]" :attr :pos :value "D"})]
+         (is (= 1 size))
+         (is (= 33 (-> hits first :anchors :keyword))))
+       (is (= 2 (size {:anchor "matchend[1]" :attr :lemma :value "i"}))))
+     (testing "an attribute the corpus lacks is refused before any command"
+       (is (thrown? Exception
+                    (size {:anchor "match" :attr :nonesuch :value "x"}))))
+     (testing "the whole match, counted as the strings it matched and
+               narrowed to one of them"
+       (let [q "[pos = \"D\"] [pos = \"A.*\"]? [pos = \"N.*\"]"]
+         (is (= [{:values ["en hund"] :freq 1}
+                 {:values ["en lille hund"] :freq 1}]
+                (frequency/frequencies! ctx "PROBE" q :word
+                                        {:at "match..matchend"})))
+         (is (= [33] (->> (search/kwic! ctx "PROBE" q
+                                        {:subset {:anchor "match..matchend"
+                                                  :attr   :word
+                                                  :value  "en hund"}})
+                          :hits
+                          (mapv :cpos))))))
+     (testing "a breakdown at a position, and of the narrowed hits"
+       (is (= {:values ["PP"] :freq 6}
+              (first (frequency/frequencies! ctx "PROBE" q :pos
+                                             {:at "match[-1]"}))))
+       (is (= [{:values ["hund"] :freq 5}]
+              (frequency/frequencies! ctx "PROBE" q :lemma
+                                      {:subset {:anchor "match"
+                                                :attr   :lemma
+                                                :value  "hund"}})))))))
+
+(deftest near-test
+  (when-cwb
+   ;; two noun phrases, only one of them within five words of Katten
+   (let [q    "[pos = \"D\"] [pos = \"A.*\"]? [pos = \"N.*\"]"
+         near {:word "katten" :distance 5}
+         page (search/kwic! ctx "PROBE" q {:near near})]
+     (testing "only the hits with the word nearby remain, the word marked
+               as their keyword, in the count as in the concordance"
+       (is (= 2 (search/size! ctx "PROBE" q)))
+       (is (= 1 (search/size! ctx "PROBE" q {:near near})))
+       (is (= 1 (:size page)))
+       (is (= 5 (-> page :hits first :anchors :keyword))))
+     (testing "a breakdown counts the same hits"
+       (is (= [{:values ["en"] :freq 1}]
+              (frequency/frequencies! ctx "PROBE" q :word {:near near}))))
+     (testing "and the word is reported back with the result"
+       (is (= near (:near (search/concordance! ctx ["PROBE"] q
+                                               {:near near}))))))))
+
 (deftest sort-test
   (when-cwb
    (let [order   (fn [opts]
@@ -152,10 +284,11 @@
                               {:filter {:text_year   #{"1591"}
                                         :text_author #{"nobody"}}}))))
      (testing "attributes from two levels anchor on the innermost"
-       (is (= [[:s_id #{"2"}] [:text_year #{"1591"}]]
+       (is (= [[:s_id #{"2"} nil] [:text_year #{"1591"} nil]]
               (search/corpus-filter! ctx "VISER" {:text_year #{"1591"}
-                                                  :s_id      #{"2"}})))
-       (is (nil? (search/corpus-filter! ctx "VISER" {})))
+                                                  :s_id      #{"2"}}
+                                     nil)))
+       (is (nil? (search/corpus-filter! ctx "VISER" {} nil)))
        (is (= 6 (search/size! ctx "VISER" "[]"
                               {:filter {:text_year #{"1591"} :s_id #{"2"}}}))))
      (testing "a corpus lacking the attribute is rejected before any command"

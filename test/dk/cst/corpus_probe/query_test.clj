@@ -21,12 +21,39 @@
   (is (= "[word = \"hund.*\"]" (query/simple->cqp "hund" {:prefix? true})))
   (is (= "[word = \".*hund.*\"]"
          (query/simple->cqp "hund" {:prefix? true :suffix? true})))
-  (is (= "[word = \"hund\"] within s" (query/simple->cqp "hund" {:within :s})))
+  (testing "any positional attribute can be the one matched"
+    (is (= "[lemma = \"hund\"]" (query/simple->cqp "hund" {:attr :lemma})))
+    (is (= "[lemma = \"hund.*\" %c]"
+           (query/simple->cqp "hund" {:attr :lemma :prefix? true
+                                      :case-insensitive? true}))))
   (testing "regex metacharacters in input are matched literally"
     (is (= "[word = \"hund\\.\"]" (query/simple->cqp "hund."))))
   (testing "blank input yields nil, not a match-everything query"
     (is (nil? (query/simple->cqp "   ")))
     (is (nil? (query/simple->cqp "" {:prefix? true})))))
+
+(deftest within-query-test
+  (is (= "[] [] within s" (query/within-query "[] []" :s)))
+  (testing "no attribute, no clause: the query is left as it was"
+    (is (= "[] []" (query/within-query "[] []" nil)))))
+
+(deftest escape-value-test
+  (testing "the control characters a command line cannot carry become
+            regex escapes"
+    (is (= "a\\tb\\nc\\rd" (query/escape-value "a\tb\nc\rd"))))
+  (testing "over the literal escaping"
+    (is (= "a\\.b\"\"" (query/escape-value "a.b\"")))))
+
+(deftest near-command-test
+  (is (= (str "set Last keyword nearest [word = \"kat\" %c] within 5 words"
+              " from match; delete Last without keyword;")
+         (query/near-command {:word "kat" :distance 5})))
+  (testing "the word is escaped like every spliced value"
+    (is (str/includes? (query/near-command {:word "a.b\n" :distance 2})
+                       "[word = \"a\\.b\\n\" %c]")))
+  (testing "no word, no command"
+    (is (nil? (query/near-command nil)))
+    (is (nil? (query/near-command {:word " " :distance 5})))))
 
 (deftest corpus-name?-test
   (is (query/corpus-name? "PROBE"))
@@ -45,6 +72,15 @@
   (testing "a TAB in a value becomes the regex escape"
     (is (= "<text_title = \"a\\tb\"> [] expand to text_title"
            (query/filter-query [[:text_title #{"a\tb"}]]))))
+  (testing "a pattern is matched as the regex it is, in a group of its
+            own, beside the values"
+    (is (= "<text_year = \"1591|(15..)|(16[0-4].)\"> [] expand to text_year"
+           (query/filter-query [[:text_year #{"1591"} ["15.." "16[0-4]."]]])))
+    (is (= "<text_title = \"(Hav.*)\"> [] expand to text_title"
+           (query/filter-query [[:text_title #{} ["Hav.*"]]])))
+    (testing "its quotes doubled, which is all it needs"
+      (is (= "<text_title = \"(\"\"a\"\")\"> [] expand to text_title"
+             (query/filter-query [[:text_title #{} ["\"a\""]]])))))
   (testing "several attributes must all hold, anchored on the first"
     (is (= (str "<s_id = \"2\"> [_.text_year = \"1583|1591\"]"
                 " expand to s_id")
@@ -237,6 +273,84 @@
     (is (nil? (:sample (batch-commands
                         (query/kwic-batch "PROBE" "\"hund\""
                                           {:p-attrs [:word]})))))))
+
+(deftest context-spec-test
+  (is (= "5 words" (query/context-spec 5)))
+  (testing "a unit of text is one region of it either side"
+    (is (= "1 s" (query/context-spec :s)))
+    (is (str/includes? (first (:setup (batch-commands
+                                       (query/kwic-batch "PROBE" "\"hund\""
+                                                         {:p-attrs [:word]
+                                                          :context :s}))))
+                       "set Context 1 s;"))))
+
+(deftest count-command-test
+  (is (= "group Last match[-1] lemma;" (query/count-command "match[-1]" :lemma)))
+  (testing "the whole match is counted with count, whose output differs"
+    (is (= "count Last by lemma;" (query/count-command "match..matchend" :lemma)))
+    (is (query/whole-match? "match..matchend"))
+    (is (not (query/whole-match? "match"))))
+  (testing "within a region attribute, the regions each value occurs in"
+    (is (= "group Last match lemma within text;"
+           (query/count-command "match" :lemma :text))))
+  (testing "only CQP's own positions are spliced in"
+    (is (thrown? Exception (query/count-command "match[-2]" :lemma)))
+    (is (thrown? Exception (query/count-command "match; exit" :lemma)))))
+
+(deftest subset-command-test
+  (let [at (fn [anchor] (query/subset-command {:anchor anchor :attr :lemma
+                                                :value  "a.b"}))]
+    (testing "at the ends of the match, CQP's own subset, the value escaped
+              and read through the this label"
+      (is (= "Last = subset Last where match: [_.lemma = \"a\\.b\"];"
+             (at "match")))
+      (is (= "Last = subset Last where matchend: [_.lemma = \"a\\.b\"];"
+             (at "matchend"))))
+    (testing "beside it, the keyword anchor set on the one token there"
+      (is (= (str "set Last keyword nearest [_.lemma = \"a\\.b\"] within left"
+                  " 1 words from match; delete Last without keyword;")
+             (at "match[-1]")))
+      (is (= (str "set Last keyword nearest [_.lemma = \"a\\.b\"] within"
+                  " right 1 words from matchend; delete Last without keyword;")
+             (at "matchend[1]"))))
+    (testing "over the whole match, the result intersected with the exact
+              sequence, one locked token pattern per space"
+      (let [cmd (query/subset-command {:anchor "match..matchend" :attr :lemma
+                                       :value  "en hund"})]
+        (is (str/starts-with? cmd "Q = Last;\nset QueryLock "))
+        (is (str/includes? cmd "\n[lemma = \"en\"] [lemma = \"hund\"]\n;\n"))
+        (is (str/ends-with? cmd ";\nLast = intersection Q Last;"))))
+    (is (thrown? Exception (at "target")))))
+
+(deftest narrowing-test
+  (let [subset {:anchor "match" :attr :lemma :value "hund"}
+        near   {:word "kat" :distance 5}]
+    (testing "the subset comes first, so the word is looked for beside the
+              hits that are kept"
+      (is (= [:subset :near]
+             (mapv first (query/narrowing {:subset subset :near near})))))
+    (testing "nothing asked for, nothing to run"
+      (is (= [] (query/narrowing {})))
+      (is (= [] (query/narrowing {:near {:word " " :distance 5}}))))
+    (is (= [:setup :corpus :query :subset :near :sample :size :sort :cat :dump]
+           (mapv first (query/kwic-batch "PROBE" "\"hund\""
+                                         {:p-attrs [:word]
+                                          :subset  subset
+                                          :near    near
+                                          :sample  100}))))))
+
+(deftest kwic-batch-near-test
+  (testing "the nearby word narrows the result before the sample is drawn
+            from it, and before it is counted or ordered"
+    (is (= [:setup :corpus :query :near :sample :size :sort :cat :dump]
+           (mapv first (query/kwic-batch "PROBE" "\"hund\""
+                                         {:p-attrs [:word]
+                                          :near    {:word "kat" :distance 5}
+                                          :sample  100})))))
+  (let [near {:word "kat" :distance 5}
+        b    (batch-commands (query/kwic-batch "PROBE" "\"hund\""
+                                               {:p-attrs [:word] :near near}))]
+    (is (= [(query/near-command near)] (:near b)))))
 
 (deftest stored-kwic-batch-test
   (let [batch (query/stored-kwic-batch "PROBE" "q_abc"

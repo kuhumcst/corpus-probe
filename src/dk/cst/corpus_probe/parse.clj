@@ -118,6 +118,20 @@
             {:values [value] :freq (parse-long freq)}))
         lines))
 
+(defn count->freqs
+  "Parse `lines` from `count` (with PrettyPrint off: frequency TAB first
+  line TAB string) into frequency maps.
+
+  Returns [{:values [<s>] :freq <n>} ...], the shape of `group->freqs`,
+  in the order printed, which is by descending frequency. The string is
+  the match's tokens joined by spaces, and since no token holds a TAB
+  the two TABs before it are the only ones on the line."
+  [lines]
+  (mapv (fn [line]
+          (let [[freq _ string] (str/split line #"\t" 3)]
+            {:values [string] :freq (parse-long freq)}))
+        lines))
+
 (defn lexicon->freqs
   "Parse `lines` from `cwb-lexdecode -fb` (frequency TAB value, one line per
   lexicon entry, in lexicon order) into frequency maps.

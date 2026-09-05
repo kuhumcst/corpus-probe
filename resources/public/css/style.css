@@ -82,6 +82,13 @@ pre { overflow-x: auto; }
 .kwic button.token:focus { outline: 2px solid currentColor;
                            outline-offset: 1px; }
 
+/* the anchors a query sets, as cqp itself shows them (manual section 3.3):
+   the target in bold, the keyword underlined. Both classes, or the
+   button rule above wins on specificity and its font: inherit undoes
+   the weight */
+.kwic .token.target { font-weight: bold; }
+.kwic .token.keyword { text-decoration: underline; }
+
 /* the expanded-context row spans all columns and wraps */
 .kwic .expanded td { white-space: normal; text-align: left; }
 
@@ -116,9 +123,10 @@ body:has(.sidebar) { padding-block-end: var(--sheet-block-size); }
    rather than a wall above it, so refining a query costs no scroll. Only
    above 64rem: below that the single column is the design, and the
    results fragment still lands the reader on the answer. The block above
-   negates this breakpoint; the two are a pair. */
+   negates this breakpoint; the two are a pair. The query help stands
+   where the answer will, so it takes the same column. */
 @media (min-width: 64rem) {
-  main:has(> .result) {
+  main:has(> .result, > .help) {
     display: grid;
     grid-template-columns: minmax(16rem, 22rem) minmax(0, 1fr);
     grid-template-areas: "heading results" "query results";
@@ -131,15 +139,16 @@ body:has(.sidebar) { padding-block-end: var(--sheet-block-size); }
        which is also what lets it stick */
     align-items: start;
   }
-  main:has(> .result) > h1      { grid-area: heading; }
-  main:has(> .result) > .result { grid-area: results; }
+  main:has(> .result, > .help) > h1      { grid-area: heading; }
+  main:has(> .result, > .help) > .result,
+  main:has(> .result, > .help) > .help   { grid-area: results; }
 
   /* the rail follows the reader down the results rather than scrolling
      away from them. It cannot obscure anything: it is a column beside the
      hits, not a bar over them. A rail taller than the viewport scrolls
      inside itself, or its foot would be unreachable */
-  main:has(> .result) > search,
-  main:has(> .result) > .sidebar {
+  main:has(> .result, > .help) > search,
+  main:has(> .result, > .help) > .sidebar {
     grid-area: query;
     position: sticky;
     inset-block-start: 1rem;

@@ -7,10 +7,11 @@
             [dk.cst.corpus-probe.views.page :as page]))
 
 (deftest search-form-test
-  (let [state {:lang    "en"
-               :folders [{:label nil :folders []
-                          :corpora [{:id "PROBE" :size 47}]}]
-               :params  {:corpus ["PROBE"] :q "hund" :sort "word"}}
+  (let [state {:lang         "en"
+               :folders      [{:label nil :folders []
+                               :corpora [{:id "PROBE" :size 47}]}]
+               :search-attrs [:word :pos :lemma]
+               :params       {:corpus ["PROBE"] :q "hund" :sort "word"}}
         html  (page/search-form state "/" nil)]
     (testing "the form is wrapped in a <search> landmark"
       (is (= :search (first html))))
@@ -49,17 +50,41 @@
         (is (some #{{:role "radiogroup" :aria-label "Query mode"}}
                   (deep html)))
         (is (some #{{:role "group" :aria-label "Simple-search options"}}
-                  (deep html)))))
+                  (deep html)))
+        (testing "with what a simple search matches on a row of its own,
+                  above how loosely"
+          (let [group (some #(when (and (vector? %) (map? (second %))
+                                        (= "group" (:role (second %))))
+                               %)
+                            (deep html))]
+            (is (= :div (first group)))
+            (is (= [:p :p] (map first (drop 2 group))))))))
     (testing "and the options are live only for a query they can qualify"
       (let [disabled (fn [mode]
                        (->> (deep (page/search-form
                                    (assoc-in state [:params :mode] mode)
                                    "/" nil))
-                            (filter #(and (map? %) (= "checkbox" (:type %))
-                                          (#{"ci" "prefix" "suffix"} (:name %))))
+                            (filter #(and (map? %)
+                                          (#{"in" "ci" "prefix" "suffix"}
+                                           (:name %))))
                             (map :disabled)))]
-        (is (= [false false false] (disabled "simple")))
-        (is (= [true true true] (disabled "cqp")))))
+        (is (= [false false false false] (disabled "simple")))
+        (is (= [true true true true] (disabled "cqp")))))
+    (testing "a simple search matches one of the corpora's attributes,
+              the surface form unless the URL says otherwise"
+      (let [options (fn [state]
+                      (->> (deep (page/search-form state "/" nil))
+                           (filter #(and (map? %) (contains? % :selected)
+                                         (string? (:value %))
+                                         (not= "" (:value %))))
+                           (map (juxt :value :selected))))]
+        (is (= [["word" true] ["pos" false] ["lemma" false]]
+               (options state)))
+        (is (= [["word" false] ["pos" false] ["lemma" true]]
+               (options (assoc-in state [:params :in] "lemma"))))
+        (testing "and one the list lacks is offered rather than replaced"
+          (is (= [["word" false] ["pos" false] ["lemma" false] ["msd" true]]
+                 (options (assoc-in state [:params :in] "msd")))))))
     (testing "a disabled fieldset submits nothing, so no simple option
               rides along with a CQP query"
       ;; the checkboxes are still there and still ticked, so looking at
@@ -85,6 +110,28 @@
         (is (some #{"Forespørgsel"} da))
         (is (not (some #(and (map? %) (= "lang" (:name %))) da)))))))
 
+(deftest query-help-test
+  (let [html (page/query-help en)]
+    (testing "a headed section of recipes, each a query and what it finds"
+      (is (= :section.help (first html)))
+      (is (= [:h2 {:id "help-heading"} "Query help"] (nth html 2)))
+      (is (= "help-heading" (:aria-labelledby (second html))))
+      (is (some #{[:dt [:code "[lemma = \"hund\"]"]]} (deep html)))
+      (is (some #{"a sequence, one pattern per token"} (deep html))))
+    (testing "and the manual for the rest"
+      (is (some #(and (map? %) (= "https://cwb.sourceforge.io/files/CQP_Manual/"
+                                  (:href %)))
+                (deep html))))
+    (testing "in Danish, the queries themselves untranslated"
+      (let [da (deep (page/query-help da))]
+        (is (some #{"Hjælp til forespørgsler"} da))
+        (is (some #{[:dt [:code "[lemma = \"hund\"]"]]} da))))
+    (testing "it is not in the form: it stands where the results will"
+      (is (not (some #{:section.help}
+                     (deep (page/search-form {:lang "en" :folders []
+                                              :params {}}
+                                             "/" nil))))))))
+
 (deftest navigation-status-test
   (testing "the region is rendered before it has anything to announce"
     (is (= [:div.status {:role "status"} nil]
@@ -96,21 +143,53 @@
 (deftest view-controls-test
   (let [sort* (fn [lang] (page/sort-control lang [["word" :sort-word]] "word"))]
     (testing "no controls, nothing rendered"
-      (is (nil? (page/view-controls en false nil))))
+      (is (nil? (page/view-controls en false nil nil false))))
     (testing "a control that acts on a result submits the form that made it"
-      (let [html (page/view-controls en false (sort* "en"))]
+      (let [html (page/view-controls en false (sort* "en") nil false)]
         (is (some #(and (map? %) (= page/form-id (:form %))) (deep html)))))
-    (testing "without a client, a button is what applies it"
-      (is (some #{"Apply"} (deep (page/view-controls en false (sort* "en")))))
+    (testing "without a client, a button is what applies it, one a browser
+              with a script never shows"
+      (is (some #{"Apply"} (deep (page/view-controls en false (sort* "en")
+                                                  nil false))))
+      (is (some #(and (vector? %) (= :noscript (first %)))
+                (deep (page/view-controls en false (sort* "en") nil false))))
       (is (some #{"Anvend"} (deep (page/view-controls da false
-                                                      (sort* "da"))))))
+                                                      (sort* "da")
+                                                      nil false)))))
     (testing "with one, choosing an order is asking for it: no button"
-      (let [html (page/view-controls en true (sort* "en"))]
+      (let [html (page/view-controls en true (sort* "en") nil false)]
         (is (not (some #{"Apply"} (deep html))))
         (is (not (some #(and (vector? %) (= :button (first %))) (deep html))))))
     (testing "and the control itself is what applies it"
       (is (some #(and (map? %) (= [:apply-view] (get-in % [:on :change])))
-                (deep (sort* "en")))))))
+                (deep (sort* "en")))))
+    (testing "what narrows a result sits behind a disclosure, closed until
+              a narrowing is in force, open while one is"
+      (let [narrowing (page/sample-control en nil)
+            closed    (page/view-controls en true (sort* "en") narrowing false)
+            open      (page/view-controls en true (sort* "en") narrowing true)
+            details   (fn [html] (some #(when (and (vector? %)
+                                                   (= :details (first %)))
+                                          %)
+                                       (deep html)))]
+        (is (= :div.viewctl (first closed)))
+        (is (false? (:open (second (details closed)))))
+        (is (true? (:open (second (details open)))))
+        (is (some #{"Narrow the result"} (deep closed)))
+        (is (some #{"Indsnævr resultatet"}
+                  (deep (page/view-controls da true (sort* "da")
+                                            narrowing false))))
+        (testing "each row gets its own button without a client"
+          (is (= 2 (count (filter #{"Apply"}
+                                  (deep (page/view-controls en false
+                                                            (sort* "en")
+                                                            narrowing
+                                                            false)))))))
+        (testing "and a narrowing alone, with nothing to read differently,
+                  is the disclosure alone"
+          (let [html (page/view-controls en true nil narrowing true)]
+            (is (nil? (second html)))
+            (is (details html))))))))
 
 (deftest sample-control-test
   (testing "no sample is the whole result, and it is what is chosen"
@@ -134,6 +213,73 @@
     (is (= [50 77 100 500 1000]
            (keep #(when (number? (:value %)) (:value %))
                  (deep (page/sample-control en 77)))))))
+
+(deftest context-control-test
+  (let [values (fn [html] (->> (deep html) (filter map?) (keep :value)
+                               (map str)))]
+    (testing "the widths offered, the chosen one marked, units by name"
+      (let [html (page/context-control en :sentence)]
+        (is (= ["5" "10" "20" "sentence" "paragraph"] (values html)))
+        (is (some #(and (map? %) (= "sentence" (:value %)) (:selected %))
+                  (deep html)))
+        (is (some #{"5 words" "sentence" "paragraph"} (deep html)))))
+    (testing "a number of words the list lacks is offered among the
+              numbers, in order"
+      (is (= ["5" "7" "10" "20" "sentence" "paragraph"]
+             (values (page/context-control en 7)))))
+    (testing "it submits the query form as the sort control does"
+      (is (some #(and (map? %) (= "context" (:name %))
+                      (= page/form-id (:form %))
+                      (= [:apply-view] (get-in % [:on :change])))
+                (deep (page/context-control en 5)))))
+    (testing "in Danish"
+      (is (some #{"sætning" "5 ord" "Kontekst"}
+                (deep (page/context-control da 5)))))))
+
+(deftest near-control-test
+  (testing "no word in force: an empty field and the default distance"
+    (let [html (page/near-control en nil)]
+      (is (some #(and (map? %) (= "near" (:name %)) (= "" (:value %))
+                      (= page/form-id (:form %)))
+                (deep html)))
+      (is (some #(and (map? %) (= page/near-distance (:value %)) (:selected %))
+                (deep html)))))
+  (testing "the word and distance in force, the distance applying itself"
+    (let [html (page/near-control en {:word "kat" :distance 3})]
+      (is (some #(and (map? %) (= "near" (:name %)) (= "kat" (:value %)))
+                (deep html)))
+      (is (some #(and (map? %) (= 3 (:value %)) (:selected %)) (deep html)))
+      (is (some #(and (map? %) (= "distance" (:name %))
+                      (= [:apply-view] (get-in % [:on :change])))
+                (deep html))))
+    (testing "and so does the word, once the reader is done typing it"
+      (is (some #(and (map? %) (= "near" (:name %))
+                      (= [:apply-view] (get-in % [:on :change])))
+                (deep (page/near-control en {:word "kat" :distance 3}))))))
+  (testing "a distance the list lacks is offered beside them, in order"
+    (is (= [1 2 3 4 5 10]
+           (keep #(when (number? (:value %)) (:value %))
+                 (deep (page/near-control en {:word "kat" :distance 4}))))))
+  (testing "in Danish"
+    (is (some #{"Nær"} (deep (page/near-control da nil))))
+    (is (some #{"1 ord"} (deep (page/near-control da nil))))))
+
+(deftest subset-phrase-test
+  (is (= " · lemma before the match = kat"
+         (page/subset-phrase en {:anchor "match[-1]" :attr :lemma
+                                 :value  "kat"})))
+  (is (= " · lemma før matchet = kat"
+         (page/subset-phrase da {:anchor "match[-1]" :attr :lemma
+                                 :value  "kat"})))
+  (is (nil? (page/subset-phrase en nil)))
+  (testing "a position nothing names is shown as CQP names it"
+    (is (= "target" (page/position-label en "target"))))
+  (is (= "over hele matchet" (page/position-label da "match..matchend"))))
+
+(deftest near-phrase-test
+  (is (= " near kat" (page/near-phrase en {:word "kat" :distance 5})))
+  (is (= " nær kat" (page/near-phrase da {:word "kat" :distance 5})))
+  (is (nil? (page/near-phrase en nil))))
 
 (deftest sample-phrase-test
   (testing "no sample, nothing said"
@@ -210,15 +356,45 @@
                            (:placeholder %)))))))))
 
 (deftest filter-phrase-test
-  (is (= "" (page/filter-phrase {})))
+  (is (= "" (page/filter-phrase {} nil)))
   (is (= "text_author ukendt; text_year 1583, 1591"
          (page/filter-phrase {:text_year   #{"1591" "1583"}
-                              :text_author #{"ukendt"}})))
-  (is (nil? (page/within-phrase en nil)))
+                              :text_author #{"ukendt"}}
+                             nil)))
+  (is (nil? (page/within-phrase en nil nil)))
   (is (= " within text_year 1591"
-         (page/within-phrase en {:text_year #{"1591"}})))
+         (page/within-phrase en {:text_year #{"1591"}} nil)))
   (is (= " inden for text_year 1591"
-         (page/within-phrase da {:text_year #{"1591"}}))))
+         (page/within-phrase da {:text_year #{"1591"}} nil)))
+  (testing "patterns follow the values, between slashes"
+    (is (= "text_title /Hav.*/; text_year 1583, 1591, /16../"
+           (page/filter-phrase {:text_year #{"1591" "1583"}}
+                               {:text_title ["Hav.*"] :text_year ["16.."]})))
+    (is (= " within text_title /Hav.*/"
+           (page/within-phrase en nil {:text_title ["Hav.*"]})))))
+
+(deftest pattern-row-test
+  (let [years [{:value "1583"} {:value "1591"}]
+        html  (page/pattern-row en :text_year years "15.." ["1583" nil])]
+    (testing "a pattern field under the attribute's pattern param, holding
+              what is in force"
+      (is (some #(and (map? %) (= "fp.text_year" (:name %)) (= "15.." (:value %)))
+                (deep html))))
+    (testing "a range over values that are all numbers, either end blank
+              when not in force"
+      (is (some #(and (map? %) (= "ff.text_year" (:name %)) (= "1583" (:value %)))
+                (deep html)))
+      (is (some #(and (map? %) (= "ft.text_year" (:name %)) (= "" (:value %)))
+                (deep html))))
+    (testing "and no range over values that are not"
+      (is (not (some #(and (map? %) (= "ff.text_title" (:name %)))
+                     (deep (page/pattern-row en :text_title
+                                             [{:value "Havfruens sang"}]
+                                             nil nil)))))
+      (is (not (page/numeric-values? []))))
+    (testing "in Danish"
+      (is (some #{"mønster" "fra" "til"}
+                (deep (page/pattern-row da :text_year years nil nil)))))))
 
 (deftest filter-fieldset-test
   (testing "no metadata renders nothing"

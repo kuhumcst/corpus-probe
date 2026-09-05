@@ -714,6 +714,18 @@
                 (.-shiftKey event) (.-altKey event)))
        (not= 1 (.-button event))))
 
+(defn filled-fields
+  "The query string of `form`'s fields as a submit would send them, less
+  the ones left empty: a field left empty says nothing, and the metadata
+  filter has a pattern field per attribute, so a URL that kept them would
+  carry one empty parameter per attribute of the corpus, which is no URL
+  to cite."
+  [form]
+  (let [fields (js/URLSearchParams. (js/FormData. form))
+        kept   (js/URLSearchParams.)]
+    (.forEach fields (fn [v k] (when-not (str/blank? v) (.append kept k v))))
+    (.toString kept)))
+
 (defn route-clicks!
   "Take over link clicks and form submits that stay inside the app, so
   moving between views keeps the state rather than reloading the document."
@@ -747,10 +759,9 @@
                        js/location.origin))
            (.preventDefault e)
            ;; the browser's own rules for what a form submits, so a routed
-           ;; submit sends exactly what a real one would
-           (let [url (js/URL. (.-action form))
-                 qs  (.toString (js/URLSearchParams. (js/FormData. form)))]
-             (set! (.-search url) qs)
+           ;; submit sends what a real one would, less the empty fields
+           (let [url (js/URL. (.-action form))]
+             (set! (.-search url) (filled-fields form))
              (navigate! (.-href url) true)))))))
   (.addEventListener js/window "popstate"
                      (fn [_] (navigate! js/location.href false))))

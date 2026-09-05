@@ -354,3 +354,104 @@ msgid "value"
 msgid_plural "values"
 msgstr[0] "værdi"
 msgstr[1] "værdier"
+
+msgid "Near"
+msgstr "Nær"
+
+msgid "near"
+msgstr "nær"
+
+msgid "word"
+msgid_plural "words"
+msgstr[0] "ord"
+msgstr[1] "ord"
+
+msgid "Context"
+msgstr "Kontekst"
+
+msgid "sentence"
+msgstr "sætning"
+
+msgid "paragraph"
+msgstr "afsnit"
+
+msgid "before the match"
+msgstr "før matchet"
+
+msgid "at the start of the match"
+msgstr "ved matchets start"
+
+msgid "at the end of the match"
+msgstr "ved matchets slutning"
+
+msgid "after the match"
+msgstr "efter matchet"
+
+msgid "Position"
+msgstr "Position"
+
+msgid "over the whole match"
+msgstr "over hele matchet"
+
+msgid "count texts"
+msgstr "tæl tekster"
+
+msgid "texts"
+msgstr "tekster"
+
+msgid "pattern"
+msgstr "mønster"
+
+msgid "from"
+msgstr "fra"
+
+msgid "to"
+msgstr "til"
+
+msgid "Query help"
+msgstr "Hjælp til forespørgsler"
+
+msgid "a word form; the quoted string is a regular expression"
+msgstr "en ordform; strengen i anførselstegn er et regulært udtryk"
+
+msgid "forms starting with hund, in any case"
+msgstr "former der begynder med hund, uanset store og små bogstaver"
+
+msgid "either word"
+msgstr "det ene eller det andet ord"
+
+msgid "every form of a lemma; any attribute of the corpus goes in the brackets"
+msgstr "alle former af et lemma; enhver af korpussets attributter kan stå i klammerne"
+
+msgid "anything but; the value is a regular expression too"
+msgstr "alt andet end; værdien er også et regulært udtryk"
+
+msgid "both at once; | for either, ! for not"
+msgstr "begge dele på én gang; | for enten-eller, ! for ikke"
+
+msgid "a sequence, one pattern per token"
+msgstr "en sekvens, ét mønster per token"
+
+msgid "with up to two tokens between"
+msgstr "med op til to tokens imellem"
+
+msgid "both in one sentence, in that order"
+msgstr "begge i samme sætning, i den rækkefølge"
+
+msgid "@ marks a token as the target, shown in bold and counted at its own position"
+msgstr "@ udpeger et token som target, vist med fed og talt på sin egen position"
+
+msgid "labels name tokens, and the constraint after :: relates them: the same word on both sides of og"
+msgstr "etiketter navngiver tokens, og betingelsen efter :: knytter dem sammen: samme ord på begge sider af og"
+
+msgid "tokens of twelve characters or more"
+msgstr "tokens på tolv tegn eller flere"
+
+msgid "The CQP manual"
+msgstr "CQP-manualen"
+
+msgid "has the rest."
+msgstr "har resten."
+
+msgid "Narrow the result"
+msgstr "Indsnævr resultatet"

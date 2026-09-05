@@ -62,6 +62,10 @@
     (is (= [{:values ["bad\ttitle"] :freq 7}]
            (parse/group->freqs ["bad\ttitle\t7"])))))
 
+(deftest count->freqs-test
+  (is (= [{:values ["en hund"] :freq 3} {:values ["en lille hund"] :freq 1}]
+         (parse/count->freqs ["3\t0\ten hund" "1\t3\ten lille hund"]))))
+
 (deftest lexicon->freqs-test
   (let [freqs (parse/lexicon->freqs (golden-lines "lexdecode.tsv"))]
     (testing "entries come out sorted by frequency, in the group shape"

@@ -33,6 +33,40 @@ so the aligned match column that makes it scannable survives the phone.
 Unwrapped the table is 807px at 375px wide, with the match off screen.
 The source column is dropped so the contexts have room.
 
+A simple search matches the surface form unless the reader chooses
+another positional attribute of the corpora searched, lemma in most of
+them, and a simple search of several words is kept within one sentence,
+as the CQP manual advises, under whatever name the corpus gives its
+sentences. Until a search has been made, a dozen CQP recipes drawn from
+the manual stand where the results will, since everything in them
+already worked in the CQP box and nothing said so.
+
+A result carries its own controls, in two rows. The first decides how
+the hits are read: the sort, the context, which can be a number of words
+or a whole sentence or paragraph under each corpus's own attribute for
+it, and the sample. The second, behind a disclosure that opens by itself
+while it is in force, narrows the hits to those with a nearby word: a
+word within a few tokens on either side, the way the manual finds a word
+near a hit (its `set target` command), marked as the keyword anchor,
+which the concordance underlines. A target a reader marks with `@` in a
+CQP query is shown in bold, as cqp itself shows both. The narrowing and
+the sample travel with the search into its frequency view and its
+exports. Without a script the controls apply through a button a browser
+with one never shows.
+
+The frequency view counts at any of CQP's positions: the token before
+the match, its first or last token, the token after it, or the whole
+match as the string it is, which CQP's `count` gives where `group` sees
+only the first token. Every row links to the hits it counted, so a table
+is a way into a concordance rather than the end of one, and a checkbox
+adds the number of texts each value occurs in beside its frequency.
+
+The metadata filter accepts a pattern per attribute beside the values
+ticked, matched as the regular expression it is, and a range from one
+number to another over attributes whose values are numbers, which is how
+a decade of years or a year of dates is asked for, and the only way to an
+attribute with too many values to list.
+
 Startup vets the installation and logs what it finds. It checks that the
 CWB programs can be launched, and runs CQP's own sort pipeline (`sort ... |
 gawk`) under the configured locale to see whether it collates the way the

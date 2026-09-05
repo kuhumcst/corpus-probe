@@ -44,6 +44,22 @@
             "VISER per million" "total frequency" "total per million"]
            (first rows)))
     (is (= ["hund" "5" "106383.0" "1" "20833.3" "6" "63157.9"] (second rows)))
+    (testing "the texts counted make a third column per group"
+      (let [rows (export/frequency-table
+                  {:attr   :lemma
+                   :docs   true
+                   :counts [{:corpus "PROBE" :tokens 47 :size 15}
+                            {:corpus "VISER" :tokens 48 :size 16}]
+                   :rows   [{:value "hund"
+                             :freqs {"PROBE" 5 "VISER" 1}
+                             :docs  {"PROBE" 3 "VISER" 1}
+                             :total 6}]})]
+        (is (= ["lemma" "PROBE frequency" "PROBE per million" "PROBE texts"
+                "VISER frequency" "VISER per million" "VISER texts"
+                "total frequency" "total per million" "total texts"]
+               (first rows)))
+        (is (= ["hund" "5" "106383.0" "3" "1" "20833.3" "1" "6" "63157.9" "4"]
+               (second rows)))))
     (testing "one corpus means no totals"
       (is (= ["word" "PROBE frequency" "PROBE per million"]
              (first (export/frequency-table

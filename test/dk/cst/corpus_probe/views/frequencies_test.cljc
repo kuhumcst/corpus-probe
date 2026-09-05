@@ -75,7 +75,64 @@
    :rows   [{:value "hund" :freqs {"PROBE" 5 "VISER" 1} :total 6}
             {:value "borg" :freqs {"VISER" 2} :total 2}]})
 
+(deftest position-control-test
+  (let [positions ["match[-1]" "match" "match..matchend" "matchend"
+                   "matchend[1]"]
+        html      (freq/position-control en positions "matchend[1]")]
+    (testing "one option per position, worded, the chosen one marked"
+      (is (= ["before the match" "at the start of the match"
+              "over the whole match" "at the end of the match"
+              "after the match"]
+             (keep #(when (and (vector? %) (= :option (first %))) (last %))
+                   (deep html))))
+      (is (some #(and (map? %) (= "matchend[1]" (:value %)) (:selected %))
+                (deep html))))
+    (testing "it submits the query form and applies itself, as the
+              grouping does"
+      (is (some #(and (map? %) (= "at" (:name %)) (= page/form-id (:form %))
+                      (= [:apply-view] (get-in % [:on :change])))
+                (deep html))))
+    (testing "in Danish"
+      (is (some #{"før matchet"} (deep (freq/position-control da positions nil)))))))
+
+(deftest linked-rows-test
+  (testing "a row with a link links its value to the hits it counted"
+    (is (some #{[:th {:scope "row"} [:a {:href "/?subset=hund"} "hund"]]}
+              (deep (freq/frequency-table
+                     en (assoc counted
+                               :rows [{:value "hund" :freqs {"PROBE" 3}
+                                       :total 3 :href "/?subset=hund"}]))))))
+  (testing "and one without a link is plain text"
+    (is (some #{[:th {:scope "row"} "hund"]}
+              (deep (freq/frequency-table en counted))))))
+
+(deftest docs-test
+  (let [result (assoc counted
+                      :docs true
+                      :rows [{:value "hund" :freqs {"PROBE" 3}
+                              :docs  {"PROBE" 2} :total 3}])
+        html   (freq/frequency-table en result)]
+    (testing "a table counting texts has a third column per corpus"
+      (is (some #{[:th {:scope "col"} "texts"]} (deep html)))
+      (is (some #{[:td.n "2"]} (deep html)))
+      (is (some #{[:colgroup {:span 3}]} (deep html))))
+    (testing "and one that does not has two"
+      (is (not (some #{[:th {:scope "col"} "texts"]}
+                     (deep (freq/frequency-table en counted)))))
+      (is (some #{[:colgroup {:span 2}]} (deep (freq/frequency-table en counted))))))
+  (testing "the control applies itself through the query form"
+    (is (some #(and (map? %) (= "docs" (:name %)) (:checked %)
+                    (= page/form-id (:form %))
+                    (= [:apply-view] (get-in % [:on :change])))
+              (deep (freq/docs-control en true))))
+    (is (some #{"tæl tekster"} (deep (freq/docs-control da false))))))
+
 (deftest frequency-summary-test
+  (testing "where in the match the table counts is said after the attribute"
+    (is (= "5 hits in PROBE by word before the match · 1 value"
+           (freq/frequency-summary en (assoc counted :at "match[-1]") 1)))))
+
+(deftest frequency-summary-original-test
   (testing "only the corpora that could be counted are counted"
     (is (= "31 hits in 2 corpora by lemma · 2 values"
            (freq/frequency-summary en sample-result 2))))

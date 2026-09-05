@@ -43,7 +43,33 @@
   (when-cwb
    (let [freqs (frequency/frequencies! ctx "PROBE" "[pos = \"N.*\"]" :lemma)]
      (is (= {:values ["hund"] :freq 5} (first freqs)))
-     (is (= 10 (count freqs))))))
+     (is (= 10 (count freqs))))
+   (testing "asked to, each value also counts the texts it occurs in"
+     (let [freqs (frequency/frequencies! ctx "PROBE" "[pos = \"N.*\"]" :lemma
+                                         {:docs true})]
+       (is (= {:values ["hund"] :freq 5 :docs 3} (first freqs)))
+       (is (every? #(= 1 (:docs %)) (rest freqs))))
+     (testing "except over the whole match, which count cannot"
+       (is (= {:values ["hund"] :freq 3}
+              (first (frequency/frequencies! ctx "PROBE" "[pos = \"N.*\"]"
+                                             :word {:docs true
+                                                    :at   "match..matchend"}))))))))
+
+(deftest with-docs-test
+  (is (= [{:values ["a"] :freq 3 :docs 2} {:values ["b"] :freq 1 :docs 0}]
+         (frequency/with-docs [{:values ["a"] :freq 3} {:values ["b"] :freq 1}]
+                              [{:values ["a"] :freq 2}]))))
+
+(deftest frequency-rows-docs-test
+  (testing "the texts counted travel with the rows, per corpus"
+    (is (= [{:value "hund" :freqs {"A" 5 "B" 1} :docs {"A" 3 "B" 1} :total 6}]
+           (frequency/frequency-rows
+            [{:corpus "A" :freqs [{:values ["hund"] :freq 5 :docs 3}]}
+             {:corpus "B" :freqs [{:values ["hund"] :freq 1 :docs 1}]}]))))
+  (testing "and rows that counted none carry none"
+    (is (= [{:value "hund" :freqs {"A" 5} :total 5}]
+           (frequency/frequency-rows
+            [{:corpus "A" :freqs [{:values ["hund"] :freq 5}]}])))))
 
 (deftest groupable-attrs-test
   (when-cwb

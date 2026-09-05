@@ -97,27 +97,135 @@
       [:option {:value n :selected (= n sample)}
        (i18n/group-digits ui n)])]))
 
+(def context-widths
+  "The widths of context the concordance offers, in display order: a few
+  numbers of words, then the units of text a corpus marks (see
+  dk.cst.corpus-probe.search/units), one region of which is shown either
+  side. The first is the usual width (see
+  dk.cst.corpus-probe.query/kwic-defaults). A hand-written URL may name
+  any other number of words, which `context-control` then shows beside
+  these."
+  [5 10 20 :sentence :paragraph])
+
+(defn context-label
+  "What the context width `context` (see `context-widths`) is called, in
+  `ui`."
+  [ui context]
+  (case context
+    :sentence  (i18n/tr ui "sentence")
+    :paragraph (i18n/tr ui "paragraph")
+    (str context " " (i18n/trn ui "word" "words" context))))
+
+(defn context-control
+  "The context control of the concordance in `ui`: a select over the
+  `context-widths` with `context` (a number of words or a unit keyword)
+  chosen, named by `context-label`. A number of words the list does not
+  hold is offered among the numbers, in order. It names the form it
+  submits with, for the reason `sort-control` does."
+  [ui context]
+  (let [widths (if (or (keyword? context) (some #{context} context-widths))
+                 context-widths
+                 (into (vec (sort (conj (filterv number? context-widths)
+                                        context)))
+                       (filter keyword? context-widths)))]
+    (list
+     [:label {:for "context"} (i18n/tr ui "Context")]
+     " "
+     [:select {:id   "context" :name "context" :form form-id
+               :on   {:change [:apply-view]}}
+      (for [width widths]
+        [:option {:value    (if (keyword? width) (name width) width)
+                  :selected (= width context)}
+         (context-label ui width)])])))
+
+(def near-distance
+  "How many words away a nearby word may be unless the reader says: the
+  distance of the manual's own example (section 3.7), and the window a
+  collocation is usually counted in."
+  5)
+
+(def near-distances
+  "The distances the near control offers, in display order."
+  [1 2 3 5 10])
+
+(defn near-control
+  "The proximity control of a result in `ui`: the word every hit must
+  have nearby and how many words away it may be, from `near` (the :word
+  and :distance in force, if any) and the `near-distances`.
+
+  The word is typed rather than chosen, so it applies once the reader is
+  done with it: a text field reports a change on Enter and on focus
+  leaving it, and the change applies the view as a select's does. Enter
+  alone could not be relied on: implicit submission does not reach a
+  form from a field that only names it. The distance applies itself as
+  the sort does. A distance the list does not hold is offered beside
+  them, as a sample size is."
+  [ui {:keys [word distance]}]
+  (let [distance (or distance near-distance)]
+    (list
+     [:label {:for "near"} (i18n/tr ui "Near")]
+     " "
+     [:input {:id           "near"
+              :name         "near"
+              :type         "search"
+              :form         form-id
+              :value        (or word "")
+              :autocomplete "off"
+              :on           {:change [:apply-view]}}]
+     " "
+     [:label {:for "distance"} (i18n/tr ui "within")]
+     " "
+     [:select {:id   "distance" :name "distance" :form form-id
+               :on   {:change [:apply-view]}}
+      (for [n (sort (conj (set near-distances) distance))]
+        [:option {:value n :selected (= n distance)}
+         (str n " " (i18n/trn ui "word" "words" n))])])))
+
+(defn apply-button
+  "The button applying a result's controls where no `client?` runs to
+  apply them itself, in `ui`; nil where one does.
+
+  Each control applies itself on being changed where the client runs, so
+  there is no button: choosing an order is asking for it, and a control
+  that needs a second control to take effect is one the reader has to be
+  told about. Without a client nothing can act on a change, so the button
+  is what applies it there.
+
+  Inside <noscript>: the server renders every page for the reader without
+  a script, and a browser with one showed the button for the split second
+  before the client's first render took it away. Wrapped, that browser
+  never shows it, while one without a script does."
+  [ui client?]
+  (when-not client?
+    (list " " [:noscript
+               [:button {:type "submit" :form form-id} (i18n/tr ui "Apply")]])))
+
 (defn view-controls
-  "The `controls` (hiccup) deciding how a result is read rather than what
-  was searched for, in `ui`; nil without controls.
+  "The controls of a result in `ui`: the `reading` ones (hiccup), which
+  decide how the hits are read rather than what was searched for, and
+  behind a disclosure the `narrowing` ones (hiccup; nil for none), which
+  keep only some of the hits, `open?` saying whether that disclosure
+  starts open. Nil without either.
 
   They live with the result rather than in the query form, so re-ordering
   a concordance costs a click instead of a scroll back past the form.
-  Sampling one is here for the same reason though it runs the query
-  again: how many of the hits to read is a question the reader has on
-  seeing how many there are.
+  Narrowing one is here for the same reason though it runs the query
+  again: which of the hits to keep is a question the reader has on
+  seeing them. It is behind a disclosure because it is the rarer
+  question, and a row of six controls reads as a form to fill in; the
+  disclosure is open whenever a narrowing is in force, so what narrows a
+  result is never hidden from the reader it narrows it for.
 
-  Each applies itself on being changed, so where `client?` there is no
-  button: choosing an order is asking for it, and a control that needs a
-  second control to take effect is one the reader has to be told about.
-  Without a client nothing can act on a change, so the button is what
-  applies it there."
-  [ui client? controls]
-  (when controls
-    [:p.viewctl controls
-     (when-not client?
-       (list " " [:button {:type "submit" :form form-id}
-                  (i18n/tr ui "Apply")]))]))
+  Each row carries the `apply-button` where no `client?` runs."
+  [ui client? reading narrowing open?]
+  (when (or reading narrowing)
+     [:div.viewctl
+      (when reading
+        [:p reading (apply-button ui client?)])
+      (when narrowing
+        [:details {:open (boolean open?)}
+         [:summary (i18n/tr ui "Narrow the result")]
+         [:p narrowing (apply-button ui client?)]])]))
 
 (def filter-prefix
   "The query param prefix naming a metadata filter: the prefix followed by
@@ -126,21 +234,53 @@
 
 (defn filter-phrase
   "The metadata `filter` (a map of attribute to the set of values
-  accepted) in words: each attribute with its values, sorted; empty
-  without a filter.
+  accepted) and the `patterns` beside it (a map of attribute to the
+  regexes accepted) in words: each attribute with its values, sorted,
+  then its patterns between slashes; empty without either.
 
-  (filter-phrase {:text_year #{\"1591\" \"1583\"} :text_author #{\"ukendt\"}})
-  ;; => \"text_author ukendt; text_year 1583, 1591\""
-  [filter]
-  (str/join "; " (for [[attr values] (sort-by key filter)]
-                   (str (name attr) " " (str/join ", " (sort values))))))
+  (filter-phrase {:text_year #{\"1591\" \"1583\"}} {:text_title [\"Hav.*\"]})
+  ;; => \"text_title /Hav.*/; text_year 1583, 1591\""
+  [filter patterns]
+  (str/join "; " (for [attr (sort (distinct (concat (keys filter)
+                                                    (keys patterns))))]
+                   (str (name attr) " "
+                        (str/join ", " (concat (sort (get filter attr))
+                                               (map #(str "/" % "/")
+                                                    (get patterns attr))))))))
 
 (defn within-phrase
-  "The metadata `filter` as the qualifier of a result summary in `ui`,
-  or nil without a filter: \" within text_year 1591\"."
-  [ui filter]
-  (when (seq filter)
-    (str " " (i18n/tr ui "within") " " (filter-phrase filter))))
+  "The metadata `filter` and its `patterns` as the qualifier of a result
+  summary in `ui`, or nil without either: \" within text_year 1591\"."
+  [ui filter patterns]
+  (when (or (seq filter) (seq patterns))
+    (str " " (i18n/tr ui "within") " " (filter-phrase filter patterns))))
+
+(defn position-label
+  "What the `position` of a match (see
+  dk.cst.corpus-probe.query/positions) is called, in `ui`, worded to
+  follow an attribute name; the position itself for one nothing names."
+  [ui position]
+  (case position
+    "match[-1]"       (i18n/tr ui "before the match")
+    "match"           (i18n/tr ui "at the start of the match")
+    "match..matchend" (i18n/tr ui "over the whole match")
+    "matchend"        (i18n/tr ui "at the end of the match")
+    "matchend[1]"     (i18n/tr ui "after the match")
+    position))
+
+(defn subset-phrase
+  "That a result holds only the hits whose token at the :anchor of
+  `subset` has its :value as its :attr, in `ui`; nil without one."
+  [ui {:keys [anchor attr value] :as subset}]
+  (when subset
+    (str " · " (name attr) " " (position-label ui anchor) " = " value)))
+
+(defn near-phrase
+  "That a result holds only the hits with the :word of `near` nearby,
+  in `ui`; nil without one."
+  [ui {:keys [word] :as near}]
+  (when near
+    (str " " (i18n/tr ui "near") " " word)))
 
 (defn attribute-value
   "Render attribute value `v` semantically by its key `k`: a text title as
@@ -205,17 +345,51 @@
               (every? :hidden? rows) (assoc :hidden? true))))
         attrs))
 
+(defn numeric-values?
+  "True when every listed value of `rows` is an integer, so that a range
+  from one to another can be asked for."
+  [rows]
+  (boolean (and (seq rows) (every? #(parse-long (:value %)) rows))))
+
+(defn pattern-row
+  "The controls asking for the values of `attr` a pattern matches,
+  `pattern` being the one in force, and, over `rows` that are all
+  numbers, those from one number to another, `bounds` being the [from to]
+  in force, in `ui`: the way to a decade of years, to one year of dates,
+  or to any value of an attribute with too many to list.
+
+  Text fields, so they apply on Enter, which submits the form: a pattern
+  is typed rather than chosen."
+  [ui attr rows pattern [from to :as bounds]]
+  (let [field (fn [prefix value attrs]
+                [:input (merge {:name         (str prefix (name attr))
+                                :value        (or value "")
+                                :autocomplete "off"
+                                :spellcheck   "false"}
+                               attrs)])]
+    [:p.pattern
+     [:label (i18n/tr ui "pattern") " " (field "fp." pattern {:type "search"})]
+     (when (numeric-values? rows)
+       (list " "
+             [:label (i18n/tr ui "from") " "
+              (field "ff." from {:type "text" :inputmode "numeric" :size 6})]
+             " "
+             [:label (i18n/tr ui "to") " "
+              (field "ft." to {:type "text" :inputmode "numeric" :size 6})]))]))
+
 (defn filter-details
   "The disclosure of one prepared metadata attribute (its `:name`, its
   `:rows` and whether the filter has left it `:hidden?`) in the filter
-  fieldset, with the `chosen` values of that attribute and, where
-  `client?`, a control taking every value showing.
+  fieldset, with what is in force for that attribute, the `:chosen`
+  values, the `:pattern` and the `:range` (see `pattern-row`), and,
+  where `client?`, a control taking every value showing.
 
-  Closed whatever is chosen, its summary counting the selection: one
-  attribute may carry hundreds of values, and reopening them on every
-  resubmit grew the form exactly while the reader was refining it. The
-  wording is in `ui`."
-  [ui client? {attr :name :keys [rows hidden?]} chosen]
+  Closed whatever is chosen, its summary counting the selection and
+  saying when a pattern or range is in force: one attribute may carry
+  hundreds of values, and reopening them on every resubmit grew the form
+  exactly while the reader was refining it. The wording is in `ui`."
+  [ui client? {attr :name :keys [rows hidden?]}
+   {:keys [chosen pattern] bounds :range}]
   ;; a set even when nothing is chosen, since it is read as a predicate
   (let [chosen  (set chosen)
         showing (mapv :value (remove :hidden? rows))]
@@ -227,7 +401,10 @@
      [:details (cond-> {} hidden? (assoc :hidden true))
       [:summary [:code (name attr)]
        (when (seq chosen)
-         (str " · " (count chosen) " " (i18n/tr ui "selected")))]
+         (str " · " (count chosen) " " (i18n/tr ui "selected")))
+       (when (some #(not (str/blank? %)) (cons pattern bounds))
+         (str " · " (i18n/tr ui "pattern")))]
+      (pattern-row ui attr rows pattern bounds)
       [:ul (map (partial filter-item ui attr chosen) rows)]])))
 
 (defn value-count
@@ -270,10 +447,13 @@
   One disclosure over the whole filter, counting the values chosen across
   every attribute, so a corpus with forty annotated attributes is one line
   rather than forty. Inside it, a disclosure per listed attribute
-  (`:attrs`) holds a checkbox per value (see `filter-details`), followed
-  by one per `:selected` attribute the list lacks, then a note naming the
-  `:unlisted` attributes, all worded in `ui`. `:selected` maps
-  each attribute to the set of chosen values.
+  (`:attrs`) holds a pattern row and a checkbox per value (see
+  `filter-details`), followed by one per attribute the list lacks but
+  the `:selected` values, the `:patterns`, the `:ranges` or the
+  `:unlisted` name, with the pattern row alone, then a note naming the
+  `:unlisted` attributes, all worded in `ui`. `:selected` maps each
+  attribute to the set of chosen values, `:patterns` to the pattern in
+  force and `:ranges` to the [from to] in force.
 
   Where `:client?`, it carries the same three controls the corpus chooser
   does, from the same namespace: a box narrowing it to the attributes and
@@ -291,7 +471,7 @@
   Which attributes there are to filter by depends on the corpora
   selected, and only the server knows: `:pending?` marks the fieldset busy
   while the client is fetching them for a selection that has changed."
-  [ui {:keys [attrs unlisted selected] :as filters}
+  [ui {:keys [attrs unlisted selected patterns ranges] :as filters}
    {:keys [served open? pending? client?] q :filter}]
   (when (or (seq attrs) (seq unlisted) (seq selected))
     (let [listed    (set (map :name attrs))
@@ -299,9 +479,12 @@
           prepared  (concat
                      (for [{attr :name :keys [rows]} attrs]
                        {:name attr :rows (attr-rows rows (get selected attr))})
-                     (for [[attr chosen] (sort-by key selected)
+                     (for [attr  (sort (distinct (concat (keys selected)
+                                                         (keys patterns)
+                                                         (keys ranges)
+                                                         unlisted)))
                            :when (not (listed attr))]
-                       {:name attr :rows (attr-rows [] chosen)}))
+                       {:name attr :rows (attr-rows [] (get selected attr))}))
           filtering (not (str/blank? q))
           shown     (cond->> prepared
                       filtering (narrow-attrs (str/lower-case q)))
@@ -332,7 +515,9 @@
                    nothing-found? (assoc :hidden true))
         [:summary (str n " " (i18n/tr ui "selected"))]
         (for [{attr :name :as m} shown]
-          (filter-details ui client? m (get selected attr)))
+          (filter-details ui client? m {:chosen  (get selected attr)
+                                        :pattern (get patterns attr)
+                                        :range   (get ranges attr)}))
         ;; a caveat about the control rather than part of it, which is
         ;; what <small> is for: these attributes are not on offer here
         (when (seq unlisted)
@@ -347,6 +532,74 @@
   (if (= mode "cqp")
     (i18n/tr ui "[lemma = \"hund\"] or [pos = \"N.*\"]")
     (i18n/tr ui "hund, or several words in order")))
+
+(defn attribute-control
+  "The control choosing which positional attribute a simple search
+  matches, in `ui`: a select over `attrs` (attribute keywords, word
+  first) with `selected` (a string, word when blank) chosen, `disabled?`
+  while the query is CQP, which names its own.
+
+  An attribute the list lacks is offered after them, so a hand-written
+  URL shows what it searches rather than something else."
+  [ui attrs selected disabled?]
+  (let [selected (if (str/blank? selected) "word" selected)
+        names    (map name attrs)
+        offered  (cond-> names
+                   (not (some #{selected} names)) (concat [selected]))]
+    [:label (i18n/tr ui "attribute") " "
+     [:select {:name "in" :disabled disabled?}
+      (for [n offered]
+        [:option {:value n :selected (= n selected)} n])]]))
+
+(defn query-help
+  "What CQP can be asked, in `ui`, standing where the results will once
+  there are any: a dozen recipes drawn from the CQP manual, each the
+  query itself and what it finds, and a link to the manual for the rest.
+
+  Everything here already works in the CQP box; nothing there says so,
+  and a reader who has not searched yet is the one with room to read it.
+  The queries are CQP's own and stay as written; the words beside them
+  are the interface's. The attributes named are the common ones, word,
+  lemma and pos, since what a corpus actually carries is under the
+  attribute control in the form."
+  [ui]
+  (let [recipe (fn [q what] (list [:dt [:code q]] [:dd what]))]
+    [:section.help {:aria-labelledby "help-heading"}
+     [:h2 {:id "help-heading"} (i18n/tr ui "Query help")]
+     [:dl
+      (recipe "\"hund\""
+              (i18n/tr ui (str "a word form; the quoted string is a regular "
+                               "expression")))
+      (recipe "\"hund.*\" %c"
+              (i18n/tr ui "forms starting with hund, in any case"))
+      (recipe "\"hund|kat\""
+              (i18n/tr ui "either word"))
+      (recipe "[lemma = \"hund\"]"
+              (i18n/tr ui (str "every form of a lemma; any attribute of the "
+                               "corpus goes in the brackets")))
+      (recipe "[pos != \"N.*\"]"
+              (i18n/tr ui (str "anything but; the value is a regular "
+                               "expression too")))
+      (recipe "[lemma = \"lille\" & pos = \"A.*\"]"
+              (i18n/tr ui "both at once; | for either, ! for not"))
+      (recipe "[lemma = \"lille\"] [pos = \"N.*\"]"
+              (i18n/tr ui "a sequence, one pattern per token"))
+      (recipe "\"i\" []{0,2} \"med\""
+              (i18n/tr ui "with up to two tokens between"))
+      (recipe "\"hund\" []* \"kat\" within s"
+              (i18n/tr ui "both in one sentence, in that order"))
+      (recipe "\"en\" @[pos = \"A.*\"] [pos = \"N.*\"]"
+              (i18n/tr ui (str "@ marks a token as the target, shown in bold "
+                               "and counted at its own position")))
+      (recipe "a:[] \"og\" b:[] :: a.word = b.word"
+              (i18n/tr ui (str "labels name tokens, and the constraint after "
+                               ":: relates them: the same word on both sides "
+                               "of og")))
+      (recipe "[word = \".*\" & strlen(word) >= 12]"
+              (i18n/tr ui "tokens of twelve characters or more"))]
+     [:p [:a {:href "https://cwb.sourceforge.io/files/CQP_Manual/"}
+          (i18n/tr ui "The CQP manual")]
+      " " (i18n/tr ui "has the rest.")]]))
 
 (defn navigation-status
   "The live region reporting a routed navigation in flight in `ui`,
@@ -376,13 +629,15 @@
 
 (defn search-form
   "The search form of `state`: over its `:folders` tree of corpus
-  overviews and its metadata `:filter-controls`, prefilled from its
-  `:params` (:corpus, a vector of selected names, :q :mode :ci :prefix
-  :suffix), submitted as GET to `action`, with the page's own `extra`
-  hidden inputs.
+  overviews, its metadata `:filter-controls` and the `:search-attrs` a
+  simple search may match (see `attribute-control`), prefilled from its
+  `:params` (:corpus, a vector of selected names, :q :mode :in :ci
+  :prefix :suffix), submitted as GET to `action`, with the page's own
+  `extra` hidden inputs.
 
   The query input comes first, then everything that decides how it is
-  read: the mode, and under it the options that only a simple query has.
+  read, in one group: the mode, under it the options that only a simple
+  query has, what it matches on one row and how loosely on the next.
   Then the scope of the search, the corpus chooser and the metadata
   filter, each behind one disclosure. So the field the reader reaches for
   is the first control in the form, whatever the registry holds, and what
@@ -409,12 +664,12 @@
   the button they asked it with, and `:served-corpus`, the corpora this
   page was served for, decides which folders of the chooser start open
   while `:params` follows what the reader is choosing now."
-  [{:keys [ui folders filter-controls params client? pending? served-corpus
-           served-filter corpus-filter value-filter chooser-open?
-           filters-open? filters-pending?]
+  [{:keys [ui folders filter-controls search-attrs params client? pending?
+           served-corpus served-filter corpus-filter value-filter
+           chooser-open? filters-open? filters-pending?]
     :as state}
    action extra]
-  (let [{:keys [corpus q mode ci prefix suffix]} params]
+  (let [{:keys [corpus q mode in ci prefix suffix]} params]
     [:search
      [:form.search {:id form-id :method "get" :action action}
       extra
@@ -456,21 +711,25 @@
                          :checked (= mode "cqp")
                          :on      {:change [:set-mode "cqp"]}}]
          "CQP"]]
-       [:p {:role "group" :aria-label (i18n/tr ui "Simple-search options")}
-        [:label [:input {:type "checkbox" :name "ci" :value "on"
-                         :checked  (some? ci)
-                         :disabled (= mode "cqp")}]
-         (i18n/tr ui "ignore case")]
-        " "
-        [:label [:input {:type "checkbox" :name "prefix" :value "on"
-                         :checked  (some? prefix)
-                         :disabled (= mode "cqp")}]
-         (i18n/tr ui "starts with")]
-        " "
-        [:label [:input {:type "checkbox" :name "suffix" :value "on"
-                         :checked  (some? suffix)
-                         :disabled (= mode "cqp")}]
-         (i18n/tr ui "ends with")]]]
+       ;; two rows: what a simple search matches, then how loosely. One
+       ;; row of four ran the attribute into the options it governs
+       [:div {:role "group" :aria-label (i18n/tr ui "Simple-search options")}
+        [:p (attribute-control ui search-attrs in (= mode "cqp"))]
+        [:p
+         [:label [:input {:type "checkbox" :name "ci" :value "on"
+                          :checked  (some? ci)
+                          :disabled (= mode "cqp")}]
+          (i18n/tr ui "ignore case")]
+         " "
+         [:label [:input {:type "checkbox" :name "prefix" :value "on"
+                          :checked  (some? prefix)
+                          :disabled (= mode "cqp")}]
+          (i18n/tr ui "starts with")]
+         " "
+         [:label [:input {:type "checkbox" :name "suffix" :value "on"
+                          :checked  (some? suffix)
+                          :disabled (= mode "cqp")}]
+          (i18n/tr ui "ends with")]]]]
       ;; marks a selection the reader actually made: without it, unticking
       ;; every corpus and submitting is indistinguishable from arriving
       ;; with no corpus named, which searches them all
@@ -527,13 +786,16 @@
 (defn result-summary
   "The summary text of a concordance `result` page (`:size` hits over
   `:pages`, in the corpora that could be searched, within its metadata
-  `:filter` and holding its random `:sample` of the matches), used as the
-  heading naming the results region, in `ui`."
+  `:filter`, narrowed to its `:subset` and `:near` a word, holding its
+  random `:sample` of the matches), used as the heading naming the
+  results region, in `ui`."
   [ui {:keys [size counts] :as result}]
   (let [searched (map :corpus (filter :size counts))]
     (str (hits-phrase ui size) " " (i18n/tr ui "in") " "
          (corpora-phrase ui searched)
-         (within-phrase ui (:filter result))
+         (within-phrase ui (:filter result) (:patterns result))
+         (subset-phrase ui (:subset result))
+         (near-phrase ui (:near result))
          ;; a search that found nothing sampled nothing, and saying it
          ;; drew a sample of what it found reads as the reason it is empty
          (when (pos? size)
@@ -752,7 +1014,8 @@
 
 (defn result-section
   "The concordance view of the search in `state`: when any corpus could be
-  searched and found something, the sort and sample controls, the
+  searched and found something, the sort, context and sample controls
+  with the near control behind its disclosure (see `view-controls`), the
   pagination above and below the table, the concordance with its
   `:expanded` hits and `:langs`, then the per-corpus counts as an aside
   and the download links (`:export-hrefs`, exports holding at most
@@ -769,14 +1032,24 @@
      (when (searched? result)
        ;; a search that found nothing has nothing to page, download or
        ;; count: the table would be a header over no rows and the exports
-       ;; header-only files
+       ;; header-only files. A result emptied by the word its hits had
+       ;; to be near keeps that one control, or the reader could not take
+       ;; the word away again
        (if (zero? size)
-         [:p (i18n/tr ui "No hits.")]
+         (list
+          (when (:near result)
+            (view-controls ui client? nil (near-control ui (:near result))
+                           true))
+          [:p (i18n/tr ui "No hits.")])
          (list
           (view-controls ui client?
                          (list (sort-control ui sort-modes (:sort params))
                                " "
-                               (sample-control ui (:sample result))))
+                               (context-control ui (:context result))
+                               " "
+                               (sample-control ui (:sample result)))
+                         (near-control ui (:near result))
+                         (:near result))
           (pagination ui prev-href next-href position)
           (kwic/concordance hits {:caption  (i18n/tr ui "Concordance")
                                   :ui       ui
