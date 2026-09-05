@@ -96,11 +96,8 @@
   what was asked, by the mode that reads them. `::tokens` stands for the
   fields of an extended search's tokens (see `token-key?`). A param outside
   its mode's set says nothing to the search, so a URL does not carry it
-  (see `canonical`).
-
-  TODO: the simple form has no control for within, though a simple search
-  of several words honours it; the form gets one when it derives its
-  controls from this table."
+  (see `canonical`), and the form's control for it is disabled (see
+  dk.cst.corpus-probe.views.page/search-form)."
   {"simple"   #{:q :in :ci :match :within}
    "list"     #{:q :in :ci :match}
    "extended" #{::tokens :within}

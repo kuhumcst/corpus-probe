@@ -3,6 +3,7 @@
             [clojure.test :refer [deftest is testing]]
             [dk.cst.corpus-probe.views.hiccup :refer [da deep en]]
             [dk.cst.corpus-probe.commands :as commands]
+            [dk.cst.corpus-probe.url :as url]
             [dk.cst.corpus-probe.views.layout :as layout]
             [dk.cst.corpus-probe.views.page :as page]))
 
@@ -54,10 +55,16 @@
                 (deep (page/search-form
                        state "/" [:input {:type  "hidden" :name "attr"
                                           :value "word"}])))))
-    (testing "the query options are one group, under the query field"
+    (testing "the query options are one group, under the query row"
       (let [order (fn [x] (.indexOf (vec (deep html)) x))]
+        (is (< (order :div.query) (order :input)))
         (is (< (order :input) (order :fieldset.query-options)))
         (is (< (order :fieldset.query-options) (order :fieldset.corpora)))
+        (testing "with the status line after the mode and above the rest"
+          (is (< (order {:role "radiogroup" :aria-label "Query mode"})
+                 (order :div.status)))
+          (is (< (order :div.status)
+                 (order {:role "group" :aria-label "Simple-search options"}))))
         ;; the two boxes said the same thing twice; the groups they named
         ;; are still named, without a box each
         (is (not (some #{:fieldset.mode :fieldset.options} (deep html))))
@@ -73,16 +80,28 @@
                             (deep html))]
             (is (= :div (first group)))
             (is (= [:p :p] (map first (drop 2 group))))))))
-    (testing "and the options are live only for a query they can qualify"
-      (let [disabled (fn [mode]
-                       (->> (deep (page/search-form
-                                   (assoc-in state [:params :mode] mode)
-                                   "/" nil))
-                            (filter #(and (map? %)
-                                          (#{"in" "ci" "match"} (:name %))))
-                            (map :disabled)))]
-        (is (= [false false false] (disabled "simple")))
-        (is (= [true true true] (disabled "cqp")))))
+    (testing "and the options are live only for a query they can qualify,
+              as the table of what each mode reads says"
+      (let [live (fn [mode]
+                   (->> (deep (page/search-form
+                               (assoc-in state [:params :mode] mode)
+                               "/" nil))
+                        (filter #(and (map? %)
+                                      (#{"in" "ci" "match" "within"}
+                                       (:name %))))
+                        (map (juxt :name (comp not :disabled)))))]
+        (is (= [["in" true] ["match" true] ["ci" true] ["within" true]]
+               (live "simple")))
+        (is (= [["in" true] ["match" true] ["ci" true] ["within" false]]
+               (live "list")))
+        (is (= [["in" false] ["match" false] ["ci" false] ["within" true]]
+               (live "extended")))
+        (is (= [["in" false] ["match" false] ["ci" false] ["within" false]]
+               (live "cqp")))
+        (doseq [mode url/modes]
+          (is (= (map (fn [[k _]] (url/reads? mode (keyword k))) (live mode))
+                 (map second (live mode)))
+              mode))))
     (testing "a simple search matches one of the corpora's attributes,
               the surface form unless the URL says otherwise"
       (let [options (fn [state]
@@ -112,9 +131,14 @@
         (is (some #(and (map? %) (= "ci" (:name %)) (:checked %)
                         (:disabled %))
                   html))))
-    (testing "no status region without a client to put anything in it"
-      (is (not (some #{:div.status} (deep html)))))
-    (testing "with one it follows the form, inside the same landmark"
+    (testing "one status region in the form, for what a change of mode
+              could not keep, empty until then; the navigation's only with
+              a client to put anything in it"
+      (is (= [[:div.status {:role "status"}]]
+             (filter #(and (vector? %) (= :div.status (first %)))
+                     (deep html)))))
+    (testing "with one, the navigation's follows the form, inside the same
+              landmark"
       (let [live (page/search-form (assoc state :client? true :pending? true)
                                    "/" nil)]
         (is (= :div.status (first (last live))))
@@ -217,8 +241,10 @@
     (testing "the repeat pair is a group, so its second number, labelled
               only to, is heard in context"
       (is (some #{{:role "group" :aria-label "repeat"}} (deep html))))
-    (testing "the unit the tokens are kept within is chosen beside them"
+    (testing "the unit the tokens are kept within is chosen among the
+              options, and is live"
       (is (= ["sentence"] (chosen html "within")))
+      (is (not (:disabled (named html "within"))))
       (is (= ["paragraph"]
              (chosen (page/search-form (assoc-in state [:params :within]
                                                  "paragraph")

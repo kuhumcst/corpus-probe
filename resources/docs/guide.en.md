@@ -1,8 +1,10 @@
 # Query help
 
 To do a simple search, type one word or several words in order. A
-simple search needs no syntax. To find any word of a list, select List
-as the query mode and type one word per line.
+simple search needs no syntax. A search of several words stays within
+one sentence. To keep it within a paragraph or a text, select that
+unit. To find any word of a list, select List as the query mode and
+type one word per line.
 
 An extended search builds a query from [tokens](/glossary#token). Select
 Extended as the query mode. Each token has one or more conditions. A

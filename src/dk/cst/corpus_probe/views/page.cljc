@@ -829,13 +829,14 @@
     (i18n/tr ui "sentence")))
 
 (defn within-control
-  "The control choosing the unit of text an extended search of several
-  tokens is kept within, in `ui`: a select over the
-  dk.cst.corpus-probe.url/units with `within` chosen, the sentence when
-  it names none (see dk.cst.corpus-probe.query/within)."
-  [ui within]
+  "The control choosing the unit of text a search of several tokens is
+  kept within, in `ui`: a select over the dk.cst.corpus-probe.url/units
+  with `within` chosen, the sentence when it names none (see
+  dk.cst.corpus-probe.query/within), `disabled?` where the mode reads no
+  unit."
+  [ui within disabled?]
   [:label (i18n/tr ui "within") " "
-   [:select {:name "within"}
+   [:select {:name "within" :disabled disabled?}
     (for [unit url/units]
       [:option {:value unit :selected (= unit (or within "sentence"))}
        (unit-label ui unit)])]])
@@ -921,6 +922,17 @@
    ;; (see `results-region`), and the three should be answered together.
    (when pending? [:p (i18n/tr ui "Loading …")])])
 
+(defn mode-label
+  "What the query `mode` (see dk.cst.corpus-probe.url/modes) is called,
+  in `ui`. CQP is an abbreviation and no link: the click on a label
+  belongs to its radio, and the glossary is in the masthead."
+  [ui mode]
+  (case mode
+    "list"     (i18n/tr ui "List")
+    "extended" (i18n/tr ui "Extended")
+    "cqp"      (layout/term ui :cqp false)
+    (i18n/tr ui "Simple")))
+
 (defn search-form
   "The search form of `state`: over its `:folders` tree of corpus
   overviews, its metadata `:filter-controls` and the `:search-attrs` a
@@ -929,24 +941,24 @@
   :match), submitted as GET to `action`, with the page's own `extra`
   hidden inputs.
 
-  The query field comes first (see `query-field`), or the tokens of an
+  The query row comes first (see `query-field`), or the tokens of an
   extended search (see `token-fieldset`, over the `:tokens` and
-  `:value-lists` of `state`) with the unit they are kept within (see
-  `within-control`), then everything that decides how it is read, in
-  one group:
-  the mode, under it the options that only a simple query or a list has,
-  what it matches on one row and how loosely on the next.
-  Then the scope of the search, the corpus chooser and the metadata
-  filter, each behind one disclosure. So the field the reader reaches for
-  is the first control in the form, whatever the registry holds, and what
-  qualifies what they typed is under their hand rather than past two
-  disclosures.
+  `:value-lists` of `state`), then everything that decides how it is
+  read, in one group: the mode, a status line for what a change of mode
+  could not keep, under it the options that only a simple query or a
+  list has, what it matches on one row and how loosely on the next, and
+  the unit of text a search of several tokens is kept within (see
+  `within-control`). Then the scope of the search, the corpus chooser
+  and the metadata filter, each behind one disclosure. So the field the
+  reader reaches for is the first control in the form, whatever the
+  registry holds, and what qualifies what they typed is under their hand
+  rather than past two disclosures.
 
   The query example is the placeholder of the mode in `:params`, and the
   mode radios dispatch `:set-mode`, so choosing a mode swaps the example
-  and the shape of the field and disables the simple options without a
-  round trip; without the client all three are as the search was
-  submitted.
+  and the shape of the field without a round trip. Which options are
+  live is the mode's row of dk.cst.corpus-probe.url/fields, on both
+  sides; without the client all of it is as the search was submitted.
 
   The query is required, except when the form is submitted from the
   frequency view (its `:view`), which counts every token of a blank one,
@@ -978,36 +990,39 @@
            filters-pending?]
     :as state}
    action extra]
-  (let [{:keys [corpus q mode in ci match within]} params
-        ;; a CQP query and an extended search name their own attributes,
-        ;; so the simple options mean nothing to them
-        simple? (not (#{"cqp" "extended"} mode))
+  (let [{:keys [corpus q in ci match within]} params
+        mode    (url/mode params)
+        ;; a control the mode does not read is disabled rather than taken
+        ;; away: a reader who looks at CQP and comes back finds what they
+        ;; had ticked still ticked, the form does not change height under
+        ;; them, and a disabled control is not submitted, so nothing about
+        ;; a simple search rides along with a CQP one
+        dead?   (fn [k] (not (url/reads? mode k)))
         button  [:button {:type "submit"} (i18n/trx ui "button" "Search")]]
     [:search
      [:form.search {:id form-id :method "get" :action action}
       extra
-      ;; the button belongs against the field it submits, not at the foot
-      ;; of every control that qualifies it
-      (if (= mode "extended")
-        (list (token-fieldset ui search-attrs value-lists client?
-                              (not= :frequencies view) tokens)
-              [:p (within-control ui within)]
-              [:p
-               (when client?
-                 (list [:button {:type "button" :on {:click [:add-token]}}
-                        (i18n/tr ui "Add token")]
-                       " "))
-               button])
-        [:p (query-field ui mode q (not= :frequencies view)) " " button])
+      ;; the query row: the field or the tokens, and the button, which
+      ;; belongs against the field it submits rather than at the foot of
+      ;; every control that qualifies it. In a wrapper of one kind whatever
+      ;; the row holds, so that the group after it keeps its identity when
+      ;; the row changes kind: measured, without it the switch back from
+      ;; the tokens rebuilt the group, the radio the reader had pressed
+      ;; included
+      [:div.query
+       (if (= mode "extended")
+         (list (token-fieldset ui search-attrs value-lists client?
+                               (not= :frequencies view) tokens)
+               [:p
+                (when client?
+                  (list [:button {:type "button" :on {:click [:add-token]}}
+                         (i18n/tr ui "Add token")]
+                        " "))
+                button])
+         [:p (query-field ui mode q (not= :frequencies view)) " " button])]
       ;; one group: everything here qualifies the query above it, and two
       ;; boxes said that twice. A row each, so the mode a reader is in
       ;; does not run into the options it decides the meaning of.
-      ;;
-      ;; The options are disabled rather than taken away when they mean
-      ;; nothing: a reader who looks at CQP and comes back finds what they
-      ;; had ticked still ticked, the form does not change height under
-      ;; them, and a disabled control is not submitted, so nothing about a
-      ;; simple search rides along with a CQP one.
       ;;
       ;; Named by a legend like the boxes beside it, so that the three
       ;; line up when they share a row; the word is the query's, since
@@ -1017,38 +1032,30 @@
        ;; the radios are still a group of their own, and still named:
        ;; a fieldset is not the only thing that can say so
        [:p {:role "radiogroup" :aria-label (i18n/tr ui "Query mode")}
-        [:label [:input {:type    "radio" :name "mode" :value "simple"
-                         :checked (not (#{"cqp" "list" "extended"} mode))
-                         :on      {:change [:set-mode "simple"]}}]
-         (i18n/tr ui "Simple")]
-        " "
-        [:label [:input {:type    "radio" :name "mode" :value "list"
-                         :checked (= mode "list")
-                         :on      {:change [:set-mode "list"]}}]
-         (i18n/tr ui "List")]
-        " "
-        [:label [:input {:type    "radio" :name "mode" :value "extended"
-                         :checked (= mode "extended")
-                         :on      {:change [:set-mode "extended"]}}]
-         (i18n/tr ui "Extended")]
-        " "
-        ;; an abbreviation and no link: the click on a label belongs to
-        ;; its radio, and the glossary is in the masthead
-        [:label [:input {:type    "radio" :name "mode" :value "cqp"
-                         :checked (= mode "cqp")
-                         :on      {:change [:set-mode "cqp"]}}]
-         (layout/term ui :cqp false)]]
+        (interpose " "
+                   (for [m url/modes]
+                     [:label [:input {:type    "radio" :name "mode" :value m
+                                      :checked (= m mode)
+                                      :on      {:change [:set-mode m]}}]
+                      (mode-label ui m)]))]
+       ;; what a change of mode could not keep, once a switch reports it:
+       ;; rendered always, so that the live region exists before it fills,
+       ;; and above everything a switch changes
+       [:div.status {:role "status"}]
        ;; two rows: what a simple search matches, then how loosely. One
        ;; row of four ran the attribute into the options it governs
        [:div {:role "group" :aria-label (i18n/tr ui "Simple-search options")}
-        [:p (attribute-control ui search-attrs in (not simple?))]
+        [:p (attribute-control ui search-attrs in (dead? :in))]
         [:p
-         (match-control ui match (not simple?))
+         (match-control ui match (dead? :match))
          " "
          [:label [:input {:type "checkbox" :name "ci" :value "on"
                           :checked  (some? ci)
-                          :disabled (not simple?)}]
-          (i18n/tr ui "ignore case")]]]]
+                          :disabled (dead? :ci)}]
+          (i18n/tr ui "ignore case")]]]
+       ;; the unit a search of several tokens is kept within, which the
+       ;; words of a simple search read as the tokens of an extended one do
+       [:p (within-control ui within (dead? :within))]]
       ;; marks a selection the reader actually made: without it, unticking
       ;; every corpus and submitting is indistinguishable from arriving
       ;; with no corpus named, which searches them all

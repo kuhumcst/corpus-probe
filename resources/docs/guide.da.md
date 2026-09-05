@@ -1,9 +1,11 @@
 # Hjælp til forespørgsler
 
 For at lave en simpel søgning skal du skrive ét ord eller flere ord i
-rækkefølge. En simpel søgning kræver ingen syntaks. For at finde et
-hvilket som helst ord fra en liste skal du vælge Liste som søgetype og
-skrive ét ord pr. linje.
+rækkefølge. En simpel søgning kræver ingen syntaks. En søgning på flere
+ord holder sig inden for én sætning. For at holde den inden for et
+afsnit eller en tekst skal du vælge den enhed. For at finde et hvilket
+som helst ord fra en liste skal du vælge Liste som søgetype og skrive
+ét ord pr. linje.
 
 En udvidet søgning bygger en forespørgsel af [tokens](/glossary#token).
 Vælg Udvidet som søgetype. Hvert token har en eller flere betingelser.

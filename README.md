@@ -60,9 +60,10 @@ is hidden, so that the contexts have room.
 A simple search matches the surface form. The reader can select another
 positional attribute of the searched corpora, for example lemma. A
 simple search of several words is kept within one sentence, as the CQP
-manual advises. The search uses the name that each corpus gives its
-sentences. Until the reader makes a search, a guide of CQP examples
-stands where the results will be.
+manual advises, or within a paragraph or a text when the reader selects
+one. The search uses the name that each corpus gives its sentences.
+Until the reader makes a search, a guide of CQP examples stands where
+the results will be.
 
 A third query mode, List, takes one word per line and finds any of
 them. The compiler turns the list into one token pattern with an
