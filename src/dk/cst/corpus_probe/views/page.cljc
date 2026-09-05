@@ -1513,16 +1513,18 @@
   `:expanded` hits and `:langs`, then the per-corpus counts as an aside
   and the download links (`:export-hrefs`, exports holding at most
   `:export-limit` hits), all worded in the state's `:ui` and wrapped in
-  the shared `results-region`."
-  [{:keys [ui sort-modes params result error langs expanded client?
+  the shared `results-region`. The result answers the params the search
+  was `:asked` with, not the form's `:params`, which the client's form
+  leaves behind at a change of mode."
+  [{:keys [ui sort-modes asked result error langs expanded client?
            export-hrefs export-limit prev-href next-href]
     :as state}]
   (let [{:keys [counts hits size]} result
         position (when result (page-phrase ui result))]
     (results-region
      state
-     (result-heading ui params result error)
-     (qualifiers ui params result)
+     (result-heading ui asked result error)
+     (qualifiers ui asked result)
      (when (searched? result)
        ;; a search that found nothing has nothing to page, download or
        ;; count: the table would be a header over no rows and the exports
@@ -1537,7 +1539,7 @@
           [:p (i18n/tr ui "No hits.")])
          (list
           (view-controls ui client?
-                         (list (sort-control ui sort-modes (:sort params))
+                         (list (sort-control ui sort-modes (:sort asked))
                                " "
                                (context-control ui (:context result))
                                " "

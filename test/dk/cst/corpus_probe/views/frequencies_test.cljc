@@ -49,7 +49,7 @@
 (deftest frequency-section-test
   (let [html (freq/frequency-section
               {:lang       "en"
-               :params     {:q "hund"}
+               :asked      {:q "hund"}
                :result     counted
                :view       :frequencies
                :view-hrefs [[:kwic "/?view=kwic"]
@@ -271,7 +271,7 @@
                        :view      :frequencies
                        :attrs     [{:type :structural :name :text_year}]
                        :positions ["match"]
-                       :params    {:attr "lemma"}}))]
+                       :asked     {:attr "lemma"}}))]
       (is (some #{:table.frequencies.crosstab} html))
       (is (not (some #(and (map? %) (= "docs" (:name %))) html))))))
 

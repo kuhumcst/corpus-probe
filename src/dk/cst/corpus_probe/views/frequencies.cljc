@@ -285,21 +285,23 @@
   table, cross-tabulated when the result is counted `:by` a second
   attribute, then the download links (`:export-hrefs`, exports holding
   every row), in the state's `:ui`, wrapped in the shared
-  dk.cst.corpus-probe.views.page/results-region."
-  [{:keys [ui attrs positions params result error export-hrefs client?]
+  dk.cst.corpus-probe.views.page/results-region. The table answers the
+  params the search was `:asked` with, not the form's `:params` (see
+  dk.cst.corpus-probe.views.page/result-section)."
+  [{:keys [ui attrs positions asked result error export-hrefs client?]
     :as   state}]
   (let [tabled (tabled? result)]
     (page/results-region
      state
-     (frequency-heading ui params result error)
+     (frequency-heading ui asked result error)
      ;; how the table counted comes first: it is what this view asks
      ;; that the concordance of the same hits does not
-     (cond->> (page/qualifiers ui params result)
+     (cond->> (page/qualifiers ui asked result)
        tabled (cons (grouping-phrase ui result)))
      (when tabled
        (list
         (page/view-controls ui client?
-                            (list (attr-control ui attrs (:attr params))
+                            (list (attr-control ui attrs (:attr asked))
                                   " "
                                   (position-control ui positions (:at result))
                                   " "

@@ -356,6 +356,14 @@
                       (contains? own k)
                       (and (contains? own ::tokens) (token-key? k)))))))
 
+(defn read-keys
+  "The query params among `params` that the form of `mode` reads (see
+  `reads?`), as keys, the mode itself aside: what a form holds of a
+  query, and so what its query replaces when it changes."
+  [mode params]
+  (filter #(and (query-key? %) (not= :mode %) (reads? mode %))
+          (keys params)))
+
 (defn unread
   "The keys of the query params among `params` that their mode (see
   `mode`) does not read: what the form of another mode, or a hand-written

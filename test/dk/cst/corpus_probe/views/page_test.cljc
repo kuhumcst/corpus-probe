@@ -1027,7 +1027,7 @@
                :view-hrefs   [[:kwic "/?v=k"]
                               [:frequencies "/?v=f"]]
                :sort-modes   ["corpus" "word"]
-               :params       {:q "hund"}
+               :asked        {:q "hund"}
                :result       example-result
                :next-href    "/?page=1"
                :export-hrefs {:tsv "/e?format=tsv"}
@@ -1147,7 +1147,7 @@
                                              :remaining ["B" "C"]})))))
   (let [state {:ui        en
                :view      :kwic
-               :params    {:q "hund"}
+               :asked     {:q "hund"}
                :next-href "/?page=2"}
         html  (page/result-section
                (assoc state :result (assoc example-result

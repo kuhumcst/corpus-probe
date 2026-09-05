@@ -131,6 +131,18 @@
       (is (= {:q "a b" :within "text" :sort "word"}
              (url/canonical {:q "a b" :within "text" :sort "word"}))))))
 
+(deftest read-keys-test
+  (testing "what a form holds of the query params: the keys its mode reads,
+            the mode itself aside"
+    (is (= #{:q :in :within}
+           (set (url/read-keys "simple" {:q "x" :in "lemma" :within "text"
+                                         :t1.v "y" :mode "simple"
+                                         :corpus "A"}))))
+    (is (= #{:t1.v :within}
+           (set (url/read-keys "extended" {:q "x" :in "lemma" :within "text"
+                                           :t1.v "y" :corpus "A"}))))
+    (is (= #{:q} (set (url/read-keys "cqp" {:q "x" :in "lemma"}))))))
+
 (deftest unread-query?-test
   (testing "a query the mode does not read is the form submitted with its
             radio changed, or a hand-written URL"

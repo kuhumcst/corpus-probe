@@ -486,13 +486,6 @@
   (into {} (for [format (keys export/formats)]
              [(keyword format) (url/export-href view format params)])))
 
-(defn read-keys
-  "The query params among `params` that the form of `mode` reads (see
-  dk.cst.corpus-probe.url/reads?), as keys."
-  [mode params]
-  (filter #(and (url/query-key? %) (not= :mode %) (url/reads? mode %))
-          (keys params)))
-
 (defn value-lists!
   "The values of each positional attribute among `attrs` (keywords) that
   every one of `corpora` via `ctx` can list (see
@@ -884,7 +877,9 @@
   no corpus selected, while a URL naming no corpus still searches every
   readable one and shows them all. It also carries `:cqp`, the CQP the
   query compiled to, which the heading and the title of an extended
-  search show; no URL carries it, the URL rule not knowing it. The
+  search show; no URL carries it, the URL rule not knowing it. `:asked`
+  is the same map for the result to read, which the client's form leaves
+  behind at a change of mode. The
   tokens of the extended form are `:tokens` (see
   dk.cst.corpus-probe.query/form-rows), the values its fields suggest
   `:value-lists` (see `value-lists!`), and what a change of mode could
@@ -939,7 +934,7 @@
                                                          request))))
         ;; the form's marker of the mode it was rendered in is no param of
         ;; the search; what its mode reads is the query it holds
-        params* (-> (apply dissoc params :from (read-keys form params))
+        params* (-> (apply dissoc params :from (url/read-keys form params))
                     (merge (query/params form held))
                     (assoc :mode   form
                            :corpus (if outcome selected named)
@@ -961,6 +956,9 @@
       :switch          {:loss loss :unread unread}
       :value-lists     (value-lists! ctx known p-attrs)
       :params          params*
+      ;; the same, frozen: the client's form moves on from `:params` at a
+      ;; change of mode, while the result still answers what was asked
+      :asked           params*
       :cited           cited
       :result          (:result outcome)
       :error           (:error outcome)

@@ -451,18 +451,6 @@
          (swap! state dissoc :selected))))
    0))
 
-(defn carried-query
-  "The query `q` as `mode` takes it: one word per line for a list, and
-  one line of words for anything else, since a search box has no line
-  breaks to keep a list in and would drop them.
-
-  (carried-query \"simple\" \"hund\\nkat\")
-  ;; => \"hund kat\""
-  [mode q]
-  (if (= "list" mode)
-    (str/replace (str/trim (str q)) #"\s+" "\n")
-    (page/one-line q)))
-
 (defn own-rows
   "The tokens of an extended search as this client shows them: the served
   `tokens` (see dk.cst.corpus-probe.query/form-rows) less the blank
@@ -534,6 +522,52 @@
     (let [c (min k (count (get-in @state path)))]
       (focus-field! (url/token-key i c (if (= 1 c) :attr :join))))))
 
+(defn switch-mode!
+  "Change the query mode of `form` (the form element) to `mode`, holding
+  in the new mode's form as much of the query the old one holds as it
+  can, as the server does for a submitted form (see
+  dk.cst.corpus-probe.query/project and /loss), and saying the rest in
+  the form's status line.
+
+  The old form is read as it stands, not as it was served, so a word
+  typed or an option changed since the last search comes along. What
+  its mode reads is replaced by the new mode's spelling of what it
+  holds (see dk.cst.corpus-probe.query/params); what neither mode reads
+  stays in the params as memory, for the disabled control that shows it.
+
+  Switching away and back loses nothing while nothing was edited: the
+  query the last switch started from is `:remembered`, and the form it
+  handed the reader `:projected`; a form still holding that projection
+  is read as the remembered query, so that Simple, CQP and back is the
+  words again and not the CQP read as words, and Extended, Simple and
+  back is every token again.
+
+  The result on screen is left as it is: it answers what was asked (see
+  dk.cst.corpus-probe.views.page/result-section), and the form has
+  moved on."
+  [form mode]
+  (swap! state
+         (fn [{:keys [params remembered projected] :as s}]
+           (let [from    (url/mode params)
+                 live    (form-params form)
+                 typed   (query/of (assoc live :mode from))
+                 source  (if (= typed projected) remembered typed)
+                 held    (query/project mode source)
+                 memory  (-> (apply dissoc params (url/read-keys from params))
+                             (merge (select-keys live
+                                                 (filter url/query-key?
+                                                         (keys live)))))]
+             (assoc s
+                    :params     (-> (apply dissoc memory :from
+                                           (url/read-keys mode memory))
+                                    (merge (query/params mode held))
+                                    (assoc :mode mode))
+                    :tokens     (own-rows (query/form-rows
+                                           (when (= "extended" mode) held)))
+                    :switch     {:loss (query/loss mode source) :unread #{}}
+                    :remembered source
+                    :projected  held)))))
+
 (defn handle!
   "Apply an `action` to the state, using `data` (the Replicant dispatch
   data) for the key a token was pressed with.
@@ -543,9 +577,9 @@
   `:move-cursor` answers a key pressed on a token, `:leave-concordance`
   closes the panel once focus has gone elsewhere, and `:close` dismisses
   it from its own button. `:toggle-context` expands a hit (fetching its
-  wider context) or collapses it. `:set-mode` records the query mode the
-  reader picked, which swaps the query example the placeholder shows and
-  the shape of the field, keeping what was typed in it.
+  wider context) or collapses it. `:set-mode` changes the query mode
+  the reader picked the form to, carrying the query across as far as
+  the new mode holds it and saying the rest (see `switch-mode!`).
   `:apply-view` submits the search again with a result control as it now
   stands, so choosing an order is asking for it. `:add-token` and
   `:remove-token` add a token to the extended search and take one away,
@@ -583,36 +617,7 @@
     ;; so leaving it keeps the query the state already holds, and
     ;; entering it with nothing asked yet seeds the tokens from the query
     :set-mode
-    ;; the form as it stands, not the served params: the query and the
-    ;; options the reader may have changed since the last search.
-    ;; TODO: what was built in the extended form is not carried out of
-    ;; it (the field shows the query typed before entering it), and CQP
-    ;; text entering it is seeded as words; both wait for the query to
-    ;; be one value that each form projects
-    (let [live (form-params (.-form (.-target (:replicant/dom-event data))))
-          from (url/mode (:params @state))]
-      (swap! state (fn [s]
-                     (let [q (:q live)
-                           ;; a line a served switch page came with is about
-                           ;; that switch, not this one
-                           ;; TODO: say what this switch could not keep, as
-                           ;; the server does (see
-                           ;; dk.cst.corpus-probe.query/arrived)
-                           s (cond-> (-> (assoc-in s [:params :mode] arg)
-                                         (dissoc :switch))
-                               q (assoc-in [:params :q] (carried-query arg q)))]
-                       ;; entering the mode with nothing asked yet leaves
-                       ;; tokens the handlers below can edit: the query as
-                       ;; the form the reader left read it, or one blank
-                       (if (and (= "extended" arg)
-                                (not (some url/asks? (:tokens s))))
-                         (assoc s :tokens
-                                (own-rows
-                                 (query/form-rows
-                                  (query/project
-                                   "extended"
-                                   (query/of (assoc live :mode from))))))
-                         s)))))
+    (switch-mode! (.-form (.-target (:replicant/dom-event data))) arg)
     :add-token        (add-token!)
     :remove-token     (remove-token! arg)
     :add-condition    (add-condition! arg)
