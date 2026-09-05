@@ -820,7 +820,7 @@
          (is (= [{:id 1 :conditions [{:id 1 :attr "lemma" :v "hund"}]}
                  {:id 2 :conditions [{:id 1}]}]
                 tokens))
-         (is (= {:loss [] :unread #{}} switch))
+         (is (= {:loss [] :unread #{} :from "simple"} switch))
          (is (= {:mode "extended" :t1.attr "lemma" :t1.v "hund"
                  :corpus "PROBE"}
                 cited))
@@ -855,6 +855,41 @@
          (is (= 0 (:size result)))
          (is (= "[lemma = \"hund\"]" (:q params)))
          (is (= [[:reading]] (:loss switch))))))))
+
+(deftest citation-redirect-test
+  (when-cwb
+   (let [pairs (fn [query-string]
+                 (into {}
+                       (map (fn [pair]
+                              (let [[k v] (str/split pair #"=" 2)]
+                                [(keyword k) (or v "")])))
+                       (remove str/blank? (str/split query-string #"&"))))
+         fetch (fn [query-string]
+                 (api/search-page ctx {:query-params (pairs query-string)
+                                       :query-string query-string
+                                       :headers      {}}))]
+     (testing "a document asked for by a query string that is not the
+               search's citation is sent to it"
+       (let [{:keys [status headers]}
+             (fetch "q=hund&match=&scope=chosen&corpus=PROBE&mode=simple")]
+         (is (= 303 status))
+         (is (= "/search?q=hund&corpus=PROBE#results"
+                (get headers "Location")))))
+     (testing "the citation itself, and the bare page, are answered"
+       (is (= 200 (:status (fetch "q=hund&corpus=PROBE"))))
+       (is (= 200 (:status (fetch "")))))
+     (testing "not a form submitted with its mode changed: what it holds
+               is not what it was given, and it runs nothing until sent"
+       (is (= 200 (:status (fetch (str "t1.v=hund&mode=simple&from=extended"
+                                      "&corpus=PROBE"))))))
+     (testing "nor the client's own request for the data, which cites for
+               itself"
+       (is (= 200 (:status (api/search-page
+                            ctx {:query-params {:q "hund" :match ""
+                                                :corpus "PROBE"}
+                                 :query-string "q=hund&match=&corpus=PROBE"
+                                 :headers      {"accept"
+                                                api/transit-type}}))))))))
 
 (deftest export-hrefs-test
   (testing "the view of the search as a file, one URL per format"

@@ -856,6 +856,47 @@
         (comp (remove #{:word}) (map name))
         attrs))
 
+(defn runs?
+  "True when the search `req` (see `search-request`) runs in `view`: it
+  carries a query, or it is the frequency view of the corpora whole,
+  which a blank query counts, unless the query is blank only because a
+  change of mode could not keep it (see dk.cst.corpus-probe.query/arrived),
+  when the form is shown and nothing runs."
+  [{:keys [params cqp known unknown]} view]
+  (boolean (or cqp
+               (and (= :frequencies view)
+                    (not (url/unread-query? params))
+                    (or (seq known) (seq unknown))))))
+
+(defn shown-params
+  "The params the search page for `req` (see `search-request`) shows in
+  its form and cites in its links, in `view`: what arrived, less the
+  form's own query keys, with the query the form holds in the form's own
+  spelling (see dk.cst.corpus-probe.query/params) over it, so that a
+  control the mode does not read keeps what it carried, as memory; the
+  corpora searched, or only those named when nothing runs (see `runs?`),
+  since a reader arriving at the form starts with none selected; the
+  grouping of the frequency view; and the CQP the query compiled to,
+  which no URL carries. The form's marker of the mode it was rendered in
+  is no param of the search."
+  [{:keys [params arrived selected named cqp] :as req} view]
+  (let [{:keys [form held]} arrived]
+    (-> (apply dissoc params :from (url/read-keys form params))
+        (merge (query/params form held))
+        (assoc :mode   form
+               :corpus (if (runs? req view) selected named)
+               :attr   (attr-param (:attr params))
+               :at     (position-param (:at params))
+               :cqp    cqp))))
+
+(defn citation
+  "The URL params the search page for `req` (see `search-request`) in
+  `view` cites (see `shown-params` and dk.cst.corpus-probe.url/canonical),
+  against the corpora `ctx` can read."
+  [ctx {:keys [corpora] :as req} view]
+  (url/canonical (shown-params req view)
+                 (set (readable-corpora ctx corpora))))
+
 (defn search-view-data
   "The data dk.cst.corpus-probe.views.app/search-view renders one
   search page for `request` against `ctx` from: the state of the form, the
@@ -890,8 +931,8 @@
   so it holds corpus overviews only: the full registry maps carry
   absolute server paths and stay here."
   [ctx request]
-  (let [{:keys [params arrived corpora named selected known unknown cqp
-                opts]}
+  (let [{:keys [params arrived corpora selected known unknown cqp opts]
+         :as   req}
         (search-request ctx request)
         {:keys [form held loss unread]} arrived
         lang    (request-language request)
@@ -932,16 +973,8 @@
                                           ;; (see `counts-page`)
                                           :incremental? (wants-transit?
                                                          request))))
-        ;; the form's marker of the mode it was rendered in is no param of
-        ;; the search; what its mode reads is the query it holds
-        params* (-> (apply dissoc params :from (url/read-keys form params))
-                    (merge (query/params form held))
-                    (assoc :mode   form
-                           :corpus (if outcome selected named)
-                           :attr   attr
-                           :at     at
-                           :cqp    cqp))
-        cited   (url/canonical params* (set (readable-corpora ctx corpora)))
+        params* (shown-params req view)
+        cited   (citation ctx req view)
         attrs   (attr-options! ctx known)
         ;; what a simple search may match, and a concordance sort by: the
         ;; positional attributes of the corpora it is over
@@ -953,7 +986,7 @@
       :filter-controls (filter-controls! ctx known params)
       :search-attrs    p-attrs
       :tokens          (query/form-rows (when (= "extended" form) held))
-      :switch          {:loss loss :unread unread}
+      :switch          {:loss loss :unread unread :from (:from arrived)}
       :value-lists     (value-lists! ctx known p-attrs)
       :params          params*
       ;; the same, frozen: the client's form moves on from `:params` at a
@@ -1046,19 +1079,35 @@
   is none, else the search guide (see dk.cst.corpus-probe.docs) where
   the results will be.
 
+  A document asked for by a query string that is not the search's
+  citation (see `citation`) is answered with a redirect to it, so that
+  the address bar of a submit without the client shows the one URL the
+  search has, as a routed submit does (see
+  dk.cst.corpus-probe.ui/form-query). Not for a form submitted with its
+  mode changed, whose citation is what the form holds rather than what
+  it was given, and which runs nothing until sent again.
+
   `:cited` goes to the masthead's navigation and not to the client, which
   does not read it."
   [ctx request]
-  (let [{:keys [lang view params result error cited]
-         :as   data} (search-view-data ctx request)
-        data (cond-> (assoc (dissoc data :cited) :route :search)
-               (not (or result error))
-               (assoc :guide (docs/hiccup "guide"
-                                          (request-languages request))))]
-    (page-response request
-                   (result-title (i18n/->ui lang) view params result)
-                   data
-                   cited)))
+  (let [req   (search-request ctx request)
+        cited (citation ctx req (view-param (get-in req [:params :view])))]
+    (if (and (not (wants-transit? request))
+             (nil? (get-in req [:arrived :from]))
+             (not= (or (:query-string request) "")
+                   (url/query-string cited)))
+      {:status  303
+       :headers {"Location" (url/results-href cited)}}
+      (let [{:keys [lang view params result error]
+             :as   data} (search-view-data ctx request)
+            data (cond-> (assoc (dissoc data :cited) :route :search)
+                   (not (or result error))
+                   (assoc :guide (docs/hiccup "guide"
+                                              (request-languages request))))]
+        (page-response request
+                       (result-title (i18n/->ui lang) view params result)
+                       data
+                       cited)))))
 
 (defn document-page
   "Handle a `request` for the document called `name` (see

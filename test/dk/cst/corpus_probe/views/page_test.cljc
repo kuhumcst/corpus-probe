@@ -303,6 +303,52 @@
         (is (some #{"eller"} da))
         (is (some #{"sætningsbegyndelse"} da))))))
 
+(deftest change-mode-button-test
+  (let [button (fn [state]
+                 (some #(when (and (vector? %) (= :button (first %))
+                                   (= "Change mode" (last %)))
+                          (second %))
+                       (deep (page/search-form state "/" nil))))]
+    (testing "without the client, a button submits the form without its
+              checks, so a reader can leave an empty form for another mode"
+      (let [attrs (button {:ui en :folders [] :params {}})]
+        (is (= "submit" (:type attrs)))
+        (is (true? (:formnovalidate attrs))))
+      (is (some #{:noscript} (deep (page/search-form {:ui en :folders []
+                                                      :params {}}
+                                                     "/" nil)))))
+    (testing "with it, none: the radios change the form themselves"
+      (is (nil? (button {:ui en :folders [] :params {} :client? true}))))))
+
+(deftest cqp-line-test
+  (testing "what the words run as, under the field, as its output"
+    (is (= [:p "As CQP" ": " [:output {:for "q"} [:code "[lemma = \"hund\"]"]]]
+           (page/cqp-line en "simple" {:q "hund" :in "lemma"})))
+    (is (= [:p "Som CQP" ": "
+            [:output {:for "q"} [:code "[word = \"(a|b)\"]"]]]
+           (page/cqp-line da "list" {:q "a\nb" :mode "list"}))))
+  (testing "the tokens too, which are no one field"
+    (is (= [:p "As CQP" ": " [:output [:code "[word = \"x\"] []"]]]
+           (page/cqp-line en "extended" {:mode "extended" :t1.v "x"
+                                         :t2.op "any"}))))
+  (testing "nothing under the CQP field, which holds it, and for no query"
+    (is (nil? (page/cqp-line en "cqp" {:q "[]" :mode "cqp"})))
+    (is (nil? (page/cqp-line en "simple" {:q "  "})))))
+
+(deftest not-cqp-test
+  (testing "a word under the CQP mode is refused as a corpus, which the
+            reader is told in their own terms, above CQP's own words"
+    (let [message "CQP Error:\n\tCorpus ``hund'' is undefined"
+          body    (page/error-body en {:type :cqp :message message} ["PROBE"])]
+      (is (page/not-cqp? message))
+      (is (some #{(str "This is not a CQP query. To search for a word, "
+                       "select Simple.")}
+                (deep body)))
+      (is (some #{[:samp message]} (deep body))))
+    (is (not (page/not-cqp? "CQP Error:\n\tSyntax error")))
+    (is (not (some #(and (string? %) (str/starts-with? % "This is not"))
+                   (deep (page/error-body en {:type :cqp :message "x"} [])))))))
+
 (deftest switch-notice-test
   (testing "nothing to say is nothing, the line's empty state"
     (is (nil? (page/switch-notice en "simple" [] #{}))))

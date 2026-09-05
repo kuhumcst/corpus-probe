@@ -922,6 +922,23 @@
    ;; (see `results-region`), and the three should be answered together.
    (when pending? [:p (i18n/tr ui "Loading …")])])
 
+(defn cqp-line
+  "The CQP the query of `params` compiles to (see
+  dk.cst.corpus-probe.query/of), under the field of `mode` in `ui`, so
+  that a reader sees what the words or the tokens run as, which is what
+  a switch to the CQP mode would hand them; nothing under the CQP field,
+  which holds it, and nothing for no query. An output of the field where
+  there is one field.
+
+  TODO: the query as last searched or switched, not as typed: the fields
+  are read at Search and at a change of mode, not at every key."
+  [ui mode params]
+  (when-let [cqp (and (not= "cqp" mode) (query/->cqp (query/of params)))]
+    [:p (i18n/tr ui "As CQP") ": "
+     (if (= "extended" mode)
+       [:output [:code cqp]]
+       [:output {:for "q"} [:code cqp]])]))
+
 (defn mode-label
   "What the query `mode` (see dk.cst.corpus-probe.url/modes) is called,
   in `ui`, as a word."
@@ -1096,7 +1113,8 @@
                          (i18n/tr ui "Add token")]
                         " "))
                 button])
-         [:p (query-field ui mode q (not= :frequencies view)) " " button])]
+         [:p (query-field ui mode q (not= :frequencies view)) " " button])
+       (cqp-line ui mode params)]
       ;; one group: everything here qualifies the query above it, and two
       ;; boxes said that twice. A row each, so the mode a reader is in
       ;; does not run into the options it decides the meaning of.
@@ -1120,6 +1138,14 @@
                       (if (= "cqp" m)
                         (layout/term ui :cqp false)
                         (mode-label ui m))]))]
+       ;; without the client a change of mode is a submit, which the field
+       ;; a fresh form requires would refuse; this button submits without
+       ;; that check, so a reader can leave an empty form for another mode.
+       ;; Inside <noscript> for the reason `apply-button` is
+       (when-not client?
+         [:noscript
+          [:p [:button {:type "submit" :formnovalidate true}
+               (i18n/tr ui "Change mode")]]])
        ;; what a change of mode could not keep (see `switch-notice`):
        ;; rendered always, so that the live region exists before it fills,
        ;; and above everything a switch changes
@@ -1358,11 +1384,19 @@
                                      "server log has the details."))
     nil))
 
+(defn not-cqp?
+  "True when CQP's error `message` is the one a word gets under the CQP
+  mode: a bare word is read as the name of a corpus, and refused as one
+  the registry lacks."
+  [message]
+  (boolean (re-find #"Corpus ``.*'' is undefined" (str message))))
+
 (defn error-body
   "The parts of an `error` under its heading in `ui`: the
   `corpora` it concerns, the explanation of a type that carries no message,
-  and cqp's own message verbatim, its `<--` position pointer included, as
-  the sample output of another program."
+  what a word under the CQP mode gets told (see `not-cqp?`), and cqp's own
+  message verbatim, its `<--` position pointer included, as the sample
+  output of another program."
   [ui {:keys [type message]} corpora]
   (list
    (when (seq corpora)
@@ -1370,6 +1404,9 @@
       (interpose ", " (map (fn [c] [:code c]) corpora))])
    (when-let [explanation (error-explanation ui type)]
      [:p explanation])
+   (when (not-cqp? message)
+     [:p (i18n/tr ui (str "This is not a CQP query. To search for a word, "
+                          "select Simple."))])
    ;; the stylesheet scrolls this rather than letting cqp's column-aligned
    ;; pointer reflow, and a scroll container a keyboard cannot reach is
    ;; unreadable in the browsers that do not focus scrollers themselves

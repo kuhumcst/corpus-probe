@@ -619,10 +619,11 @@
 (defn arrived
   "What the search `params` of a submitted form ask, once a change of its
   mode radio is allowed for: the `:form` shown, which is the ticked mode
-  (see dk.cst.corpus-probe.url/mode), the query `:held` by that form
-  (see `project`), the `:query` that runs, what the form could not keep
-  as `:loss` items (see `loss`) and, for a hand-written URL, the
-  `:unread` keys it carried (see dk.cst.corpus-probe.url/unread).
+  (see dk.cst.corpus-probe.url/mode), the mode it came `:from` when that
+  is another, the query `:held` by that form (see `project`), the
+  `:query` that runs, what the form could not keep as `:loss` items (see
+  `loss`) and, for a hand-written URL, the `:unread` keys it carried
+  (see dk.cst.corpus-probe.url/unread).
 
   A form whose mode radio was changed submits the old mode's field under
   the new mode's name, and names the old mode in `from`. The ticked mode
@@ -659,6 +660,7 @@
         held   (if (contains? #{:in :out} switch) (project form other) own)
         lost?  (some (complement (comp reading-items first)) loss)]
     {:form   form
+     :from   from
      :held   held
      :query  (when-not lost? held)
      :loss   loss

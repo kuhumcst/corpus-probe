@@ -520,6 +520,10 @@ msgid "Loading …"
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/page.cljc
+msgid "As CQP"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/page.cljc
 msgid "List"
 msgstr ""
 
@@ -609,6 +613,10 @@ msgstr ""
 
 #: src/dk/cst/corpus_probe/views/page.cljc
 msgid "Query mode"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/page.cljc
+msgid "Change mode"
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/page.cljc
@@ -727,6 +735,10 @@ msgstr ""
 
 #: src/dk/cst/corpus_probe/views/page.cljc
 msgid "The search failed on the server. The server log has the details."
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/page.cljc
+msgid "This is not a CQP query. To search for a word, select Simple."
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/page.cljc

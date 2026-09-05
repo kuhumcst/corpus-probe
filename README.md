@@ -106,10 +106,16 @@ not read. With the client, the form changes at the click on the radio,
 without a round trip, and switching away and back loses nothing while
 nothing was edited in between: the query the last switch started from is
 remembered, and a form still holding what that switch handed it is read
-as the remembered query. A query kept within a unit of text carries the
-unit into CQP as `within s`, `within p` or `within text`, and each
-corpus renames the unit after its own attribute, or drops the clause
-where it marks no such unit, as it renames the sentence tags.
+as the remembered query. Without the client, a Change mode button
+submits the form without its checks, so an empty form can change mode
+too, and a submit whose query string is not the search's citation is
+redirected to it, so the address bar shows the one URL the search has.
+Under the field, a line shows the CQP the words or the tokens run as. A
+bare word sent as CQP is answered with what it is not, above CQP's own
+error. A query kept within a unit of text carries the unit into CQP as
+`within s`, `within p` or `within text`, and each corpus renames the
+unit after its own attribute, or drops the clause where it marks no
+such unit, as it renames the sentence tags.
 
 ### Documents
 

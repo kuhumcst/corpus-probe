@@ -587,3 +587,12 @@ msgstr "søgeudtrykket"
 
 msgid "the tokens"
 msgstr "tokens"
+
+msgid "Change mode"
+msgstr "Skift søgetype"
+
+msgid "As CQP"
+msgstr "Som CQP"
+
+msgid "This is not a CQP query. To search for a word, select Simple."
+msgstr "Dette er ikke en CQP-forespørgsel. For at søge efter et ord skal du vælge Simpel."
