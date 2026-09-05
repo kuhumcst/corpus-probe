@@ -820,7 +820,7 @@
          (is (= [{:id 1 :conditions [{:id 1 :attr "lemma" :v "hund"}]}
                  {:id 2 :conditions [{:id 1}]}]
                 tokens))
-         (is (= {:loss [] :unread #{} :from "simple"} switch))
+         (is (= {:loss [] :unread #{}} switch))
          (is (= {:t1.attr "lemma" :t1.v "hund" :corpus "PROBE"} cited))
          (testing "with the field it came from kept as memory, uncited"
            (is (= "hund" (:q params))))))

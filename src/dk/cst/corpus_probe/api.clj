@@ -719,15 +719,15 @@
   corpora, the corpus names `named` in the params, the names `selected`
   to search, those split into the `known` and the `unknown` (see
   `split-known`), what `arrived` with the form, a change of its mode
-  allowed for (see dk.cst.corpus-probe.query/arrived), the `query` that
-  runs, the CQP it compiles to (see dk.cst.corpus-probe.query/->cqp) and
-  the `opts` every search of it
-  takes: its metadata :filter (see `filter-params`) and the :patterns
-  beside it (see `pattern-params`), the unit of text it is kept :within
-  (see dk.cst.corpus-probe.query/within), the :subset of its hits kept
-  (see `subset-param`) and the word its hits are :near (see
-  `near-param`). A request naming no corpus searches every readable one
-  (see `selected-corpora`).
+  allowed for (see dk.cst.corpus-probe.query/arrived), the `cqp` the
+  query that runs compiles to (see dk.cst.corpus-probe.query/->cqp) and
+  the `opts` every search of it takes: its metadata :filter (see
+  `filter-params`) and the :patterns beside it (see `pattern-params`),
+  the unit of text it is kept :within (see
+  dk.cst.corpus-probe.query/within), the :subset of its hits kept (see
+  `subset-param`) and the word its hits are :near (see `near-param`). A
+  request naming no corpus searches every readable one (see
+  `selected-corpora`).
 
   Every handler that answers a search starts from this."
   [ctx request]
@@ -739,7 +739,6 @@
         [known unknown] (split-known corpora selected)]
     {:params   params
      :arrived  arrived
-     :query    query
      :corpora  corpora
      :named    (url/corpora-param (:corpus params))
      :selected selected
@@ -916,8 +915,7 @@
   no corpus selected, while a URL naming no corpus still searches every
   readable one and shows them all. `:asked` is the same map for the
   result to read, which the client's form leaves behind at a change of
-  mode. The
-  tokens of the extended form are `:tokens` (see
+  mode. The tokens of the extended form are `:tokens` (see
   dk.cst.corpus-probe.query/form-rows), the values its fields suggest
   `:value-lists` (see `value-lists!`), and what a change of mode could
   not keep is `:switch`, its `:loss` and the `:unread` params, for the
@@ -930,7 +928,7 @@
   (let [{:keys [params arrived corpora selected known unknown cqp opts]
          :as   req}
         (search-request ctx request)
-        {:keys [form held loss unread]} arrived
+        {:keys [form held]} arrived
         lang    (request-language request)
         view    (view-param (:view params))
         attr    (attr-param (:attr params))
@@ -939,12 +937,7 @@
         page-n  (page-param (:page params))
         freq?   (= :frequencies view)
         outcome (cond
-                  ;; a blank query counts every token of the corpora, but
-                  ;; not one blank only because the mode was changed under
-                  ;; a query the new mode could not keep whole: that request
-                  ;; shows the form and searches nothing (see `arrived`)
-                  (and freq? (or cqp (and (not (url/unread-query? params))
-                                          (or (seq known) (seq unknown)))))
+                  (and freq? (runs? req view))
                   (-> (frequency-outcome! ctx known unknown cqp attr
                                           (assoc opts
                                                  :at   at
@@ -982,7 +975,7 @@
       :filter-controls (filter-controls! ctx known params)
       :search-attrs    p-attrs
       :tokens          (query/form-rows (when (= "extended" form) held))
-      :switch          {:loss loss :unread unread :from (:from arrived)}
+      :switch          (select-keys arrived [:loss :unread])
       :value-lists     (value-lists! ctx known p-attrs)
       :params          params*
       ;; the same, frozen: the client's form moves on from `:params` at a
@@ -1226,9 +1219,8 @@
   400 without known corpora or a known format, or when no corpus could
   be counted."
   [ctx request format]
-  (let [{:keys [params known cqp opts]} (search-request ctx request)]
-    (if-not (and (seq known) (export/formats format)
-                 (not (and (nil? cqp) (url/unread-query? params))))
+  (let [{:keys [params known cqp opts] :as req} (search-request ctx request)]
+    (if-not (and (seq known) (export/formats format) (runs? req :frequencies))
       {:status 400 :body "bad request"}
       (let [table (frequency/frequency-table!
                    ctx known (or cqp "") (attr-param (:attr params))

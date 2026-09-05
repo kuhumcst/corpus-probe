@@ -32,7 +32,7 @@
   is called, in `ui`; a mode naming a positional attribute (see
   dk.cst.corpus-probe.commands/sort-attr) is the match by that attribute.
 
-  Naming them here rather than in the query namespace keeps the CQP
+  Naming them here rather than in the commands namespace keeps the CQP
   command table free of anything the interface decides."
   [ui value]
   (case value
@@ -542,37 +542,34 @@
     "list" (i18n/tr ui "one word per line")
     (i18n/tr ui "one word, or several words in order")))
 
-(defn list-words
-  "The words of the list `q` a list-mode search asked for, as
-  dk.cst.corpus-probe.query/of reads them: one per line, or several to
-  a line."
-  [q]
-  (remove str/blank? (str/split (str q) #"\s+")))
-
 (defn query-phrase
-  "The query of `params` in words for a title, in `ui`: the query as
-  typed, or, for a list, how many words it holds, a title being one
-  line and a list not, or, for an extended search, the CQP its tokens
-  compile to (see dk.cst.corpus-probe.query/->cqp), which is what the
-  CQP mode shows too."
-  [ui {:keys [q list cqp] :as params}]
-  (case (url/mode params)
-    "list"     (let [n (count (list-words list))]
-                 (str n " " (i18n/trn ui "word" "words" n)))
-    "extended" (query/->cqp (query/of params))
-    "cqp"      cqp
-    q))
+  "The query of `params` in words for a title, in `ui`: the text as
+  typed, or, for a list, how many words it holds (see
+  dk.cst.corpus-probe.query/words), a title being one line and a list
+  not, or, for an extended search, the CQP its tokens compile to (see
+  dk.cst.corpus-probe.query/->cqp), which is what the CQP mode shows
+  too."
+  [ui params]
+  (let [mode (url/mode params)
+        text (get params (url/field mode))]
+    (case mode
+      "list"     (let [n (count (query/words text))]
+                   (str n " " (i18n/trn ui "word" "words" n)))
+      "extended" (query/->cqp (query/of params))
+      text)))
 
 (defn one-line
   "The query `q` on one line: each line break, with the space around it,
   as one space, and none at either end. What a search box holds, since
   it cannot hold a line break and drops one rather than keep it: a list
-  typed one word per line and submitted under another mode arrives with
-  its line breaks."
+  typed one word per line and submitted under the CQP radio is read as
+  CQP as typed, line breaks and all (see
+  dk.cst.corpus-probe.query/arrived), where the words of a simple search
+  are spelt again by their printer."
   [q]
   ;; TODO: the citation of such a search still carries the line breaks,
-  ;; url/canonical keeping q as it arrived, while the box resubmits it
-  ;; with spaces; the printer of the query value will cite the words
+  ;; url/canonical keeping the CQP as it arrived, while the box resubmits
+  ;; it with spaces
   (str/trim (str/replace (str q) #"\s*[\r\n]+\s*" " ")))
 
 (defn query-field
@@ -956,12 +953,11 @@
   [ui mode params tokens]
   (when-let [cqp (and (not= "cqp" mode)
                       (query/->cqp
-                       (query/of
-                        (if (= "extended" mode)
-                          (merge (apply dissoc params
-                                        (filter url/token-key? (keys params)))
-                                 (url/rows->params tokens))
-                          params))))]
+                       (query/of (if (= "extended" mode)
+                                   ;; the tokens as the form holds them,
+                                   ;; not as the params say
+                                   (assoc (url/rows->params tokens) :mode mode)
+                                   params))))]
     [:p (i18n/tr ui "As CQP") ": "
      (if (= "extended" mode)
        [:output [:code cqp]]
@@ -1017,15 +1013,17 @@
   the query, the list, the CQP, the tokens, or the option's own label;
   nil for a key with no name."
   [ui k]
-  (cond
-    (= :q k)           (i18n/tr ui "the query")
-    (= :list k)        (i18n/tr ui "the list")
-    (= :cqp k)         (i18n/tr ui "the CQP query")
-    (url/token-key? k) (i18n/tr ui "the tokens")
-    (= :in k)          (i18n/tr ui "attribute")
-    (= :match k)       (i18n/tr ui "match")
-    (= :ci k)          (i18n/tr ui "ignore case")
-    (= :within k)      (i18n/tr ui "within")))
+  (if (url/token-key? k)
+    (i18n/tr ui "the tokens")
+    (case k
+      :q      (i18n/tr ui "the query")
+      :list   (i18n/tr ui "the list")
+      :cqp    (i18n/tr ui "the CQP query")
+      :in     (i18n/tr ui "attribute")
+      :match  (i18n/tr ui "match")
+      :ci     (i18n/tr ui "ignore case")
+      :within (i18n/tr ui "within")
+      nil)))
 
 (defn switch-notice
   "What a change of the query mode to `form` could not keep, in `ui`,
@@ -1256,12 +1254,12 @@
   the code it is, and so an extended search, as the CQP it compiles to
   (see `query-phrase`), a list as how many words it holds, and a simple
   search quoted, being a word spoken of rather than used."
-  [ui {:keys [q cqp] :as params}]
-  (case (url/mode params)
-    "cqp"      [:code cqp]
-    "extended" [:code (query-phrase ui params)]
-    "list"     (query-phrase ui params)
-    [:q q]))
+  [ui params]
+  (let [phrase (query-phrase ui params)]
+    (case (url/mode params)
+      ("cqp" "extended") [:code phrase]
+      "list"             phrase
+      [:q phrase])))
 
 (defn asked?
   "True when the search `params` ask for anything (see

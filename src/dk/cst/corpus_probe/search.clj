@@ -1,8 +1,8 @@
 (ns dk.cst.corpus-probe.search
   "High-level search operations: one function call in, plain data out.
 
-  Composes query generation (dk.cst.corpus-probe.query), the child-process
-  driver (dk.cst.corpus-probe.cqp) and the output parsers
+  Composes command generation (dk.cst.corpus-probe.commands), the
+  child-process driver (dk.cst.corpus-probe.cqp) and the output parsers
   (dk.cst.corpus-probe.parse) into complete round trips: a KWIC page or a
   match count for one corpus, and a concordance over several. Breakdowns
   of those matches are dk.cst.corpus-probe.frequency, composed on the

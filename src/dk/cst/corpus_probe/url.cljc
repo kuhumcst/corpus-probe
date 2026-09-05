@@ -376,10 +376,9 @@
   the first of the `modes`."
   [params]
   (let [m (:mode params)]
-    (cond
-      (contains? fields m) m
-      (typed params)       (typed params)
-      :else                (first modes))))
+    (if (contains? fields m)
+      m
+      (or (typed params) (first modes)))))
 
 (defn query-key?
   "True when param key `k` says what was asked: the mode, a key some mode
@@ -402,11 +401,11 @@
                       (and (contains? own ::tokens) (token-key? k)))))))
 
 (defn read-keys
-  "The query params among `params` that the form of `mode` reads (see
+  "The query params among `params` that the form of mode `m` reads (see
   `reads?`), as keys, the mode itself aside: what a form holds of a
   query, and so what its query replaces when it changes."
-  [mode params]
-  (filter #(and (query-key? %) (not= :mode %) (reads? mode %))
+  [m params]
+  (filter #(and (query-key? %) (not= :mode %) (reads? m %))
           (keys params)))
 
 (defn unread
@@ -422,12 +421,9 @@
          (keys params))))
 
 (defn without-unread
-  "`params` less what their mode, or the mode `m` given, does not read
-  (see `unread`)."
-  ([params]
-   (without-unread params (mode params)))
-  ([params m]
-   (apply dissoc params (unread params m))))
+  "`params` less what the mode `m` does not read (see `unread`)."
+  [params m]
+  (apply dissoc params (unread params m)))
 
 (defn unread-query?
   "True when `params` carry a query their mode does not read (see
@@ -462,14 +458,14 @@
    ;; and no URL carries: what the trimmed params say once it is gone is
    ;; the field kept, so a second pass reads the same
    (let [m (mode params)]
-     (->> (with-corpora params all)
-          (keep (fn [[k v]]
-                  (let [v (present v)]
-                    (when (and (known? k) v (not= v (default k)))
-                      [k v]))))
-          (into {})
-          (without-orphans)
-          (#(without-unread % m))))))
+     (-> (into {}
+               (keep (fn [[k v]]
+                       (let [v (present v)]
+                         (when (and (known? k) v (not= v (default k)))
+                           [k v]))))
+               (with-corpora params all))
+         (without-orphans)
+         (without-unread m)))))
 
 (defn pairs
   "Canonical `params` as [name value] string pairs in `param-order`, a

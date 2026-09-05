@@ -629,11 +629,6 @@
   element alone."
   [data [action arg]]
   (case action
-    ;; the field changes shape between the modes (a list is a text
-    ;; area), so what was typed is carried into the new element rather
-    ;; than left behind in the old one; the extended mode has no field,
-    ;; so leaving it keeps the query the state already holds, and
-    ;; entering it with nothing asked yet seeds the tokens from the query
     :set-mode
     (switch-mode! (.-form (.-target (:replicant/dom-event data))) arg)
     :add-token        (add-token!)

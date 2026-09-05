@@ -237,13 +237,14 @@
   :attr (a keyword; word unless the name is a plausible attribute name,
   since it is spliced into the query), its :op (one of
   dk.cst.corpus-probe.url/operators, equality otherwise), its :value as
-  typed and :ci? for its ignore-case box. Its :join is its token's to
-  read (see `token-params`)."
-  [{:keys [attr op v ci]}]
+  typed, :ci? for its ignore-case box and its :join as typed, which
+  `joined` reads by its place among its token's conditions."
+  [{:keys [attr op v ci join]}]
   {:attr  (keyword (if (attribute-name? (str attr)) attr "word"))
    :op    (if (some #{op} url/operators) op "is")
    :value (str v)
-   :ci?   (some? ci)})
+   :ci?   (some? ci)
+   :join  join})
 
 (defn joined
   "`conditions` (see `condition-params`) with the :join of each after the
@@ -274,9 +275,7 @@
               (map (fn [{:keys [conditions start end] lo :min hi :max}]
                      (let [lo (repeat-param lo 1)]
                        {:conditions (joined
-                                     (map (fn [{:keys [join] :as row}]
-                                            (assoc (condition-params row)
-                                                   :join join))
+                                     (map condition-params
                                           (filter url/condition-asks?
                                                   conditions)))
                         :min        lo
@@ -300,6 +299,14 @@
   simple search or the alternatives of a list are."
   [conditions]
   {:conditions (vec conditions) :min 1 :max 1 :start? false :end? false})
+
+(defn list-token
+  "The one token a list is (see `list-token?`): `conditions` as
+  alternatives of one another, each once, every one after the first
+  joined by or."
+  [conditions]
+  (token (map-indexed (fn [i c] (cond-> c (pos? i) (assoc :join "or")))
+                      (distinct conditions))))
 
 (defn words
   "The words of `q`, whitespace-separated as a search box or a list holds
@@ -333,11 +340,7 @@
       "cqp"      (when-not (str/blank? text) {:cqp text})
       "extended" (tokens (token-params params))
       "list"     (tokens (when (seq words)
-                           [(token (map-indexed
-                                    (fn [i word]
-                                      (cond-> (condition params word)
-                                        (pos? i) (assoc :join "or")))
-                                    (distinct words)))]))
+                           [(list-token (map #(condition params %) words))]))
       (tokens (map #(token [(condition params %)]) words)))))
 
 (defn ->cqp
@@ -407,10 +410,10 @@
 (defn word-params
   "The params of the words of `query` as a simple search or a list
   spells them, by `mode`: the values of its tokens in order, or of its
-  one token's alternatives, in q, one line each for a list, with the
-  first condition's attribute, operator and case flag as the options
-  every word shares (see `condition`). For a query the form holds (see
-  `project`)."
+  one token's alternatives, in the mode's field, one line each for a
+  list, with the first condition's attribute, operator and case flag as
+  the options every word shares (see `condition`). For a query the form
+  holds (see `project`)."
   [mode {:keys [tokens within]}]
   (let [[attr op ci?] (literal-shape (first (:conditions (first tokens))))
         list?         (= "list" mode)
@@ -531,12 +534,12 @@
       (nil? query) []
       (= "cqp" mode) []
       (= "extended" mode)
-      (cond
-        cqp [[:cqp cqp]]
-        :else (into [] (keep (fn [{:keys [conditions]}]
-                               (when (> (count conditions) max-alternatives)
-                                 [:list (count conditions)])))
-                    tokens))
+      (if cqp
+        [[:cqp cqp]]
+        (into [] (keep (fn [{:keys [conditions]}]
+                         (when (> (count conditions) max-alternatives)
+                           [:list (count conditions)])))
+              tokens))
       cqp [[:reading]]
       (list-token? tokens)
       (if (and (= "simple" mode) (next (:conditions (first tokens))))
@@ -547,11 +550,6 @@
             (mapcat (fn [i token] (token-loss (shape tokens) i token))
                     (range 1 (inc (count tokens)))
                     tokens)))))
-
-(defn fits?
-  "True when the form of `mode` holds `query` whole (see `loss`)."
-  [mode query]
-  (empty? (loss mode query)))
 
 (defn carried
   "The words of `tokens` a simple search or a list carries (see `loss`):
@@ -572,23 +570,17 @@
   and starts blank, nil; the simple form and the list form hold CQP as
   its words, and of tokens the words they carry (see `carried`), in
   order or as alternatives, matched as the first of them is (see
-  `shape`). Nil when nothing is carried.
-
-  TODO: a unit named in the CQP is CWB's name for it, which a corpus
-  naming it otherwise must rename when the query runs, as it renames
-  the sentence tags."
-  [mode {:keys [cqp tokens within] :as query}]
+  `shape`). Nil when nothing is carried."
+  [mode {:keys [cqp tokens] :as query}]
   (cond
     (nil? query) nil
     (= "cqp" mode)
     (if cqp
       query
       {:cqp (str (->cqp query)
-                 (some->> (dk.cst.corpus-probe.query/within query)
-                          unit-names
-                          (str " within ")))})
+                 (some->> (within query) unit-names (str " within ")))})
     (= "extended" mode)
-    (when (fits? mode query) query)
+    (when (empty? (loss mode query)) query)
     cqp
     (of {(url/field mode) cqp})
     :else
@@ -597,12 +589,9 @@
                              (carried tokens))]
       (when (seq conditions)
         (if (= "list" mode)
-          {:tokens [(token (map-indexed
-                            (fn [i c] (cond-> c (pos? i) (assoc :join "or")))
-                            (distinct conditions)))]
-           :within :sentence}
+          {:tokens [(list-token conditions)] :within :sentence}
           {:tokens (mapv #(token [%]) conditions)
-           :within within})))))
+           :within (:within query)})))))
 
 (defn form-rows
   "The rows of the extended form holding `query` (see `project`): its
@@ -648,7 +637,7 @@
   (let [form   (url/mode params)
         own    (of params)
         origin (url/typed params)
-        from   (when (and origin (not= origin form)) origin)
+        from   (when (not= origin form) origin)
         switch (cond
                  (or (nil? from) own)  nil
                  (= "extended" form)   :in

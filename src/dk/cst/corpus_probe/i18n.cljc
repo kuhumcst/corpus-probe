@@ -83,7 +83,7 @@
   ([ui s]
    (get (:table ui) s s))
   ([ui s values]
-   (fill (get (:table ui) s s) values)))
+   (fill (tr ui s) values)))
 
 (defn trx
   "The translation of English UI string `s` in the disambiguating
@@ -118,8 +118,7 @@
    (let [[one many] (get (:table ui) [s1 s2] [s1 s2])]
      (if (= 1 n) one many)))
   ([ui s1 s2 n values]
-   (let [[one many] (get (:table ui) [s1 s2] [s1 s2])]
-     (fill (if (= 1 n) one many) values))))
+   (fill (trn ui s1 s2 n) values)))
 
 (def number-formats
   "How each language writes a number: its thousands and decimal
