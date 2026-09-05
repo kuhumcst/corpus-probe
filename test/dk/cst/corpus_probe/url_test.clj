@@ -267,6 +267,16 @@
                            :t2.op "any" :t2.min "1" :t2.max "3"
                            :t3.attr "lemma" :t3.op "prefix" :t3.v ""
                            :t3.ci "on"}))))
+  (testing "the rows print as the params the form submits, and read back
+            as themselves"
+    (let [rows [{:id 1 :conditions [{:id 1 :v "a"}
+                                    {:id 2 :v "c" :join "or" :attr "pos"}]}
+                {:id 2 :max "2" :start "on" :conditions [{:id 1 :op "any"}]}]]
+      (is (= {:t1.v "a" :t1.2.v "c" :t1.2.join "or" :t1.2.attr "pos"
+              :t2.max "2" :t2.start "on" :t2.op "any"}
+             (url/rows->params rows)))
+      (is (= rows (url/form-tokens (url/token-rows (url/rows->params rows)))))
+      (is (= {} (url/rows->params [])))))
   (testing "the defaults are the compiler's"
     (is (= "[word = \"x\"]"
            (query/extended->cqp

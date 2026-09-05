@@ -522,6 +522,23 @@
     (let [c (min k (count (get-in @state path)))]
       (focus-field! (url/token-key i c (if (= 1 c) :attr :join))))))
 
+(defn control-value
+  "What the form control an `event` came from now holds, as its param
+  would carry it: its value, or, for a checkbox, `on` when ticked and
+  nil when not, which is the absence the form submits."
+  [event]
+  (let [el (.-target event)]
+    (if (= "checkbox" (.-type el))
+      (when (.-checked el) "on")
+      (.-value el))))
+
+(defn with-field
+  "`m`, a token or a condition as the form holds it, with `field` set to
+  `value`, or without the field for a nil value: a checkbox unticked is
+  a field the form does not submit."
+  [m field value]
+  (if (some? value) (assoc m field value) (dissoc m field)))
+
 (defn switch-mode!
   "Change the query mode of `form` (the form element) to `mode`, holding
   in the new mode's form as much of the query the old one holds as it
@@ -585,10 +602,11 @@
   `:remove-token` add a token to the extended search and take one away,
   `:add-condition` and `:remove-condition` do the same to a token's
   conditions (see `add-token!` and the others, which also move focus),
-  and `:set-condition` records a condition's operator or attribute,
-  which decide which of its controls are live and which values its
-  field suggests; the values typed stay in the DOM, which a re-render
-  leaves alone, since tokens and conditions are keyed by their ids.
+  `:set-condition` and `:set-token` record a condition's or a token's
+  field as the reader sets it, so the state holds the tokens as typed
+  and the CQP line under them follows (see
+  dk.cst.corpus-probe.views.page/cqp-line), a checkbox as its `on` or
+  nothing; `:set-query` records the query field likewise.
   `:toggle-corpora` records a corpus box or a whole folder being selected
   or cleared, and `:set-checkbox-state`, a render hook rather than an
   event, writes the states of a checkbox that no attribute carries: partly
@@ -622,13 +640,22 @@
     :remove-token     (remove-token! arg)
     :add-condition    (add-condition! arg)
     :remove-condition (let [[i id] arg] (remove-condition! i id))
+    :set-query
+    (let [value (.-value (.-target (:replicant/dom-event data)))]
+      (swap! state (fn [{:keys [params] :as s}]
+                     (assoc-in s [:params (url/field (url/mode params))]
+                               value))))
     :set-condition
     (let [[i id field] arg
-          value (.-value (.-target (:replicant/dom-event data)))]
+          value (control-value (:replicant/dom-event data))]
       (swap! state update-in [:tokens (dec i) :conditions]
              (fn [conditions]
-               (mapv #(cond-> % (= id (:id %)) (assoc field value))
+               (mapv #(if (= id (:id %)) (with-field % field value) %)
                      conditions))))
+    :set-token
+    (let [[i field] arg
+          value (control-value (:replicant/dom-event data))]
+      (swap! state update-in [:tokens (dec i)] with-field field value))
     :apply-view (apply-view!)
     :toggle-corpora (do (toggle-corpora! arg) (refresh-filters!))
     ;; what metadata a selection offers is the server's to say, so it is

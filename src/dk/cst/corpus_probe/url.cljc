@@ -228,6 +228,27 @@
   [rows]
   (numbered (map #(update % :conditions numbered :c) rows) :n))
 
+(defn rows->params
+  "The params of the extended form's `rows` (see `form-tokens`), as the
+  form would submit them, the inverse of `token-rows` for rows numbered
+  by their place: each condition's fields under its token's number and
+  its own, and the token's own fields (see `own-fields`) under its first
+  condition, present fields only."
+  [rows]
+  (into {}
+        (mapcat (fn [n {:keys [conditions] :as row}]
+                  (concat (for [[field v] (select-keys row own-fields)
+                                :when (some? v)]
+                            [(keyword (token-key n 1 field)) v])
+                          (mapcat (fn [c condition]
+                                    (for [[field v] (dissoc condition :id)
+                                          :when (some? v)]
+                                      [(keyword (token-key n c field)) v]))
+                                  (map inc (range))
+                                  conditions)))
+                (map inc (range))
+                rows)))
+
 (defn default
   "The value param key `k` has when a URL leaves it out (see `defaults`,
   and `token-defaults` for the field of a token); nil for a key that has

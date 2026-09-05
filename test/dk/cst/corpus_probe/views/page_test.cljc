@@ -225,6 +225,14 @@
                   tokens and conditions by a button, every one must be"
           (is (= [true true false true]
                  (required (assoc state :client? true)))))))
+    (testing "every control records itself, so the state holds the tokens
+              as typed"
+      (is (= {:input [:set-condition [1 1 :v]]} (:on (named html "t1.v"))))
+      (is (= {:change [:set-condition [1 1 :ci]]} (:on (named html "t1.ci"))))
+      (is (= {:change [:set-condition [1 2 :join]]}
+             (:on (named html "t1.2.join"))))
+      (is (= {:input [:set-token [2 :max]]} (:on (named html "t2.max"))))
+      (is (= {:change [:set-token [2 :start]]} (:on (named html "t2.start")))))
     (testing "an any-word token has nothing to say beyond its first operator"
       (is (:disabled (named html "t2.v")))
       (is (:disabled (named html "t2.attr")))
@@ -324,17 +332,21 @@
 (deftest cqp-line-test
   (testing "what the words run as, under the field, as its output"
     (is (= [:p "As CQP" ": " [:output {:for "q"} [:code "[lemma = \"hund\"]"]]]
-           (page/cqp-line en "simple" {:q "hund" :in "lemma"})))
+           (page/cqp-line en "simple" {:q "hund" :in "lemma"} nil)))
     (is (= [:p "Som CQP" ": "
             [:output {:for "q"} [:code "[word = \"(a|b)\"]"]]]
-           (page/cqp-line da "list" {:list "a\nb"}))))
-  (testing "the tokens too, which are no one field"
+           (page/cqp-line da "list" {:list "a\nb"} nil))))
+  (testing "the tokens too, which are no one field, as the form holds them
+            rather than as the params say"
     (is (= [:p "As CQP" ": " [:output [:code "[word = \"x\"] []"]]]
-           (page/cqp-line en "extended" {:mode "extended" :t1.v "x"
-                                         :t2.op "any"}))))
+           (page/cqp-line en "extended" {:mode "extended" :t1.v "y"}
+                          [{:id 1 :conditions [{:id 1 :v "x"}]}
+                           {:id 2 :conditions [{:id 1 :op "any"}]}]))))
   (testing "nothing under the CQP field, which holds it, and for no query"
-    (is (nil? (page/cqp-line en "cqp" {:cqp "[]"})))
-    (is (nil? (page/cqp-line en "simple" {:q "  "})))))
+    (is (nil? (page/cqp-line en "cqp" {:cqp "[]"} nil)))
+    (is (nil? (page/cqp-line en "simple" {:q "  "} nil)))
+    (is (nil? (page/cqp-line en "extended" {:mode "extended"}
+                             [{:id 1 :conditions [{:id 1}]}])))))
 
 (deftest not-cqp-test
   (testing "a word under the CQP mode is refused as a corpus, which the
@@ -1271,9 +1283,13 @@
                     :autocomplete "off"
                     :spellcheck   "false"
                     :required     true
+                    :on           {:input [:set-query]}
                     :type         "search"
                     :value        "hund"}]
-           (page/query-field en nil "hund" true))))
+           (page/query-field en nil "hund" true)))
+    (testing "the text is rendered as typed, so the render never moves it"
+      (is (= "hund "
+             (:value (second (page/query-field en nil "hund " true)))))))
   (testing "a list is a text area, its words its content, and required too"
     (let [[tag attrs text] (page/query-field en "list" "hund\nkat" true)]
       (is (= :textarea tag))

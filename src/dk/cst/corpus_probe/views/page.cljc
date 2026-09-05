@@ -583,7 +583,10 @@
   was typed in, and carrying the one id the client finds the field by.
   No visible label: a field with a search button beside it needs none
   to say what it is, so the name it keeps is the one only a screen
-  reader reads.
+  reader reads. Every key dispatches `:set-query`, so the state holds
+  the text as typed and the CQP line under the field follows it (see
+  `cqp-line`); the text is rendered as it is, a line break aside, so
+  that the render never moves what the reader is typing.
 
   Required when `required?`: a search of nothing is then reported by the
   browser before it is sent, rather than answered with the guide again.
@@ -596,12 +599,18 @@
                :placeholder  (query-example ui mode)
                :autocomplete "off"
                :spellcheck   "false"
-               :required     required?}]
+               :required     required?
+               :on           {:input [:set-query]}}
+        text  (str text)]
     (if (= mode "list")
       ;; the text is the element's content: a text area has no value
       ;; attribute for a document to carry it in
-      [:textarea (assoc attrs :rows 4) (or text "")]
-      [:input (assoc attrs :type "search" :value (one-line text))])))
+      [:textarea (assoc attrs :rows 4) text]
+      [:input (assoc attrs
+                     :type  "search"
+                     :value (if (re-find #"[\r\n]" text)
+                              (one-line text)
+                              text))])))
 
 (defn attribute-options
   "The options of a select over the positional `attrs` (attribute
@@ -666,9 +675,11 @@
   (see dk.cst.corpus-probe.url/token-key). The value is required when
   `required?`. Under `:any?` every control but that first operator is
   disabled: an any-word token has nothing else to say, and without the
-  client they are as the search was submitted. The client re-renders the
-  token when an operator or an attribute changes, the one to disable,
-  the other to switch the value list."
+  client they are as the search was submitted. Every control dispatches
+  `:set-condition` with its field, so the state holds the condition as
+  the reader has it: the operator and the attribute decide which
+  controls are live and which values the field suggests, and all of
+  them decide the CQP line under the tokens (see `cqp-line`)."
   [ui {:keys [i attrs value-lists any? removable?]} required? c
    {:keys [id attr op v ci join]}]
   (let [param  (fn [field] (url/token-key i c field))
@@ -680,7 +691,8 @@
      (when-not first?
        (list [:select {:name       (param :join)
                        :aria-label (i18n/tr ui "joined by")
-                       :disabled   dead?}
+                       :disabled   dead?
+                       :on         {:change [:set-condition [i id :join]]}}
               (for [j url/joins]
                 [:option {:value j :selected (= j (or join "and"))}
                  (case j "or" (i18n/tr ui "or") (i18n/tr ui "and"))])]
@@ -705,13 +717,15 @@
                       :autocomplete "off"
                       :spellcheck   "false"
                       :required     (and required? (not any?))
-                      :disabled     any?}
+                      :disabled     any?
+                      :on           {:input [:set-condition [i id :v]]}}
                (contains? value-lists attr*)
                (assoc :list (value-list-id attr*)))]
      " "
      [:label [:input {:type     "checkbox" :name (param :ci) :value "on"
                       :checked  (some? ci)
-                      :disabled any?}]
+                      :disabled any?
+                      :on       {:change [:set-condition [i id :ci]]}}]
       (i18n/tr ui "ignore case")]
      (when removable?
        (list " "
@@ -728,7 +742,9 @@
   number: its conditions as an ordered list, since each joins the ones
   before it, then the repeat as least and most, in a group named for
   what the pair is, whether it opens or closes a sentence, and, where
-  `client?`, buttons adding a condition and taking the token away.
+  `client?`, buttons adding a condition and taking the token away. The
+  repeat and the edges dispatch `:set-token` with their field, as the
+  conditions' controls do theirs.
 
   The first condition's value is required when `required?`; the others'
   only where the client runs, which is where a condition is added, so a
@@ -759,18 +775,22 @@
       [:span {:role "group" :aria-label (i18n/tr ui "repeat")}
        [:label (i18n/tr ui "repeat") " "
         [:input {:type "number" :name (param :min) :value (or lo "1")
-                 :min  0 :max 99}]]
+                 :min  0 :max 99
+                 :on   {:input [:set-token [i :min]]}}]]
        " "
        [:label (i18n/tr ui "to") " "
         [:input {:type "number" :name (param :max) :value (or hi "1")
-                 :min  0 :max 99}]]]
+                 :min  0 :max 99
+                 :on   {:input [:set-token [i :max]]}}]]]
       " "
       [:label [:input {:type    "checkbox" :name (param :start) :value "on"
-                       :checked (some? start)}]
+                       :checked (some? start)
+                       :on      {:change [:set-token [i :start]]}}]
        (i18n/tr ui "sentence start")]
       " "
       [:label [:input {:type    "checkbox" :name (param :end) :value "on"
-                       :checked (some? end)}]
+                       :checked (some? end)
+                       :on      {:change [:set-token [i :end]]}}]
        (i18n/tr ui "sentence end")]]
      ;; the token's own actions on a row of their own, so they stay together
      (when client?
@@ -926,16 +946,22 @@
 
 (defn cqp-line
   "The CQP the query of `params` compiles to (see
-  dk.cst.corpus-probe.query/of), under the field of `mode` in `ui`, so
-  that a reader sees what the words or the tokens run as, which is what
-  a switch to the CQP mode would hand them; nothing under the CQP field,
-  which holds it, and nothing for no query. An output of the field where
-  there is one field.
-
-  TODO: the query as last searched or switched, not as typed: the fields
-  are read at Search and at a change of mode, not at every key."
-  [ui mode params]
-  (when-let [cqp (and (not= "cqp" mode) (query/->cqp (query/of params)))]
+  dk.cst.corpus-probe.query/of), or of the `tokens` of the extended form
+  in `mode` (see dk.cst.corpus-probe.url/rows->params), under the field
+  in `ui`, so that a reader sees what the words or the tokens run as,
+  which is what a switch to the CQP mode would hand them, and as they
+  type, since every control records itself in the state; nothing under
+  the CQP field, which holds it, and nothing for no query. An output of
+  the field where there is one field."
+  [ui mode params tokens]
+  (when-let [cqp (and (not= "cqp" mode)
+                      (query/->cqp
+                       (query/of
+                        (if (= "extended" mode)
+                          (merge (apply dissoc params
+                                        (filter url/token-key? (keys params)))
+                                 (url/rows->params tokens))
+                          params))))]
     [:p (i18n/tr ui "As CQP") ": "
      (if (= "extended" mode)
        [:output [:code cqp]]
@@ -1119,7 +1145,7 @@
                         " "))
                 button])
          [:p (query-field ui mode text (not= :frequencies view)) " " button])
-       (cqp-line ui mode params)]
+       (cqp-line ui mode params tokens)]
       ;; one group: everything here qualifies the query above it, and two
       ;; boxes said that twice. A row each, so the mode a reader is in
       ;; does not run into the options it decides the meaning of.

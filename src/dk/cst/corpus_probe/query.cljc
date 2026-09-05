@@ -448,8 +448,10 @@
 
 (def max-alternatives
   "The most words a list is carried into the extended form as, one
-  condition each; a longer list is not (see `loss`).
-  TODO: a guess, to be set by the lists readers paste."
+  condition each: fifty, which is as many rows of five controls as one
+  token can show before the form is a page of its own, and more than a
+  reader builds by hand. A longer list is the list mode's, whose field
+  holds any number (see `loss`)."
   50)
 
 (defn list-token?
