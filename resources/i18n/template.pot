@@ -588,6 +588,14 @@ msgid "the query"
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/page.cljc
+msgid "the list"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/page.cljc
+msgid "the CQP query"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/page.cljc
 msgid "the tokens"
 msgstr ""
 

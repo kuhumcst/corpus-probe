@@ -665,7 +665,7 @@
   (when-cwb
    (cache/forget-counts!)
    (let [request {:headers      {"accept" "application/transit+json"}
-                  :query-params {:q "[]" :mode "cqp"}}
+                  :query-params {:cqp "[]"}}
          view    #(api/search-view-data ctx request)]
      (testing "a page the client renders arrives before the corpora past it
                are counted, linking onward on the hits it has"
@@ -759,7 +759,7 @@
 (deftest extended-mode-test
   (testing "the titles name the CQP the rows compiled to"
     (let [params {:mode "extended" :t1.attr "lemma" :t1.v "hund"
-                  :cqp "[lemma = \"hund\"]" :corpus ["PROBE"]}]
+                  :corpus ["PROBE"]}]
       (is (str/starts-with? (api/search-title en params {:size   5
                                                           :page   0
                                                           :counts [{:corpus "PROBE"
@@ -767,7 +767,7 @@
                             "[lemma = \"hund\"] · 5 hits"))
       (is (str/starts-with? (api/frequency-title en (assoc params :attr "word"))
                             "[lemma = \"hund\"]"))
-      (is (str/starts-with? (api/search-title en (dissoc params :cqp :t1.attr
+      (is (str/starts-with? (api/search-title en (dissoc params :t1.attr
                                                          :t1.v)
                                               nil)
                             "Search"))))
@@ -784,7 +784,7 @@
                                                      :t1.attr "lemma"
                                                      :t1.v    "hund"}})]
        (is (= 5 (:size result)))
-       (is (= "[lemma = \"hund\"]" (:cqp params)))
+       (is (= "[lemma = \"hund\"]" (query/->cqp (query/of params))))
        (is (= [{:id 1 :conditions [{:id 1 :attr "lemma" :v "hund"}]}
                {:id 2 :conditions [{:id 1}]}]
               tokens))
@@ -814,16 +814,14 @@
      (testing "a form submitted into the extended mode runs the words it
                was typed as, as tokens, and cites them so"
        (let [{:keys [result params tokens switch cited]}
-             (page {:q "hund" :in "lemma" :mode "extended" :from "simple"})]
+             (page {:q "hund" :in "lemma" :mode "extended"})]
          (is (= 5 (:size result)))
-         (is (= "[lemma = \"hund\"]" (:cqp params)))
+         (is (= "[lemma = \"hund\"]" (query/->cqp (query/of params))))
          (is (= [{:id 1 :conditions [{:id 1 :attr "lemma" :v "hund"}]}
                  {:id 2 :conditions [{:id 1}]}]
                 tokens))
          (is (= {:loss [] :unread #{} :from "simple"} switch))
-         (is (= {:mode "extended" :t1.attr "lemma" :t1.v "hund"
-                 :corpus "PROBE"}
-                cited))
+         (is (= {:t1.attr "lemma" :t1.v "hund" :corpus "PROBE"} cited))
          (testing "with the field it came from kept as memory, uncited"
            (is (= "hund" (:q params))))))
      (testing "a form submitted out of the extended mode with a part of the
@@ -831,7 +829,7 @@
                says what it dropped"
        (let [{:keys [result error params switch tokens]}
              (page {:t1.attr "lemma" :t1.v "hund" :t2.op "any" :t2.max "3"
-                    :mode "simple" :from "extended"})]
+                    :mode "simple"})]
          (is (nil? result))
          (is (nil? error))
          (is (= "hund" (:q params)))
@@ -841,17 +839,17 @@
          (testing "in the frequency view too"
            (is (nil? (:result (page {:t1.attr "lemma" :t1.v "hund"
                                      :t2.op "any" :mode "simple"
-                                     :from "extended"
                                      :view "frequencies"})))))))
      (testing "a form submitted out of the extended mode into CQP runs the
                tokens' CQP, kept within their unit"
        (let [{:keys [result params]}
-             (page {:t1.v "lille" :t2.v "hund" :mode "cqp" :from "extended"})]
-         (is (= "[word = \"lille\"] [word = \"hund\"] within s" (:q params)))
+             (page {:t1.v "lille" :t2.v "hund" :mode "cqp"})]
+         (is (= "[word = \"lille\"] [word = \"hund\"] within s"
+                (:cqp params)))
          (is (= 1 (:size result)))))
      (testing "CQP read as words runs the words and says so"
        (let [{:keys [result params switch]}
-             (page {:q "[lemma = \"hund\"]" :mode "simple" :from "cqp"})]
+             (page {:cqp "[lemma = \"hund\"]" :mode "simple"})]
          (is (= 0 (:size result)))
          (is (= "[lemma = \"hund\"]" (:q params)))
          (is (= [[:reading]] (:loss switch))))))))
@@ -880,8 +878,7 @@
        (is (= 200 (:status (fetch "")))))
      (testing "not a form submitted with its mode changed: what it holds
                is not what it was given, and it runs nothing until sent"
-       (is (= 200 (:status (fetch (str "t1.v=hund&mode=simple&from=extended"
-                                      "&corpus=PROBE"))))))
+       (is (= 200 (:status (fetch "t1.v=hund&mode=simple&corpus=PROBE")))))
      (testing "nor the client's own request for the data, which cites for
                itself"
        (is (= 200 (:status (api/search-page
@@ -947,11 +944,11 @@
 (deftest list-mode-test
   (testing "a list compiles to one token pattern"
     (is (= "[lemma = \"(hund|kat)\"]"
-           (query/->cqp (query/of {:q "hund\nkat" :mode "list" :in "lemma"})))))
+           (query/->cqp (query/of {:list "hund\nkat" :in "lemma"})))))
   (testing "a list is one token, so it is kept within nothing"
-    (is (nil? (query/within (query/of {:q "hund\nkat" :mode "list"})))))
+    (is (nil? (query/within (query/of {:list "hund\nkat"})))))
   (testing "a list is titled by its length, a title being one line"
-    (is (str/starts-with? (api/search-title en {:q "hund\nkat\n" :mode "list"})
+    (is (str/starts-with? (api/search-title en {:list "hund\nkat\n"})
                           "2 words"))))
 
 (deftest text-page-test

@@ -875,19 +875,17 @@
   spelling (see dk.cst.corpus-probe.query/params) over it, so that a
   control the mode does not read keeps what it carried, as memory; the
   corpora searched, or only those named when nothing runs (see `runs?`),
-  since a reader arriving at the form starts with none selected; the
-  grouping of the frequency view; and the CQP the query compiled to,
-  which no URL carries. The form's marker of the mode it was rendered in
-  is no param of the search."
-  [{:keys [params arrived selected named cqp] :as req} view]
+  since a reader arriving at the form starts with none selected; and the
+  grouping of the frequency view. The mode is the form's, which the
+  radios read and no URL carries."
+  [{:keys [params arrived selected named] :as req} view]
   (let [{:keys [form held]} arrived]
-    (-> (apply dissoc params :from (url/read-keys form params))
+    (-> (apply dissoc params (url/read-keys form params))
         (merge (query/params form held))
         (assoc :mode   form
                :corpus (if (runs? req view) selected named)
                :attr   (attr-param (:attr params))
-               :at     (position-param (:at params))
-               :cqp    cqp))))
+               :at     (position-param (:at params))))))
 
 (defn citation
   "The URL params the search page for `req` (see `search-request`) in
@@ -916,11 +914,9 @@
   memory. It names every corpus searched, or only what the URL named
   when nothing was searched: a reader arriving at the form starts with
   no corpus selected, while a URL naming no corpus still searches every
-  readable one and shows them all. It also carries `:cqp`, the CQP the
-  query compiled to, which the heading and the title of an extended
-  search show; no URL carries it, the URL rule not knowing it. `:asked`
-  is the same map for the result to read, which the client's form leaves
-  behind at a change of mode. The
+  readable one and shows them all. `:asked` is the same map for the
+  result to read, which the client's form leaves behind at a change of
+  mode. The
   tokens of the extended form are `:tokens` (see
   dk.cst.corpus-probe.query/form-rows), the values its fields suggest
   `:value-lists` (see `value-lists!`), and what a change of mode could
@@ -1495,7 +1491,7 @@
     (if-not cqp
       {:status 400 :body "bad request"}
       (let [page-n  (page-param (:page params))
-            params* (assoc params :corpus selected :cqp cqp)
+            params* (assoc params :corpus selected)
             counts  (-> (search/corpus-sizes!
                          ctx known cqp (search/deadline ctx)
                          (assoc opts :sample (sample-param (:sample params))))

@@ -95,27 +95,28 @@ one before the search is sent, as it reports an empty query.
 ### Changing the query mode
 
 A form whose mode radio is changed submits the old mode's field under
-the new mode, and names the old mode in a hidden field. The server reads
-the query as one value (`dk.cst.corpus-probe.query`), holds it in the
-new form as far as that form can, and runs it when the form holds it
-whole or reads it in another way. When a part of the query cannot be
-held, nothing runs: the form shows what it kept, and a status line under
-the modes says what it dropped, so the reader is told before the loss.
-The same line names the params of a hand-written URL that the mode does
-not read. With the client, the form changes at the click on the radio,
-without a round trip, and switching away and back loses nothing while
-nothing was edited in between: the query the last switch started from is
-remembered, and a form still holding what that switch handed it is read
-as the remembered query. Without the client, a Change mode button
-submits the form without its checks, so an empty form can change mode
-too, and a submit whose query string is not the search's citation is
-redirected to it, so the address bar shows the one URL the search has.
-Under the field, a line shows the CQP the words or the tokens run as. A
-bare word sent as CQP is answered with what it is not, above CQP's own
-error. A query kept within a unit of text carries the unit into CQP as
-`within s`, `within p` or `within text`, and each corpus renames the
-unit after its own attribute, or drops the clause where it marks no
-such unit, as it renames the sentence tags.
+the new mode's radio, and the field is named for the mode it was typed
+in. The server reads the query as one value (`dk.cst.corpus-
+probe.query`), holds it in the new form as far as that form can, and
+runs it when the form holds it whole or reads it in another way. When a
+part of the query cannot be held, nothing runs: the form shows what it
+kept, and a status line under the modes says what it dropped, so the
+reader is told before the loss. The same line names the params of a
+hand-written URL that the mode does not read. With the client, the form
+changes at the click on the radio, without a round trip, and switching
+away and back loses nothing while nothing was edited in between: the
+query the last switch started from is remembered, and a form still
+holding what that switch handed it is read as the remembered query.
+Without the client, a Change mode button submits the form without its
+checks, so an empty form can change mode too, and a submit whose query
+string is not the search's citation is redirected to it, so the address
+bar shows the one URL the search has. Under the field, a line shows the
+CQP the words or the tokens run as. A bare word sent as CQP is answered
+with what it is not, above CQP's own error. A query kept within a unit
+of text carries the unit into CQP as `within s`, `within p` or `within
+text`, and each corpus renames the unit after its own attribute, or
+drops the clause where it marks no such unit, as it renames the sentence
+tags.
 
 ### Documents
 
@@ -159,7 +160,10 @@ the entry links to its section.
 A result URL is a citation. One rule builds it on the server and on the
 client (`dk.cst.corpus-probe.url`). The URL names only the settings
 that differ from the defaults. A simple search of the word attribute,
-in corpus order, with five words of context, is `/search?q=x`. The
+in corpus order, with five words of context, is `/search?q=x`. No URL
+names a query mode: the query field says it, `q` for words in order,
+`list` for a list, `cqp` for CQP and the token fields for an extended
+search, and a URL carries only what that mode reads. The
 corpora are one comma-separated parameter. When each readable corpus is
 selected, the URL names no corpus, because that is the same search.
 The search page itself starts with no corpus selected. The reader

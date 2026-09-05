@@ -280,21 +280,22 @@
       (is (= 1 (count (filter #(and (vector? %) (= :fieldset.token (first %)))
                               (deep (page/search-form
                                      (dissoc state :tokens) "/" nil)))))))
-    (testing "the heading names the CQP the tokens compiled to"
+    (testing "the heading names the CQP the tokens compile to"
       (is (= [:code "[lemma = \"hund\"]"]
-             (page/query-mark en {:mode "extended" :cqp "[lemma = \"hund\"]"})))
+             (page/query-mark en {:mode "extended" :t1.attr "lemma"
+                                  :t1.v "hund"})))
       (is (= "6 hits for [lemma = \"hund\"]"
              (text (page/hits-heading en {:mode    "extended"
                                           :t1.attr "lemma"
-                                          :t1.v    "hund"
-                                          :cqp     "[lemma = \"hund\"]"}
+                                          :t1.v    "hund"}
                                       6))))
       (testing "and every token when no token asked for anything"
         (is (= "All tokens" (page/hits-heading en {:mode "extended"} 47)))
         (is (page/asked? {:q "hund"}))
         (is (not (page/asked? {:q "hund" :mode "extended"}))))
       (is (= "[lemma = \"hund\"]"
-             (page/query-phrase en {:mode "extended" :cqp "[lemma = \"hund\"]"}))))
+             (page/query-phrase en {:mode "extended" :t1.attr "lemma"
+                                    :t1.v "hund"}))))
     (testing "in Danish"
       (let [da (deep (page/search-form (assoc state :ui da) "/" nil))]
         (is (some #{"Udvidet"} da))
@@ -326,13 +327,13 @@
            (page/cqp-line en "simple" {:q "hund" :in "lemma"})))
     (is (= [:p "Som CQP" ": "
             [:output {:for "q"} [:code "[word = \"(a|b)\"]"]]]
-           (page/cqp-line da "list" {:q "a\nb" :mode "list"}))))
+           (page/cqp-line da "list" {:list "a\nb"}))))
   (testing "the tokens too, which are no one field"
     (is (= [:p "As CQP" ": " [:output [:code "[word = \"x\"] []"]]]
            (page/cqp-line en "extended" {:mode "extended" :t1.v "x"
                                          :t2.op "any"}))))
   (testing "nothing under the CQP field, which holds it, and for no query"
-    (is (nil? (page/cqp-line en "cqp" {:q "[]" :mode "cqp"})))
+    (is (nil? (page/cqp-line en "cqp" {:cqp "[]"})))
     (is (nil? (page/cqp-line en "simple" {:q "  "})))))
 
 (deftest not-cqp-test
@@ -1011,8 +1012,8 @@
            (text (page/hits-heading da {:q "hund"} 6)))))
   (testing "a CQP query is code, a list is its length, a word is quoted"
     (is (= [:code "[lemma = \"hund\"]"]
-           (page/query-mark en {:q "[lemma = \"hund\"]" :mode "cqp"})))
-    (is (= "2 words" (page/query-mark en {:q "hund\nkat" :mode "list"})))
+           (page/query-mark en {:cqp "[lemma = \"hund\"]"})))
+    (is (= "2 words" (page/query-mark en {:list "hund\nkat"})))
     (is (= [:q "hund"] (page/query-mark en {:q "hund" :mode "simple"}))))
   (testing "a blank query counts every token, which only a table asks for"
     (is (= "All tokens" (page/hits-heading en {:q ""} 47)))))
@@ -1276,7 +1277,8 @@
   (testing "a list is a text area, its words its content, and required too"
     (let [[tag attrs text] (page/query-field en "list" "hund\nkat" true)]
       (is (= :textarea tag))
-      (is (= "q" (:name attrs)))
+      (is (= "list" (:name attrs)))
+      (is (= "q" (:id attrs)))
       (is (= "one word per line" (:placeholder attrs)))
       (is (true? (:required attrs)))
       (is (= "hund\nkat" text)))
@@ -1292,27 +1294,27 @@
     (is (= "hund\r\nkat"
            (last (page/query-field en "list" "hund\r\nkat" true))))))
 
-(deftest from-input-test
-  (testing "the form names the mode it was rendered in, so a submit whose
-            radio was changed can read the query as it was typed"
-    (let [from (fn [params]
-                 (some #(and (map? %) (= "from" (:name %)) (:value %))
-                       (deep (page/search-form {:ui en :folders []
-                                                :params params}
-                                               "/" nil))))]
-      (is (= "simple" (from {})))
-      (is (= "simple" (from {:mode "nonesuch"})))
-      (is (= "list" (from {:mode "list" :q "a\nb"})))
-      (is (= "extended" (from {:mode "extended"})))
-      (is (= "cqp" (from {:mode "cqp"}))))))
+(deftest field-name-test
+  (testing "the field is named for its mode, so a submit says which mode
+            the text was typed in, whatever radio is ticked"
+    (let [field (fn [params]
+                  (some #(and (map? %) (= "q" (:id %)) (:name %))
+                        (deep (page/search-form {:ui en :folders []
+                                                 :params params}
+                                                "/" nil))))]
+      (is (= "q" (field {})))
+      (is (= "q" (field {:mode "nonesuch"})))
+      (is (= "list" (field {:mode "list" :list "a\nb"})))
+      (is (= "cqp" (field {:mode "cqp" :cqp "[]"})))
+      (is (nil? (field {:mode "extended"}))))))
 
 (deftest query-phrase-test
   (is (= "hund" (page/query-phrase en {:q "hund"})))
-  (is (= "2 words" (page/query-phrase en {:q "hund\n\nkat\n" :mode "list"})))
+  (is (= "2 words" (page/query-phrase en {:list "hund\n\nkat\n"})))
   (testing "a list counts its words however they are laid out"
     (is (= "3 words"
-           (page/query-phrase en {:q "lille hund\nkat" :mode "list"}))))
-  (is (= "1 ord" (page/query-phrase da {:q "hund" :mode "list"}))))
+           (page/query-phrase en {:list "lille hund\nkat"}))))
+  (is (= "1 ord" (page/query-phrase da {:list "hund"}))))
 
 (deftest sidebar-text-link-test
   (let [selected {:token {:word "hund"} :corpus "PROBE" :cpos 9 :matchend 9}]

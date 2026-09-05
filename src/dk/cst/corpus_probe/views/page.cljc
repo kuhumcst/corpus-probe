@@ -553,13 +553,14 @@
   "The query of `params` in words for a title, in `ui`: the query as
   typed, or, for a list, how many words it holds, a title being one
   line and a list not, or, for an extended search, the CQP its tokens
-  compiled to (its :cqp, see dk.cst.corpus-probe.api/search-view-data),
-  which is what CQP mode shows too."
-  [ui {:keys [q mode cqp]}]
-  (case mode
-    "list"     (let [n (count (list-words q))]
+  compile to (see dk.cst.corpus-probe.query/->cqp), which is what the
+  CQP mode shows too."
+  [ui {:keys [q list cqp] :as params}]
+  (case (url/mode params)
+    "list"     (let [n (count (list-words list))]
                  (str n " " (i18n/trn ui "word" "words" n)))
-    "extended" cqp
+    "extended" (query/->cqp (query/of params))
+    "cqp"      cqp
     q))
 
 (defn one-line
@@ -575,21 +576,22 @@
   (str/trim (str/replace (str q) #"\s*[\r\n]+\s*" " ")))
 
 (defn query-field
-  "The query field of the search form in `ui`, holding `q`: a search
-  box, on one line (see `one-line`), or, in list `mode`, a text area
-  taking one word per line. Both are named q, so either submits the
-  query, and both carry the one id the client finds the field by.
-  Neither has a visible label: a field with a search button beside it
-  needs none to say what it is, so the name it keeps is the one only a
-  screen reader reads.
+  "The query field of the search form in `ui`, holding the `text` of
+  `mode`: a search box, on one line (see `one-line`), or, in list mode,
+  a text area taking one word per line. Named for its mode (see
+  dk.cst.corpus-probe.url/field), so a submit says which mode the text
+  was typed in, and carrying the one id the client finds the field by.
+  No visible label: a field with a search button beside it needs none
+  to say what it is, so the name it keeps is the one only a screen
+  reader reads.
 
   Required when `required?`: a search of nothing is then reported by the
   browser before it is sent, rather than answered with the guide again.
   The caller says when a blank query means something (see
   `search-form`)."
-  [ui mode q required?]
+  [ui mode text required?]
   (let [attrs {:id           "q"
-               :name         "q"
+               :name         (name (get url/field mode :q))
                :aria-label   (i18n/tr ui "Query")
                :placeholder  (query-example ui mode)
                :autocomplete "off"
@@ -598,8 +600,8 @@
     (if (= mode "list")
       ;; the text is the element's content: a text area has no value
       ;; attribute for a document to carry it in
-      [:textarea (assoc attrs :rows 4) (or q "")]
-      [:input (assoc attrs :type "search" :value (one-line q))])))
+      [:textarea (assoc attrs :rows 4) (or text "")]
+      [:input (assoc attrs :type "search" :value (one-line text))])))
 
 (defn attribute-options
   "The options of a select over the positional `attrs` (attribute
@@ -986,11 +988,13 @@
 (defn param-label
   "What the query param `k` a URL carried is called in `ui`, for the
   sentence naming the ones the mode did not read (see `switch-notice`):
-  the query, the tokens, or the option's own label; nil for a key with
-  no name."
+  the query, the list, the CQP, the tokens, or the option's own label;
+  nil for a key with no name."
   [ui k]
   (cond
     (= :q k)           (i18n/tr ui "the query")
+    (= :list k)        (i18n/tr ui "the list")
+    (= :cqp k)         (i18n/tr ui "the CQP query")
     (url/token-key? k) (i18n/tr ui "the tokens")
     (= :in k)          (i18n/tr ui "attribute")
     (= :match k)       (i18n/tr ui "match")
@@ -1030,9 +1034,9 @@
   "The search form of `state`: over its `:folders` tree of corpus
   overviews, its metadata `:filter-controls` and the `:search-attrs` a
   simple search may match (see `attribute-control`), prefilled from its
-  `:params` (:corpus, a vector of selected names, :q :mode :in :ci
-  :match), submitted as GET to `action`, with the page's own `extra`
-  hidden inputs.
+  `:params` (:corpus, a vector of selected names, :mode, the field of
+  that mode, :in :ci :match :within), submitted as GET to `action`, with
+  the page's own `extra` hidden inputs.
 
   The query row comes first (see `query-field`), or the tokens of an
   extended search (see `token-fieldset`, over the `:tokens` and
@@ -1084,8 +1088,9 @@
            filters-pending?]
     :as state}
    action extra]
-  (let [{:keys [corpus q in ci match within]} params
+  (let [{:keys [corpus in ci match within]} params
         mode    (url/mode params)
+        text    (get params (url/field mode))
         ;; a control the mode does not read is disabled rather than taken
         ;; away: a reader who looks at CQP and comes back finds what they
         ;; had ticked still ticked, the form does not change height under
@@ -1113,7 +1118,7 @@
                          (i18n/tr ui "Add token")]
                         " "))
                 button])
-         [:p (query-field ui mode q (not= :frequencies view)) " " button])
+         [:p (query-field ui mode text (not= :frequencies view)) " " button])
        (cqp-line ui mode params)]
       ;; one group: everything here qualifies the query above it, and two
       ;; boxes said that twice. A row each, so the mode a reader is in
@@ -1169,10 +1174,6 @@
       ;; every corpus and submitting is indistinguishable from arriving
       ;; with no corpus named, which searches them all
       [:input {:type "hidden" :name "scope" :value "chosen"}]
-      ;; names the mode this form was rendered in, so that a submit whose
-      ;; radio was changed can read the query field as it was typed (see
-      ;; dk.cst.corpus-probe.query/arrived); no URL cites it
-      [:input {:type "hidden" :name "from" :value (url/mode params)}]
       (corpus-views/chooser ui folders
                             {:selected (set corpus)
                              :served   (set (or served-corpus corpus))
@@ -1226,13 +1227,13 @@
 
 (defn query-mark
   "The query of `params` as a heading names it, in `ui`: a CQP query as
-  the code it is, and so an extended search, as the CQP it compiled to
+  the code it is, and so an extended search, as the CQP it compiles to
   (see `query-phrase`), a list as how many words it holds, and a simple
   search quoted, being a word spoken of rather than used."
-  [ui {:keys [q mode cqp] :as params}]
-  (case mode
-    "cqp"      [:code q]
-    "extended" [:code cqp]
+  [ui {:keys [q cqp] :as params}]
+  (case (url/mode params)
+    "cqp"      [:code cqp]
+    "extended" [:code (query-phrase ui params)]
     "list"     (query-phrase ui params)
     [:q q]))
 

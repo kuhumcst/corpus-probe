@@ -317,19 +317,20 @@
   names where the mode reads it (see `within-param`). Nil when nothing is
   asked, which counts every token.
 
-  Simple is the default and CQP mode is opt-in: a request naming no mode
-  is read as a plain word search, since CQP mode answers a bare word with
-  a parse error naming a corpus the reader never mentioned. What a mode
-  does not read is not read (see dk.cst.corpus-probe.url/fields): a q
-  under the extended mode, or tokens under any other, ask nothing here."
-  [{:keys [q within] :as params}]
+  Each mode reads its own field (see dk.cst.corpus-probe.url/field) and
+  what a mode does not read is not read (see
+  dk.cst.corpus-probe.url/fields): the field of another mode, or tokens
+  under a mode that reads none, ask nothing here. Simple is the default,
+  so a URL naming no mode and carrying q is a plain word search."
+  [{:keys [within] :as params}]
   (let [mode   (url/mode params)
+        text   (get params (url/field mode))
         unit   (within-param (when (url/reads? mode :within) within))
         tokens (fn [tokens]
                  (when (seq tokens) {:tokens (vec tokens) :within unit}))
-        words  (words q)]
+        words  (words text)]
     (case mode
-      "cqp"      (when-not (str/blank? q) {:cqp q})
+      "cqp"      (when-not (str/blank? text) {:cqp text})
       "extended" (tokens (token-params params))
       "list"     (tokens (when (seq words)
                            [(token (map-indexed
@@ -416,8 +417,7 @@
         values        (if list?
                         (map :value (:conditions (first tokens)))
                         (map (comp :value first :conditions) tokens))]
-    (cond-> {:q (str/join (if list? "\n" " ") values)}
-      list?                                (assoc :mode "list")
+    (cond-> {(url/field mode) (str/join (if list? "\n" " ") values)}
       (not= (url/default :in) (name attr)) (assoc :in (name attr))
       (not= "is" op)                       (assoc :match op)
       ci?                                  (assoc :ci "on")
@@ -426,20 +426,22 @@
 
 (defn params
   "The search params of `mode` that carry `query`, as the form of that
-  mode submits them and its URL cites them: the words in q with their
+  mode submits them and its URL cites them: the words or the lines in
+  the mode's own field (see dk.cst.corpus-probe.url/field) with their
   options (see `word-params`), the tokens as their fields (see
-  `token->params`) with the unit, or the CQP text; each with its mode,
-  nothing at its default. For a query the form holds (see `project`), so
-  that reading them back (see `of`) gives the query again."
+  `token->params`) with the unit, or the CQP text; nothing at its
+  default, and no mode, which the field says. For a query the form holds
+  (see `project`), so that reading them back (see `of`) gives the query
+  again."
   [mode query]
   (cond
-    (nil? query)         (if (= mode (url/default :mode)) {} {:mode mode})
-    (= "cqp" mode)       {:mode "cqp" :q (->cqp query)}
+    (nil? query)         {}
+    (= "cqp" mode)       {:cqp (->cqp query)}
     (= "extended" mode)  (let [{:keys [tokens within]} query
                                fields (map-indexed (fn [i t]
                                                      (token->params (inc i) t))
                                                    tokens)]
-                           (cond-> (into {:mode "extended"} fields)
+                           (cond-> (into {} fields)
                              (not= :sentence within)
                              (assoc :within (name within))))
     :else                (word-params mode query)))
@@ -586,7 +588,7 @@
     (= "extended" mode)
     (when (fits? mode query) query)
     cqp
-    (of {:q cqp :mode mode})
+    (of {(url/field mode) cqp})
     :else
     (let [[attr op ci?] (shape tokens)
           conditions    (map #(hash-map :attr attr :op op :value % :ci? ci?)
@@ -619,45 +621,46 @@
 (defn arrived
   "What the search `params` of a submitted form ask, once a change of its
   mode radio is allowed for: the `:form` shown, which is the ticked mode
-  (see dk.cst.corpus-probe.url/mode), the mode it came `:from` when that
-  is another, the query `:held` by that form (see `project`), the
-  `:query` that runs, what the form could not keep as `:loss` items (see
-  `loss`) and, for a hand-written URL, the `:unread` keys it carried
-  (see dk.cst.corpus-probe.url/unread).
+  (see dk.cst.corpus-probe.url/mode), the mode the query came `:from`
+  when that is another, which the name of the field it arrived in says
+  (see dk.cst.corpus-probe.url/typed), the query `:held` by that form
+  (see `project`), the `:query` that runs, what the form could not keep
+  as `:loss` items (see `loss`) and, for a hand-written URL, the
+  `:unread` keys it carried (see dk.cst.corpus-probe.url/unread).
 
-  A form whose mode radio was changed submits the old mode's field under
-  the new mode's name, and names the old mode in `from`. The ticked mode
-  reads the query field, since text typed after ticking is in that mode.
-  Across the field and the tokens, the shape decides: a q under the
-  extended mode, which reads none, is read as `from` says it was typed,
-  words in order without one, and seeds the tokens; tokens under a mode
-  that reads none are projected into its field. Between the modes that
-  share the field a change is one of reading alone, which `from` says
-  so that the reader can be told.
+  A form whose mode radio was changed submits the old mode's field, named
+  for the old mode, under the new mode's radio. Between the modes that
+  have a field the ticked mode reads the text, since text typed after
+  ticking is in that mode, and the reading the text had before is what
+  the reader is told of. Across a field and the tokens, the shape
+  decides: a field under the extended mode is read as the mode it is
+  named for and seeds the tokens; tokens under a mode with a field are
+  projected into it.
 
   A form holds what it holds and runs it, unless part of the query was
   lost: then nothing runs, the form shows what it kept and the line says
   the rest, so that the reader is told before the loss. What arrived
   with a switch is the switch's own business, so only a URL that names
   no switch has unread params to report."
-  [{:keys [q from] :as params}]
+  [params]
   (let [form   (url/mode params)
         own    (of params)
-        from   (when (and (contains? url/fields from) (not= from form))
-                 from)
-        blank? (nil? own)
+        origin (url/typed params)
+        from   (when (and origin (not= origin form)) origin)
         switch (cond
-                 (and blank? (= "extended" form) (url/present q))    :in
-                 (and blank? (not= "extended" form)
-                      (url/unread-query? params))                    :out
-                 (and own from (not= "extended" from))               :reading)
-        other  (case switch
-                 :in      (of (assoc params :mode (or from "simple")))
-                 :out     (of (assoc params :mode "extended"))
-                 :reading (of (assoc params :mode from))
-                 nil)
+                 (or (nil? from) own)  nil
+                 (= "extended" form)   :in
+                 (= "extended" from)   :out
+                 :else                 :reading)
+        other  (when switch (of (assoc params :mode from)))
+        held   (case switch
+                 :reading   (of (assoc params
+                                       :mode form
+                                       (url/field form)
+                                       (get params (url/field from))))
+                 (:in :out) (project form other)
+                 own)
         loss   (if other (loss form other) [])
-        held   (if (contains? #{:in :out} switch) (project form other) own)
         lost?  (some (complement (comp reading-items first)) loss)]
     {:form   form
      :from   from

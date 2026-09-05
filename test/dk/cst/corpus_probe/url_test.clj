@@ -32,8 +32,11 @@
            (url/canonical {:q "hund" :sample "" :fp.text_title " "
                            :lang "da" :format "tsv" nil "x"}))))
   (testing "what departs from the default stays, as a string"
-    (is (= {:q "hund" :mode "cqp" :sort "word" :page "2"}
-           (url/canonical {:q "hund" :mode "cqp" :sort "word" :page 2}))))
+    (is (= {:cqp "hund" :sort "word" :page "2"}
+           (url/canonical {:cqp "hund" :sort "word" :page 2}))))
+  (testing "no URL names a mode: the query field says it"
+    (is (= {:cqp "hund"} (url/canonical {:cqp "hund" :mode "cqp"})))
+    (is (= {:q "hund"} (url/canonical {:q "hund" :mode "simple"}))))
   (testing "the corpora are one param, uppercased, deduplicated, in order"
     (is (= {:q "hund" :corpus "PROBE,VISER"}
            (url/canonical {:q "hund" :corpus ["probe" "VISER" "PROBE"]})))
@@ -88,17 +91,26 @@
     (is (= (:at url/defaults) (api/position-param nil)))
     (is (= (:subset-at url/defaults) (api/position-param nil)))
     (is (= 0 (api/page-param (:page url/defaults))))
-    (is (= (query/->cqp {:q "hund"})
-           (query/->cqp {:q "hund" :mode (:mode url/defaults)})))
-    (is (= (:mode url/defaults) (first url/modes)))))
+    (is (= (first url/modes) (url/mode {})))))
 
 (deftest modes-test
   (testing "every mode has its row of fields, and no row lacks its mode"
     (is (= (set url/modes) (set (keys url/fields)))))
-  (testing "a URL naming no mode, or one the app does not know, is simple"
+  (testing "a submitted form's radio names the mode; a URL's query field
+            says it, CQP before a list before tokens before words; and
+            nothing is simple"
     (is (= "simple" (url/mode {})))
     (is (= "simple" (url/mode {:mode "nonesuch"})))
-    (is (= "cqp" (url/mode {:mode "cqp"}))))
+    (is (= "cqp" (url/mode {:mode "cqp"})))
+    (is (= "cqp" (url/mode {:mode "cqp" :q "x"})))
+    (is (= "simple" (url/mode {:q "x"})))
+    (is (= "list" (url/mode {:list "x"})))
+    (is (= "cqp" (url/mode {:cqp "x"})))
+    (is (= "extended" (url/mode {:t1.v "x"})))
+    (is (= "extended" (url/mode {:t1.v "x" :q "y"})))
+    (is (= "cqp" (url/mode {:cqp "x" :list "y" :t1.v "z"})))
+    (is (nil? (url/typed {:in "lemma"})))
+    (is (= "list" (url/typed {:list "x" :mode "cqp"}))))
   (testing "a mode reads the mode, its own keys and, given tokens, their
             fields, nothing else"
     (is (url/reads? "simple" :within))
@@ -111,22 +123,22 @@
       (is (not (url/reads? "extended" ::url/tokens)))
       (is (not (url/query-key? ::url/tokens)))))
   (testing "a query key is one some mode reads; the rest say where and how"
-    (is (every? url/query-key? [:q :mode :in :ci :match :within :t1.v
-                                :t2.3.join]))
+    (is (every? url/query-key? [:q :list :cqp :mode :in :ci :match :within
+                                :t1.v :t2.3.join]))
     (is (not-any? url/query-key? [:corpus :sort :f.text_year :page :from nil])))
   (testing "what the mode does not read is unread, and no URL carries it"
     (is (= #{:in :ci :match}
-           (url/unread {:q "x" :mode "cqp" :in "lemma" :ci "on"
-                        :match "prefix"})))
-    (is (= {:q "x" :mode "cqp"}
-           (url/canonical {:q "x" :mode "cqp" :in "lemma" :ci "on"
-                           :match "prefix"})))
-    (is (= {:mode "extended" :t1.v "kat"}
+           (url/unread {:cqp "x" :in "lemma" :ci "on" :match "prefix"})))
+    (is (= {:cqp "x"}
+           (url/canonical {:cqp "x" :in "lemma" :ci "on" :match "prefix"})))
+    (is (= {:t1.v "kat"}
            (url/canonical {:q "hund" :mode "extended" :t1.v "kat"})))
-    (is (= {:q "hund"}
+    (is (= {:t1.v "kat" :t1.attr "lemma"}
            (url/canonical {:q "hund" :t1.v "kat" :t1.attr "lemma"})))
-    (is (= {:q "a\nb" :mode "list"}
-           (url/canonical {:q "a\nb" :mode "list" :within "text"})))
+    (is (= {:q "hund"}
+           (url/canonical {:q "hund" :t1.v "kat" :mode "simple"})))
+    (is (= {:list "a\nb"}
+           (url/canonical {:list "a\nb" :within "text"})))
     (testing "while what it reads stays, and what every mode shares"
       (is (= {:q "a b" :within "text" :sort "word"}
              (url/canonical {:q "a b" :within "text" :sort "word"}))))))
@@ -141,7 +153,7 @@
     (is (= #{:t1.v :within}
            (set (url/read-keys "extended" {:q "x" :in "lemma" :within "text"
                                            :t1.v "y" :corpus "A"}))))
-    (is (= #{:q} (set (url/read-keys "cqp" {:q "x" :in "lemma"}))))))
+    (is (= #{:cqp} (set (url/read-keys "cqp" {:cqp "x" :in "lemma"}))))))
 
 (deftest unread-query?-test
   (testing "a query the mode does not read is the form submitted with its
@@ -151,8 +163,12 @@
     (is (url/unread-query? {:t1.v "hund" :mode "cqp" :corpus "PROBE"})))
   (testing "not a query in its own mode, nor an option carried along"
     (is (not (url/unread-query? {:q "hund"})))
-    (is (not (url/unread-query? {:q "hund" :mode "cqp" :in "lemma"})))
+    (is (not (url/unread-query? {:cqp "hund" :in "lemma"})))
     (is (not (url/unread-query? {:mode "extended"}))))
+  (testing "the field of another mode with text in it is one"
+    (is (url/unread-query? {:q "hund" :mode "cqp"}))
+    (is (url/unread-query? {:list "hund" :mode "simple"}))
+    (is (url/unread-query? {:cqp "[]" :mode "list"})))
   (testing "nor the blank field or the blank trailing token every form
             submits"
     (is (not (url/unread-query? {:q "" :mode "extended" :in "word"})))
@@ -161,12 +177,12 @@
 
 (deftest query-string-test
   (testing "what was asked, where, which hits, how shown, where in them"
-    (is (= (str "q=hund&mode=cqp&corpus=PROBE&f.text_year=1591&near=kat"
+    (is (= (str "cqp=hund&corpus=PROBE&f.text_year=1591&near=kat"
                 "&distance=3&sample=100&view=frequencies&attr=lemma&page=2")
            (url/query-string {:page "2" :attr "lemma" :view "frequencies"
                               :sample "100" :distance "3" :near "kat"
                               :f.text_year "1591" :corpus "PROBE"
-                              :mode "cqp" :q "hund"}))))
+                              :cqp "hund"}))))
   (testing "the filter's params sort by name among themselves"
     (is (= "f.text_author=x&f.text_year=1591&ff.text_year=1590&fp.text_title=H"
            (url/query-string {:fp.text_title "H" :ff.text_year "1590"
@@ -175,12 +191,12 @@
     (is (= "f.text_year=1591&f.text_year=1583"
            (url/query-string {:f.text_year ["1591" "1583"]}))))
   (testing "form encoding, as a browser submits a GET form"
-    (is (= "q=%5Blemma+%3D+%22hund%22%5D&mode=cqp"
-           (url/query-string {:q "[lemma = \"hund\"]" :mode "cqp"})))
+    (is (= "cqp=%5Blemma+%3D+%22hund%22%5D"
+           (url/query-string {:cqp "[lemma = \"hund\"]"})))
     (is (= "q=h%C3%B8ne" (url/query-string {:q "høne"}))))
   (testing "except that a comma and a colon stay readable"
-    (is (= "q=a:%5B%5D+::+b&mode=cqp&corpus=PROBE,VISER&expand=PROBE:9,PROBE:12"
-           (url/query-string {:q "a:[] :: b" :mode "cqp"
+    (is (= "cqp=a:%5B%5D+::+b&corpus=PROBE,VISER&expand=PROBE:9,PROBE:12"
+           (url/query-string {:cqp "a:[] :: b"
                               :corpus ["PROBE" "VISER"]
                               :expand "PROBE:9,PROBE:12"}))))
   (testing "nothing to say is an empty string"
@@ -216,10 +232,10 @@
     (is (nil? (url/token-field :t2.x)))
     (is (nil? (url/token-field :tv)))
     (is (url/known? :t1.attr))
-    (is (= ["mode" "t1.attr" "t1.v" "t2.op" "within" "corpus"]
+    (is (= ["t1.attr" "t1.v" "t2.op" "within" "corpus"]
            (map first (url/pairs {:corpus "A" :t2.op "any" :t1.v "x"
                                   :within "paragraph"
-                                  :t1.attr "lemma" :mode "extended"})))))
+                                  :t1.attr "lemma"})))))
   (testing "a key is built as it is read"
     (is (= "t2.v" (url/token-key 2 1 :v)))
     (is (= "t2.3.join" (url/token-key 2 3 :join)))
@@ -242,8 +258,7 @@
     (is (not (url/asks? {:conditions [{:v ""}]}))))
   (testing "the URL drops a field at its default, a token asking nothing
             and a condition asking nothing"
-    (is (= {:mode "extended" :t1.v "hund" :t1.3.v "kat"
-            :t2.op "any" :t2.max "3"}
+    (is (= {:t1.v "hund" :t1.3.v "kat" :t2.op "any" :t2.max "3"}
            (url/canonical {:mode "extended"
                            :t1.attr "word" :t1.op "is" :t1.v "hund"
                            :t1.min "1" :t1.max "1"

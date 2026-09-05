@@ -558,7 +558,7 @@
                                                  (filter url/query-key?
                                                          (keys live)))))]
              (assoc s
-                    :params     (-> (apply dissoc memory :from
+                    :params     (-> (apply dissoc memory
                                            (url/read-keys mode memory))
                                     (merge (query/params mode held))
                                     (assoc :mode mode))

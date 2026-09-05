@@ -71,8 +71,7 @@
   carries. Each is the default its reader in dk.cst.corpus-probe.api or
   .query applies, restated as the string a URL would carry;
   `defaults-test` holds the two together."
-  {:mode        "simple"
-   :in          "word"
+  {:in          "word"
    :within      "sentence"
    :sort        "corpus"
    :context     "5"
@@ -85,11 +84,20 @@
    :page        "1"})
 
 (def modes
-  "The query modes, in display order, each as its `mode` param value: words
-  in order, a list of words, a builder of tokens, and CQP as the reader
-  wrote it (see dk.cst.corpus-probe.query/->cqp). The first is the default,
-  which no URL carries."
+  "The query modes, in display order, each as the value of the form's
+  `mode` radio: words in order, a list of words, a builder of tokens,
+  and CQP as the reader wrote it (see dk.cst.corpus-probe.query/->cqp).
+  The first is the default. No URL names a mode: the query field it
+  carries says it (see `field` and `mode`)."
   ["simple" "list" "extended" "cqp"])
+
+(def field
+  "The param the query field of each of the `modes` submits, and a URL
+  carries: the words of a simple search, the lines of a list, the CQP
+  text. The extended form has tokens (see `token-key`) and no field."
+  {"simple" :q
+   "list"   :list
+   "cqp"    :cqp})
 
 (def fields
   "What each of the `modes` reads of the query params: the keys that say
@@ -99,9 +107,9 @@
   (see `canonical`), and the form's control for it is disabled (see
   dk.cst.corpus-probe.views.page/search-form)."
   {"simple"   #{:q :in :ci :match :within}
-   "list"     #{:q :in :ci :match}
+   "list"     #{:list :in :ci :match}
    "extended" #{::tokens :within}
-   "cqp"      #{:q}})
+   "cqp"      #{:cqp}})
 
 (def operators
   "The operators of an extended-search condition, in display order: how
@@ -236,7 +244,7 @@
   `::tokens` stands for the fields of an extended search's tokens (see
   `token-key?`) and `::filter` for the metadata filter's params (see
   `metadata-key?`)."
-  [:q :mode ::tokens :within :in :ci :match
+  [:q :list :cqp ::tokens :within :in :ci :match
    :corpus :scope ::filter
    :near :distance :subset :subset-at :subset-attr :sample
    :view :sort :context :attr :at :by :docs
@@ -328,13 +336,29 @@
       (nil? (:near params))   (dissoc :distance)
       (nil? (:subset params)) (dissoc :subset-at :subset-attr))))
 
+(defn typed
+  "The mode the query of `params` was typed in, by the query field they
+  carry (see `field` and `token-key?`): CQP before a list before tokens
+  before words, so that a URL carrying two is read by the first; nil
+  when they carry none."
+  [params]
+  (cond
+    (contains? params :cqp)         "cqp"
+    (contains? params :list)        "list"
+    (some token-key? (keys params)) "extended"
+    (contains? params :q)           "simple"))
+
 (defn mode
-  "The mode of the search `params`: the one of the `modes` their `mode`
-  param names, or the default when it names none or one the app does
-  not know."
+  "The mode of the search `params`: the one their `mode` param names,
+  when it is one of the `modes`, which is what a submitted form's radios
+  say; else the one their query field was `typed` in; else the default,
+  the first of the `modes`."
   [params]
   (let [m (:mode params)]
-    (if (contains? fields m) m (:mode defaults))))
+    (cond
+      (contains? fields m) m
+      (typed params)       (typed params)
+      :else                (first modes))))
 
 (defn query-key?
   "True when param key `k` says what was asked: the mode, a key some mode
@@ -366,29 +390,36 @@
 
 (defn unread
   "The keys of the query params among `params` that their mode (see
-  `mode`) does not read: what the form of another mode, or a hand-written
-  URL, carried along, which the search never sees."
-  [params]
-  (let [m (mode params)]
-    (into #{}
-          (filter #(and (query-key? %) (not (reads? m %))))
-          (keys params))))
+  `mode`), or the mode `m` given, does not read: what the form of
+  another mode, or a hand-written URL, carried along, which the search
+  never sees."
+  ([params]
+   (unread params (mode params)))
+  ([params m]
+   (into #{}
+         (filter #(and (query-key? %) (not (reads? m %))))
+         (keys params))))
 
 (defn without-unread
-  "`params` less what their mode does not read (see `unread`)."
-  [params]
-  (apply dissoc params (unread params)))
+  "`params` less what their mode, or the mode `m` given, does not read
+  (see `unread`)."
+  ([params]
+   (without-unread params (mode params)))
+  ([params m]
+   (apply dissoc params (unread params m))))
 
 (defn unread-query?
   "True when `params` carry a query their mode does not read (see
-  `unread`) that says something: a q with words in it under the extended
-  mode, or a token that asks (see `asks?`) under any other. What the
-  form submits when its mode radio is changed before the query is
-  retyped, and what a hand-written URL may carry; the blank field or the
-  blank trailing token every form submits is no query."
+  `unread`) that says something: the field of another mode (see `field`)
+  with text in it, or a token that asks (see `asks?`) under a mode that
+  reads none. What the form submits when its mode radio is changed
+  before the query is retyped, and what a hand-written URL may carry;
+  the blank field or the blank trailing token every form submits is no
+  query."
   [params]
   (let [unread (unread params)]
-    (boolean (or (and (unread :q) (present (:q params)))
+    (boolean (or (some #(and (unread %) (present (get params %)))
+                       (vals field))
                  (and (some token-key? unread)
                       (some asks? (token-rows params)))))))
 
@@ -406,14 +437,18 @@
   ([params]
    (canonical params nil))
   ([params all]
-   (->> (with-corpora params all)
-        (keep (fn [[k v]]
-                (let [v (present v)]
-                  (when (and (known? k) v (not= v (default k)))
-                    [k v]))))
-        (into {})
-        (without-orphans)
-        (without-unread))))
+   ;; by the mode the params name, which a submitted form's radio says
+   ;; and no URL carries: what the trimmed params say once it is gone is
+   ;; the field kept, so a second pass reads the same
+   (let [m (mode params)]
+     (->> (with-corpora params all)
+          (keep (fn [[k v]]
+                  (let [v (present v)]
+                    (when (and (known? k) v (not= v (default k)))
+                      [k v]))))
+          (into {})
+          (without-orphans)
+          (#(without-unread % m))))))
 
 (defn pairs
   "Canonical `params` as [name value] string pairs in `param-order`, a
@@ -469,7 +504,6 @@
              #{"PROBE" "VISER" "TALER"})
   ;; => {:q "hund", :corpus "PROBE,VISER"}
 
-  (results-href {:q "[lemma = \"hund\"]" :mode "cqp" :page 2
-                 :corpus ["PROBE" "VISER"]})
-  ;; => "/search?q=%5Blemma+%3D+%22hund%22%5D&mode=cqp&corpus=PROBE,VISER&page=2#results"
+  (results-href {:cqp "[lemma = \"hund\"]" :corpus ["PROBE" "VISER"]})
+  ;; => "/search?cqp=%5Blemma+%3D+%22hund%22%5D&corpus=PROBE,VISER#results"
   #_.)
