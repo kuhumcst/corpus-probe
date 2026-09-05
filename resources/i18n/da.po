@@ -279,9 +279,6 @@ msgstr "valgt"
 msgid "Simple"
 msgstr "Simpel"
 
-msgid "Simple-search options"
-msgstr "Indstillinger for simpel søgning"
-
 msgid "Site"
 msgstr "Websted"
 

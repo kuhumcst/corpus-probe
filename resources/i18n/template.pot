@@ -584,6 +584,10 @@ msgid "A list of {n} words is not kept in Extended."
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/page.cljc
+msgid "the tokens"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/page.cljc
 msgid "the query"
 msgstr ""
 
@@ -593,10 +597,6 @@ msgstr ""
 
 #: src/dk/cst/corpus_probe/views/page.cljc
 msgid "the CQP query"
-msgstr ""
-
-#: src/dk/cst/corpus_probe/views/page.cljc
-msgid "the tokens"
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/page.cljc
@@ -625,10 +625,6 @@ msgstr ""
 
 #: src/dk/cst/corpus_probe/views/page.cljc
 msgid "Change mode"
-msgstr ""
-
-#: src/dk/cst/corpus_probe/views/page.cljc
-msgid "Simple-search options"
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/frequencies.cljc src/dk/cst/corpus_probe/views/page.cljc

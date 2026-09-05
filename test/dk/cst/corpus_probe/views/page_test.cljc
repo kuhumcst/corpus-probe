@@ -56,30 +56,25 @@
                        state "/" [:input {:type  "hidden" :name "attr"
                                           :value "word"}])))))
     (testing "the query options are one group, under the query row"
-      (let [order (fn [x] (.indexOf (vec (deep html)) x))]
+      (let [order (fn [x] (.indexOf (vec (deep html)) x))
+            at    (fn [name]
+                    (order (some #(when (and (map? %) (= name (:name %))) %)
+                                 (deep html))))]
         (is (< (order :div.query) (order :input)))
         (is (< (order :input) (order :fieldset.query-options)))
         (is (< (order :fieldset.query-options) (order :fieldset.corpora)))
-        (testing "with the status line after the mode and above the rest"
+        (testing "with the status line after the mode and above the rows"
           (is (< (order {:role "radiogroup" :aria-label "Query mode"})
                  (order :div.status)))
-          (is (< (order :div.status)
-                 (order {:role "group" :aria-label "Simple-search options"}))))
-        ;; the two boxes said the same thing twice; the groups they named
-        ;; are still named, without a box each
+          (is (< (order :div.status) (at "in"))))
+        ;; the two boxes said the same thing twice; the group they named
+        ;; is still named, without a box
         (is (not (some #{:fieldset.mode :fieldset.options} (deep html))))
         (is (some #{{:role "radiogroup" :aria-label "Query mode"}}
                   (deep html)))
-        (is (some #{{:role "group" :aria-label "Simple-search options"}}
-                  (deep html)))
-        (testing "with what a simple search matches on a row of its own,
-                  above how loosely"
-          (let [group (some #(when (and (vector? %) (map? (second %))
-                                        (= "group" (:role (second %))))
-                               %)
-                            (deep html))]
-            (is (= :div (first group)))
-            (is (= [:p :p] (map first (drop 2 group))))))))
+        (testing "and the rows on the line each of their own: the three
+                  selects in one column, the case box under them"
+          (is (< (at "in") (at "match") (at "within") (at "ci"))))))
     (testing "and the options are live only for a query they can qualify,
               as the table of what each mode reads says"
       (let [live (fn [mode]
@@ -90,13 +85,13 @@
                                       (#{"in" "ci" "match" "within"}
                                        (:name %))))
                         (map (juxt :name (comp not :disabled)))))]
-        (is (= [["in" true] ["match" true] ["ci" true] ["within" true]]
+        (is (= [["in" true] ["match" true] ["within" true] ["ci" true]]
                (live "simple")))
-        (is (= [["in" true] ["match" true] ["ci" true] ["within" false]]
+        (is (= [["in" true] ["match" true] ["within" false] ["ci" true]]
                (live "list")))
-        (is (= [["in" false] ["match" false] ["ci" false] ["within" true]]
+        (is (= [["in" false] ["match" false] ["within" true] ["ci" false]]
                (live "extended")))
-        (is (= [["in" false] ["match" false] ["ci" false] ["within" false]]
+        (is (= [["in" false] ["match" false] ["within" false] ["ci" false]]
                (live "cqp")))
         (doseq [mode url/modes]
           (is (= (map (fn [[k _]] (url/reads? mode (keyword k))) (live mode))

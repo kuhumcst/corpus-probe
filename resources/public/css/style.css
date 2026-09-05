@@ -13,6 +13,7 @@
      edge, so the line runs straight through the boxes */
   --line: 5.5rem;
   --box-pad: 0.75rem;
+  --row-gap: 0.5rem;          /* between the rows of a box */
   --label-col: var(--line);
   accent-color: var(--chosen);
 }
@@ -156,9 +157,13 @@ ul.row a, .sitename { display: inline-block; padding-block: 0.2rem; }
 :where(button, select) { background: var(--button);
                          border-color: var(--button);
                          color: var(--button-tx); }
-:where(button) { cursor: pointer; }
-:where(button, select):hover { background: var(--button-hover);
-                               border-color: var(--button-hover); }
+:where(button:enabled) { cursor: pointer; }
+:where(button:enabled, select:enabled):hover {
+  background: var(--button-hover); border-color: var(--button-hover);
+}
+/* a disabled control fades, as the words beside it do, and answers no
+   pointer: the mode reads none of it */
+:where(input, select, textarea, button):disabled { opacity: 0.4; }
 /* Safari draws a search field its own way until told not to */
 input[type="search"] { appearance: none; }
 
@@ -175,7 +180,7 @@ summary { cursor: pointer; }
 summary .count { color: var(--tx-2); }
 
 /* the words beside a disabled control are greyed with it */
-label:has(input:disabled) { color: var(--tx-3); }
+label:has(:is(input, select):disabled) { color: var(--tx-3); }
 
 /* the corpus chooser and the metadata filter: a row per entry, the
    label the whole target; trees indent by nesting, without bullets; a
@@ -194,45 +199,53 @@ label:has(input:disabled) { color: var(--tx-3); }
 
 /* The rail: one rhythm, and controls that fill their rows */
 
-form.search { display: flex; flex-direction: column; gap: 1rem; }
-form.search :is(fieldset, div[role="group"]) {
-  display: flex; flex-direction: column; gap: 0.5rem;
-}
+form.search, .rail { display: flex; flex-direction: column; gap: 1rem; }
+form.search fieldset { display: flex; flex-direction: column;
+                       gap: var(--row-gap); }
 form.search > *,
-form.search :is(fieldset, div[role="group"]) > * { margin-block: 0; }
+form.search :is(.query, .rail, fieldset, noscript) > * { margin-block: 0; }
 
-/* the rail's own rows: what is typed in takes the width and the button
-   that submits keeps to the end, aligned to the foot so it sits at the
-   foot of a list's text area */
-form.search > p { display: flex; flex-wrap: wrap; align-items: end;
-                  gap: 0.5rem; }
-form.search > p > :is(input, textarea, label) { flex: 1;
-                                                 min-inline-size: 0; }
-form.search > p > button[type="submit"] { margin-inline-start: auto; }
+/* a live region is rendered whether or not it says anything (the line
+   under the modes, the chooser's "nothing found"), so while empty it is
+   a row of nothing: it gives back the gap before it */
+form.search :is(.status, .empty):empty {
+  margin-block-start: calc(-1 * var(--row-gap));
+}
+
+/* the query: the field or the tokens, the row that submits, and what
+   they run as, in a wrapper of one kind whatever the mode, close
+   together */
+.query { display: flex; flex-direction: column; gap: 0.5rem; }
+
+/* the row that submits: what is typed in takes the width and the button
+   keeps to the end, aligned to the foot so it sits at the foot of a
+   list's text area; in an extended search the row holds buttons alone */
+.query > p:has(> button[type="submit"]) { display: flex; flex-wrap: wrap;
+                                          align-items: end; gap: 0.5rem; }
+.query > p > :is(input, textarea) { flex: 1; min-inline-size: 0; }
+.query > p > button[type="submit"] { margin-inline-start: auto; }
+
+/* what the words or the tokens run as: a side note under the field */
+.query > p:has(> output) { color: var(--tx-2); }
 
 /* a labelled row is a grid on the line; a label holding its control is
    a subgrid of the row, its words ending on the line and its control
-   filling the rest */
-form.search > p:has(> label),
-.query-options div[role="group"] > p,
+   filling the rest. The rows are the two of the options group and the
+   unit's row beside it, which is the box's, not the group's */
+.query-options p:has(> label > select),
 .find {
   display: grid; grid-template-columns: var(--label-col) 1fr;
   column-gap: 0.5rem; align-items: center;
 }
-:is(form.search > p, .query-options div[role="group"] > p)
+.query-options p:has(> label > select)
   > label:has(> select, > input:not([type="checkbox"])) {
   display: grid; grid-template-columns: subgrid; grid-column: 1 / -1;
   align-items: center; text-align: end;
 }
-:is(form.search > p, .query-options div[role="group"] > p)
+.query-options p:has(> label > select)
   > label > :is(select, input:not([type="checkbox"])),
 .find input { inline-size: 100%; min-inline-size: 0; text-align: start; }
 .find label { text-align: end; }
-/* a checkbox row starts at the box's edge like the modes, with a step
-   of air above it */
-.query-options div[role="group"] > p > label:has(> [type="checkbox"]) {
-  grid-column: 1 / -1; text-align: start; margin-block-start: 0.5rem;
-}
 form.search [role="radiogroup"] { display: flex; flex-wrap: wrap;
                                   gap: 0.25rem 1rem; }
 
@@ -451,21 +464,21 @@ ul.index .size, ul.index em { grid-column: 3; justify-self: end; }
 
 /* middle: the form spans the page with the answer below it, so its
    boxes share rows under the query: two from 40rem, with the metadata
-   box across the width, three from 48rem. The tokens, unit and buttons
-   of an extended search keep the whole row */
+   box across the width, three from 48rem */
 @media (min-width: 40rem) and (max-width: 63.999rem) {
-  form.search { display: grid; gap: 1rem;
-                grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  form.search > * { grid-column: 1 / -1; }
-  form.search > :is(.query-options, .corpora) { grid-column: auto; }
+  .rail { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .rail > .filters { grid-column: 1 / -1; }
 }
 @media (min-width: 48rem) and (max-width: 63.999rem) {
-  form.search { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-  form.search > .filters { grid-column: auto; }
+  .rail { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .rail > .filters { grid-column: auto; }
 }
 
-/* wide: the query controls are a rail beside the answer, so refining a
-   query costs no scroll. The rail is as wide as centring a 40rem measure
+/* wide: the boxes are a rail beside the answer, so refining a query
+   costs no scroll, and the query row stands above the answer, where a
+   field has room. The landmark and the form give up their boxes, so
+   that the row, the rail, the navigation's status and the answer are
+   items of one grid. The rail is as wide as centring a 40rem measure
    beside it leaves, and no narrower than 16rem, so the guide stands
    where every other page's prose stands and the rail does not move when
    an answer arrives */
@@ -474,28 +487,46 @@ ul.index .size, ul.index em { grid-column: 3; justify-self: end; }
     display: grid;
     grid-template-columns: max(16rem, calc((100% - 40rem) / 2 - 2rem))
                            minmax(0, 1fr);
-    grid-template-areas: "query results";
+    /* the last row takes a tall rail's spare height, so the rail cannot
+       push the answer down from the query row */
+    grid-template-rows: auto auto 1fr;
+    grid-template-areas: "rail query" "rail status" "rail results";
     column-gap: 2rem;
     align-items: start;  /* the rail keeps its own height, which lets it stick */
   }
+  main:has(> .result, > .help) :is(search, form.search) { display: contents; }
   main:has(> .result, > .help) > .result,
   main:has(> .result, > .help) > .help   { grid-area: results; }
 
+  /* the query row keeps to the measure, like the guide under it, starts
+     half a legend's line down so that the field's edge meets the boxes'
+     border, which runs through the middle of their legends, and steps
+     down to the answer; the status between them takes a step only while
+     it says something */
+  main:has(> .result, > .help) .query { grid-area: query;
+                                        max-inline-size: 40rem;
+                                        margin-block: 0.75rem 1rem; }
+  main:has(> .result, > .help) > search > .status { grid-area: status; }
+  main:has(> .result, > .help) > search > .status:not(:empty) {
+    margin-block-end: 1rem;
+  }
+
   /* the rail follows the reader down the results and scrolls inside
      itself when taller than the viewport. A scroll container clips at
-     its padding edge, where the query field's focus ring would be: the
-     padding gives it room and the margin takes it back */
-  main:has(> .result, > .help) > search,
+     its padding edge, where a focus ring would be: the padding gives it
+     room and the margin takes it back */
+  main:has(> .result, > .help) .rail,
   main:has(> .result, > .help) > .sidebar {
-    grid-area: query; position: sticky; inset-block-start: 1rem;
+    grid-area: rail; position: sticky; inset-block-start: 1rem;
     max-block-size: calc(100vh - 2rem); overflow-y: auto;
     padding: 0.25rem; margin: -0.25rem;
   }
 
-  /* the panel takes the query column while open; the form still submits,
-     it is just not what the column is for right now. A column, not a
-     sheet: nothing closes it off and nothing is owed under it */
-  main:has(> .sidebar) > search { display: none; }
+  /* the panel takes the rail's column while open; the form still
+     submits, it is just not what the column is for right now. A
+     column, not a sheet: nothing closes it off and nothing is owed
+     under it */
+  main:has(> .sidebar) .rail { display: none; }
   main:has(> .result, > .help) > .sidebar { border-block-start: 0; }
   body:has(.sidebar) { padding-block-end: 0; }
 }

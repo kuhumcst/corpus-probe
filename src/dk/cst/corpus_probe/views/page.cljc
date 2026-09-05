@@ -925,8 +925,8 @@
 
   It sits with the query controls rather than with the results, because
   the wait starts at the submit button and the results it is about may
-  not exist yet. Above 64rem those controls are a sticky rail, so it
-  stays in view while a page of hits is fetched too."
+  not exist yet. Above 64rem the layout sets it between the query row
+  and the answer, under that button."
   [ui pending?]
   [:div.status {:role "status"}
    ;; TODO: design this. A line of text arriving under the form is what
@@ -1066,15 +1066,16 @@
   extended search (see `token-fieldset`, over the `:tokens` and
   `:value-lists` of `state`), then everything that decides how it is
   read, in one group: the mode, a status line for what a change of mode
-  could not keep (its `:switch`, see `switch-notice`), under it the
-  options that only a simple query or a
-  list has, what it matches on one row and how loosely on the next, and
-  the unit of text a search of several tokens is kept within (see
-  `within-control`). Then the scope of the search, the corpus chooser
+  could not keep (its `:switch`, see `switch-notice`), and under it a
+  row each for what a simple search matches, how loosely, the unit of
+  text a search of several tokens is kept within (see `within-control`)
+  and the case. Then the scope of the search, the corpus chooser
   and the metadata filter, each behind one disclosure. So the field the
   reader reaches for is the first control in the form, whatever the
   registry holds, and what qualifies what they typed is under their hand
-  rather than past two disclosures.
+  rather than past two disclosures. The boxes stand in a wrapper of
+  their own, which the wide layout makes a rail beside the answer while
+  the query row stands above the answer, with room to type in.
 
   The query example is the placeholder of the mode in `:params`, and the
   mode radios dispatch `:set-mode`, so choosing a mode swaps the example
@@ -1096,16 +1097,15 @@
   rendered outside it (the sort of the concordance, the grouping of the
   frequency table) still submits with it. The corpus chooser, the metadata
   filter and the query options are <fieldset> groups; inside the last, the
-  mode and the options it governs are a named group each without a box of
-  their own. No language is submitted with the search: which language the
+  modes are a named group without a box of their own. No language is
+  submitted with the search: which language the
   answer is worded in is the reader's own stored preference, not part of
   what they asked.
 
   Where the client runs, `navigation-status` follows the form inside the
-  landmark, so a reader learns that their question is in flight beside
-  the button they asked it with, and `:served-corpus`, the corpora this
-  page was served for, decides which folders of the chooser start open
-  while `:params` follows what the reader is choosing now."
+  landmark, and `:served-corpus`, the corpora this page was served for,
+  decides which folders of the chooser start open while `:params`
+  follows what the reader is choosing now."
   [{:keys [ui view folders filter-controls search-attrs params tokens
            value-lists switch client? pending? served-corpus served-filter
            corpus-filter value-filter chooser-open? filters-open?
@@ -1144,72 +1144,74 @@
                 button])
          [:p (query-field ui mode text (not= :frequencies view)) " " button])
        (cqp-line ui mode params tokens)]
-      ;; one group: everything here qualifies the query above it, and two
-      ;; boxes said that twice. A row each, so the mode a reader is in
-      ;; does not run into the options it decides the meaning of.
-      ;;
-      ;; Named by a legend like the boxes beside it, so that the three
-      ;; line up when they share a row; the word is the query's, since
-      ;; everything in the box qualifies it
-      [:fieldset.query-options
-       [:legend (i18n/trx ui "legend" "Query")]
-       ;; the radios are still a group of their own, and still named:
-       ;; a fieldset is not the only thing that can say so
-       [:p {:role "radiogroup" :aria-label (i18n/tr ui "Query mode")}
-        (interpose " "
-                   (for [m url/modes]
-                     [:label [:input {:type    "radio" :name "mode" :value m
-                                      :checked (= m mode)
-                                      :on      {:change [:set-mode m]}}]
-                      ;; CQP as an abbreviation and no link: the click on
-                      ;; a label belongs to its radio, and the glossary is
-                      ;; in the masthead
-                      (if (= "cqp" m)
-                        (layout/term ui :cqp false)
-                        (mode-label ui m))]))]
-       ;; without the client a change of mode is a submit, which the field
-       ;; a fresh form requires would refuse; this button submits without
-       ;; that check, so a reader can leave an empty form for another mode.
-       ;; Inside <noscript> for the reason `apply-button` is
-       (when-not client?
-         [:noscript
-          [:p [:button {:type "submit" :formnovalidate true}
-               (i18n/tr ui "Change mode")]]])
-       ;; what a change of mode could not keep (see `switch-notice`):
-       ;; rendered always, so that the live region exists before it fills,
-       ;; and above everything a switch changes
-       [:div.status {:role "status"}
-        (switch-notice ui mode (:loss switch) (:unread switch))]
-       ;; two rows: what a simple search matches, then how loosely. One
-       ;; row of four ran the attribute into the options it governs
-       [:div {:role "group" :aria-label (i18n/tr ui "Simple-search options")}
+      ;; one wrapper, which the wide layout makes a rail beside the answer
+      [:div.rail
+       ;; one group: everything here qualifies the query above it, and two
+       ;; boxes said that twice. A row each, so the mode a reader is in
+       ;; does not run into the options it decides the meaning of.
+       ;;
+       ;; Named by a legend like the boxes beside it, so that the three
+       ;; line up when they share a row; the word is the query's, since
+       ;; everything in the box qualifies it
+       [:fieldset.query-options
+        [:legend (i18n/trx ui "legend" "Query")]
+        ;; the radios are still a group of their own, and still named:
+        ;; a fieldset is not the only thing that can say so
+        [:p {:role "radiogroup" :aria-label (i18n/tr ui "Query mode")}
+         (interpose " "
+                    (for [m url/modes]
+                      [:label [:input {:type    "radio" :name "mode" :value m
+                                       :checked (= m mode)
+                                       :on      {:change [:set-mode m]}}]
+                       ;; CQP as an abbreviation and no link: the click on
+                       ;; a label belongs to its radio, and the glossary is
+                       ;; in the masthead
+                       (if (= "cqp" m)
+                         (layout/term ui :cqp false)
+                         (mode-label ui m))]))]
+        ;; without the client a change of mode is a submit, which the field
+        ;; a fresh form requires would refuse; this button submits without
+        ;; that check, so a reader can leave an empty form for another mode.
+        ;; Inside <noscript> for the reason `apply-button` is
+        (when-not client?
+          [:noscript
+           [:p [:button {:type "submit" :formnovalidate true}
+                (i18n/tr ui "Change mode")]]])
+        ;; what a change of mode could not keep (see `switch-notice`):
+        ;; rendered always, so that the live region exists before it fills,
+        ;; and above everything a switch changes
+        [:div.status {:role "status"}
+         (switch-notice ui mode (:loss switch) (:unread switch))]
+        ;; a row each, on the line: what a simple search matches, how
+        ;; loosely, the unit of text a search of several tokens is kept
+        ;; within, which the words of a simple search read as the tokens
+        ;; of an extended one do, and the case, from the edge like the
+        ;; modes. One row of four ran the attribute into the options it
+        ;; governs, and the case box last keeps the three selects in one
+        ;; column
         [:p (attribute-control ui search-attrs in (dead? :in))]
-        [:p
-         (match-control ui match (dead? :match))
-         " "
-         [:label [:input {:type "checkbox" :name "ci" :value "on"
-                          :checked  (some? ci)
-                          :disabled (dead? :ci)}]
-          (i18n/tr ui "ignore case")]]]
-       ;; the unit a search of several tokens is kept within, which the
-       ;; words of a simple search read as the tokens of an extended one do
-       [:p (within-control ui within (dead? :within))]]
-      ;; marks a selection the reader actually made: without it, unticking
-      ;; every corpus and submitting is indistinguishable from arriving
-      ;; with no corpus named, which searches them all
-      [:input {:type "hidden" :name "scope" :value "chosen"}]
-      (corpus-views/chooser ui folders
-                            {:selected (set corpus)
-                             :served   (set (or served-corpus corpus))
-                             :client?  client?
-                             :filter   corpus-filter
-                             :open?    chooser-open?})
-      (filter-fieldset ui filter-controls
-                       {:served   served-filter
-                        :open?    filters-open?
-                        :pending? filters-pending?
-                        :client?  client?
-                        :filter   value-filter})]
+        [:p (match-control ui match (dead? :match))]
+        [:p (within-control ui within (dead? :within))]
+        [:p [:label [:input {:type "checkbox" :name "ci" :value "on"
+                             :checked  (some? ci)
+                             :disabled (dead? :ci)}]
+             (i18n/tr ui "ignore case")]]]
+       ;; marks a selection the reader actually made: without it, unticking
+       ;; every corpus and submitting is indistinguishable from arriving
+       ;; with no corpus named, which searches them all
+       [:input {:type "hidden" :name "scope" :value "chosen"}]
+       (corpus-views/chooser ui folders
+                             {:selected (set corpus)
+                              :served   (set (or served-corpus corpus))
+                              :client?  client?
+                              :filter   corpus-filter
+                              :open?    chooser-open?})
+       (filter-fieldset ui filter-controls
+                        {:served   served-filter
+                         :open?    filters-open?
+                         :pending? filters-pending?
+                         :client?  client?
+                         :filter   value-filter})]]
      ;; only where the client runs: every other navigation is the
      ;; browser's own, and the browser reports those itself
      (when client? (navigation-status ui pending?))]))

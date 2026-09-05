@@ -82,8 +82,10 @@
   ;; => \"Søgning\""
   ([ui s]
    (get (:table ui) s s))
+  ;; the lookup again rather than `(tr ui s)`: the scanner reads a call
+  ;; of `tr` on a symbol as a lookup of no literal string, and warns
   ([ui s values]
-   (fill (tr ui s) values)))
+   (fill (get (:table ui) s s) values)))
 
 (defn trx
   "The translation of English UI string `s` in the disambiguating
@@ -117,8 +119,10 @@
   ([ui s1 s2 n]
    (let [[one many] (get (:table ui) [s1 s2] [s1 s2])]
      (if (= 1 n) one many)))
+  ;; the lookup again rather than `(trn ui s1 s2 n)`, as in `tr`
   ([ui s1 s2 n values]
-   (fill (trn ui s1 s2 n) values)))
+   (let [[one many] (get (:table ui) [s1 s2] [s1 s2])]
+     (fill (if (= 1 n) one many) values))))
 
 (def number-formats
   "How each language writes a number: its thousands and decimal
