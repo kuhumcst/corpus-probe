@@ -620,11 +620,11 @@ msgid "legend|Query"
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/page.cljc
-msgid "Query mode"
+msgid "Change mode"
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/page.cljc
-msgid "Change mode"
+msgid "legend|Matching"
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/frequencies.cljc src/dk/cst/corpus_probe/views/page.cljc

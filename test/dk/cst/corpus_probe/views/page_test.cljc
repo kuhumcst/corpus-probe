@@ -61,17 +61,17 @@
                     (order (some #(when (and (map? %) (= name (:name %))) %)
                                  (deep html))))]
         (is (< (order :div.query) (order :input)))
-        (is (< (order :input) (order :fieldset.query-options)))
-        (is (< (order :fieldset.query-options) (order :fieldset.corpora)))
+        (is (< (order :input) (order :fieldset.modes)))
+        (is (< (order :fieldset.modes) (order :fieldset.matching)))
+        (is (< (order :fieldset.matching) (order :fieldset.corpora)))
         (testing "with the status line after the mode and above the rows"
-          (is (< (order {:role "radiogroup" :aria-label "Query mode"})
+          (is (< (order :fieldset.modes)
                  (order :div.status)))
           (is (< (order :div.status) (at "in"))))
         ;; the two boxes said the same thing twice; the group they named
         ;; is still named, without a box
         (is (not (some #{:fieldset.mode :fieldset.options} (deep html))))
-        (is (some #{{:role "radiogroup" :aria-label "Query mode"}}
-                  (deep html)))
+        (is (some #{[:legend "Query"] [:legend "Matching"]} (deep html)))
         (testing "and the rows on the line each of their own: the three
                   selects in one column, the case box under them"
           (is (< (at "in") (at "match") (at "within") (at "ci"))))))
@@ -327,7 +327,7 @@
 (deftest cqp-line-test
   (testing "what the tokens run as, under them, as the form holds them
             rather than as the params say"
-    (is (= [:p "As CQP" ": " [:output [:code "[word = \"x\"] []"]]]
+    (is (= [:p.cqp "As CQP" ": " [:code "[word = \"x\"] []"]]
            (page/cqp-line en {:mode "extended" :t1.v "y"}
                           [{:id 1 :conditions [{:id 1 :v "x"}]}
                            {:id 2 :conditions [{:id 1 :op "any"}]}])))
@@ -340,7 +340,7 @@
   (testing "and no line under the field of a simple search or a list: the
             CQP radio shows what they run as"
     (let [outputs (fn [state]
-                    (filter #(and (vector? %) (= :output (first %)))
+                    (filter #(and (vector? %) (= :p.cqp (first %)))
                             (deep (page/search-form
                                    (assoc state :ui en :folders [])
                                    "/" nil))))]

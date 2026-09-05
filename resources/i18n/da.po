@@ -240,11 +240,11 @@ msgstr "ét ord pr. linje"
 msgid "one word, or several words in order"
 msgstr "ét eller flere ord i rækkefølge"
 
-msgid "Query mode"
-msgstr "Søgetype"
-
 msgid "legend|Query"
 msgstr "Forespørgsel"
+
+msgid "legend|Matching"
+msgstr "Matchning"
 
 msgid "Remove condition"
 msgstr "Fjern betingelse"

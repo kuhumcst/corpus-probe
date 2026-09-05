@@ -958,7 +958,9 @@
   with the `params`), under them in `ui`, so that a reader sees how the
   conditions' joins and repeats came out before a search is spent on
   them, and as they edit, since every control records itself in the
-  state; nothing for no query.
+  state; nothing for no query. A paragraph rather than an output, whose
+  implicit status role would have a screen reader read the string after
+  every keystroke.
 
   TODO: is the line worth its place even here? The CQP radio hands the
   same text to the field, with the unit, and switching back restores
@@ -966,7 +968,7 @@
   for that reason. Drop it if nobody reads it."
   [ui params tokens]
   (when-let [cqp (query/->cqp (form-query params tokens))]
-    [:p (i18n/tr ui "As CQP") ": " [:output [:code cqp]]]))
+    [:p.cqp (i18n/tr ui "As CQP") ": " [:code cqp]]))
 
 (defn mode-label
   "What the query `mode` (see dk.cst.corpus-probe.url/modes) is called,
@@ -1070,11 +1072,12 @@
   The query row comes first (see `query-field`), or the tokens of an
   extended search (see `token-fieldset`, over the `:tokens` and
   `:value-lists` of `state`), then everything that decides how it is
-  read, in one group: the mode, a status line for what a change of mode
-  could not keep (its `:switch`, see `switch-notice`), and under it a
-  row each for what a simple search matches, how loosely, the unit of
-  text a search of several tokens is kept within (see `within-control`)
-  and the case. Then the scope of the search, the corpus chooser
+  read, a box each: the mode, with a status line for what a change of
+  it could not keep (its `:switch`, see `switch-notice`), and the
+  matching, a row each for what a simple search matches, how loosely,
+  the unit of text a search of several tokens is kept within (see
+  `within-control`) and the case. Then the scope of the search, the
+  corpus chooser
   and the metadata filter, each behind one disclosure. So the field the
   reader reaches for is the first control in the form, whatever the
   registry holds, and what qualifies what they typed is under their hand
@@ -1101,9 +1104,8 @@
   and works without JavaScript. The form carries an id, so a control
   rendered outside it (the sort of the concordance, the grouping of the
   frequency table) still submits with it. The corpus chooser, the metadata
-  filter and the query options are <fieldset> groups; inside the last, the
-  modes are a named group without a box of their own. No language is
-  submitted with the search: which language the
+  filter, the modes and the matching are <fieldset> groups. No language
+  is submitted with the search: which language the
   answer is worded in is the reader's own stored preference, not part of
   what they asked.
 
@@ -1158,22 +1160,22 @@
        ;; Named by a legend like the boxes beside it, so that the three
        ;; line up when they share a row; the word is the query's, since
        ;; everything in the box qualifies it
-       [:fieldset.query-options
+       ;; the query's box: its mode, named by the legend like the boxes
+       ;; beside it, so that they line up when they share a row
+       [:fieldset.modes
         [:legend (i18n/trx ui "legend" "Query")]
-        ;; the radios are still a group of their own, and still named:
-        ;; a fieldset is not the only thing that can say so
-        [:p {:role "radiogroup" :aria-label (i18n/tr ui "Query mode")}
-         (interpose " "
-                    (for [m url/modes]
-                      [:label [:input {:type    "radio" :name "mode" :value m
-                                       :checked (= m mode)
-                                       :on      {:change [:set-mode m]}}]
-                       ;; CQP as an abbreviation and no link: the click on
-                       ;; a label belongs to its radio, and the glossary is
-                       ;; in the masthead
-                       (if (= "cqp" m)
-                         (layout/term ui :cqp false)
-                         (mode-label ui m))]))]
+        [:p (interpose " "
+                       (for [m url/modes]
+                         [:label [:input {:type    "radio" :name "mode"
+                                          :value   m
+                                          :checked (= m mode)
+                                          :on      {:change [:set-mode m]}}]
+                          ;; CQP as an abbreviation and no link: the click
+                          ;; on a label belongs to its radio, and the
+                          ;; glossary is in the masthead
+                          (if (= "cqp" m)
+                            (layout/term ui :cqp false)
+                            (mode-label ui m))]))]
         ;; without the client a change of mode is a submit, which the field
         ;; a fresh form requires would refuse; this button submits without
         ;; that check, so a reader can leave an empty form for another mode.
@@ -1184,16 +1186,18 @@
                 (i18n/tr ui "Change mode")]]])
         ;; what a change of mode could not keep (see `switch-notice`):
         ;; rendered always, so that the live region exists before it fills,
-        ;; and above everything a switch changes
+        ;; and before everything a switch changes
         [:div.status {:role "status"}
-         (switch-notice ui mode (:loss switch) (:unread switch))]
-        ;; a row each, on the line: what a simple search matches, how
-        ;; loosely, the unit of text a search of several tokens is kept
-        ;; within, which the words of a simple search read as the tokens
-        ;; of an extended one do, and the case, from the edge like the
-        ;; modes. One row of four ran the attribute into the options it
-        ;; governs, and the case box last keeps the three selects in one
-        ;; column
+         (switch-notice ui mode (:loss switch) (:unread switch))]]
+       ;; the matching, a row each on the line: what a simple search
+       ;; matches, how loosely, the unit of text a search of several
+       ;; tokens is kept within, which the words of a simple search read
+       ;; as the tokens of an extended one do, and the case, from the edge
+       ;; like the modes. One row of four ran the attribute into the
+       ;; options it governs, and the case box last keeps the three
+       ;; selects in one column
+       [:fieldset.matching
+        [:legend (i18n/trx ui "legend" "Matching")]
         [:p (attribute-control ui search-attrs in (dead? :in))]
         [:p (match-control ui match (dead? :match))]
         [:p (within-control ui within (dead? :within))]

@@ -227,28 +227,26 @@ form.search :is(.status, .empty):empty {
 .query > p > button[type="submit"] { margin-inline-start: auto; }
 
 /* what the words or the tokens run as: a side note under the field */
-.query > p:has(> output) { color: var(--tx-2); }
+.query > .cqp { color: var(--tx-2); }
 
 /* a labelled row is a grid on the line; a label holding its control is
    a subgrid of the row, its words ending on the line and its control
-   filling the rest. The rows are the two of the options group and the
-   unit's row beside it, which is the box's, not the group's */
-.query-options p:has(> label > select),
+   filling the rest */
+.matching p:has(> label > select),
 .find {
   display: grid; grid-template-columns: var(--label-col) 1fr;
   column-gap: 0.5rem; align-items: center;
 }
-.query-options p:has(> label > select)
+.matching p:has(> label > select)
   > label:has(> select, > input:not([type="checkbox"])) {
   display: grid; grid-template-columns: subgrid; grid-column: 1 / -1;
   align-items: center; text-align: end;
 }
-.query-options p:has(> label > select)
+.matching p:has(> label > select)
   > label > :is(select, input:not([type="checkbox"])),
 .find input { inline-size: 100%; min-inline-size: 0; text-align: start; }
 .find label { text-align: end; }
-form.search [role="radiogroup"] { display: flex; flex-wrap: wrap;
-                                  gap: 0.25rem 1rem; }
+.modes > p { display: flex; flex-wrap: wrap; gap: 0.25rem 1rem; }
 
 /* a metadata attribute's pattern takes a row and its two bounds the
    next, deeper in the box than the line reaches */
@@ -474,15 +472,14 @@ ul.index .size, ul.index em { grid-column: 3; justify-self: end; }
 }
 
 /* middle: the form spans the page with the answer below it, so its
-   boxes share rows under the query: two from 40rem, with the metadata
-   box across the width, three from 48rem */
+   four boxes share rows under the query: two and two from 40rem, three
+   from 48rem with the metadata box across the width */
 @media (min-width: 40rem) and (max-width: 63.999rem) {
   .rail { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .rail > .filters { grid-column: 1 / -1; }
 }
 @media (min-width: 48rem) and (max-width: 63.999rem) {
   .rail { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-  .rail > .filters { grid-column: auto; }
+  .rail > .filters { grid-column: 1 / -1; }
 }
 
 /* wide: the boxes are a rail beside the answer, so refining a query
