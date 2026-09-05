@@ -20,7 +20,8 @@
             [dk.cst.corpus-probe.views.corpus :as corpus-views]
             [dk.cst.corpus-probe.views.frequencies :as freq-views]
             [dk.cst.corpus-probe.views.layout :as layout]
-            [dk.cst.corpus-probe.views.page :as page]))
+            [dk.cst.corpus-probe.views.page :as page]
+            [dk.cst.corpus-probe.views.text :as text-views]))
 
 (defn result-view
   "The outcome of the search in `state` in its `:view`: the hits counted
@@ -95,9 +96,9 @@
   and the client already holds every table (see
   dk.cst.corpus-probe.i18n).
 
-  The two corpus pages take that context and their own data, whose
-  `:lang` is the corpus's rather than the interface's; a document page
-  needs neither."
+  The two corpus pages and the reading page take that context and their
+  own data, whose `:lang` is the corpus's rather than the interface's;
+  a document page needs neither."
   [{:keys [route lang] :as state}]
   (let [ui    (i18n/->ui lang)
         state (assoc state :ui ui)]
@@ -106,4 +107,5 @@
       :search  (search-view state)
       :corpora (corpus-views/index-view ui (:data state))
       :corpus  (corpus-views/info-view ui (:data state))
+      :text    (text-views/reading-view ui (:data state))
       nil)))

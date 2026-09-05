@@ -60,7 +60,7 @@
              (nqr "[]" {:rows [25 49] :context 20 :struct-attrs [:text_id]}))))
     (testing "the modes that all mean corpus order share one result"
       (is (= (nqr "[]" {:sort "corpus"}) (nqr "[]" {:sort nil})))
-      (is (= (nqr "[]" {:sort "corpus"}) (nqr "[]" {:sort "bogus"})))
+      (is (= (nqr "[]" {:sort "corpus"}) (nqr "[]" {:sort "no such mode"})))
       (is (not= (nqr "[]" {:sort "corpus"}) (nqr "[]" {:sort "word"}))))
     (testing "two registries can define one corpus name"
       (is (not= (nqr "[]" {})
@@ -354,3 +354,14 @@
     (is (= 1 (cache/reap-due! ctx)))
     (testing "the save straight after does not walk the directory again"
       (is (nil? (cache/reap-due! ctx))))))
+
+(deftest holds?-test
+  (let [ctx {:registry "r" :cache-dir (str (fs/create-temp-dir))}
+        nqr "q_1"]
+    (.mkdirs (cache/corpus-directory ctx "PROBE"))
+    (spit (cache/result-file ctx "PROBE" nqr) (apply str (repeat 40 "x")))
+    (testing "a file is held to eight bytes a match, as when it was saved"
+      (is (cache/holds? ctx "PROBE" nqr 5))
+      (is (not (cache/holds? ctx "PROBE" nqr 6))))
+    (testing "a missing file holds nothing"
+      (is (not (cache/holds? ctx "PROBE" "q_2" 1))))))

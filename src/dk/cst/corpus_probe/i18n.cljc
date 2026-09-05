@@ -107,10 +107,21 @@
   {"da" {:group "." :decimal ","}
    "en" {:group "," :decimal "."}})
 
+(defn fixed
+  "Number `n` written with `decimals` digits after the point, whatever
+  the platform: a JVM double prints its .0 and a JavaScript number does
+  not, so a rate of a whole number would read as a count in the
+  browser and as a rate on the server."
+  [n decimals]
+  #?(:clj  (.toPlainString (.setScale (bigdec n) (int decimals)
+                                      java.math.RoundingMode/HALF_UP))
+     :cljs (.toFixed n decimals)))
+
 (defn group-digits
   "Write number `n` the way `ui`'s language writes it: its digits
   grouped in thousands, its fraction (when it has one) after the
-  decimal separator; nil for nil, so a statistic that could not be
+  decimal separator, and with exactly `decimals` digits of it when
+  given (see `fixed`); nil for nil, so a statistic that could not be
   computed shows as nothing.
 
   Danish and English swap the two separators, so a rate beside a
@@ -120,18 +131,24 @@
   ;; => \"64.600.000\"
 
   (group-digits (->ui \"da\") 1234.5)
-  ;; => \"1.234,5\""
-  [{:keys [lang] :as ui} n]
-  (when (some? n)
-    (let [{:keys [group decimal]} (number-formats lang (number-formats
-                                                        source-language))
-          [whole fraction] (str/split (str n) #"\.")]
-      (cond-> (->> (reverse whole)
-                   (partition-all 3)
-                   (map (comp str/join reverse))
-                   (reverse)
-                   (str/join group))
-        fraction (str decimal fraction)))))
+  ;; => \"1.234,5\"
+
+  (group-digits (->ui \"en\") 1234 1)
+  ;; => \"1,234.0\""
+  ([ui n]
+   (group-digits ui n nil))
+  ([{:keys [lang] :as ui} n decimals]
+   (when (some? n)
+     (let [{:keys [group decimal]} (number-formats lang (number-formats
+                                                         source-language))
+           [whole fraction] (str/split (if decimals (fixed n decimals) (str n))
+                                       #"\.")]
+       (cond-> (->> (reverse whole)
+                    (partition-all 3)
+                    (map (comp str/join reverse))
+                    (reverse)
+                    (str/join group))
+         fraction (str decimal fraction))))))
 
 (comment
   ;; a string no table covers falls back to its own English

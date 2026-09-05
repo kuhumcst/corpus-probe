@@ -26,6 +26,20 @@
   [id]
   (str corpora "/" (str/lower-case id)))
 
+(def hit-id
+  "The id of the hit marked on a reading page, which its URL lands on."
+  "hit")
+
+(defn text
+  "The URL of the reading page of the text of corpus `id` holding
+  corpus position `cpos`, the hit from `cpos` to `matchend` marked and
+  landed on: `/corpora/viser/text?cpos=9&matchend=10#hit`. A hit of one
+  token names no end."
+  [id cpos matchend]
+  (str (corpus id) "/text?cpos=" cpos
+       (when (and matchend (not= cpos matchend)) (str "&matchend=" matchend))
+       "#" hit-id))
+
 (def glossary
   "The glossary."
   "/glossary")
@@ -78,7 +92,7 @@
   [:q :mode :in :ci :prefix :suffix
    :corpus :scope ::filter
    :near :distance :subset :subset-at :subset-attr :sample
-   :view :sort :context :attr :at :docs
+   :view :sort :context :attr :at :by :docs
    :page :expand])
 
 (defn metadata-key?

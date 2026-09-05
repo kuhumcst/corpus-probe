@@ -189,3 +189,91 @@
         (is (some #{"frekvens"} da))
         (is (some #{"i alt"} da))
         (is (some #{[:code "lemma"]} da))))))
+
+(deftest by-control-test
+  (let [attrs [{:type :positional :name :word}
+               {:type :structural :name :text_year}]
+        html  (freq/by-control en attrs :text_year)]
+    (testing "the corpora are the columns unless an attribute is chosen"
+      (is (some #(and (map? %) (= "" (:value %)) (not (:selected %)))
+                (deep html)))
+      (is (some #(and (map? %) (= "" (:value %)) (:selected %))
+                (deep (freq/by-control en attrs nil))))
+      (is (some #{"corpora"} (deep html))))
+    (testing "the structural attributes come first"
+      (is (= ["structural attributes" "positional attributes"]
+             (keep :label (deep html)))))
+    (testing "the chosen attribute is selected, and the control applies itself"
+      (is (some #(and (map? %) (= "text_year" (:value %)) (:selected %))
+                (deep html)))
+      (is (some #(and (map? %) (= "by" (:name %)) (= page/form-id (:form %))
+                      (= [:apply-view] (get-in % [:on :change])))
+                (deep html))))
+    (is (some #{"kolonner"} (deep (freq/by-control da attrs nil))))))
+
+(def crosstab
+  "A frequency result counted against a second, structural attribute."
+  {:query        "[pos = \"N.*\"]"
+   :attr         :lemma
+   :by           :text_year
+   :at           "match"
+   :sized        true
+   :counts       [{:corpus "PROBE" :tokens 47 :size 15}]
+   :columns      [{:value "2023" :total 3 :tokens 20}
+                  {:value "2024" :total 2 :tokens 27}]
+   :column-count 2
+   :rows         [{:value "hund" :cells {"2023" 3 "2024" 2} :total 5
+                   :href  "/?subset=hund"}]})
+
+(deftest crosstab-table-test
+  (let [html (freq/crosstab-table en crosstab)]
+    (testing "it scrolls inside its own region"
+      (is (= :div.scroll (first html))))
+    (testing "a column per value of the second attribute, headed by it"
+      (is (some #{[:th {:scope "col"} [:time "2023"]]} (deep html)))
+      (is (some #{[:th {:scope "col"} "total"]} (deep html))))
+    (testing "the tokens of each column head the rows"
+      (is (some #{[:th {:scope "row"} "tokens"]} (deep html)))
+      (is (some #{[:td.n "20"]} (deep html))))
+    (testing "a cell is the count with its rate per million of the column"
+      (is (some #{[:td.n "3" " (150,000.0)"]} (deep html)))
+      (is (some #{[:td.n "5" " (106,383.0)"]} (deep html))))
+    (testing "the value links to its hits"
+      (is (some #{[:th {:scope "row"} [:a {:href "/?subset=hund"} "hund"]]}
+                (deep html))))
+    (testing "unsized, a cell is the count alone and there is no tokens row"
+      (let [html (deep (freq/crosstab-table en (assoc crosstab :sized false)))]
+        (is (some #{[:td.n "3" nil]} html))
+        (is (not (some #{[:th {:scope "row"} "tokens"]} html)))))))
+
+(deftest crosstab-summary-test
+  (is (= (str "15 hits in PROBE by lemma at the start of the match and "
+              "text_year · 1 value · 2 columns")
+         (freq/frequency-summary en crosstab 1)))
+  (testing "cut columns say so"
+    (is (re-find #"3 columns, the 2 most frequent shown"
+                 (freq/frequency-summary en (assoc crosstab :column-count 3)
+                                         1))))
+  (testing "the section shows the cross-tabulation, without a text count"
+    (let [html (deep (freq/frequency-section
+                      {:lang      "en"
+                       :result    crosstab
+                       :view      :frequencies
+                       :attrs     [{:type :structural :name :text_year}]
+                       :positions ["match"]
+                       :params    {:attr "lemma"}}))]
+      (is (some #{:table.frequencies.crosstab} html))
+      (is (not (some #(and (map? %) (= "docs" (:name %))) html))))))
+
+(deftest sized-table-test
+  (let [result (assoc counted
+                      :attr  :text_year
+                      :sized true
+                      :rows  [{:value  "2023" :freqs {"PROBE" 3} :total 3
+                               :tokens {"PROBE" 20}}])
+        html   (deep (freq/frequency-table en result))]
+    (testing "a sized table has a tokens column per corpus and rates against it"
+      (is (some #{[:th {:scope "col"} "tokens"]} html))
+      (is (some #{[:td.n "20"]} html))
+      (is (some #{[:td.n "150,000.0"]} html))
+      (is (some #{[:colgroup {:span 3}]} html)))))

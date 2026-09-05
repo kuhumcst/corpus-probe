@@ -135,3 +135,20 @@
       (is (= [{:word "a\rb" :pos "P" :lemma "l"}] (:match hit)))))
   (testing "a non-KWIC line throws instead of returning garbage"
     (is (thrown? Exception (parse/kwic-line->hit [:word] "not a kwic line")))))
+
+(deftest group-pairs->freqs-test
+  (testing "the counted value comes first, though CQP prints it second"
+    (is (= [{:values ["hund" "2023"] :freq 3}]
+           (parse/group-pairs->freqs ["2023\thund\t3"]))))
+  (testing "a TAB inside the value counted against stays intact"
+    (is (= [{:values ["hund" "bad\ttitle"] :freq 7}]
+           (parse/group-pairs->freqs ["bad\ttitle\thund\t7"])))))
+
+(deftest s-decode->sizes-test
+  (testing "each value gets the tokens of its regions"
+    (is (= {"Hverdag" 20 "Vejret" 19 "Samtale" 8}
+           (parse/s-decode->sizes (golden-lines "s-decode-regions.txt")))))
+  (testing "repeated values add up, blank values and lines are skipped"
+    (is (= {"S" 5 "V" 1}
+           (parse/s-decode->sizes ["0\t2\tS" "3\t3\tV" "4\t5\tS" "6\t7\t"
+                                   ""])))))

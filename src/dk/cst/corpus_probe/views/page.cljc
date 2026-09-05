@@ -28,18 +28,20 @@
 
 (defn sort-label
   "What the sort mode `value` (see dk.cst.corpus-probe.query/sort-modes)
-  is called, in `ui`; the value itself for a mode nothing names.
+  is called, in `ui`; a mode naming a positional attribute (see
+  dk.cst.corpus-probe.query/sort-attr) is the match by that attribute.
 
   Naming them here rather than in the query namespace keeps the CQP
   command table free of anything the interface decides."
   [ui value]
   (case value
-    "corpus" (i18n/tr ui "corpus order")
-    "word"   (i18n/tr ui "match")
-    "left"   (i18n/tr ui "left context")
-    "right"  (i18n/tr ui "right context")
-    "random" (i18n/tr ui "random")
-    value))
+    "corpus"  (i18n/tr ui "corpus order")
+    "word"    (i18n/tr ui "match")
+    "reverse" (i18n/tr ui "match from the end")
+    "left"    (i18n/tr ui "left context")
+    "right"   (i18n/tr ui "right context")
+    "random"  (i18n/tr ui "random")
+    (str (i18n/tr ui "match") " " value)))
 
 (defn sort-control
   "The sort control of the concordance in `ui`: a select over
@@ -516,12 +518,50 @@
                           (map (fn [attr] [:code (name attr)]) unlisted))]])])])))
 
 (defn query-example
-  "The example query shown for `mode`, in `ui`: the two modes take
-  different input, so one example cannot serve both."
+  "The example query shown for `mode`, in `ui`: the modes take different
+  input, so one example cannot serve them all."
   [ui mode]
-  (if (= mode "cqp")
-    (i18n/tr ui "\"x\" or [lemma = \"x\"]")
+  (case mode
+    "cqp"  (i18n/tr ui "\"x\" or [lemma = \"x\"]")
+    "list" (i18n/tr ui "one word per line")
     (i18n/tr ui "one word, or several words in order")))
+
+(defn list-words
+  "The words of the list `q` a list-mode search asked for: one per
+  line, blank lines and surrounding space dropped, as
+  dk.cst.corpus-probe.query/simple->cqp reads them."
+  [q]
+  (remove str/blank? (map str/trim (str/split-lines (str q)))))
+
+(defn query-phrase
+  "The query of `params` in words for a title, in `ui`: the query as
+  typed, or, for a list, how many words it holds, a title being one
+  line and a list not."
+  [ui {:keys [q mode]}]
+  (if (= mode "list")
+    (let [n (count (list-words q))]
+      (str n " " (i18n/trn ui "word" "words" n)))
+    q))
+
+(defn query-field
+  "The query field of the search form in `ui`, holding `q`: a search
+  box, or, in list `mode`, a text area taking one word per line. Both
+  are named q, so either submits the query, and both carry the one id
+  the client finds the field by. Neither has a visible label: a field
+  with a search button beside it needs none to say what it is, so the
+  name it keeps is the one only a screen reader reads."
+  [ui mode q]
+  (let [attrs {:id           "q"
+               :name         "q"
+               :aria-label   (i18n/tr ui "Query")
+               :placeholder  (query-example ui mode)
+               :autocomplete "off"
+               :spellcheck   "false"}]
+    (if (= mode "list")
+      ;; the text is the element's content: a text area has no value
+      ;; attribute for a document to carry it in
+      [:textarea (assoc attrs :rows 4) (or q "")]
+      [:input (assoc attrs :type "search" :value (or q ""))])))
 
 (defn attribute-control
   "The control choosing which positional attribute a simple search
@@ -597,9 +637,10 @@
   :prefix :suffix), submitted as GET to `action`, with the page's own
   `extra` hidden inputs.
 
-  The query input comes first, then everything that decides how it is
-  read, in one group: the mode, under it the options that only a simple
-  query has, what it matches on one row and how loosely on the next.
+  The query field comes first (see `query-field`), then everything that
+  decides how it is read, in one group: the mode, under it the options
+  that only a simple query or a list has, what it matches on one row and
+  how loosely on the next.
   Then the scope of the search, the corpus chooser and the metadata
   filter, each behind one disclosure. So the field the reader reaches for
   is the first control in the form, whatever the registry holds, and what
@@ -608,8 +649,9 @@
 
   The query example is the placeholder of the mode in `:params`, and the
   mode radios dispatch `:set-mode`, so choosing a mode swaps the example
-  and disables the simple options without a round trip; without the
-  client both are as the search was submitted.
+  and the shape of the field and disables the simple options without a
+  round trip; without the client all three are as the search was
+  submitted.
 
   Wrapped in a <search> landmark; GET, so every search has a shareable URL
   and works without JavaScript. The form carries an id, so a control
@@ -636,18 +678,9 @@
      [:form.search {:id form-id :method "get" :action action}
       extra
       ;; the button belongs against the field it submits, not at the foot
-      ;; of every control that qualifies it. A field with a search button
-      ;; beside it needs no visible label to say what it is, so the name
-      ;; it keeps is the one only a screen reader reads
+      ;; of every control that qualifies it
       [:p
-       [:input {:id           "q"
-                :name         "q"
-                :type         "search"
-                :aria-label   (i18n/tr ui "Query")
-                :value        (or q "")
-                :placeholder  (query-example ui mode)
-                :autocomplete "off"
-                :spellcheck   "false"}]
+       (query-field ui mode q)
        " "
        [:button {:type "submit"} (i18n/trx ui "button" "Search")]]
       ;; one group: everything here qualifies the query above it, and two
@@ -665,9 +698,14 @@
        ;; a fieldset is not the only thing that can say so
        [:p {:role "radiogroup" :aria-label (i18n/tr ui "Query mode")}
         [:label [:input {:type    "radio" :name "mode" :value "simple"
-                         :checked (not= mode "cqp")
+                         :checked (not (#{"cqp" "list"} mode))
                          :on      {:change [:set-mode "simple"]}}]
          (i18n/tr ui "Simple")]
+        " "
+        [:label [:input {:type    "radio" :name "mode" :value "list"
+                         :checked (= mode "list")
+                         :on      {:change [:set-mode "list"]}}]
+         (i18n/tr ui "List")]
         " "
         ;; an abbreviation and no link: the click on a label belongs to
         ;; its radio, and the glossary is in the masthead
@@ -834,6 +872,7 @@
   (case type
     :timeout        (i18n/tr ui "The search did not finish in time")
     :no-corpus      (i18n/tr ui "No corpus selected")
+    :no-texts       (i18n/tr ui "The corpus marks no texts")
     :unknown-corpus (i18n/tr ui "Unknown corpus")
     :rejected       (i18n/tr ui "Request rejected")
     :misaligned     (i18n/tr ui "Unreadable CQP output")
@@ -846,6 +885,8 @@
   [ui type]
   (case type
     :no-corpus      (i18n/tr ui "Select at least one corpus to search.")
+    :no-texts       (i18n/tr ui (str "Without a text attribute there is "
+                                     "nothing to read as one text."))
     :unknown-corpus (i18n/tr ui "The registry has no corpus with that name.")
     :misaligned     (i18n/tr ui "CQP did not print the requested rows.")
     :internal       (i18n/tr ui (str "The search failed on the server. The "
@@ -1058,8 +1099,9 @@
 
 (defn sidebar
   "The token inspection panel: what the concordance's cursor is on, in
-  `ui`, from `selected` (its :token, :structs and :corpus);
-  nil while nothing is selected.
+  `ui`, from `selected` (its :token, :structs, :corpus and the :cpos and
+  :matchend of its hit, which the link to the whole text takes); nil
+  while nothing is selected.
 
   Above the rail's breakpoint it takes the query column, so it sits beside
   the hits it describes without narrowing them; below it, it is a sheet at
@@ -1073,13 +1115,16 @@
 
   The group titles are in `ui`; the attribute names inside them are the
   corpus's own."
-  [ui {:keys [token structs corpus] :as selected}]
+  [ui {:keys [token structs corpus cpos matchend] :as selected}]
   (when selected
     [:aside.sidebar {:aria-label (i18n/tr ui "Token details")}
      [:h2 (i18n/tr ui "Token details")]
      [:button {:type "button" :on {:click [:close]}} (i18n/tr ui "Close")]
      (detail-group (i18n/tr ui "Token") (dissoc token :open :close))
      (detail-group (i18n/tr ui "Text") structs)
+     (when (and corpus cpos)
+       [:p [:a {:href (url/text corpus cpos matchend)}
+            (i18n/tr ui "Read the whole text")]])
      (when corpus
        [:section
         [:h3 (i18n/tr ui "Corpus")]

@@ -715,3 +715,83 @@
       (is (= 400 status))
       (is (str/starts-with? (get headers "Content-Type") "text/plain"))
       (is (str/starts-with? body "REGISTRY-PROBE: internal")))))
+
+(deftest sort-options-test
+  (testing "the fixed modes, then a sort by each attribute but word"
+    (is (= ["corpus" "word" "reverse" "left" "right" "random" "lemma" "pos"]
+           (api/sort-options [:word :lemma :pos])))
+    (is (= ["corpus" "word" "reverse" "left" "right" "random"]
+           (api/sort-options [:word])))))
+
+(deftest by-param-test
+  (is (= :text_year (api/by-param "text_year")))
+  (testing "no attribute, no second attribute"
+    (is (nil? (api/by-param "")))
+    (is (nil? (api/by-param nil)))))
+
+(deftest view-hrefs-by-test
+  (testing "the second attribute of a table travels between the views"
+    (is (every? #(str/includes? (second %) "by=text_year")
+                (api/view-hrefs {:q "hund" :attr "lemma" :by "text_year"})))))
+
+(deftest list-mode-test
+  (testing "a list compiles to one token pattern"
+    (is (= "[lemma = \"(hund|kat)\"]"
+           (api/->cqp {:q "hund\nkat" :mode "list" :in "lemma"}))))
+  (testing "a list is one token, so it is kept within nothing"
+    (is (nil? (api/within-unit {:q "hund\nkat" :mode "list"}))))
+  (testing "a list is titled by its length, a title being one line"
+    (is (str/starts-with? (api/search-title en {:q "hund\nkat\n" :mode "list"})
+                          "2 words"))))
+
+(deftest text-page-test
+  (let [page (fn [id params]
+               (api/text-page {:registry "test/resources"}
+                              {:path-params  {:id id}
+                               :query-params params
+                               :headers      {"cookie" "lang=en"}}))]
+    (testing "a hostile or unknown corpus, or no position, is not found"
+      (is (= 404 (:status (page "bad; exit" {:cpos "9"}))))
+      (is (= 404 (:status (page "nope" {:cpos "9"}))))
+      (is (= 404 (:status (page "registry-probe" {:cpos "nine"})))))
+    (testing "without a position the reader is sent to the corpus page"
+      (is (= 303 (:status (page "registry-probe" {}))))
+      (is (= "/corpora/registry-probe"
+             (get-in (page "registry-probe" {:cpos ""}) [:headers "Location"]))))
+    (testing "a corpus whose data are gone is a page saying so, and its
+              paths stay private"
+      (let [{:keys [status body]} (page "registry-probe" {:cpos "9"})]
+        (is (= 200 status))
+        (is (str/includes? body "CQP error"))
+        (is (not (str/includes? body "/corpora/data/probe")))))))
+
+(deftest export-stream-test
+  (when-cwb
+   (let [download (fn [file params]
+                    (let [{:keys [status headers body]}
+                          (api/export-page ctx {:path-params  {:file file}
+                                                :query-params params})
+                          out (java.io.ByteArrayOutputStream.)]
+                      (body out)
+                      {:status  status
+                       :type    (get headers "Content-Type")
+                       :text    (String. (.toByteArray out) "UTF-8")}))
+         {:keys [status type text]} (download "kwic.tsv" {:corpus "PROBE,TALER"
+                                                          :q      "hund"})
+         lines (str/split-lines text)]
+     (testing "the download is written as the corpora answer, under the
+               columns of them all"
+       (is (= 200 status))
+       (is (str/starts-with? type "text/tab-separated-values"))
+       (is (= (str "corpus\tcpos\tmatchend\tleft\tmatch\tright\tmatch pos\t"
+                   "match lemma\ts_id\ttext_id\ttext_title\ttext_year\t"
+                   "text_speaker\ttext_party")
+              (first lines)))
+       (is (some #{(str "PROBE\t9\t9\t. Katten jagter en lille\thund\t"
+                        "i haven . Hunde og\tNCSI\thund\t2\tt1\tHverdag\t"
+                        "2023\t\t")}
+                 lines)))
+     (testing "as CSV, with the byte order mark and CRLF"
+       (let [{:keys [text]} (download "kwic.csv" {:corpus "PROBE" :q "hund"})]
+         (is (str/starts-with? text "﻿corpus,cpos,matchend,"))
+         (is (str/includes? text "\r\n")))))))

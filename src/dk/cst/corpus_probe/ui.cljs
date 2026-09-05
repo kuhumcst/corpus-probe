@@ -446,6 +446,18 @@
          (swap! state dissoc :selected))))
    0))
 
+(defn carried-query
+  "The query `q` as `mode` takes it: one word per line for a list, and
+  one line of words for anything else, since a search box has no line
+  breaks to keep a list in and would drop them.
+
+  (carried-query \"simple\" \"hund\\nkat\")
+  ;; => \"hund kat\""
+  [mode q]
+  (if (= "list" mode)
+    (str/replace (str/trim (str q)) #"\s+" "\n")
+    (str/replace (str q) #"\s*[\r\n]+\s*" " ")))
+
 (defn handle!
   "Apply an `action` to the state, using `data` (the Replicant dispatch
   data) for the key a token was pressed with.
@@ -456,7 +468,8 @@
   closes the panel once focus has gone elsewhere, and `:close` dismisses
   it from its own button. `:toggle-context` expands a hit (fetching its
   wider context) or collapses it. `:set-mode` records the query mode the
-  reader picked, which swaps the query example the placeholder shows.
+  reader picked, which swaps the query example the placeholder shows and
+  the shape of the field, keeping what was typed in it.
   `:apply-view` submits the search again with a result control as it now
   stands, so choosing an order is asking for it.
   `:toggle-corpora` records a corpus box or a whole folder being selected
@@ -479,7 +492,18 @@
   element alone."
   [data [action arg]]
   (case action
-    :set-mode (swap! state assoc-in [:params :mode] arg)
+    ;; the field changes shape between the modes (a list is a text
+    ;; area), so what was typed is carried into the new element rather
+    ;; than left behind in the old one
+    :set-mode (swap! state (fn [s]
+                             (-> s
+                                 (assoc-in [:params :mode] arg)
+                                 (assoc-in [:params :q]
+                                           (carried-query
+                                            arg
+                                            (some-> (.getElementById
+                                                     js/document "q")
+                                                    (.-value)))))))
     :apply-view (apply-view!)
     :toggle-corpora (do (toggle-corpora! arg) (refresh-filters!))
     ;; what metadata a selection offers is the server's to say, so it is
@@ -547,23 +571,30 @@
 
   The whole query string is rewritten rather than one param set on it,
   so the URL in the bar is the canonical one whatever was typed:
-  `mode=simple` goes and the corpora become one param."
+  `mode=simple` goes and the corpora become one param. Only on the search
+  page, whose query string is the one that rule knows: on any other
+  page it would drop what it does not know, and the reading page names
+  its position that way. Whatever the page, what is on screen is
+  recorded (see `shown`), so a fragment jump is not taken for a page to
+  fetch."
   []
-  (let [url    (current-url)
-        ks     (sort (keys (:expanded @state)))
-        params (cond-> (dissoc (location-params) :expand)
-                 (seq ks)
-                 (assoc :expand (str/join "," (map (fn [[corpus cpos]]
-                                                     (str corpus ":" cpos))
-                                                   ks))))]
-    (set! (.-search url) (url/query-string params))
-    ;; only when it would say something new: this runs on every render, and
-    ;; a render happens on every arrow key. Safari throws past roughly a
-    ;; hundred history writes in thirty seconds, and that throw comes back
-    ;; out through the watcher into the swap! that moved the cursor
-    (when (not= (.-href url) js/location.href)
-      (.replaceState js/history nil "" (.-href url)))
-    (reset! shown (page-key))))
+  (when (= url/search js/location.pathname)
+    (let [url    (current-url)
+          ks     (sort (keys (:expanded @state)))
+          params (cond-> (dissoc (location-params) :expand)
+                   (seq ks)
+                   (assoc :expand (str/join "," (map (fn [[corpus cpos]]
+                                                       (str corpus ":" cpos))
+                                                     ks))))]
+      (set! (.-search url) (url/query-string params))
+      ;; only when it would say something new: this runs on every render,
+      ;; and a render happens on every arrow key. Safari throws past
+      ;; roughly a hundred history writes in thirty seconds, and that
+      ;; throw comes back out through the watcher into the swap! that
+      ;; moved the cursor
+      (when (not= (.-href url) js/location.href)
+        (.replaceState js/history nil "" (.-href url)))))
+  (reset! shown (page-key)))
 
 (defn render!
   "Render the current state into the masthead and #app, then sync the URL
@@ -702,6 +733,19 @@
           :when hit]
     (fetch-context! corpus cpos (:matchend (:anchors hit)))))
 
+(defn landed-href
+  "The address a routed navigation to `href` answered by `response` lands
+  on: where the response came from, which is elsewhere after a redirect,
+  with the fragment of `href`, which a fetch never sends and a browser
+  keeps across a redirect. `href` itself when the response names no
+  address."
+  [href response]
+  (if (seq (.-url response))
+    (let [url (js/URL. (.-url response))]
+      (set! (.-hash url) (.-hash (js/URL. href js/location.href)))
+      (.-href url))
+    href))
+
 (defn navigate!
   "Fetch the route at `href` as data and render it, without a page load.
 
@@ -734,14 +778,18 @@
                             :signal  (.-signal controller)})
         (.then (fn [response]
                  (if (.-ok response)
-                   (.text response)
+                   ;; the address the answer came from travels with it:
+                   ;; a redirect may have moved it (see `landed-href`)
+                   (.then (.text response)
+                          (fn [body] [(landed-href href response) body]))
                    (throw (js/Error. "route request failed")))))
-        (.then (fn [body]
+        (.then (fn [[landed body]]
                  (let [data (read-transit body)]
                    ;; before the state is replaced, or a report scheduled
                    ;; for a wait that is over lands on the answer to it
                    (cancel! pending-timer)
-                   (when push? (.pushState js/history nil "" (cited-href href)))
+                   (when push?
+                     (.pushState js/history nil "" (cited-href landed)))
                    (reset! shown (page-key))
                    (set! (.-title js/document) (:title data))
                    (reset! state (client-state data))

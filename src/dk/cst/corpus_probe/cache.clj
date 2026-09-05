@@ -315,6 +315,18 @@
                       (into-array CopyOption
                                   [StandardCopyOption/ATOMIC_MOVE])))))))
 
+(defn holds?
+  "True when the saved query result named `nqr` of `corpus` under `ctx`
+  is large enough to hold `matches` matches: the rule `commit!` applies
+  when a result is saved, applied again when one is read whole. A file
+  that has shrunk since it was written reads back zero-filled past the
+  cut without CQP saying so, and a count over it would count position
+  nought that many times."
+  [ctx corpus nqr matches]
+  (boolean (some-> ^File (result-file ctx corpus nqr)
+                   (.length)
+                   (>= (* 8 (or matches 0))))))
+
 (defn stale?
   "True when `f` was last read more than `ttl-ms` before `now`."
   [ttl-ms now ^File f]

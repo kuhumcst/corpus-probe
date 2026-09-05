@@ -82,3 +82,11 @@
     (is (= "1,000" (i18n/group-digits (i18n/->ui "de") 1000))))
   (testing "a statistic that could not be computed stays nothing"
     (is (nil? (i18n/group-digits da nil)))))
+
+(deftest fixed-digits-test
+  (testing "a rate keeps its one decimal on either platform"
+    (is (= "150,000.0" (i18n/group-digits en 150000.0 1)))
+    (is (= "150,000.0" (i18n/group-digits en 150000 1)))
+    (is (= "1.234,0" (i18n/group-digits da 1234 1)))
+    (is (= "106,383.0" (i18n/group-digits en 106382.96 1)))
+    (is (nil? (i18n/group-digits en nil 1)))))

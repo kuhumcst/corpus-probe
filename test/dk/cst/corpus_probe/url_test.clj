@@ -149,3 +149,9 @@
     (is (not (url/metadata-key? :fx.text_year)))
     (is (not (url/metadata-key? :format)))
     (is (not (url/metadata-key? nil)))))
+
+(deftest text-test
+  (is (= "/corpora/probe/text?cpos=9#hit" (url/text "PROBE" 9 9)))
+  (testing "a hit of several tokens names its end"
+    (is (= "/corpora/probe/text?cpos=9&matchend=11#hit" (url/text "PROBE" 9 11))))
+  (is (= "/corpora/probe/text?cpos=9#hit" (url/text "PROBE" 9 nil))))

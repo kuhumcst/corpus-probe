@@ -132,28 +132,41 @@
   Korp's simple search: `[word = \"<escaped>\"]` with `.*` affixes for
   :prefix?/:suffix? and the %c flag for :case-insensitive?, matching the
   positional attribute :attr (default word) rather than the surface form
-  when one is given. Returns nil for blank input rather than a
-  match-everything query. The region the words are kept within is each
-  corpus's own business (see `within-query`).
+  when one is given. Under :list?, the input is a list of words, one per
+  line, and the query is the one token pattern matching any of them: an
+  alternation, which the affixes and the flag then apply to as a whole.
+  Returns nil for blank input rather than a match-everything query. The
+  region the words are kept within is each corpus's own business (see
+  `within-query`).
 
   (simple->cqp \"lille hund\" {:case-insensitive? true})
   ;; => [word = \"lille\" %c] [word = \"hund\" %c]
 
   (simple->cqp \"hund\" {:attr :lemma})
-  ;; => [lemma = \"hund\"]"
+  ;; => [lemma = \"hund\"]
+
+  (simple->cqp \"hund\\nkat\" {:list? true :prefix? true})
+  ;; => [word = \"(hund|kat).*\"]"
   ([input]
    (simple->cqp input {}))
-  ([input {:keys [case-insensitive? prefix? suffix? attr] :or {attr :word}}]
+  ([input {:keys [case-insensitive? prefix? suffix? attr list?]
+           :or   {attr :word}}]
    (when-not (str/blank? input)
-     (let [pattern (fn [word]
+     (let [pattern (fn [literal]
                      (str "[" (name attr) " = \""
                           (when suffix? ".*")
-                          (escape-literal word)
+                          literal
                           (when prefix? ".*")
-                          "\"" (when case-insensitive? " %c") "]"))]
-       (->> (str/split (str/trim input) #"\s+")
-            (map pattern)
-            (str/join " "))))))
+                          "\"" (when case-insensitive? " %c") "]"))
+           words   (fn [parts] (remove str/blank? (map str/trim parts)))]
+       (if list?
+         (let [alternatives (->> (words (str/split-lines input))
+                                 (distinct)
+                                 (map escape-literal))]
+           (pattern (str "(" (str/join "|" alternatives) ")")))
+         (->> (words (str/split input #"\s+"))
+              (map (comp pattern escape-literal))
+              (str/join " ")))))))
 
 (defn within-query
   "`query` with its matches kept within one region of s-attribute `attr`,
@@ -344,16 +357,25 @@
   match, whose output dk.cst.corpus-probe.parse/count->freqs reads, and
   its `group` at one token, read by group->freqs.
 
-  Given the s-attribute `within`, `group` counts the regions of it each
-  value occurs in rather than the matches (manual section 3.4): a
-  document frequency, which `count` cannot give, so it is the caller's
-  to ask for one token only."
+  Given the s-attribute `:within` of `opts`, `group` counts the regions
+  of it each value occurs in rather than the matches (manual section
+  3.4): a document frequency. Given the attribute `:by`, it counts the
+  values of `attr` against each value of that one at the match, a
+  cross-tabulation read by group-pairs->freqs. `count` can do neither,
+  so both are the caller's to ask for at one token only.
+
+  (count-command \"match\" :lemma {:by :text_year})
+  ;; => group Last match lemma by match text_year;"
+  ;; TODO: `group ... by ...` is verified on 3.5.0 only; check it on the
+  ;; production 3.4.27 (PLAN.md appendix B lists group as safe, not the
+  ;; pairwise form).
   ([position attr]
-   (count-command position attr nil))
-  ([position attr within]
+   (count-command position attr {}))
+  ([position attr {:keys [within by]}]
    (if (whole-match? (valid-position position))
      (str "count Last by " (name attr) ";")
      (str "group Last " position " " (name attr)
+          (when by (str " by match " (name by)))
           (when within (str " within " (name within))) ";"))))
 
 (defn subset-command
@@ -405,26 +427,60 @@
 (def sort-modes
   "The KWIC sort modes, in display order: each mode's `sort` param value
   and the CQP command that reorders the result `Last`. The context sorts
-  order by the words nearest the match (up to five tokens either side).
+  order by the words nearest the match (up to five tokens either side);
+  the reverse sort orders the matches by their word read from its end,
+  which puts the words with one suffix together (manual section 3.3).
 
-  What each mode is called is the interface's business rather than this
-  namespace's (see dk.cst.corpus-probe.views.page/sort-label)."
+  A mode naming a positional attribute sorts by that attribute instead
+  (see `sort-attr`). What each mode is called is the interface's
+  business rather than this namespace's (see
+  dk.cst.corpus-probe.views.page/sort-label)."
+  ;; TODO: `sort ... reverse` is verified on 3.5.0 only; check it on the
+  ;; production 3.4.27 (PLAN.md appendix B lists sort as safe, not this
+  ;; option of it).
   (let [external "set ExternalSort on; sort Last by word"]
-    [["corpus" "sort Last;"]
-     ["word"   (str external ";")]
-     ["left"   (str external " on match[-1] .. match[-5];")]
-     ["right"  (str external " on matchend[1] .. matchend[5];")]
-     ["random" "sort Last randomize 1;"]]))
+    [["corpus"  "sort Last;"]
+     ["word"    (str external ";")]
+     ["reverse" (str external " reverse;")]
+     ["left"    (str external " on match[-1] .. match[-5];")]
+     ["right"   (str external " on matchend[1] .. matchend[5];")]
+     ["random"  "sort Last randomize 1;"]]))
+
+(defn attribute-name?
+  "True when `s` is a syntactically valid CQP attribute name: a letter or
+  underscore followed by letters, digits, underscores and hyphens.
+
+  An interpolation guard like `corpus-name?`: an attribute a reader
+  chose to sort by is spliced into a command outside the QueryLock, so
+  it is held to CQP's own lexer rule for a name here and checked against
+  the corpus's inventory by dk.cst.corpus-probe.search."
+  [s]
+  (boolean (re-matches #"[a-zA-Z_][a-zA-Z0-9_-]*" (str s))))
+
+(defn sort-attr
+  "The positional attribute the sort mode `mode` orders the matches by:
+  a keyword when `mode` is an attribute name (see `attribute-name?`)
+  rather than one of the `sort-modes`; nil otherwise.
+
+  (sort-attr \"lemma\")
+  ;; => :lemma"
+  [mode]
+  (when (and (not (some #{mode} (map first sort-modes)))
+             (attribute-name? mode))
+    (keyword mode)))
 
 (defn sort-command
-  "The CQP command that sorts `Last` for sort mode `mode` (see `sort-modes`);
-  an unknown mode falls back to corpus order.
+  "The CQP command that sorts `Last` for sort mode `mode`: one of the
+  `sort-modes`, or a positional attribute to sort the matches by (see
+  `sort-attr`); anything else falls back to corpus order.
 
-  Word sort delegates to CQP's ExternalSort so the collation follows the
-  process locale (Danish, not byte order); random sort uses a fixed seed so
-  pagination is stable across requests."
+  Word and attribute sorts delegate to CQP's ExternalSort so the
+  collation follows the process locale (Danish, not byte order); random
+  sort uses a fixed seed so pagination is stable across requests."
   [mode]
   (or (some (fn [[k command]] (when (= k mode) command)) sort-modes)
+      (when-let [attr (sort-attr mode)]
+        (str "set ExternalSort on; sort Last by " (name attr) ";"))
       "sort Last;"))
 
 (defn context-spec
@@ -479,32 +535,23 @@
                  [:tabulate (str "tabulate " span " match " (name attr) ";")]))
           struct-attrs)))
 
-(defn kwic-batch
-  "The batch running `query` (raw CQP) against `corpus` and returning the
-  rows `:rows` of its result: a vector of [section command] pairs, each
-  section naming what its command's output holds (see `batch-sections`).
+(defn result-batch
+  "The batch producing the result Last of `query` (raw CQP) in `corpus`:
+  [section command] pairs, the setup with `context` and `cache-dir` (see
+  `setup-command`), the activation, the query within `filter` (see
+  `restricted-query`), the narrowings of `opts` (see `narrowing`), the
+  `sample` (see `sample-command`), the size, the `sort` (see
+  `sort-command`) and, given `nqr`, the save. What reads the result
+  follows: a page of it (see `kwic-batch`) or every row (see
+  `export-batch`).
 
-  `context` is a number of tokens or an s-attribute keyword (see
-  `context-spec`); `rows` is the [from to] row range (see
-  `page-rows`); `sort` is a sort mode (see `sort-modes`), which the `cat`,
-  `dump` and `tabulate` rows then follow; `filter` restricts the query to
-  the regions of a metadata filter (see `restricted-query`); `p-attrs`,
-  `struct-attrs` and `cache-dir` are as `page-commands` and
-  `setup-command` take them.
-
-  `subset` and `near` narrow the result (see `narrowing`), and `sample`
-  then reduces what is left to that many random matches (see
-  `sample-command`), all before anything is counted or ordered, so that
-  the size reported and the rows paged are those of the hits kept.
-
-  Given `nqr`, the result is also saved under that name for
-  `stored-kwic-batch` to page later. It is named only after being sorted,
-  since the sort order travels with the result into the save file, which
-  is what makes a stored result worth having."
-  [corpus query {:keys [p-attrs struct-attrs context rows sort filter
-                        sample cache-dir nqr]
-                 :or   {context (:context kwic-defaults)
-                        rows    (:rows kwic-defaults)}
+  The narrowings and the sample come before anything is counted or
+  ordered, so that the size reported and the rows read are those of
+  the hits kept. The result is named only after being sorted, since the
+  sort order travels with it into the save file, which is what makes a
+  stored result worth having."
+  [corpus query {:keys [context filter sample cache-dir nqr sort]
+                 :or   {context (:context kwic-defaults)}
                  :as   opts}]
   (let [sampling (sample-command sample)]
     (-> [[:setup  (setup-command context cache-dir)]
@@ -515,8 +562,75 @@
         (into [[:size "size Last;"]
                [:sort (sort-command sort)]])
         (cond-> nqr (conj (let [nqr (valid-result-name nqr)]
-                            [:save (str nqr " = Last; save " nqr ";")])))
-        (into (page-commands "Last" rows p-attrs struct-attrs)))))
+                            [:save (str nqr " = Last; save " nqr ";")]))))))
+
+(defn kwic-batch
+  "The batch running `query` (raw CQP) against `corpus` and returning the
+  rows `:rows` of its result: the `result-batch` of `opts` followed by
+  the `page-commands` of the rows, [section command] pairs, each
+  section naming what its command's output holds (see `batch-sections`).
+
+  `rows` is the [from to] row range (see `page-rows`), `p-attrs` and
+  `struct-attrs` are as `page-commands` takes them, and the rest of
+  `opts` are `result-batch`'s. Given `nqr`, the result is also saved
+  under that name for `stored-kwic-batch` to page later."
+  [corpus query {:keys [p-attrs struct-attrs rows]
+                 :or   {rows (:rows kwic-defaults)}
+                 :as   opts}]
+  (into (result-batch corpus query opts)
+        (page-commands "Last" rows p-attrs struct-attrs)))
+
+(defn tabulate-commands
+  "The [section command] pairs printing the rows `[from to]` of the
+  query result named `nqr` for an export, one line per hit: a :tabulate
+  of the columns no TAB can occur in (the match's positions, `context`
+  words either side of it, its words and its values of each of the
+  `p-attrs` but word), then one :tabulate per entry of `struct-attrs`,
+  since an annotation value may hold a TAB (see `page-commands`).
+  `tabulate` clamps the range to the result as `cat` does, and prints a
+  position outside the corpus as an empty word."
+  [nqr [from to] context p-attrs struct-attrs]
+  (let [span (str nqr " " from " " to)]
+    (into [[:tabulate
+            (str "tabulate " span " match, matchend, "
+                 "match[-" (long context) "]..match[-1] word, "
+                 "match..matchend word, "
+                 "matchend[1]..matchend[" (long context) "] word"
+                 (str/join (map #(str ", match..matchend " (name %))
+                                (remove #{:word} p-attrs)))
+                 ";")]]
+          (map (fn [attr]
+                 [:tabulate (str "tabulate " span " match " (name attr) ";")]))
+          struct-attrs)))
+
+(defn export-batch
+  "The batch running `query` (raw CQP) against `corpus` and printing the
+  first `limit` rows of its result for an export: the `result-batch` of
+  `opts` followed by the `tabulate-commands` of the rows, with `context`
+  a number of words either side, since `tabulate` takes token offsets
+  only, and `p-attrs` and `struct-attrs` as they take them."
+  [corpus query {:keys [context p-attrs struct-attrs limit] :as opts}]
+  (into (result-batch corpus query opts)
+        (tabulate-commands "Last" [0 (dec limit)] context p-attrs
+                           struct-attrs)))
+
+(defn text-batch
+  "The batch reading one whole region of `corpus` as a KWIC row with no
+  context: [section command] pairs as `kwic-batch` returns them, for
+  `query` (raw CQP, whose one match is the region, see `position-query`
+  and CQP's `expand to`), showing the p-attributes `p-attrs`, tagging
+  the regions of the s-attributes `shown` inline, where the row is
+  split into the blocks it is read in, and fetching the `struct-attrs`
+  as `page-commands` does."
+  [corpus query {:keys [p-attrs struct-attrs shown]}]
+  (-> [[:setup  (setup-command 0 nil)]
+       [:corpus (str corpus ";")]
+       [:query  (locked-query query)]]
+      (cond-> (seq shown)
+        (conj [:show (str "show "
+                          (str/join " " (map #(str "+" (name %)) shown))
+                          ";")]))
+      (into (page-commands "Last" [0 0] p-attrs struct-attrs))))
 
 (defn stored-kwic-batch
   "The batch returning the rows `:rows` of the saved query result named
@@ -533,6 +647,32 @@
          [:corpus (str corpus ";")]
          [:size   (str "size " (valid-result-name nqr) ";")]]
         (page-commands nqr rows p-attrs struct-attrs)))
+
+(defn stored-export-batch
+  "The batch printing the first `limit` rows of the saved query result
+  named `nqr` of `corpus` for an export, as `export-batch` prints a
+  fresh one's; no query runs and nothing is sorted, as with
+  `stored-kwic-batch`."
+  [corpus nqr {:keys [context p-attrs struct-attrs cache-dir limit]}]
+  (into [[:setup  (setup-command context cache-dir)]
+         [:corpus (str corpus ";")]
+         [:size   (str "size " (valid-result-name nqr) ";")]]
+        (tabulate-commands nqr [0 (dec limit)] context p-attrs struct-attrs)))
+
+(defn load-command
+  "The command making the saved query result named `nqr` of `corpus` in
+  `cache-dir` its result Last, for commands that count one: the
+  directory first, since setting it rescans the corpus list (see
+  `setup-command`), then the activation, then the copy, which is what
+  reads the file.
+
+  (load-command \"PROBE\" \"q_1\" \"/cache/PROBE\")
+  ;; => set DataDirectory \"/cache/PROBE\"; PROBE; Last = q_1;"
+  ;; TODO: assigning a saved result to Last is verified on 3.5.0 only;
+  ;; check it on the production 3.4.27 before relying on it there.
+  [corpus nqr cache-dir]
+  (str "set DataDirectory \"" (valid-data-directory cache-dir) "\"; "
+       corpus "; Last = " (valid-result-name nqr) ";"))
 
 (defn batch-sections
   "Group the output `results` of `batch` (its [section command] pairs) by

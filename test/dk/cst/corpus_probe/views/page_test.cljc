@@ -294,14 +294,15 @@
 (deftest sort-label-test
   (testing "every sort mode the query namespace offers is named here"
     ;; in Danish, where no label can coincide with the param value
-    (is (= ["korpusrækkefølge" "match" "venstre kontekst" "højre kontekst"
-            "tilfældig"]
+    (is (= ["korpusrækkefølge" "match" "match bagfra" "venstre kontekst"
+            "højre kontekst" "tilfældig"]
            (map (comp (partial page/sort-label da) first) query/sort-modes)))
     (doseq [[value] query/sort-modes]
       (is (not (str/blank? (page/sort-label en value)))
           (str "sort mode " value " has no label"))))
-  (testing "a mode nothing offers falls back to its own name"
-    (is (= "nonesuch" (page/sort-label en "nonesuch")))))
+  (testing "a mode naming an attribute is the match by that attribute"
+    (is (= "match lemma" (page/sort-label en "lemma")))
+    (is (= "match lemma" (page/sort-label da "lemma")))))
 
 (deftest view-label-test
   (is (= [:abbr {:title "key word in context"} "KWIC"]
@@ -316,17 +317,19 @@
                              {:ui en :folders [] :params params} "/" nil))
                       (filter #(and (map? %) (= "mode" (:name %))))))]
     (testing "Simple comes first, since it is what most searches want"
-      (is (= ["simple" "cqp"] (map :value (radios {})))))
+      (is (= ["simple" "list" "cqp"] (map :value (radios {})))))
     (testing "and it is the default, so a bare word is not a parse error"
-      (is (= [true false] (map (comp boolean :checked) (radios {}))))
-      (is (= [true false] (map (comp boolean :checked)
-                               (radios {:mode "simple"})))))
-    (testing "CQP mode is opt-in and stays selected once chosen"
-      (is (= [false true] (map (comp boolean :checked)
-                               (radios {:mode "cqp"})))))
+      (is (= [true false false] (map (comp boolean :checked) (radios {}))))
+      (is (= [true false false] (map (comp boolean :checked)
+                                     (radios {:mode "simple"})))))
+    (testing "the list and CQP modes are opt-in and stay selected once chosen"
+      (is (= [false true false] (map (comp boolean :checked)
+                                     (radios {:mode "list"}))))
+      (is (= [false false true] (map (comp boolean :checked)
+                                     (radios {:mode "cqp"})))))
     (testing "each radio dispatches the mode it selects, so the client can
               swap the example without a round trip"
-      (is (= [[:set-mode "simple"] [:set-mode "cqp"]]
+      (is (= [[:set-mode "simple"] [:set-mode "list"] [:set-mode "cqp"]]
              (map (comp :change :on) (radios {})))))))
 
 (deftest query-example-test
@@ -868,3 +871,34 @@
       (is (some #{[:button {:type "button" :on {:click [:close]}} "Close"]}
                 (deep html))))))
 
+(deftest query-field-test
+  (testing "a simple or CQP query is a search box holding the query"
+    (is (= [:input {:id           "q"
+                    :name         "q"
+                    :aria-label   "Query"
+                    :placeholder  "one word, or several words in order"
+                    :autocomplete "off"
+                    :spellcheck   "false"
+                    :type         "search"
+                    :value        "hund"}]
+           (page/query-field en nil "hund"))))
+  (testing "a list is a text area, its words its content"
+    (let [[tag attrs text] (page/query-field en "list" "hund\nkat")]
+      (is (= :textarea tag))
+      (is (= "q" (:name attrs)))
+      (is (= "one word per line" (:placeholder attrs)))
+      (is (= "hund\nkat" text)))
+    (is (= "ét ord pr. linje"
+           (:placeholder (second (page/query-field da "list" nil)))))))
+
+(deftest query-phrase-test
+  (is (= "hund" (page/query-phrase en {:q "hund"})))
+  (is (= "2 words" (page/query-phrase en {:q "hund\n\nkat\n" :mode "list"})))
+  (is (= "1 ord" (page/query-phrase da {:q "hund" :mode "list"}))))
+
+(deftest sidebar-text-link-test
+  (let [selected {:token {:word "hund"} :corpus "PROBE" :cpos 9 :matchend 9}]
+    (testing "the panel links to the whole text of the hit it describes"
+      (is (some #(and (map? %) (= "/corpora/probe/text?cpos=9#hit" (:href %)))
+                (deep (page/sidebar en selected))))
+      (is (some #{"Læs hele teksten"} (deep (page/sidebar da selected)))))))

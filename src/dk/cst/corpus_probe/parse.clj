@@ -118,6 +118,23 @@
             {:values [value] :freq (parse-long freq)}))
         lines))
 
+(defn group-pairs->freqs
+  "Parse `lines` from `group ... by ...` into frequency maps.
+
+  Returns [{:values [<counted> <counted against>] :freq <n>} ...]: the
+  value counted first and the value it was counted against second, as
+  the command names them; CQP prints them the other way round. The
+  frequency and the counted value are split off from the right, so a
+  TAB inside the value counted against stays intact. One inside the
+  counted value does not, which only a structural attribute counted
+  against another can carry."
+  [lines]
+  (mapv (fn [line]
+          (let [[_ by value freq] (re-matches #"(?s)(.*)\t([^\t]*)\t(\d+)"
+                                              line)]
+            {:values [value by] :freq (parse-long freq)}))
+        lines))
+
 (defn count->freqs
   "Parse `lines` from `count` (with PrettyPrint off: frequency TAB first
   line TAB string) into frequency maps.
@@ -167,6 +184,24 @@
                     (remove str/blank? lines))
             (sort-by key)
             (mapv (fn [[value n]] {:values [value] :freq n})))))
+
+(defn s-decode->sizes
+  "Parse `lines` from `cwb-s-decode` (start TAB end TAB annotation value,
+  one line per region, in corpus order) into the number of tokens
+  carrying each value: {<value> <tokens>}.
+
+  A region spans its end position less its start, plus one. Blank lines
+  (the trailing one, and regions with a blank value) are skipped, as
+  `s-decode->freqs` skips them."
+  [lines]
+  (reduce (fn [m line]
+            (let [[start end value] (str/split line #"\t" 3)]
+              (if (str/blank? value)
+                m
+                (update m value (fnil + 0)
+                        (inc (- (parse-long end) (parse-long start)))))))
+          {}
+          lines))
 
 (defn describe->map
   "Parse `lines` from `cwb-describe-corpus -s` (one corpus) into corpus

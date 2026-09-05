@@ -105,3 +105,20 @@
    (testing "an attribute with too many values to list is nil"
      (with-value-limit 1
        (is (nil? (tools/annotation-values! ctx "VISER" :text_year)))))))
+
+(deftest annotation-sizes-test
+  (testing "a hostile corpus name is rejected before any command is built"
+    (is (thrown-with-msg? Exception #"Invalid corpus name"
+                          (tools/annotation-sizes! ctx "PROBE; exit"
+                                                   :text_year))))
+  (when-cwb
+   (testing "only annotated s-attributes of the corpus can be decoded"
+     (is (thrown-with-msg? Exception #"Not an annotated structural attribute"
+                           (tools/annotation-sizes! ctx "TALER" "word"))))
+   (testing "each value gets the tokens of its regions, the corpus in all"
+     (is (= {"2023" 20 "2024" 27}
+            (tools/annotation-sizes! ctx "PROBE" :text_year)))
+     (is (= {"S" 28 "V" 14}
+            (tools/annotation-sizes! ctx "TALER" "text_party")))
+     (is (= 42 (reduce + (vals (tools/annotation-sizes! ctx "TALER"
+                                                        :text_party))))))))

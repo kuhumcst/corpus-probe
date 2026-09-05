@@ -12,10 +12,6 @@ msgid "no data"
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/corpus.cljc
-msgid "tokens"
-msgstr ""
-
-#: src/dk/cst/corpus_probe/views/corpus.cljc
 msgid "unavailable"
 msgstr ""
 
@@ -107,19 +103,9 @@ msgstr ""
 msgid "Position"
 msgstr ""
 
-#: src/dk/cst/corpus_probe/api.clj src/dk/cst/corpus_probe/views/frequencies.cljc
-msgid "All tokens"
-msgstr ""
-
-#: src/dk/cst/corpus_probe/api.clj src/dk/cst/corpus_probe/views/frequencies.cljc
-msgid "by"
-msgstr ""
-
 #: src/dk/cst/corpus_probe/views/frequencies.cljc
-msgid "value"
-msgid_plural "values"
-msgstr[0] ""
-msgstr[1] ""
+msgid "columns"
+msgstr ""
 
 #: src/dk/cst/corpus_probe/views/frequencies.cljc
 msgid "the"
@@ -129,6 +115,30 @@ msgstr ""
 msgid "most frequent shown"
 msgstr ""
 
+#: src/dk/cst/corpus_probe/api.clj src/dk/cst/corpus_probe/views/frequencies.cljc
+msgid "All tokens"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/api.clj src/dk/cst/corpus_probe/views/frequencies.cljc
+msgid "by"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/api.clj src/dk/cst/corpus_probe/views/frequencies.cljc
+msgid "and"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/frequencies.cljc
+msgid "value"
+msgid_plural "values"
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/dk/cst/corpus_probe/views/frequencies.cljc
+msgid "column"
+msgid_plural "columns"
+msgstr[0] ""
+msgstr[1] ""
+
 #: src/dk/cst/corpus_probe/views/frequencies.cljc
 msgid "count texts"
 msgstr ""
@@ -137,8 +147,16 @@ msgstr ""
 msgid "total"
 msgstr ""
 
+#: src/dk/cst/corpus_probe/views/corpus.cljc src/dk/cst/corpus_probe/views/frequencies.cljc
+msgid "tokens"
+msgstr ""
+
 #: src/dk/cst/corpus_probe/views/frequencies.cljc
 msgid "texts"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/frequencies.cljc
+msgid "the rate per million tokens of the column in parentheses"
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/frequencies.cljc
@@ -227,6 +245,10 @@ msgstr ""
 
 #: src/dk/cst/corpus_probe/views/layout.cljc src/dk/cst/corpus_probe/views/page.cljc
 msgid "match"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/page.cljc
+msgid "match from the end"
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/kwic.cljc src/dk/cst/corpus_probe/views/page.cljc
@@ -358,7 +380,15 @@ msgid "\"x\" or [lemma = \"x\"]"
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/page.cljc
+msgid "one word per line"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/page.cljc
 msgid "one word, or several words in order"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/page.cljc
+msgid "Query"
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/corpus.cljc src/dk/cst/corpus_probe/views/page.cljc
@@ -367,10 +397,6 @@ msgstr ""
 
 #: src/dk/cst/corpus_probe/views/kwic.cljc src/dk/cst/corpus_probe/views/page.cljc
 msgid "Loading …"
-msgstr ""
-
-#: src/dk/cst/corpus_probe/views/page.cljc
-msgid "Query"
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/page.cljc
@@ -390,6 +416,10 @@ msgid "Simple"
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/page.cljc
+msgid "List"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/page.cljc
 msgid "Simple-search options"
 msgstr ""
 
@@ -405,7 +435,7 @@ msgstr ""
 msgid "ends with"
 msgstr ""
 
-#: src/dk/cst/corpus_probe/views/corpus.cljc src/dk/cst/corpus_probe/views/page.cljc
+#: src/dk/cst/corpus_probe/views/corpus.cljc src/dk/cst/corpus_probe/views/frequencies.cljc src/dk/cst/corpus_probe/views/page.cljc
 msgid "corpora"
 msgstr ""
 
@@ -429,10 +459,6 @@ msgstr ""
 
 #: src/dk/cst/corpus_probe/views/page.cljc
 msgid "per corpus"
-msgstr ""
-
-#: src/dk/cst/corpus_probe/views/frequencies.cljc src/dk/cst/corpus_probe/views/page.cljc
-msgid "in"
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/page.cljc
@@ -468,6 +494,10 @@ msgid "No corpus selected"
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/page.cljc
+msgid "The corpus marks no texts"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/page.cljc
 msgid "Unknown corpus"
 msgstr ""
 
@@ -489,6 +519,10 @@ msgstr ""
 
 #: src/dk/cst/corpus_probe/views/page.cljc
 msgid "Select at least one corpus to search."
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/page.cljc
+msgid "Without a text attribute there is nothing to read as one text."
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/page.cljc
@@ -536,10 +570,18 @@ msgid "Token"
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/page.cljc
-msgid "Text"
+msgid "Read the whole text"
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/page.cljc
 msgid "Corpus"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/page.cljc src/dk/cst/corpus_probe/views/text.cljc
+msgid "Text"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/frequencies.cljc src/dk/cst/corpus_probe/views/page.cljc src/dk/cst/corpus_probe/views/text.cljc
+msgid "in"
 msgstr ""
 

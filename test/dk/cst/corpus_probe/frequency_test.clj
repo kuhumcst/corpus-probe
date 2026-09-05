@@ -1,9 +1,12 @@
 (ns dk.cst.corpus-probe.frequency-test
   "Frequency breakdowns and metadata filter value lists; skipped when CWB
   or the dev corpora are missing."
-  (:require [clojure.test :refer [deftest is testing]]
+  (:require [babashka.fs :as fs]
+            [clojure.test :refer [deftest is testing]]
+            [dk.cst.corpus-probe.cache :as cache]
             [dk.cst.corpus-probe.cqp-test :refer [ctx when-cwb]]
             [dk.cst.corpus-probe.frequency :as frequency]
+            [dk.cst.corpus-probe.query :as query]
             [dk.cst.corpus-probe.search :as search]
             [dk.cst.corpus-probe.search-test :refer [da-collator]]
             [dk.cst.corpus-probe.tools-test :refer [with-value-limit]]
@@ -115,6 +118,132 @@
      (let [table (frequency/frequency-table! ctx ["PROBE"] "" :lemma)]
        (is (= [{:corpus "PROBE" :tokens 47 :size 47}] (:counts table)))
        (is (= {:value "." :freqs {"PROBE" 6} :total 6} (first (:rows table))))))
-   (testing "a whole corpus cannot be tabled by a structural attribute"
-     (is (-> (frequency/frequency-table! ctx ["VISER"] "" :text_author)
-             :counts first :error)))))
+   (testing "a whole corpus is tabled by a structural attribute from the
+             size of its regions"
+     (let [table (frequency/frequency-table! ctx ["PROBE"] "" :text_year)]
+       (is (= [{:corpus "PROBE" :tokens 47 :size 47}] (:counts table)))
+       (is (:sized table))
+       (is (= [{:value "2024" :freqs {"PROBE" 27} :total 27 :tokens {"PROBE" 27}}
+               {:value "2023" :freqs {"PROBE" 20} :total 20 :tokens {"PROBE" 20}}]
+              (:rows table)))))))
+
+(deftest sized-frequencies-test
+  (when-cwb
+   (testing "a breakdown by a structural attribute measures each value's text"
+     (let [table (frequency/frequency-table! ctx ["PROBE" "VISER"]
+                                             "[pos = \"N.*\"]" :text_year)]
+       (is (:sized table))
+       (is (= {:value "2023" :freqs {"PROBE" 8} :total 8 :tokens {"PROBE" 20}}
+              (some #(when (= "2023" (:value %)) %) (:rows table))))))
+   (testing "and a filtered one measures the regions kept"
+     (let [table (frequency/frequency-table! ctx ["PROBE"] "[pos = \"N.*\"]"
+                                             :text_year
+                                             {:filter {:text_year #{"2024"}}})]
+       (is (= [{:value "2024" :freqs {"PROBE" 7} :total 7 :tokens {"PROBE" 27}}]
+              (:rows table)))))
+   (testing "a positional attribute measures nothing"
+     (is (not (:sized (frequency/frequency-table! ctx ["PROBE"]
+                                                  "[pos = \"N.*\"]" :lemma)))))
+   (testing "nor does the whole match, which count cannot size"
+     (is (not (:sized (frequency/frequency-table!
+                       ctx ["PROBE"] "[pos = \"N.*\"]" :text_year
+                       {:at "match..matchend"})))))))
+
+(deftest cross-tabulation-test
+  (when-cwb
+   (testing "each value is counted against the second attribute"
+     (is (= {:values ["hund" "2023"] :freq 3}
+            (first (frequency/frequencies! ctx "PROBE" "[pos = \"N.*\"]" :lemma
+                                           {:by :text_year})))))
+   (testing "the second attribute must be groupable too"
+     (is (thrown-with-msg? Exception #"groupable"
+                           (frequency/frequencies! ctx "PROBE" "[]" :lemma
+                                                   {:by "text; exit"}))))
+   (let [table (frequency/frequency-table! ctx ["PROBE" "VISER"]
+                                           "[pos = \"N.*\"]" "lemma"
+                                           {:by "text_year" :docs true})]
+     (testing "the corpora are summed into one row per value"
+       (is (= {:value "hund" :cells {"2023" 3 "2024" 2 "1591" 1} :total 6}
+              (first (:rows table)))))
+     (testing "the columns are the values of the second attribute, collated,
+               each with its text"
+       (is (= [{:value "1583" :total 8 :tokens 29}
+               {:value "1591" :total 8 :tokens 19}
+               {:value "2023" :total 8 :tokens 20}
+               {:value "2024" :total 7 :tokens 27}]
+              (:columns table)))
+       (is (= 4 (:column-count table)))
+       (is (:sized table)))
+     (testing "no texts are counted beside a cross-tabulation"
+       (is (not (:docs table))))
+     (is (= :text_year (:by table))))
+   (testing "over the whole match there is no second attribute"
+     (is (nil? (:by (frequency/frequency-table!
+                     ctx ["PROBE"] "[pos = \"N.*\"]" "word"
+                     {:by "text_year" :at "match..matchend"})))))))
+
+(deftest pair-rows-test
+  (is (= [{:value "hund" :cells {"2023" 4 "2024" 1} :total 5}]
+         (frequency/pair-rows
+          [{:corpus "A" :freqs [{:values ["hund" "2023"] :freq 3}]}
+           {:corpus "B" :freqs [{:values ["hund" "2023"] :freq 1}
+                                {:values ["hund" "2024"] :freq 1}]}]))))
+
+(deftest columns-test
+  (let [rows [{:value "a" :cells {"y" 5 "x" 1 "z" 1}}
+              {:value "b" :cells {"x" 3}}]]
+    (testing "columns are collated, with their totals and their text summed"
+      (is (= [{:value "x" :total 4 :tokens 30}
+              {:value "y" :total 5 :tokens 10}
+              {:value "z" :total 1 :tokens 0}]
+             (frequency/columns @da-collator
+                                [{:sizes {"x" 10 "y" 10}} {:sizes {"x" 20}}]
+                                rows))))
+    (testing "without sizes they measure nothing"
+      (is (= [{:value "x" :total 4} {:value "y" :total 5} {:value "z" :total 1}]
+             (frequency/columns @da-collator [{}] rows))))
+    (testing "the most frequent are kept"
+      (with-redefs [frequency/column-limit 2]
+        (is (= ["x" "y"]
+               (map :value (frequency/columns @da-collator [{}] rows))))))))
+
+(deftest stored-breakdown-test
+  (when-cwb
+   (let [ctx       (assoc ctx :cache-dir (str (fs/create-temp-dir)))
+         q         "[pos = \"N.*\"]"
+         hunde     "\"hund.*\" %c"
+         breakdown #(frequency/frequencies! ctx "PROBE" q :lemma
+                                            {:docs true :sort "word"})
+         fresh     (breakdown)
+         opts      (search/cache-opts ctx "PROBE" q {:sort "word"})
+         counting  [(query/count-command "match" :lemma)]
+         file      (cache/result-file ctx "PROBE" (:nqr opts))]
+     (testing "until a concordance saves the result there is nothing to read"
+       (is (nil? (frequency/stored-breakdown! ctx "PROBE" q opts counting))))
+     (search/kwic! ctx "PROBE" q {:sort "word"})
+     (testing "once one has, the breakdown reads it and agrees with a fresh run"
+       (is (= [["hund\t5" "kat\t2" "København\t1" "bord\t1" "dag\t1" "hav\t1"
+                "have\t1" "sol\t1" "strand\t1" "ven\t1"]]
+              (frequency/stored-breakdown! ctx "PROBE" q opts counting)))
+       (is (= fresh (breakdown))))
+     (testing "and it is the file that is counted, not the query"
+       ;; give the query another query's stored result: if the breakdown
+       ;; reads the file rather than running the query, it counts that
+       (search/kwic! ctx "PROBE" hunde {:sort "word"})
+       (fs/copy (cache/result-file
+                 ctx "PROBE"
+                 (:nqr (search/cache-opts ctx "PROBE" hunde {:sort "word"})))
+                file
+                {:replace-existing true})
+       (is (= [{:values ["hund"] :freq 5 :docs 3}] (breakdown))))
+     (testing "a truncated file is discarded and the query run instead"
+       (with-open [f (java.io.RandomAccessFile. file "rw")]
+         (.setLength f 12))
+       (is (= fresh (t/with-min-level :fatal (breakdown))))
+       (is (not (cache/stored? ctx "PROBE" (:nqr opts)))))
+     (testing "a sampled concordance is never counted"
+       (search/kwic! ctx "PROBE" q {:sort "word" :sample 3})
+       (is (cache/stored? ctx "PROBE"
+                          (:nqr (search/cache-opts ctx "PROBE" q
+                                                   {:sort "word" :sample 3}))))
+       (is (= fresh (breakdown)))))))

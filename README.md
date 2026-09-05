@@ -38,6 +38,15 @@ corpora in the search. The frequency view never uses a sample. A count
 of a random hundred hits is a worse answer than a count of all hits,
 and it costs the same query.
 
+When a concordance has saved its result, the frequency view of the
+same search counts the saved result instead of running the query
+again. The saved result is loaded with `Last = <name>` and sorted back
+into corpus order, which the document frequency needs. The size of the
+file is checked against the size of the result, because a file that
+has shrunk reads back zero-filled without an error from CQP. A sampled
+result is never counted, and a damaged one is discarded and the query
+run.
+
 ### Narrow screens
 
 On a narrow screen, the concordance keeps its columns and lets the text
@@ -54,6 +63,12 @@ simple search of several words is kept within one sentence, as the CQP
 manual advises. The search uses the name that each corpus gives its
 sentences. Until the reader makes a search, a guide of CQP examples
 stands where the results will be.
+
+A third query mode, List, takes one word per line and finds any of
+them. The compiler turns the list into one token pattern with an
+alternation, so the attribute, the case and affix options, the
+metadata filter and every view work as for a simple search. The list
+stays in the URL, so a search for a list can be shared like any other.
 
 ### Documents
 
@@ -103,7 +118,13 @@ Pages are numbered from one, as the page numbers itself.
 ### Result controls
 
 A result has its own controls, in two rows. The first row sets how the
-hits are read: the sort, the context and the sample. The context can be
+hits are read: the sort, the context and the sample. The sort can order
+the hits by the match read from its end, which puts the words that
+share a suffix together. This is the `reverse` option of the CQP
+command `sort`. The sort can also order the hits by any positional
+attribute of the searched corpora, for example lemma or pos. A corpus
+that lacks the attribute reports an error, so a silent corpus order
+never stands in for the order that was asked. The context can be
 a number of words, or a sentence or a paragraph, under the attribute
 that each corpus has for it. The second row is behind a disclosure. It
 narrows the hits to those with a given word nearby, within a few tokens
@@ -130,6 +151,52 @@ only the first token.
 Each row links to the hits that it counted. Thus a table is a way into
 a concordance, not the end of one. A checkbox adds the number of texts
 in which each value occurs.
+
+When the table groups by a structural attribute, for example the year,
+each value has text of its own. The table then measures the rate per
+million against the tokens of that text, not against the whole corpus.
+Thus a year with more text does not look busier. A column shows the
+tokens. The tokens come from `cwb-s-decode`, which lists the regions
+of the attribute. Under a metadata filter, the app counts the tokens
+of the kept regions with the CQP command `group` instead. A blank
+query grouped by a structural attribute is a table of the corpus size
+per value.
+
+The table can count one attribute against another, for example lemma
+by year. The control `columns` selects the second attribute. Each
+value of the second attribute is then a column, and the corpora are
+summed. This is the CQP command `group ... by ...`. When the second
+attribute is structural, the first row holds the tokens of each
+column, and each cell shows the rate per million of those tokens in
+parentheses, as KORP shows its statistics. The table holds at most
+100 columns, the most frequent. A row still links to its hits. The
+export has a frequency column and a rate column per value of the
+second attribute.
+
+### Exports
+
+A concordance export is written by the CQP command `tabulate`, one line
+per hit, and streamed corpus by corpus. The app holds one corpus's
+rows at a time. The export reads the result that the concordance
+saved, or runs the query and saves it. It holds at most 500,000 hits,
+because the driver still reads one corpus's output whole. The page
+says so when the export is cut. The positional attributes of the
+match and the structural attributes are one column each, over the
+union of the searched corpora. A structural attribute is read with a
+`tabulate` of its own, because its values may contain TAB. Where the
+concordance shows a sentence or a paragraph of context, the export
+shows 20 words on each side, because `tabulate` takes token offsets.
+
+### Reading a text
+
+The source column of the concordance and the token panel link to a
+reading page for the text behind a hit. The page shows the whole text
+as prose, with its metadata first and the hit marked, and the link
+lands on the hit. The text is one CQP match: a position query expanded
+to the corpus's own text attribute, read with no context. Its
+paragraphs are the ones the corpus marks. If the corpus marks none,
+each sentence is a paragraph. A corpus without a text attribute says
+so instead.
 
 ### Metadata filter
 

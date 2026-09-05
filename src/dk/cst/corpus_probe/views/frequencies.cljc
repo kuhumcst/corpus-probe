@@ -5,8 +5,9 @@
 
   The table keeps the columns CQP's `group` prints (value and frequency)
   per corpus and adds the computed relative frequencies and totals
-  (PLAN.md §7); the value cells render like the sidebar's attribute values,
-  so a text title is a <cite> and a year a <time>."
+  (PLAN.md §7), or, counted against a second attribute, has a column per
+  value of it; the value cells render like the sidebar's attribute
+  values, so a text title is a <cite> and a year a <time>."
   (:require [clojure.string :as str]
             [dk.cst.corpus-probe.i18n :as i18n]
             [dk.cst.corpus-probe.stats :as stats]
@@ -63,15 +64,51 @@
      [:option {:value position :selected (= position at)}
       (page/position-label ui position)])])
 
+(defn by-control
+  "The control choosing what the columns of the table are, in `ui`: the
+  corpora counted, one group of columns each, or the values of one of
+  the attribute descriptions `attrs`, the corpora then summed, `by` (a
+  keyword; nil for the corpora) chosen. The structural attributes come
+  first, a breakdown over the years or the authors being what this is
+  mostly for. It follows the position it qualifies and names the form it
+  submits with, as `attr-control` does."
+  [ui attrs by]
+  (let [{p :positional s :structural} (group-by :type attrs)
+        selected (some-> by name)]
+    (list
+     [:label {:for "by"} (i18n/tr ui "columns")]
+     " "
+     [:select {:id   "by" :name "by" :form page/form-id
+               :on   {:change [:apply-view]}}
+      [:option {:value "" :selected (nil? by)} (i18n/tr ui "corpora")]
+      (when (seq s)
+        [:optgroup {:label (i18n/tr ui "structural attributes")}
+         (map (partial attr-option selected) s)])
+      (when (seq p)
+        [:optgroup {:label (i18n/tr ui "positional attributes")}
+         (map (partial attr-option selected) p)])])))
+
+(defn shown-phrase
+  "That `shown` of `n` things, called `things` (the word for that many
+  of them), are shown, in `ui`: \"120 values, the 100 most frequent
+  shown\", or just the count when they all are."
+  [ui things n shown]
+  (str (i18n/group-digits ui n) " " things
+       (when (< shown n)
+         (str ", " (i18n/tr ui "the") " " (i18n/group-digits ui shown)
+              " " (i18n/tr ui "most frequent shown")))))
+
 (defn frequency-summary
   "The summary of frequency `result` showing `shown` of its rows, used as
   the heading naming the results region: what was counted, in the corpora
   that could be counted, within the metadata filter, narrowed and near a
-  word, by what and where in the match, and how many values there are,
-  in `ui`."
-  [ui {:keys [query attr at counts rows] :as result} shown]
-  (let [n        (count rows)
-        readable (filter :tokens counts)]
+  word, by what and where in the match, against what when the table is
+  a cross-tabulation, and how many values and columns there are, in
+  `ui`."
+  [ui {:keys [query attr at by counts rows columns column-count]
+       :as   result}
+   shown]
+  (let [readable (filter :tokens counts)]
     (str (if (str/blank? query)
            (i18n/tr ui "All tokens")
            (page/hits-phrase ui (reduce + (keep :size readable))))
@@ -82,11 +119,13 @@
          (page/near-phrase ui (:near result))
          " " (i18n/tr ui "by") " " (name attr)
          (when at (str " " (page/position-label ui at)))
-         " · " (i18n/group-digits ui n) " "
-         (i18n/trn ui "value" "values" n)
-         (when (< shown n)
-           (str ", " (i18n/tr ui "the") " " (i18n/group-digits ui shown)
-                " " (i18n/tr ui "most frequent shown"))))))
+         (when by (str " " (i18n/tr ui "and") " " (name by)))
+         " · " (shown-phrase ui (i18n/trn ui "value" "values" (count rows))
+                             (count rows) shown)
+         (when by
+           (str " · " (shown-phrase ui (i18n/trn ui "column" "columns"
+                                                 column-count)
+                                    column-count (count columns)))))))
 
 (defn docs-control
   "The control asking for the texts each value occurs in to be counted
@@ -102,29 +141,42 @@
    " " (i18n/tr ui "count texts")])
 
 (defn frequency-cells
-  "The cells of a frequency `n` in a corpus of `tokens`, in `ui`: the
-  count and its rate per million tokens, then the number of texts `docs`
-  when the table counts them (a number, nil otherwise)."
-  [ui n tokens docs]
+  "The cells of a frequency `n` against `tokens` tokens, in `ui`: the
+  count and its rate per million of them, then the tokens themselves
+  where the table is `sized` (they are then the text of the value rather
+  than the corpus, and differ from row to row), then the number of
+  texts `docs` when the table counts them (a number, nil otherwise)."
+  [ui n tokens sized docs]
   (list [:td.n (i18n/group-digits ui n)]
-        [:td.n (i18n/group-digits ui (stats/per-million n tokens))]
+        [:td.n (i18n/group-digits ui (stats/per-million n tokens) 1)]
+        (when sized [:td.n (i18n/group-digits ui tokens)])
         (when docs [:td.n (i18n/group-digits ui docs)])))
+
+(defn value-cell
+  "The value `value` of attribute `attr` as the header of its row,
+  linking to the hits it counted where the row has an `href`."
+  [attr value href]
+  [:th {:scope "row"}
+   (let [cell (page/attribute-value attr value)]
+     (if href [:a {:href href} cell] cell))])
 
 (defn frequency-table
   "The merged frequency `result` as a table: a row per value (the
   `row-limit` most frequent, each linking to the hits it counted where
   the row carries an `:href`), a column group per readable corpus (its
-  frequency, the rate per million tokens and, when the result counts
-  `:docs`, the texts it occurs in) and, over several corpora, a total
-  group. The counts are headed frequency, CWB's own word for what
-  `group` and cwb-lexdecode report; the headings are in `ui`."
-  [ui {:keys [attr counts rows docs] :as result}]
+  frequency, the rate per million tokens, those tokens when the result
+  is `:sized`, since they are then the text of the value rather than of
+  the corpus, and, when it counts `:docs`, the texts it occurs in) and,
+  over several corpora, a total group. The counts are headed frequency,
+  CWB's own word for what `group` and cwb-lexdecode report; the headings
+  are in `ui`."
+  [ui {:keys [attr counts rows docs sized] :as result}]
   (let [readable (filter :tokens counts)
         total?   (boolean (next readable))
         tokens   (reduce + (map :tokens readable))
         shown    (take row-limit rows)
         groups   (cond-> readable total? (concat [:total]))
-        span     (if docs 3 2)]
+        span     (cond-> 2 sized inc docs inc)]
     [:table.frequencies
      [:caption (i18n/tr ui "Frequencies")]
      [:colgroup]
@@ -142,21 +194,71 @@
        (for [_ groups]
          (list [:th {:scope "col"} (layout/term ui :frequency)]
                [:th {:scope "col"} (layout/term ui :per-million)]
+               (when sized [:th {:scope "col"} (i18n/tr ui "tokens")])
                (when docs [:th {:scope "col"} (i18n/tr ui "texts")])))]]
      [:tbody
-      (for [{:keys [value freqs total href] doc-freqs :docs} shown]
+      (for [{:keys [value freqs total href]
+             doc-freqs :docs row-tokens :tokens} shown]
         [:tr
-         ;; the value links to the hits it counted, where the table has a
-         ;; link for it
-         [:th {:scope "row"}
-          (let [cell (page/attribute-value attr value)]
-            (if href [:a {:href href} cell] cell))]
+         (value-cell attr value href)
          (for [{:keys [corpus tokens]} readable]
-           (frequency-cells ui (get freqs corpus 0) tokens
+           (frequency-cells ui (get freqs corpus 0)
+                            (if sized (get row-tokens corpus 0) tokens)
+                            sized
                             (when docs (get doc-freqs corpus 0))))
          (when total?
-           (frequency-cells ui total tokens
+           (frequency-cells ui total
+                            (if sized (reduce + (vals row-tokens)) tokens)
+                            sized
                             (when docs (reduce + (vals doc-freqs)))))])]]))
+
+(defn crosstab-table
+  "The cross-tabulated frequency `result` (see
+  dk.cst.corpus-probe.frequency/frequency-table! under :by) as a table:
+  a row per value of the attribute counted (the `row-limit` most
+  frequent, linked as `frequency-table` links them), a column per value
+  of the attribute it was counted against (the `:columns`) and a total
+  column, the corpora summed. Where the result is `:sized`, the tokens
+  each column measures against head the rows, and each cell gives the
+  rate per million of them after the count, in parentheses, as KORP's
+  statistics do; a count of nothing has no rate. The headings are in
+  `ui`.
+
+  Inside the region that scrolls it: a column per year is wider than the
+  page, which must not scroll sideways with it."
+  [ui {:keys [attr by counts columns rows sized] :as result}]
+  (let [tokens (reduce + (map :tokens (filter :tokens counts)))
+        cell   (fn [n t]
+                 (let [rate (when (and sized t (pos? n))
+                              (stats/per-million n t))]
+                   [:td.n (i18n/group-digits ui n)
+                    (when rate
+                      (str " (" (i18n/group-digits ui rate 1) ")"))]))]
+    [:div.scroll
+     [:table.frequencies.crosstab
+      [:caption (i18n/tr ui "Frequencies")
+       (when sized
+         (str " · " (i18n/tr ui (str "the rate per million tokens of the "
+                                     "column in parentheses"))))]
+      [:thead
+       [:tr
+        [:th {:scope "col"} [:code (name attr)]]
+        (for [{:keys [value]} columns]
+          [:th {:scope "col"} (page/attribute-value by value)])
+        [:th {:scope "col"} (i18n/tr ui "total")]]]
+      [:tbody
+       (when sized
+         [:tr
+          [:th {:scope "row"} (i18n/tr ui "tokens")]
+          (for [{col-tokens :tokens} columns]
+            [:td.n (i18n/group-digits ui col-tokens)])
+          [:td.n (i18n/group-digits ui tokens)]])
+       (for [{:keys [value cells total href]} (take row-limit rows)]
+         [:tr
+          (value-cell attr value href)
+          (for [{col :value col-tokens :tokens} columns]
+            (cell (get cells col 0) col-tokens))
+          (cell total tokens)])]]]))
 
 (defn tabled?
   "True when any corpus of frequency `result` could be counted, so its
@@ -177,10 +279,12 @@
   "The frequency view of the search in `state`.
 
   Holds, when any corpus could be counted, the grouping, position and
-  text count controls with the near control behind their disclosure (see
-  dk.cst.corpus-probe.views.page/view-controls) and the table, then the
-  download links (`:export-hrefs`, exports holding every row), in the
-  state's `:ui`, wrapped in the shared
+  column controls, with the text count where the columns are the corpora
+  (a cross-tabulation counts no texts), the near control behind their
+  disclosure (see dk.cst.corpus-probe.views.page/view-controls) and the
+  table, cross-tabulated when the result is counted `:by` a second
+  attribute, then the download links (`:export-hrefs`, exports holding
+  every row), in the state's `:ui`, wrapped in the shared
   dk.cst.corpus-probe.views.page/results-region."
   [{:keys [ui attrs positions params result error export-hrefs client?]
     :as   state}]
@@ -195,10 +299,15 @@
                                   " "
                                   (position-control ui positions (:at result))
                                   " "
-                                  (docs-control ui (:docs result)))
+                                  (by-control ui attrs (:by result))
+                                  (when-not (:by result)
+                                    (list " "
+                                          (docs-control ui (:docs result)))))
                             (page/near-control ui (:near result))
                             (:near result))
-        (frequency-table ui result)
+        (if (:by result)
+          (crosstab-table ui result)
+          (frequency-table ui result))
         ;; what to do next with the table, so it follows the table
         (page/download-links ui export-hrefs
                              (when (< row-limit (count (:rows result)))

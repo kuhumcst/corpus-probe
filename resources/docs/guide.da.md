@@ -1,7 +1,9 @@
 # Hjælp til forespørgsler
 
 For at lave en simpel søgning skal du skrive ét ord eller flere ord i
-rækkefølge. En simpel søgning kræver ingen syntaks.
+rækkefølge. En simpel søgning kræver ingen syntaks. For at finde et
+hvilket som helst ord fra en liste skal du vælge Liste som søgetype og
+skrive ét ord pr. linje.
 
 Eksemplerne nedenfor er [CQP](/glossary#cqp)-forespørgsler. Vælg CQP
 som søgetype for at bruge dem. Erstat x og y med dine egne ord.

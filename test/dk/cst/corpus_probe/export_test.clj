@@ -3,33 +3,26 @@
             [clojure.test :refer [deftest is testing]]
             [dk.cst.corpus-probe.export :as export]))
 
-(def hits
-  [{:corpus  "PROBE"
-    :cpos    9
-    :anchors {:matchend 9}
-    :left    [{:word "en" :pos "D" :lemma "en"}]
-    :match   [{:word "hund" :pos "NCSI" :lemma "hund"}]
-    :right   [{:word "i" :pos "PP" :lemma "i"}]
-    :structs {:text_title "Hverdag" :text_year "2023"}}
-   {:corpus  "TALER"
-    :cpos    4
-    :anchors {:matchend 5}
-    :left    []
-    :match   [{:word "den"} {:word "grønne"}]
-    :right   [{:word "omstilling"}]
-    :structs {:text_party "S"}}])
+(deftest kwic-header-test
+  (is (= ["corpus" "cpos" "matchend" "left" "match" "right" "match pos"
+          "match lemma" "text_title" "text_party"]
+         (export/kwic-header [:pos :lemma] [:text_title :text_party]))))
 
-(deftest kwic-table-test
-  (let [[header row1 row2] (export/kwic-table {:hits hits})]
-    (testing "columns cover the annotations any hit carries"
-      (is (= ["corpus" "cpos" "matchend" "left" "match" "right"
-              "match pos" "match lemma" "text_title" "text_year" "text_party"]
-             header)))
-    (testing "contexts are words, annotations space-joined per match token"
-      (is (= ["PROBE" "9" "9" "en" "hund" "i" "NCSI" "hund" "Hverdag" "2023" ""]
-             row1))
-      (is (= ["TALER" "4" "5" "" "den grønne" "omstilling" "" "" "" "" "S"]
-             row2)))))
+(deftest kwic-rows-test
+  (testing "a corpus's rows take the columns of the union, empty where it
+            lacks one"
+    (is (= [["TALER" "4" "5" "" "den grønne" "omstilling" "" "" "" "S"]]
+           (export/kwic-rows [:pos :lemma] [:text_title :text_party]
+                             {:corpus      "TALER"
+                              :annotations [:text_party]
+                              :rows        [["4" "5" "" "den grønne"
+                                             "omstilling" "S"]]})))
+    (is (= [["PROBE" "9" "9" "en" "hund" "i" "NCSI" "hund" "Hverdag" ""]]
+           (export/kwic-rows [:pos :lemma] [:text_title :text_party]
+                             {:corpus      "PROBE"
+                              :annotations [:pos :lemma :text_title]
+                              :rows        [["9" "9" "en" "hund" "i" "NCSI"
+                                             "hund" "Hverdag"]]})))))
 
 (deftest frequency-table-test
   (let [rows (export/frequency-table
@@ -77,3 +70,54 @@
            (subs (export/csv [["a" "b,c" "12\""]]) 1))))
   (testing "the text starts with a byte order mark"
     (is (str/starts-with? (export/csv [["a"]]) "\ufeff"))))
+
+(deftest sized-frequency-table-test
+  (let [rows (export/frequency-table
+              {:attr   :text_year
+               :sized  true
+               :counts [{:corpus "PROBE" :tokens 47 :size 15}
+                        {:corpus "VISER" :tokens 48 :size 16}]
+               :rows   [{:value  "2023"
+                         :freqs  {"PROBE" 8}
+                         :total  8
+                         :tokens {"PROBE" 20}}]})]
+    (testing "a sized table adds the tokens of each value and rates against them"
+      (is (= ["text_year" "PROBE frequency" "PROBE per million" "PROBE tokens"
+              "VISER frequency" "VISER per million" "VISER tokens"
+              "total frequency" "total per million" "total tokens"]
+             (first rows)))
+      (is (= ["2023" "8" "400000.0" "20" "0" "" "0" "8" "400000.0" "20"]
+             (second rows))))))
+
+(deftest crosstab-table-test
+  (let [result {:attr    :lemma
+                :by      :text_year
+                :sized   true
+                :counts  [{:corpus "PROBE" :tokens 47 :size 15}]
+                :columns [{:value "2023" :total 3 :tokens 20}
+                          {:value "2024" :total 2 :tokens 27}]
+                :rows    [{:value "hund" :cells {"2023" 3 "2024" 2} :total 5}]}
+        [header tokens row] (export/crosstab-table result)]
+    (is (= ["lemma" "2023 frequency" "2023 per million" "2024 frequency"
+            "2024 per million" "total frequency" "total per million"]
+           header))
+    (testing "the tokens each column measures against come first"
+      (is (= ["tokens" "20" "" "27" "" "47" ""] tokens)))
+    (is (= ["hund" "3" "150000.0" "2" "74074.1" "5" "106383.0"] row))
+    (testing "unsized, a column is its frequency alone"
+      (is (= [["lemma" "2023 frequency" "total frequency"] ["hund" "3" "3"]]
+             (export/crosstab-table
+              {:attr    :lemma
+               :counts  [{:corpus "PROBE" :tokens 47}]
+               :columns [{:value "2023" :total 3}]
+               :rows    [{:value "hund" :cells {"2023" 3} :total 3}]}))))))
+
+(deftest lines-test
+  (is (= "a\tb\n" (export/tsv-line ["a" "b"])))
+  (is (= "a,\"b,c\"\r\n" (export/csv-line ["a" "b,c"])))
+  (testing "the formats render a table as they render its lines"
+    (is (= (export/tsv [["a"] ["b"]])
+           (apply str (map (:line (export/formats "tsv")) [["a"] ["b"]]))))
+    (is (= (export/csv [["a"]])
+           (str (:preamble (export/formats "csv"))
+                ((:line (export/formats "csv")) ["a"]))))))

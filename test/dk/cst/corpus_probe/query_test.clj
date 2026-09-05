@@ -126,7 +126,7 @@
   (testing "the default is corpus order"
     (is (= "sort Last;" (query/sort-command "corpus")))
     (is (= "sort Last;" (query/sort-command nil)))
-    (is (= "sort Last;" (query/sort-command "bogus"))))
+    (is (= "sort Last;" (query/sort-command "no such mode"))))
   (testing "word sort uses ExternalSort for locale collation"
     (is (str/includes? (query/sort-command "word") "ExternalSort")))
   (testing "random sort uses a fixed seed"
@@ -292,7 +292,7 @@
     (is (not (query/whole-match? "match"))))
   (testing "within a region attribute, the regions each value occurs in"
     (is (= "group Last match lemma within text;"
-           (query/count-command "match" :lemma :text))))
+           (query/count-command "match" :lemma {:within :text}))))
   (testing "only CQP's own positions are spliced in"
     (is (thrown? Exception (query/count-command "match[-2]" :lemma)))
     (is (thrown? Exception (query/count-command "match; exit" :lemma)))))
@@ -371,3 +371,95 @@
   (testing "the name is guarded here too"
     (is (thrown? Exception (query/stored-kwic-batch "PROBE" "1abc"
                                                     {:p-attrs [:word]})))))
+
+(deftest sort-attr-test
+  (is (= :lemma (query/sort-attr "lemma")))
+  (testing "the fixed modes name no attribute, word included"
+    (is (nil? (query/sort-attr "word")))
+    (is (nil? (query/sort-attr "corpus")))
+    (is (nil? (query/sort-attr "reverse"))))
+  (testing "nothing that is not a name reaches a command"
+    (is (nil? (query/sort-attr "lemma; exit")))
+    (is (nil? (query/sort-attr "")))
+    (is (nil? (query/sort-attr nil)))))
+
+(deftest sort-attribute-command-test
+  (testing "a mode naming an attribute sorts by it under the same collation"
+    (is (= "set ExternalSort on; sort Last by lemma;"
+           (query/sort-command "lemma"))))
+  (testing "the reverse sort reads the word from its end"
+    (is (= "set ExternalSort on; sort Last by word reverse;"
+           (query/sort-command "reverse")))))
+
+(deftest count-by-command-test
+  (testing "a second attribute is counted against at the match"
+    (is (= "group Last match lemma by match text_year;"
+           (query/count-command "match" :lemma {:by :text_year})))
+    (is (= "group Last matchend[1] word by match pos within text;"
+           (query/count-command "matchend[1]" :word {:by     :pos
+                                                     :within :text}))))
+  (testing "count has no by, so the whole match ignores it"
+    (is (= "count Last by lemma;"
+           (query/count-command "match..matchend" :lemma {:by :pos})))))
+
+(deftest list-query-test
+  (testing "a list of words is one token pattern matching any of them"
+    (is (= "[word = \"(hund|kat)\"]"
+           (query/simple->cqp "hund\nkat" {:list? true})))
+    (is (= "[lemma = \"(hund|kat).*\" %c]"
+           (query/simple->cqp "hund\r\n\n kat \nhund"
+                              {:list?             true
+                               :prefix?           true
+                               :case-insensitive? true
+                               :attr              :lemma}))))
+  (testing "the words are matched literally"
+    (is (= "[word = \"(a\\.b|c\\|d)\"]"
+           (query/simple->cqp "a.b\nc|d" {:list? true}))))
+  (is (nil? (query/simple->cqp "\n \n" {:list? true}))))
+
+(deftest load-command-test
+  (is (= "set DataDirectory \"/cache/PROBE\"; PROBE; Last = q_1;"
+         (query/load-command "PROBE" "q_1" "/cache/PROBE")))
+  (testing "the name and the directory are guarded"
+    (is (thrown? Exception (query/load-command "PROBE" "q_1; exit" "/cache")))
+    (is (thrown? Exception (query/load-command "PROBE" "q_1" "/c\"; exit")))))
+
+(deftest tabulate-commands-test
+  (testing "the TAB-free columns in one command, each annotation in its own"
+    (is (= [[:tabulate (str "tabulate Last 0 9 match, matchend, "
+                            "match[-5]..match[-1] word, match..matchend word, "
+                            "matchend[1]..matchend[5] word, "
+                            "match..matchend pos, match..matchend lemma;")]
+            [:tabulate "tabulate Last 0 9 match text_id;"]
+            [:tabulate "tabulate Last 0 9 match text_title;"]]
+           (query/tabulate-commands "Last" [0 9] 5 [:word :pos :lemma]
+                                    [:text_id :text_title])))))
+
+(deftest export-batch-test
+  (testing "the result is produced as for a page, then tabulated"
+    (is (= [:setup :corpus :query :size :sort :tabulate :tabulate]
+           (map first (query/export-batch "PROBE" "[]"
+                                          {:p-attrs      [:word]
+                                           :struct-attrs [:text_id]
+                                           :context      5
+                                           :limit        100}))))
+    (is (= [:setup :corpus :query :sample :size :sort :save :tabulate]
+           (map first (query/export-batch "PROBE" "[]"
+                                          {:p-attrs      [:word]
+                                           :struct-attrs []
+                                           :context      5
+                                           :limit        100
+                                           :sample       10
+                                           :nqr          "q_1"
+                                           :cache-dir    "/c"})))))
+  (testing "a stored result is only read"
+    (let [batch (query/stored-export-batch "PROBE" "q_1"
+                                           {:p-attrs      [:word]
+                                            :struct-attrs []
+                                            :context      5
+                                            :limit        100
+                                            :cache-dir    "/c"})]
+      (is (= [:setup :corpus :size :tabulate] (map first batch)))
+      (is (= (str "tabulate q_1 0 99 match, matchend, match[-5]..match[-1] "
+                  "word, match..matchend word, matchend[1]..matchend[5] word;")
+             (second (last batch)))))))

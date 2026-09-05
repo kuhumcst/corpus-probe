@@ -199,7 +199,7 @@
        (is (= 47 (count (order {:sort "left"}))))
        (is (= 47 (count (order {:sort "right"})))))
      (testing "an unknown sort mode is corpus order"
-       (is (= natural (order {:sort "bogus"})))))))
+       (is (= natural (order {:sort "no such mode"})))))))
 
 (deftest sample-test
   (when-cwb
@@ -312,7 +312,9 @@
        (let [table (frequency/frequency-table! ctx ["VISER"] q :text_year
                                             {:filter {:text_year #{"1591"}}})]
          (is (= [{:corpus "VISER" :tokens 19 :size 1}] (:counts table)))
-         (is (= [{:value "1591" :freqs {"VISER" 1} :total 1}] (:rows table)))))
+         (is (= [{:value "1591" :freqs {"VISER" 1} :total 1
+                  :tokens {"VISER" 19}}]
+                (:rows table)))))
      (testing "a blank query under a filter tables the filtered tokens"
        (let [table (frequency/frequency-table! ctx ["VISER"] "" :lemma
                                             {:filter {:text_year #{"1591"}}})]
@@ -773,3 +775,119 @@
                   (cache/result-file ctx "VISER" (name-of nil))
                   {:replace-existing true}))
        (is (= within (hits nil)))))))
+
+(deftest attribute-sort-test
+  ;; requires gawk + the da_DK.UTF-8 locale, like danish-collation-test
+  (when-cwb
+   (let [danish (assoc ctx :sort-locale "da_DK.UTF-8")]
+     (testing "the hits sort by any positional attribute, under the collation"
+       (is (= ["bord" "dag" "hav" "have" "hund"]
+              (->> (search/kwic! danish "PROBE" "[pos = \"N.*\"]"
+                                 {:sort "lemma" :rows [0 4]})
+                   :hits
+                   (map (comp :lemma first :match))))))
+     (testing "and by the word read from its end"
+       (is (= ["hund" "hund" "hund" "Hunde" "katte"]
+              (->> (search/kwic! danish "PROBE" "[pos = \"N.*\"]"
+                                 {:sort "reverse" :rows [0 4]})
+                   :hits
+                   (map (comp :word first :match)))))))
+   (testing "an attribute the corpus lacks is rejected, not sorted around"
+     (is (thrown-with-msg? Exception #"Not a positional attribute"
+                           (search/kwic! ctx "TALER" "[]" {:sort "lemma"}))))))
+
+(deftest blocks-test
+  (let [tokens [{:word "a" :open [:s]} {:word "b"} {:word "c" :open [:s]}]]
+    (is (= [[{:word "a" :open [:s]} {:word "b"}] [{:word "c" :open [:s]}]]
+           (search/blocks :s tokens)))
+    (testing "without a unit the text is one block"
+      (is (= [tokens] (search/blocks nil tokens))))
+    (testing "a text starting inside a region still starts a block"
+      (is (= [[{:word "b"}]] (search/blocks :s [{:word "b"}]))))))
+
+(deftest text-test
+  (when-cwb
+   (let [text (search/text! ctx "PROBE" 9)]
+     (testing "the whole text holding the position, sentence by sentence"
+       (is (= "PROBE" (:corpus text)))
+       (is (= [0 19] [(:from text) (:to text)]))
+       (is (= {:s_id "1" :text_id "t1" :text_title "Hverdag" :text_year "2023"}
+              (:structs text)))
+       (is (= [["Hunden" "sover" "under" "bordet" "."]
+               ["Katten" "jagter" "en" "lille" "hund" "i" "haven" "."]
+               ["Hunde" "og" "katte" "er" "gode" "venner" "."]]
+              (:blocks text)))))
+   (testing "a position no text holds is nothing"
+     (is (nil? (search/text! ctx "PROBE" 999))))
+   (testing "a hostile corpus name is rejected before any command is built"
+     (is (thrown-with-msg? Exception #"Invalid corpus name"
+                           (search/text! ctx "PROBE; exit" 9))))))
+
+(deftest export-test
+  (when-cwb
+   (let [export (search/export! ctx "PROBE" "\"hund.*\" %c"
+                                {:limit 100 :sort "corpus"})]
+     (testing "every hit as a row of strings: positions, contexts, match,
+               then the annotations"
+       (is (= 5 (:size export)))
+       (is (= [:pos :lemma :s_id :text_id :text_title :text_year]
+              (:annotations export)))
+       (is (= ["9" "9" ". Katten jagter en lille" "hund" "i haven . Hunde og"
+               "NCSI" "hund" "2" "t1" "Hverdag" "2023"]
+              (second (:rows export)))))
+     (testing "a hit at the corpus edge has a short context, not blanks"
+       (is (= ["0" "0" "" "Hunden" "sover under bordet . Katten"
+               "NCSD" "hund" "1" "t1" "Hverdag" "2023"]
+              (first (:rows export))))))
+   (testing "the limit cuts the rows and not the size"
+     (let [export (search/export! ctx "PROBE" "\"hund.*\" %c" {:limit 2})]
+       (is (= 5 (:size export)))
+       (is (= 2 (count (:rows export))))))
+   (testing "a unit of context becomes a number of words"
+     (is (= "Hunden sover under bordet . Katten jagter en lille"
+            (nth (second (:rows (search/export! ctx "PROBE" "\"hund.*\" %c"
+                                                {:limit   5
+                                                 :context :sentence})))
+                 2))))))
+
+(deftest export-cache-test
+  (when-cwb
+   (let [ctx   (cache-ctx)
+         hunde "\"hund.*\" %c"
+         andet "\"den\" %c"
+         words (fn [q] (map #(nth % 3)
+                            (:rows (search/export! ctx "PROBE" q {:limit 10}))))]
+     (search/kwic! ctx "PROBE" hunde {})
+     (search/kwic! ctx "PROBE" andet {})
+     ;; give one query the other's stored result: if the export reads the
+     ;; file rather than running its query, it prints that
+     (fs/copy (cache/result-file ctx "PROBE" (stored-name ctx "PROBE" hunde {}))
+              (cache/result-file ctx "PROBE" (stored-name ctx "PROBE" andet {}))
+              {:replace-existing true})
+     (testing "an export reads the result the concordance saved"
+       (is (seq (words hunde)))
+       (is (= (words hunde) (words andet))))
+     (testing "and saves its own, so the concordance after it reads a file"
+       (search/export! ctx "PROBE" "\"kat.*\" %c" {:limit 10 :sort "word"})
+       (is (cache/stored? ctx "PROBE"
+                          (stored-name ctx "PROBE" "\"kat.*\" %c"
+                                       {:sort "word"})))))))
+
+(deftest export-corpora-test
+  (when-cwb
+   (let [exports (search/export-corpora! ctx ["PROBE" "NOSUCH" "VISER"]
+                                         "\"hund.*\" %c" (search/deadline ctx)
+                                         6 {})]
+     (testing "corpus by corpus, a failing one carrying its error"
+       (is (= ["PROBE" "NOSUCH" "VISER"] (map :corpus exports)))
+       (is (= 5 (count (:rows (first exports)))))
+       (is (:error (second exports))))
+     (testing "each within what is left of the limit"
+       (is (= 1 (count (:rows (nth exports 2)))))
+       (is (= 1 (count (search/export-corpora! ctx ["PROBE" "VISER"]
+                                               "\"hund.*\" %c"
+                                               (search/deadline ctx) 5 {})))))
+     (testing "and none once the deadline has passed"
+       (is (= [{:type :timeout}]
+              (map :error (search/export-corpora! ctx ["PROBE"] "[]" 0 5
+                                                  {}))))))))

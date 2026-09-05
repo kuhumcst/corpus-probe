@@ -22,6 +22,9 @@ msgstr "alle værdier"
 msgid "All values of"
 msgstr "Alle værdier af"
 
+msgid "and"
+msgstr "og"
+
 msgid "annotations"
 msgstr "annotationer"
 
@@ -48,6 +51,14 @@ msgstr "Luk"
 
 msgid "The context did not load."
 msgstr "Konteksten blev ikke hentet."
+
+msgid "columns"
+msgstr "kolonner"
+
+msgid "column"
+msgid_plural "columns"
+msgstr[0] "kolonne"
+msgstr[1] "kolonner"
 
 msgid "corpora"
 msgstr "korpusser"
@@ -178,6 +189,9 @@ msgstr "Søgeudtryk"
 msgid "\"x\" or [lemma = \"x\"]"
 msgstr "\"x\" eller [lemma = \"x\"]"
 
+msgid "one word per line"
+msgstr "ét ord pr. linje"
+
 msgid "one word, or several words in order"
 msgstr "ét ord eller flere ord i rækkefølge"
 
@@ -244,6 +258,21 @@ msgstr "tilfældig"
 msgid "right context"
 msgstr "højre kontekst"
 
+msgid "List"
+msgstr "Liste"
+
+msgid "Read the whole text"
+msgstr "Læs hele teksten"
+
+msgid "The corpus marks no texts"
+msgstr "Korpusset markerer ingen tekster"
+
+msgid "Without a text attribute there is nothing to read as one text."
+msgstr "Uden en tekstattribut er der intet at læse som én tekst."
+
+msgid "match from the end"
+msgstr "match bagfra"
+
 msgid "match"
 msgstr "match"
 
@@ -261,6 +290,9 @@ msgstr "CWB-korpussøgning"
 
 msgid "Text"
 msgstr "Tekst"
+
+msgid "the rate per million tokens of the column in parentheses"
+msgstr "raten pr. million tokens i kolonnen i parentes"
 
 msgid "the"
 msgstr "de"

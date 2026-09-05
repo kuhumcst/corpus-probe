@@ -194,10 +194,23 @@
     keyword  (assoc :data-keyword (str keyword))))
 
 (defn hit-source
-  "The source of `hit` that its tokens are inspected with: its :corpus and
-  its structural metadata :structs."
+  "The source of `hit` that its tokens are inspected with: its :corpus,
+  its structural metadata :structs and its positions, :cpos and
+  :matchend, which the reading page of its text takes."
   [hit]
-  (select-keys hit [:corpus :structs]))
+  (assoc (select-keys hit [:corpus :structs :cpos])
+         :matchend (:matchend (:anchors hit))))
+
+(defn source-cell
+  "The source of `hit` (see `source-label`) as the last cell of its row,
+  linking to the reading page of its text, with the hit marked, where
+  the hit knows its corpus; the label alone otherwise."
+  [{:keys [corpus structs cpos anchors] :as hit}]
+  [:td.structs {:title (source-title structs)}
+   (when-let [label (source-label structs)]
+     (if corpus
+       [:a {:href (url/text corpus cpos (:matchend anchors))} label]
+       label))])
 
 (defn context-control
   "The corpus position of `hit` as the control revealing its wider context,
@@ -230,7 +243,8 @@
   The corpus position is the row's header and its first cell, so every
   other cell resolves a row header as well as a column one. The source
   comes last: between the position and the left context it stood in the
-  middle of the line a reader is there to read."
+  middle of the line a reader is there to read. It links to the whole
+  text (see `source-cell`)."
   [{:keys [ui client?] :as opts} hit expanded?]
   (let [source (hit-source hit)
         opts   (assoc opts :anchored (anchored-tokens hit))
@@ -241,7 +255,7 @@
      [:td.left (tokens opts hit source 0 left)]
      [:td.match [:mark (tokens opts hit source nl match)]]
      [:td.right (tokens opts hit source (+ nl (count match)) right)]
-     [:td.structs {:title (source-title structs)} (source-label structs)]]))
+     (source-cell hit)]))
 
 (defn expanded-row
   "A full-width row showing hit `ex` (fetched with wider context, so

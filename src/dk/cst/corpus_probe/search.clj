@@ -131,6 +131,20 @@
                       {:corpus corpus :attr attr})))
     subset))
 
+(defn corpus-sort!
+  "The sort mode `mode` (see dk.cst.corpus-probe.query/sort-command) as
+  `corpus` via `ctx` may run it: with the positional attribute it names,
+  if any (see dk.cst.corpus-probe.query/sort-attr), checked against the
+  corpus's inventory, since the name is spliced into a command outside
+  the QueryLock."
+  [ctx corpus mode]
+  (when-let [attr (query/sort-attr mode)]
+    (when-not (some #(and (= attr (:name %)) (= :positional (:type %)))
+                    (corpus/attributes! ctx corpus))
+      (throw (ex-info "Not a positional attribute of this corpus"
+                      {:corpus corpus :attr attr}))))
+  mode)
+
 (defn corpus-context
   "The width of context a corpus with `attributes` shows for `context`
   (see dk.cst.corpus-probe.query/context-spec): a number of words as it
@@ -193,10 +207,11 @@
   The KWIC defaults, the corpus's positional attributes and the structural
   attributes to fetch per hit, its context width as the corpus shows it
   (see `corpus-context`), its metadata filter as
-  dk.cst.corpus-probe.query/filter-query takes it, its narrowing checked
-  (see `corpus-subset!`), and whatever the cache adds (see
-  `cache-opts`). Requested structural attributes are checked against the
-  corpus's inventory first, since their names are spliced into a command."
+  dk.cst.corpus-probe.query/filter-query takes it, its narrowing and its
+  sort mode checked (see `corpus-subset!` and `corpus-sort!`), and
+  whatever the cache adds (see `cache-opts`). Requested structural
+  attributes are checked against the corpus's inventory first, since
+  their names are spliced into a command."
   [ctx corpus query opts]
   (let [attributes (corpus/attributes! ctx corpus)
         annotated  (attr-names annotated-s-attr? attributes)
@@ -216,7 +231,9 @@
                                                      (:filter opts)
                                                      (:patterns opts))
                        :subset       (corpus-subset! ctx corpus
-                                                     (:subset opts))))))
+                                                     (:subset opts))
+                       :sort         (corpus-sort! ctx corpus
+                                                   (:sort opts))))))
 
 (defn run-kwic-batch!
   "Run KWIC `batch` for `query` in `corpus` via `ctx` and return its
@@ -263,13 +280,18 @@
   outright, one reaped between the check and the read leaves the batch
   reporting an undefined corpus, and a truncated one is caught by
   `intact?`. A timeout is not treated that way and the result is kept,
-  since it says the machine is busy rather than that the file is bad."
-  [ctx corpus query {:keys [nqr] :as opts}]
+  since it says the machine is busy rather than that the file is bad.
+
+  `stored-batch` builds the batch that reads the result from the corpus,
+  the name and the options, and `sound?` judges its sections: the page
+  batch and `intact?` for a page (see `kwic-sections!`), the export
+  batch and the size of the file for `export!`."
+  [ctx corpus query {:keys [nqr] :as opts} stored-batch sound?]
   (when (and nqr (cache/stored? ctx corpus nqr))
     (try
-      (let [batch    (query/stored-kwic-batch corpus nqr opts)
+      (let [batch    (stored-batch corpus nqr opts)
             sections (run-kwic-batch! ctx corpus query batch)]
-        (when-not (intact? sections)
+        (when-not (sound? sections)
           (throw (ex-info "Stored result read back damaged"
                           {:corpus corpus :error {:type :damaged}})))
         (cache/touch! ctx corpus nqr)
@@ -324,11 +346,16 @@
   once more without it before the failure is reported: a cache that has
   stopped working is no reason to stop answering. A timeout is not
   retried, having spent its whole budget already. Both runs get the query
-  timeout (see `running-ctx`)."
-  [ctx corpus query {:keys [nqr] :as opts}]
+  timeout (see `running-ctx`).
+
+  `fresh-batch` builds the batch from the corpus, the query and the
+  options: the page batch for a page (see
+  dk.cst.corpus-probe.query/kwic-batch and `kwic-sections!`), the
+  export batch for `export!`."
+  [ctx corpus query {:keys [nqr] :as opts} fresh-batch]
   (let [pending (when nqr (cache/pending-name nqr))
         run     #(run-kwic-batch! (running-ctx ctx) corpus query
-                                  (query/kwic-batch corpus query %))]
+                                  (fresh-batch corpus query %))]
     (try
       (let [sections (run (assoc opts :nqr pending))]
         (when nqr
@@ -362,8 +389,10 @@
   option changes about the output changes it too, without anyone having to
   remember to add it."
   [ctx corpus query {:keys [nqr] :as opts}]
-  (let [fetch #(or (stored-sections! ctx corpus query opts)
-                   (fresh-sections! ctx corpus query opts))]
+  (let [fetch #(or (stored-sections! ctx corpus query opts
+                                     query/stored-kwic-batch intact?)
+                   (fresh-sections! ctx corpus query opts
+                                    query/kwic-batch))]
     (if nqr
       (cache/share! (query/stored-kwic-batch corpus nqr opts) fetch)
       (fetch))))
@@ -379,7 +408,8 @@
   metadata (:structs). `opts` accepts :rows (the [from to] row range, see
   dk.cst.corpus-probe.query/page-rows; default the first page), :context
   (a number of tokens, or a unit of text as `corpus-context` resolves
-  it), :sort (a sort mode), :filter (a metadata filter), :sample
+  it), :sort (a sort mode, or a positional attribute to sort by; see
+  `corpus-sort!`), :filter (a metadata filter), :sample
   (how many of the matches to keep, drawn at random; see
   dk.cst.corpus-probe.query/sample-command), :near (a word the matches
   must have nearby, marked as their keyword; see
@@ -432,6 +462,127 @@
                       (cond-> (assoc hit :anchors anchor)
                         struct (assoc :structs struct)))
                     hits anchors (or structs (repeat nil)))})))
+
+(defn blocks
+  "The `tokens` of a text in the blocks it is read in: a new block
+  wherever a region of `unit` (an s-attribute keyword) opens, by the
+  :open tags the tokens carry; one block when `unit` is nil."
+  [unit tokens]
+  (if unit
+    (reduce (fn [blocks token]
+              (if (or (empty? blocks) (some #{unit} (:open token)))
+                (conj blocks [token])
+                (update blocks (dec (count blocks)) conj token)))
+            []
+            tokens)
+    [tokens]))
+
+(defn text!
+  "The text of `corpus` (an uppercase CQP corpus name) holding corpus
+  position `cpos` via `ctx`, for reading: {:corpus ... :from <n> :to <n>
+  :structs {...} :blocks [[word ...] ...]}, the positions of its first
+  and last token, its structural annotations and its words in the
+  blocks it is read in (see `blocks`): the paragraphs where the corpus
+  marks them, its sentences otherwise, one block where it marks
+  neither. Nil when no text holds the position.
+
+  A text is a region of the corpus's own text attribute (see `units`),
+  read as one match with no context (see
+  dk.cst.corpus-probe.query/text-batch); a corpus marking no texts has
+  none to read, and says so with a :no-texts error. Throws ex-info when
+  CQP reports an error, times out or dies."
+  [ctx corpus cpos]
+  (let [ctx        (corpus-ctx ctx corpus)
+        attributes (corpus/attributes! ctx corpus)
+        text       (or (unit-attr attributes :text)
+                       (throw (ex-info "This corpus marks no texts"
+                                       {:corpus corpus
+                                        :error  {:type :no-texts}})))
+        unit       (or (unit-attr attributes :paragraph)
+                       (unit-attr attributes :sentence))
+        query      (str (query/position-query cpos cpos) " expand to "
+                        (name text))
+        annotated  (attr-names annotated-s-attr? attributes)
+        batch      (query/text-batch corpus query
+                                     {:p-attrs      [:word]
+                                      :struct-attrs annotated
+                                      :shown        (some-> unit vector)})
+        {[cat-lines] :cat [dump-lines] :dump tab-sections :tabulate}
+        (run-kwic-batch! (running-ctx ctx) corpus query batch)]
+    (when-let [hit (first (parse/kwic->hits [:word] cat-lines))]
+      (let [{:keys [match matchend]} (first (parse/dump->anchors dump-lines))]
+        {:corpus  corpus
+         :from    match
+         :to      matchend
+         :structs (zipmap annotated (map first tab-sections))
+         :blocks  (mapv #(mapv :word %) (blocks unit (:match hit)))}))))
+
+(def export-unit-width
+  "How many words an export prints either side of a hit where the
+  concordance shows a unit of text: `tabulate` takes token offsets
+  only, and twenty covers most sentences."
+  20)
+
+(defn export!
+  "Every hit of CQP `query` in `corpus` (an uppercase CQP corpus name)
+  via `ctx` as the rows of an export, the first `:limit` of `opts`
+  (the rest as `kwic!` takes them): {:corpus ... :size <matches>
+  :annotations [<attr> ...] :rows [[cpos matchend left match right
+  <value> ...] ...]}, the values of each row being those of its
+  :annotations, the corpus's positional attributes but word and its
+  annotated s-attributes, in that order.
+
+  Read from the saved query result when one is stored, which the
+  concordance of the same search will have saved, and run afresh and
+  saved otherwise (see `stored-sections!` and `fresh-sections!`), so an
+  export costs no query after a concordance and warms the cache before
+  one. The context is a number of words either side: an export has no
+  room for a unit of text (see `export-unit-width`). Throws ex-info when
+  CQP reports an error, times out or dies."
+  [ctx corpus query opts]
+  (let [ctx      (corpus-ctx ctx corpus)
+        query    (query/within-query query
+                                     (within-attr! ctx corpus (:within opts)))
+        opts     (update (kwic-opts! ctx corpus query opts) :context
+                         #(if (keyword? %) export-unit-width %))
+        {:keys [nqr p-attrs struct-attrs]} opts
+        sections (or (stored-sections! ctx corpus query opts
+                                       query/stored-export-batch
+                                       #(cache/holds? ctx corpus nqr
+                                                      (batch-matches %)))
+                     (fresh-sections! ctx corpus query opts
+                                      query/export-batch))
+        [fixed & structs] (:tabulate sections)]
+    {:corpus      corpus
+     :size        (batch-matches sections)
+     :annotations (into (vec (remove #{:word} p-attrs)) struct-attrs)
+     ;; the contexts are trimmed: a position outside the corpus prints
+     ;; as an empty word, and the words are joined by spaces
+     :rows        (apply mapv
+                         (fn [line & values]
+                           (into (mapv str/trim (str/split line #"\t" -1))
+                                 values))
+                         fixed structs)}))
+
+(defn export-corpora!
+  "The exports (see `export!`) of CQP `query` in `corpora` (uppercase
+  names, in display order) via `ctx` under `opts`, one after another
+  and lazily: each within what is left of `limit` rows after the
+  corpora before it, and none once it is spent, and within `deadline`
+  (see `deadline`), after which the rest are reported as timed out. A
+  corpus whose query fails carries its :error instead of its rows, as a
+  corpus of `concordance!` does."
+  [ctx corpora query deadline limit opts]
+  (lazy-seq
+   (when-let [[corpus & more] (and (pos? limit) (seq corpora))]
+     (let [res (if (overdue? deadline)
+                 {:corpus corpus :error {:type :timeout}}
+                 (try (export! (within-deadline ctx deadline) corpus query
+                               (assoc opts :limit limit))
+                      (catch Exception e
+                        {:corpus corpus :error (error-map e)})))]
+       (cons res (export-corpora! ctx more query deadline
+                                  (- limit (count (:rows res))) opts))))))
 
 (defn run-size!
   "Count the matches of CQP `query` in `corpus` via `ctx` under `opts`

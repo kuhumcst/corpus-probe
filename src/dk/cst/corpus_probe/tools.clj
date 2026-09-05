@@ -4,7 +4,8 @@
 
   `cwb-describe-corpus` gives the corpus info pages their statistics,
   `cwb-lexdecode` gives whole-corpus frequency lists and `cwb-s-decode`
-  gives the metadata filters their value lists."
+  gives the metadata filters their value lists and the frequency
+  breakdowns the size of the text behind each value."
   (:require [clojure.string :as str]
             [dk.cst.corpus-probe.corpus :as corpus]
             [dk.cst.corpus-probe.cqp :as cqp]
@@ -95,6 +96,36 @@
   all but always exceeds `value-limit`, and decoding it costs seconds."
   1000000)
 
+(defn annotated-stats!
+  "The describe statistics of annotated s-attribute `attr` of `corpus`
+  (an uppercase CQP corpus name) via `ctx`: its name and its region
+  count (see `describe-corpus!`).
+
+  Both names are spliced into the command that decodes the attribute, so
+  the corpus name is validated and anything but an annotated
+  s-attribute of the corpus is rejected."
+  [ctx corpus attr]
+  (query/valid-corpus-name corpus)
+  (let [attr  (keyword attr)
+        stats (some #(when (= attr (:name %)) %)
+                    (:s-attrs (describe-corpus! ctx corpus)))]
+    (when-not (:values? stats)
+      (throw (ex-info "Not an annotated structural attribute of this corpus"
+                      {:corpus corpus :attr attr})))
+    stats))
+
+(defn s-decode!
+  "The lines `cwb-s-decode` prints with `flags` for annotated
+  s-attribute `attr` of `corpus` against the `ctx` registry (see
+  `annotated-stats!` for the checks both names pass first); nil when the
+  attribute has more than `region-limit` regions, which are not even
+  decoded."
+  [ctx corpus attr flags]
+  (when (<= (:regions (annotated-stats! ctx corpus attr)) region-limit)
+    (run-tool! ctx corpus (-> ["cwb-s-decode" "-r" (:registry ctx)]
+                              (into flags)
+                              (conj (str corpus) "-S" (name attr))))))
+
 (defn annotation-values!
   "The values of annotated s-attribute `attr` of `corpus` (an uppercase
   CQP corpus name) with the number of regions carrying each, via
@@ -104,24 +135,31 @@
   Returns [{:values [<s>] :freq <n>} ...] sorted by value (see
   dk.cst.corpus-probe.parse/s-decode->freqs), or nil when the attribute
   has too many values to list (see `value-limit` and `region-limit`).
-  Both names are spliced into the command: the corpus name is validated,
-  and `attr` must be one of the corpus's annotated s-attributes, checked
-  against the describe statistics that also give its region count."
+  Both names are checked before anything is decoded (see `s-decode!`)."
   [ctx corpus attr]
-  (query/valid-corpus-name corpus)
-  (let [attr  (keyword attr)
-        stats (some #(when (= attr (:name %)) %)
-                    (:s-attrs (describe-corpus! ctx corpus)))]
-    (when-not (:values? stats)
-      (throw (ex-info "Not an annotated structural attribute of this corpus"
-                      {:corpus corpus :attr attr})))
-    (corpus/with-facts-cache!
-      ctx corpus (str "cwb-s-decode " (name attr))
-      (fn []
-        (when (<= (:regions stats) region-limit)
-          (parse/s-decode->freqs
-           (run-tool! ctx corpus ["cwb-s-decode"
-                                  "-r" (:registry ctx)
-                                  "-n" (str corpus)
-                                  "-S" (name attr)])
-           value-limit))))))
+  (corpus/with-facts-cache!
+    ctx corpus (str "cwb-s-decode " (name attr))
+    (fn []
+      (some-> (s-decode! ctx corpus attr ["-n"])
+              (parse/s-decode->freqs value-limit)))))
+
+(defn annotation-sizes!
+  "The number of tokens carrying each value of annotated s-attribute
+  `attr` of `corpus` (an uppercase CQP corpus name), via `cwb-s-decode`
+  against the `ctx` registry, cached until the corpus's registry file
+  changes.
+
+  Returns {<value> <tokens>} (see
+  dk.cst.corpus-probe.parse/s-decode->sizes), or nil when the attribute
+  has too many regions to decode (see `region-limit`). What a rate per
+  million is measured against when a breakdown groups by the attribute:
+  the text carrying each value rather than the whole corpus, so that a
+  year with more text does not look busier. No `value-limit` applies,
+  this being a map a breakdown reads rather than a list of checkboxes.
+  Both names are checked as `annotation-values!` checks them."
+  [ctx corpus attr]
+  (corpus/with-facts-cache!
+    ctx corpus (str "cwb-s-decode sizes " (name attr))
+    (fn []
+      (some-> (s-decode! ctx corpus attr [])
+              (parse/s-decode->sizes)))))

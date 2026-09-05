@@ -31,6 +31,7 @@
             [dk.cst.corpus-probe.views.frequencies :as freq-views]
             [dk.cst.corpus-probe.views.layout :as layout]
             [dk.cst.corpus-probe.views.page :as page]
+            [dk.cst.corpus-probe.views.text :as text-views]
             [dk.cst.corpus-probe.views.app :as app-views]
             [replicant.string :as replicant])
   (:import [java.io ByteArrayOutputStream]))
@@ -333,6 +334,15 @@
   [v]
   (if (some #{v} query/positions) v "match"))
 
+(defn by-param
+  "The attribute the `by` query param value `v` asks a frequency table to
+  count its values against (see
+  dk.cst.corpus-probe.frequency/frequency-table!), as a keyword; nil when
+  it names none, the corpora being the columns then. The attribute is
+  checked against each corpus by the breakdown, as every attribute is."
+  [v]
+  (when-not (str/blank? v) (keyword v)))
+
 (defn subset-param
   "The narrowing the `subset`, `subset-at` and `subset-attr` query params
   of `params` ask for: {:anchor ... :attr ... :value ...} as
@@ -392,7 +402,7 @@
            ;; got, and contradicts the results heading
            hits   (when (page/searched? result)
                     (page/hits-phrase ui (:size result)))]
-       (page-title q
+       (page-title (page/query-phrase ui params)
                    hits
                    ;; only ever beside a count it could have drawn from:
                    ;; a search that found nothing sampled nothing
@@ -410,12 +420,16 @@
 
   A frequency result counts values rather than hits, so it cannot borrow
   the concordance's title: there is no hit count to report."
-  [ui {:keys [q corpus attr] :as params}]
-  (page-title (if (str/blank? q) (i18n/tr ui "All tokens") q)
+  [ui {:keys [q corpus attr by] :as params}]
+  (page-title (if (str/blank? q)
+                (i18n/tr ui "All tokens")
+                (page/query-phrase ui params))
               (when (seq corpus) (page/corpora-phrase ui corpus))
               (page/filter-phrase (filter-params params)
                                   (pattern-params params))
-              (str (i18n/tr ui "by") " " attr)
+              (str (i18n/tr ui "by") " " attr
+                   (when-not (str/blank? by)
+                     (str " " (i18n/tr ui "and") " " by)))
               (i18n/tr ui "Frequencies")))
 
 (defn result-title
@@ -464,8 +478,9 @@
              [(keyword format) (url/export-href view format params)])))
 
 (defn ->cqp
-  "The CQP query for `params`, compiling simple-mode input; nil when there
-  is nothing to search for.
+  "The CQP query for `params`, compiling simple-mode input, or a list of
+  words in list mode (see dk.cst.corpus-probe.query/simple->cqp); nil
+  when there is nothing to search for.
 
   Simple is the default and CQP mode is opt-in: a request naming no mode
   is read as a plain word search, since CQP mode answers a bare word with
@@ -478,7 +493,8 @@
       (query/simple->cqp q {:case-insensitive? (some? ci)
                             :prefix?           (some? prefix)
                             :suffix?           (some? suffix)
-                            :attr              (keyword (attr-param in))}))))
+                            :attr              (keyword (attr-param in))
+                            :list?             (= mode "list")}))))
 
 (defn within-unit
   "The unit of text the search `params` describe is kept within (see
@@ -486,10 +502,11 @@
   several words, which should not be matched across a boundary.
 
   Nil for one word, which cannot straddle a boundary and could only be
-  refused, where it stands outside every sentence; and nil for CQP, which
-  says so itself."
+  refused, where it stands outside every sentence; nil for a list, which
+  is one token; and nil for CQP, which says so itself."
   [{:keys [q mode]}]
-  (when (and (not= mode "cqp") (next (str/split (str/trim (str q)) #"\s+")))
+  (when (and (not (#{"cqp" "list"} mode))
+             (next (str/split (str/trim (str q)) #"\s+")))
     :sentence))
 
 (def follow-on-errors
@@ -750,11 +767,11 @@
 
 (defn frequency-outcome!
   "Table the `known` corpora for `cqp` (nil for the whole corpora) by
-  `attr` via `ctx` with `opts` (the :at, :docs, :filter, :within, :subset
-  and :near of dk.cst.corpus-probe.frequency/frequency-table!): {:result
-  ...}, the `unknown` corpus names reported among its counts, or {:error
-  ...} when no corpus was selected at all. Per-corpus errors travel
-  inside the result."
+  `attr` via `ctx` with `opts` (the :at, :by, :docs, :filter, :within,
+  :subset and :near of dk.cst.corpus-probe.frequency/frequency-table!):
+  {:result ...}, the `unknown` corpus names reported among its counts,
+  or {:error ...} when no corpus was selected at all. Per-corpus errors
+  travel inside the result."
   [ctx known unknown cqp attr opts]
   (if (and (empty? known) (empty? unknown))
     {:error {:type :no-corpus}}
@@ -793,9 +810,20 @@
                                 :view    value
                                 :attr    (:attr params)
                                 :at      (:at params)
+                                :by      (:by params)
                                 :docs    (:docs params)
                                 :sort    (:sort params)
                                 :context (:context params)))]))
+
+(defn sort-options
+  "The sort modes offered over corpora whose positional attributes are
+  `attrs` (keywords): the fixed modes (see
+  dk.cst.corpus-probe.query/sort-modes), then a sort by each attribute
+  but word, which the match sort already is."
+  [attrs]
+  (into (mapv first query/sort-modes)
+        (comp (remove #{:word}) (map name))
+        attrs))
 
 (defn search-view-data
   "The data dk.cst.corpus-probe.views.app/search-view renders one
@@ -828,7 +856,13 @@
         outcome (cond
                   (and freq? (or cqp (seq known) (seq unknown)))
                   (-> (frequency-outcome! ctx known unknown cqp attr
-                                          (assoc opts :at at :docs docs))
+                                          (assoc opts
+                                                 :at   at
+                                                 :docs docs
+                                                 :by   (by-param (:by params))
+                                                 ;; the concordance saved
+                                                 ;; its result under this
+                                                 :sort (:sort params)))
                       (update :result #(some->> % (linked-rows params))))
 
                   cqp
@@ -843,15 +877,16 @@
         pages   (some-> outcome :result :pages)
         params* (assoc params :corpus selected :attr attr :at at)
         cited   (url/canonical params* (set (readable-corpora ctx corpora)))
-        attrs   (attr-options! ctx known)]
+        attrs   (attr-options! ctx known)
+        ;; what a simple search may match, and a concordance sort by: the
+        ;; positional attributes of the corpora it is over
+        p-attrs (search/attr-names #(= :positional (:type %)) attrs)]
     (cond->
      {:lang            lang
       :view            view
       :folders         (corpus-tree! ctx corpora)
       :filter-controls (filter-controls! ctx known params)
-      ;; what a simple search may match: the positional attributes of
-      ;; the corpora it is over
-      :search-attrs    (search/attr-names #(= :positional (:type %)) attrs)
+      :search-attrs    p-attrs
       :params          params*
       :cited           cited
       :result          (:result outcome)
@@ -869,10 +904,11 @@
                                            (assoc (search-params cited)
                                                   :attr attr
                                                   :at   at
+                                                  :by   (:by params)
                                                   :docs (:docs params)))))
 
       (not freq?)
-      (assoc :sort-modes   (mapv first query/sort-modes)
+      (assoc :sort-modes   (sort-options p-attrs)
              :export-limit export/hit-limit
              :export-hrefs (when (:result outcome)
                              (export-hrefs :kwic
@@ -973,14 +1009,15 @@
                     :data  {:body blocks}})))
 
 (defn text-response
-  "A 200 response serving `text` in export `format` (a key of
+  "A 200 response serving `body` (text, or a function writing it to the
+  response stream as it goes) in export `format` (a key of
   dk.cst.corpus-probe.export/formats) as a download named `name`."
-  [format name text]
+  [format name body]
   {:status  200
    :headers {"Content-Type"        (:content-type (export/formats format))
              "Content-Disposition" (str "attachment; filename=\"" name "."
                                         format "\"")}
-   :body    text})
+   :body    body})
 
 (defn export-failure
   "A 400 response explaining, corpus by corpus, why the search behind an
@@ -1004,34 +1041,78 @@
     (text-response format name ((:render (export/formats format)) rows))
     (export-failure counts)))
 
+(defn export-columns!
+  "The annotation columns a concordance export over `corpora` via `ctx`
+  has: the union of their positional attributes but word, which the
+  match column is, and of their annotated s-attributes, each kind in
+  the registry order of the first corpus reporting it; a corpus that
+  cannot be read contributes none."
+  [ctx corpora]
+  (let [attrs (mapcat (fn [c] (try (corpus/attributes! ctx c)
+                                   (catch Exception _ nil)))
+                      corpora)]
+    {:p-attrs      (vec (distinct (search/attr-names
+                                   #(and (= :positional (:type %))
+                                         (not= :word (:name %)))
+                                   attrs)))
+     :struct-attrs (vec (distinct (search/attr-names search/annotated-s-attr?
+                                                     attrs)))}))
+
 (defn export-kwic
   "Handle a concordance export `request` against `ctx` in `format` (a
   key of dk.cst.corpus-probe.export/formats): the hits of the query in
-  the selected corpora (the first dk.cst.corpus-probe.export/hit-limit
-  of them, in the requested sort) as a TSV or CSV download; 400 without
+  the selected corpora, the first dk.cst.corpus-probe.export/hit-limit
+  of them in the requested sort, as a TSV or CSV download; 400 without
   a query, known corpora or a known format, or when no corpus could be
-  searched."
+  searched.
+
+  The corpora are exported one at a time (see
+  dk.cst.corpus-probe.search/export-corpora!) and written as each
+  answers, so the download holds one corpus's rows at a time. The first
+  corpus to answer is waited for before the download starts, because a
+  download once started can no longer be a 400: until one answers, the
+  corpora that failed are collected, and if every one fails their
+  reasons are the answer, as `export-failure` gives them."
   [ctx request format]
   (let [{:keys [params known cqp opts]} (search-request ctx request)]
     (if-not (and cqp (seq known) (export/formats format))
       {:status 400 :body "bad request"}
-      (let [result (search/concordance!
-                    ctx known cqp
-                    (assoc opts
-                           :page      0
-                           :page-size export/hit-limit
-                           :sort      (:sort params)
-                           :context   (context-param (:context params))
-                           :sample    (sample-param (:sample params))))]
-        (export-response format "kwic" :size result
-                         (export/kwic-table result))))))
+      (let [{:keys [line preamble]} (export/formats format)
+            {:keys [p-attrs struct-attrs]} (export-columns! ctx known)
+            header    (export/kwic-header p-attrs struct-attrs)
+            deadline  (search/deadline ctx)
+            opts      (assoc opts
+                             :sort    (:sort params)
+                             :context (context-param (:context params))
+                             :sample  (sample-param (:sample params)))
+            [failed [head]] (split-with :error
+                                        (search/export-corpora!
+                                         ctx known cqp deadline
+                                         export/hit-limit opts))
+            remaining (drop (inc (count failed)) known)
+            left      (- export/hit-limit (count (:rows head)))]
+        (if (nil? head)
+          (export-failure failed)
+          (text-response
+           format "kwic"
+           (fn [out]
+             (with-open [w (io/writer out :encoding "UTF-8")]
+               (.write w (str preamble (line header)))
+               ;; the corpora after the first are exported inside the
+               ;; stream, and nothing outside it holds their rows
+               (doseq [export (cons head (search/export-corpora!
+                                          ctx remaining cqp deadline left
+                                          opts))
+                       row    (export/kwic-rows p-attrs struct-attrs export)]
+                 (.write w ^String (line row)))))))))))
 
 (defn export-frequencies
   "Handle a frequency table export `request` against `ctx` in `format`
   (a key of dk.cst.corpus-probe.export/formats): every row of the
-  breakdown of the query (or of the whole corpora) by the `attr` param
-  as a TSV or CSV download; 400 without known corpora or a known format,
-  or when no corpus could be counted."
+  breakdown of the query (or of the whole corpora) by the `attr` param,
+  against the `by` param when there is one, as a TSV or CSV download;
+  400 without known corpora or a known format, or when no corpus could
+  be counted."
   [ctx request format]
   (let [{:keys [params known cqp opts]} (search-request ctx request)]
     (if-not (and (seq known) (export/formats format))
@@ -1040,9 +1121,13 @@
                    ctx known (or cqp "") (attr-param (:attr params))
                    (assoc opts
                           :at   (position-param (:at params))
-                          :docs (some? (:docs params))))]
+                          :by   (by-param (:by params))
+                          :docs (some? (:docs params))
+                          :sort (:sort params)))]
         (export-response format "frequencies" :tokens table
-                         (export/frequency-table table))))))
+                         (if (:by table)
+                           (export/crosstab-table table)
+                           (export/frequency-table table)))))))
 
 (def export-file
   "What an export is named as under the search path: the view of the
@@ -1101,6 +1186,57 @@
                                       :corpus corpus
                                       :title  (not-empty (:name registry))
                                       :lang   (corpus/language registry))})))))
+
+(defn text-page
+  "Handle a reading page `request` against `ctx`: the text of the corpus
+  named by the :id path parameter that holds the corpus position of the
+  `cpos` query param, with the hit from there to the `matchend` param
+  (`cpos` itself when absent) marked (see
+  dk.cst.corpus-probe.views.text/reading-view); 404 when the corpus is
+  not a registry corpus, the position is not a number or no text holds
+  it. Without any position the reader is sent to the corpus page, there
+  being no text to pick without one. A corpus that marks no texts, or a
+  CQP failure, is a page saying so."
+  [ctx request]
+  (let [lang     (request-language request)
+        corpus   (str/upper-case (str (get-in request [:path-params :id])))
+        file     (when (query/corpus-name? corpus)
+                   (corpus/registry-file ctx corpus))
+        {:keys [cpos matchend]} (:query-params request)
+        cpos*    (parse-long (str cpos))]
+    (cond
+      (not (and file (corpus/registry-file? file)))
+      {:status 404 :body "not found"}
+
+      (str/blank? (str cpos))
+      {:status 303 :headers {"Location" (url/corpus corpus)} :body ""}
+
+      (nil? cpos*)
+      {:status 404 :body "not found"}
+
+      :else
+      (let [outcome (try (search/text! ctx corpus cpos*)
+                         (catch Exception e
+                           {:error (public-error (search/error-map e))}))
+            ;; a hit ends where it starts unless told otherwise, and
+            ;; never before it starts
+            end     (max cpos* (or (some-> matchend str parse-long) cpos*))]
+        (if (nil? outcome)
+          {:status 404 :body "not found"}
+          (page-response
+           request
+           (page-title (text-views/text-name (i18n/->ui lang)
+                                             (:structs outcome))
+                       corpus)
+           {:route :text
+            :lang  lang
+            ;; the corpus's own language lives in :data, as on the
+            ;; corpus page; the UI language is the page's
+            :data  (assoc outcome
+                          :corpus corpus
+                          :hit    [cpos* end]
+                          :lang   (corpus/language
+                                   (corpus/read-registry file)))}))))))
 
 (defn safe-return
   "The path `s` to send a reader back to after a preference change, or the
@@ -1258,6 +1394,8 @@
      :route-name ::corpora]
     [(str url/corpora "/:id")     :get (partial corpus-page ctx)
      :route-name ::corpus]
+    [(str url/corpora "/:id/text") :get (partial text-page ctx)
+     :route-name ::text]
     ["/api/context"               :get (partial context-page ctx)
      :route-name ::context]
     ["/api/filters"               :get (partial filters-page ctx)

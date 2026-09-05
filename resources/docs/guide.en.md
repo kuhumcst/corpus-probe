@@ -1,7 +1,8 @@
 # Query help
 
 To do a simple search, type one word or several words in order. A
-simple search needs no syntax.
+simple search needs no syntax. To find any word of a list, select List
+as the query mode and type one word per line.
 
 The examples below are [CQP](/glossary#cqp) queries. To use one, select
 CQP as the query mode. Replace x and y with your own words.

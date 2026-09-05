@@ -256,3 +256,18 @@
                               3))]
         (is (= :tbody (first group)))
         (is (nil? (nth group 2)))))))
+
+(deftest source-cell-test
+  (let [hit {:corpus  "PROBE"
+             :cpos    9
+             :anchors {:matchend 10}
+             :structs {:text_title "Hverdag"}}]
+    (testing "the source links to the reading page of its text, hit marked"
+      (is (= [:td.structs {:title "text_title: Hverdag"}
+              [:a {:href "/corpora/probe/text?cpos=9&matchend=10#hit"}
+               [:cite "Hverdag"]]]
+             (kwic/source-cell hit))))
+    (testing "a hit that knows no corpus has nowhere to link"
+      (is (= [:cite "Hverdag"] (last (kwic/source-cell (dissoc hit :corpus))))))
+    (testing "and one without annotations has no source at all"
+      (is (nil? (last (kwic/source-cell {:corpus "PROBE" :cpos 9})))))))
