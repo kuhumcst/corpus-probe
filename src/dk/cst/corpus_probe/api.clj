@@ -464,7 +464,7 @@
   param so that returning to the concordance returns to the sample it
   was left in."
   [params]
-  (into (select-keys params [:corpus :q :mode :in :ci :prefix :suffix
+  (into (select-keys params [:corpus :q :mode :in :ci :match
                              :subset :subset-at :subset-attr
                              :near :distance :sample])
         (filter (comp url/metadata-key? key))
@@ -477,6 +477,22 @@
   (into {} (for [format (keys export/formats)]
              [(keyword format) (url/export-href view format params)])))
 
+(defn match-param
+  "The affixes the `match` query param value `v` asks
+  dk.cst.corpus-probe.query/simple->cqp for, as its options: the start
+  of the form matched for prefix, the end for suffix, either for infix,
+  and none for the whole form, which is what a URL leaves out.
+
+  One param rather than one per end, because a query that may fall at
+  either end may fall anywhere, and two params both set said so to
+  nobody."
+  [v]
+  (case v
+    "prefix" {:prefix? true}
+    "suffix" {:suffix? true}
+    "infix"  {:prefix? true :suffix? true}
+    {}))
+
 (defn ->cqp
   "The CQP query for `params`, compiling simple-mode input, or a list of
   words in list mode (see dk.cst.corpus-probe.query/simple->cqp); nil
@@ -486,15 +502,14 @@
   is read as a plain word search, since CQP mode answers a bare word with
   a parse error naming a corpus the reader never mentioned. Every URL the
   form builds names its mode, so only a hand-written one changes meaning."
-  [{:keys [q mode ci prefix suffix in]}]
+  [{:keys [q mode ci match in]}]
   (when-not (str/blank? q)
     (if (= mode "cqp")
       q
-      (query/simple->cqp q {:case-insensitive? (some? ci)
-                            :prefix?           (some? prefix)
-                            :suffix?           (some? suffix)
-                            :attr              (keyword (attr-param in))
-                            :list?             (= mode "list")}))))
+      (query/simple->cqp q (assoc (match-param match)
+                                  :case-insensitive? (some? ci)
+                                  :attr              (keyword (attr-param in))
+                                  :list?             (= mode "list"))))))
 
 (defn within-unit
   "The unit of text the search `params` describe is kept within (see

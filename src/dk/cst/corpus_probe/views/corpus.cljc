@@ -145,25 +145,20 @@
                           (update f :label #(or % (i18n/tr ui "Other")))))))
 
 
-(defn folder-count
-  "The label of `folder` followed by how many corpora it holds, in
-  `ui`, so a closed folder still says what is inside it, and by
-  how many of them are showing when a filter is hiding the rest."
-  [ui folder]
-  (let [all   (folder-corpora folder)
-        shown (remove :hidden? all)]
-    (str (:label folder) " · "
-         (when (< (count shown) (count all))
-           (str (count shown) " " (i18n/tr ui "of") " "))
-         (count all) " " (i18n/tr ui "corpora"))))
-
-(defn folder-selection
-  "`folder-count` plus how many of the folder's corpora are in the set
-  `selected`, so a closed folder says whether the selection is inside it."
+(defn folder-summary
+  "What the chooser's disclosure of `folder` says of it, in `ui`: its
+  label, how many corpora it holds (see
+  dk.cst.corpus-probe.views.controls/entry-count) and how many of them
+  are in the set `selected`, so a shut folder still says what is inside
+  it and whether the selection is. Under a filter the count is of what
+  the filter left showing; the selection counts whatever it hides too,
+  since a selection out of sight is still one."
   [ui selected folder]
-  (let [n (count (filter (comp selected :id) (folder-corpora folder)))]
-    (cond-> (folder-count ui folder)
-      (pos? n) (str " · " n " " (i18n/tr ui "selected")))))
+  (let [corpora (folder-corpora folder)
+        n       (count (filter (comp selected :id) corpora))]
+    (list (:label folder) " "
+          (controls/entry-count (count (remove :hidden? corpora)))
+          (when (pos? n) (str " · " n " " (i18n/tr ui "selected"))))))
 
 (defn chooser-summary
   "What the corpus chooser's disclosure says about the set `selected` out
@@ -342,7 +337,7 @@
        [:summary (chooser-summary ui selected corpora)]
        (map (partial folder-view
                      {:item    (partial chooser-item ui selected)
-                      :summary (partial folder-selection ui selected)
+                      :summary (partial folder-summary ui selected)
                       :toggle  (when client?
                                  (partial folder-toggle ui selected))
                       :open?   (fn [folder]

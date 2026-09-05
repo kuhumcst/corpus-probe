@@ -385,8 +385,9 @@
   values, the `:pattern` and the `:range` (see `pattern-row`), and,
   where `client?`, a control taking every value showing.
 
-  Closed whatever is chosen, its summary counting the selection and
-  saying when a pattern or range is in force: one attribute may carry
+  Closed whatever is chosen, its summary counting the values showing
+  (see dk.cst.corpus-probe.views.controls/entry-count) and the selection,
+  and saying when a pattern or range is in force: one attribute may carry
   hundreds of values, and reopening them on every resubmit grew the form
   exactly while the reader was refining it. The wording is in `ui`."
   [ui client? {attr :name :keys [rows hidden?]}
@@ -400,7 +401,8 @@
                             showing chosen
                             [:toggle-filter-values [attr showing]]))
      [:details (cond-> {} hidden? (assoc :hidden true))
-      [:summary [:code (name attr)]
+      [:summary [:code (name attr)] " "
+       (controls/entry-count (count showing))
        (when (seq chosen)
          (str " · " (count chosen) " " (i18n/tr ui "selected")))
        (when (some #(not (str/blank? %)) (cons pattern bounds))
@@ -514,7 +516,9 @@
                    ;; where it was; hidden rather than dropped, because
                    ;; its checkboxes are what a search submits
                    nothing-found? (assoc :hidden true))
-        [:summary (str n " " (i18n/tr ui "selected"))]
+        [:summary (if (zero? n)
+                    (i18n/tr ui "None selected")
+                    (str n " " (i18n/tr ui "selected")))]
         (for [{attr :name :as m} shown]
           (filter-details ui client? m {:chosen  (get selected attr)
                                         :pattern (get patterns attr)
@@ -596,6 +600,38 @@
       (for [n offered]
         [:option {:value n :selected (= n selected)} n])]]))
 
+(defn match-label
+  "What the `match` param value is called, in `ui`: how much of the
+  form a simple search must cover (see
+  dk.cst.corpus-probe.api/match-param); the whole word for a value
+  naming none."
+  [ui match]
+  (case match
+    "prefix" (i18n/tr ui "start of word")
+    "suffix" (i18n/tr ui "end of word")
+    "infix"  (i18n/tr ui "part of word")
+    (i18n/tr ui "whole word")))
+
+(def match-values
+  "The values of the match param, in display order: the whole form
+  first, which is the one no URL carries."
+  ["" "prefix" "suffix" "infix"])
+
+(defn match-control
+  "The control choosing how much of the form a simple search must
+  cover, in `ui`: a select over the `match-values`, each named by
+  `match-label`, with `match` chosen and the whole form when it names
+  none, `disabled?` while the query is CQP, which writes its own.
+
+  One control rather than a box for each end: two boxes both ticked
+  meant any part of the form, and nothing said so."
+  [ui match disabled?]
+  [:label (i18n/tr ui "match") " "
+   [:select {:name "match" :disabled disabled?}
+    (for [value match-values]
+      [:option {:value value :selected (= value (or match ""))}
+       (match-label ui value)])]])
+
 (defn heading-id
   "The id of the first heading among the hiccup `blocks` of a document,
   which is the name the document gives itself; nil when none carries
@@ -649,8 +685,8 @@
   overviews, its metadata `:filter-controls` and the `:search-attrs` a
   simple search may match (see `attribute-control`), prefilled from its
   `:params` (:corpus, a vector of selected names, :q :mode :in :ci
-  :prefix :suffix), submitted as GET to `action`, with the page's own
-  `extra` hidden inputs.
+  :match), submitted as GET to `action`, with the page's own `extra`
+  hidden inputs.
 
   The query field comes first (see `query-field`), then everything that
   decides how it is read, in one group: the mode, under it the options
@@ -695,7 +731,7 @@
            chooser-open? filters-open? filters-pending?]
     :as state}
    action extra]
-  (let [{:keys [corpus q mode in ci prefix suffix]} params]
+  (let [{:keys [corpus q mode in ci match]} params]
     [:search
      [:form.search {:id form-id :method "get" :action action}
       extra
@@ -713,9 +749,11 @@
       ;; nothing: a reader who looks at CQP and comes back finds what they
       ;; had ticked still ticked, the form does not change height under
       ;; them, and a disabled control is not submitted, so nothing about a
-      ;; simple search rides along with a CQP one
-      [:fieldset.query-options
-       [:legend (i18n/tr ui "Query options")]
+      ;; simple search rides along with a CQP one.
+      ;;
+      ;; Named for a screen reader alone: the box under the field is its
+      ;; options, and a legend saying so said what the box says
+      [:fieldset.query-options {:aria-label (i18n/tr ui "Query options")}
        ;; the radios are still a group of their own, and still named:
        ;; a fieldset is not the only thing that can say so
        [:p {:role "radiogroup" :aria-label (i18n/tr ui "Query mode")}
@@ -740,20 +778,12 @@
        [:div {:role "group" :aria-label (i18n/tr ui "Simple-search options")}
         [:p (attribute-control ui search-attrs in (= mode "cqp"))]
         [:p
+         (match-control ui match (= mode "cqp"))
+         " "
          [:label [:input {:type "checkbox" :name "ci" :value "on"
                           :checked  (some? ci)
                           :disabled (= mode "cqp")}]
-          (i18n/tr ui "ignore case")]
-         " "
-         [:label [:input {:type "checkbox" :name "prefix" :value "on"
-                          :checked  (some? prefix)
-                          :disabled (= mode "cqp")}]
-          (i18n/tr ui "starts with")]
-         " "
-         [:label [:input {:type "checkbox" :name "suffix" :value "on"
-                          :checked  (some? suffix)
-                          :disabled (= mode "cqp")}]
-          (i18n/tr ui "ends with")]]]]
+          (i18n/tr ui "ignore case")]]]]
       ;; marks a selection the reader actually made: without it, unticking
       ;; every corpus and submitting is indistinguishable from arriving
       ;; with no corpus named, which searches them all
@@ -808,11 +838,12 @@
          (when (next corpora) (str " " (i18n/tr ui "per corpus"))))))
 
 (defn result-summary
-  "The summary text of a concordance `result` page (`:size` hits over
-  `:pages`, in the corpora that could be searched, within its metadata
-  `:filter`, narrowed to its `:subset` and `:near` a word, holding its
-  random `:sample` of the matches), used as the heading naming the
-  results region, in `ui`."
+  "The summary text of a concordance `result` page (`:size` hits in the
+  corpora that could be searched, within its metadata `:filter`,
+  narrowed to its `:subset` and `:near` a word, holding its random
+  `:sample` of the matches, and which of its `:pages` this is when
+  there are several), used as the heading naming the results region,
+  in `ui`."
   [ui {:keys [size counts] :as result}]
   (let [searched (map :corpus (filter :size counts))]
     (str (hits-phrase ui size) " " (i18n/tr ui "in") " "
@@ -824,7 +855,9 @@
          ;; drew a sample of what it found reads as the reason it is empty
          (when (pos? size)
            (some->> (sample-phrase ui (:sample result) searched) (str ", ")))
-         " · " (page-phrase ui result))))
+         ;; a result that fits one page has no place in it worth naming
+         (when (< 1 (:pages result 0))
+           (str " · " (page-phrase ui result))))))
 
 (defn counts-table
   "The per-corpus hit `counts` of a search over several corpora as a table,

@@ -81,9 +81,6 @@ msgstr "Søg i CWB-korpusser og læs KWIC-konkordanser."
 msgid "Download"
 msgstr "Hent"
 
-msgid "ends with"
-msgstr "slutter med"
-
 msgid "error"
 msgstr "fejl"
 
@@ -279,9 +276,6 @@ msgstr "match"
 msgid "source"
 msgstr "kilde"
 
-msgid "starts with"
-msgstr "begynder med"
-
 msgid "button|Search"
 msgstr "Søg"
 
@@ -458,3 +452,18 @@ msgstr "Københavns Universitet"
 
 msgid "a whole number"
 msgstr "et helt tal"
+
+msgid "whole word"
+msgstr "hele ordet"
+
+msgid "start of word"
+msgstr "ordets begyndelse"
+
+msgid "end of word"
+msgstr "ordets slutning"
+
+msgid "part of word"
+msgstr "del af ordet"
+
+msgid "None selected"
+msgstr "Ingen valgt"

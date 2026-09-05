@@ -74,18 +74,19 @@
                                    (assoc-in state [:params :mode] mode)
                                    "/" nil))
                             (filter #(and (map? %)
-                                          (#{"in" "ci" "prefix" "suffix"}
-                                           (:name %))))
+                                          (#{"in" "ci" "match"} (:name %))))
                             (map :disabled)))]
-        (is (= [false false false false] (disabled "simple")))
-        (is (= [true true true true] (disabled "cqp")))))
+        (is (= [false false false] (disabled "simple")))
+        (is (= [true true true] (disabled "cqp")))))
     (testing "a simple search matches one of the corpora's attributes,
               the surface form unless the URL says otherwise"
       (let [options (fn [state]
                       (->> (deep (page/search-form state "/" nil))
-                           (filter #(and (map? %) (contains? % :selected)
-                                         (string? (:value %))
-                                         (not= "" (:value %))))
+                           (filter #(and (vector? %) (= :select (first %))
+                                         (= "in" (:name (second %)))))
+                           (first)
+                           (deep)
+                           (filter #(and (map? %) (contains? % :selected)))
                            (map (juxt :value :selected))))]
         (is (= [["word" true] ["pos" false] ["lemma" false]]
                (options state)))
@@ -716,32 +717,37 @@
 
 (deftest result-summary-test
   (testing "only the corpora that could be searched are counted"
-    (is (= "6 hits in 2 corpora · page 1 of 1"
+    (is (= "6 hits in 2 corpora"
            (page/result-summary en example-result))))
-  (is (= "5 hits in PROBE · page 1 of 1"
+  (is (= "5 hits in PROBE"
          (page/result-summary en {:size 5 :page 0 :pages 1
                                     :counts [{:corpus "PROBE" :size 5}]})))
+  (testing "where in the pages the reader is, once there are several: a
+            result that fits one page has no place in it worth naming"
+    (is (= "5 hits in PROBE · page 2 of 3"
+           (page/result-summary en {:size 5 :page 1 :pages 3
+                                    :counts [{:corpus "PROBE" :size 5}]}))))
   (testing "a metadata filter qualifies the corpora"
-    (is (= "5 hits in PROBE within text_year 1591 · page 1 of 1"
+    (is (= "5 hits in PROBE within text_year 1591"
            (page/result-summary en {:size   5 :page 0 :pages 1
                                       :filter {:text_year #{"1591"}}
                                       :counts [{:corpus "PROBE"
                                                 :size   5}]}))))
   (testing "the same summary in Danish, the attribute name untranslated"
-    (is (= "5 forekomster i PROBE inden for text_year 1591 · side 1 af 1"
+    (is (= "5 forekomster i PROBE inden for text_year 1591"
            (page/result-summary da {:size   5 :page 0 :pages 1
                                       :filter {:text_year #{"1591"}}
                                       :counts [{:corpus "PROBE"
                                                 :size   5}]}))))
   (testing "a sample qualifies the count, since a page of one is not a
             page of the whole result and nothing else says so"
-    (is (= "5 hits in PROBE, a random sample of at most 100 · page 1 of 1"
+    (is (= "5 hits in PROBE, a random sample of at most 100"
            (page/result-summary en {:size   5 :page 0 :pages 1
                                     :sample 100
                                     :counts [{:corpus "PROBE" :size 5}]}))))
   (testing "a search that found nothing sampled nothing, and saying it
             drew a sample reads as the reason the result is empty"
-    (is (= "0 hits in PROBE · page 1 of 1"
+    (is (= "0 hits in PROBE"
            (page/result-summary en {:size   0 :page 0 :pages 1
                                     :sample 100
                                     :counts [{:corpus "PROBE" :size 0}]})))))
@@ -789,7 +795,7 @@
     (testing "its heading is the summary the caption used to carry, and it
               is the page's own: the search page has no other"
       (is (some #{[:h1 {:id "results-heading"}
-                   "6 hits in 2 corpora · page 1 of 1"]}
+                   "6 hits in 2 corpora"]}
                 (deep html))))
     (testing "errors are headed sections before the counts and concordance"
       (is (some #{[:h2 "CQP error"]} (deep html)))
@@ -891,6 +897,25 @@
     (testing "closing is a plain button, since Escape is handled by the grid"
       (is (some #{[:button {:type "button" :on {:click [:close]}} "Close"]}
                 (deep html))))))
+
+(deftest match-control-test
+  (let [options (fn [match]
+                  (->> (deep (page/match-control en match false))
+                       (filter #(and (map? %) (contains? % :selected)))
+                       (map (juxt :value :selected))))]
+    (testing "one select over how much of the form the query must cover,
+              the whole form unless the URL says otherwise"
+      (is (= [["" true] ["prefix" false] ["suffix" false] ["infix" false]]
+             (options nil)))
+      (is (= [["" false] ["prefix" false] ["suffix" false] ["infix" true]]
+             (options "infix"))))
+    (testing "named, and disabled while the query writes its own"
+      (is (= [:label "match" " "] (subvec (page/match-control en nil false) 0 3)))
+      (is (true? (:disabled (second (last (page/match-control en nil true)))))))
+    (testing "in either language"
+      (is (some #{"whole word" "part of word"} (deep (page/match-control en nil false))))
+      (is (some #{"hele ordet" "en del af ordet"}
+                (deep (page/match-control da "infix" false)))))))
 
 (deftest query-field-test
   (testing "a simple or CQP query is a search box holding the query"

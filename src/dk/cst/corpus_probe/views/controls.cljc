@@ -60,6 +60,14 @@
                                        :invalid       invalid}]
                 :on                  {:change action}}]))))
 
+(defn entry-count
+  "How many entries a disclosure holds, `n`, beside the name in its
+  summary: in parentheses and as a side note, which the user agent sets
+  smaller and the stylesheet greys, so a shut disclosure says what is
+  inside it without the count competing with the name."
+  [n]
+  [:small.count (str "(" n ")")])
+
 (defn toggled
   "`disclosure` with `control` beside it as one row, or the disclosure
   alone where there is no control to put there."

@@ -24,7 +24,7 @@
            (api/->cqp {:q "[lemma = \"hund\"]" :mode "cqp"}))))
   (testing "simple mode compiles the query"
     (is (= "[word = \"hund.*\" %c]"
-           (api/->cqp {:q "hund" :mode "simple" :prefix "on" :ci "on"}))))
+           (api/->cqp {:q "hund" :mode "simple" :match "prefix" :ci "on"}))))
   (testing "the in param names the attribute matched, word when blank"
     (is (= "[lemma = \"hund\"]" (api/->cqp {:q "hund" :in "lemma"})))
     (is (= "[word = \"hund\"]" (api/->cqp {:q "hund" :in ""}))))
@@ -36,7 +36,19 @@
     (is (= "[word = \"hund\"]" (api/->cqp {:q "hund" :mode ""})))
     (testing "and its options still apply"
       (is (= "[word = \"hund.*\" %c]"
-             (api/->cqp {:q "hund" :prefix "on" :ci "on"}))))))
+             (api/->cqp {:q "hund" :match "prefix" :ci "on"}))))))
+
+(deftest match-param-test
+  (testing "one param says how much of the form the query must cover"
+    (is (= {} (api/match-param nil)))
+    (is (= {} (api/match-param "")))
+    (is (= {:prefix? true} (api/match-param "prefix")))
+    (is (= {:suffix? true} (api/match-param "suffix")))
+    (is (= {:prefix? true :suffix? true} (api/match-param "infix"))))
+  (testing "so a query may fall anywhere in the form without two params
+            both set having to mean that"
+    (is (= "[word = \".*hund.*\"]" (api/->cqp {:q "hund" :match "infix"})))
+    (is (= "[word = \".*hund\"]" (api/->cqp {:q "hund" :match "suffix"})))))
 
 (deftest within-unit-test
   (testing "a simple search of several words is kept within a sentence"

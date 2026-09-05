@@ -194,6 +194,11 @@ nav.views [aria-current] { font-weight: bold; }
    disclosure that shows a text cursor does not read as a control */
 summary { cursor: pointer; }
 
+/* the count beside a disclosure's name is a side note: the user agent
+   sets it smaller, and the system's own grey keeps it from reading as
+   part of the name. GrayText, so no palette */
+summary .count { color: GrayText; }
+
 /* the label is the target: one row per corpus and per filter value. The
    rows only: a label naming a control beside it, as the corpus filter's
    does, stays inline like every other label in the form */

@@ -392,6 +392,10 @@ msgid "No values found."
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/page.cljc
+msgid "None selected"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/page.cljc
 msgid "Too many values to list: "
 msgstr ""
 
@@ -413,6 +417,22 @@ msgstr ""
 
 #: src/dk/cst/corpus_probe/views/corpus.cljc src/dk/cst/corpus_probe/views/page.cljc
 msgid "attribute"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/page.cljc
+msgid "start of word"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/page.cljc
+msgid "end of word"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/page.cljc
+msgid "part of word"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/page.cljc
+msgid "whole word"
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/kwic.cljc src/dk/cst/corpus_probe/views/page.cljc
@@ -447,14 +467,6 @@ msgstr ""
 msgid "ignore case"
 msgstr ""
 
-#: src/dk/cst/corpus_probe/views/page.cljc
-msgid "starts with"
-msgstr ""
-
-#: src/dk/cst/corpus_probe/views/page.cljc
-msgid "ends with"
-msgstr ""
-
 #: src/dk/cst/corpus_probe/views/corpus.cljc src/dk/cst/corpus_probe/views/frequencies.cljc src/dk/cst/corpus_probe/views/page.cljc
 msgid "corpora"
 msgstr ""
@@ -485,7 +497,7 @@ msgstr ""
 msgid "Hits per corpus"
 msgstr ""
 
-#: src/dk/cst/corpus_probe/views/page.cljc
+#: src/dk/cst/corpus_probe/views/corpus.cljc src/dk/cst/corpus_probe/views/page.cljc
 msgid "corpus"
 msgstr ""
 

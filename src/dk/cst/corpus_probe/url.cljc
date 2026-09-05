@@ -89,7 +89,7 @@
   A param not named here is dropped from every URL the app builds.
   `::filter` stands for the metadata filter's params (see
   `metadata-key?`)."
-  [:q :mode :in :ci :prefix :suffix
+  [:q :mode :in :ci :match
    :corpus :scope ::filter
    :near :distance :subset :subset-at :subset-attr :sample
    :view :sort :context :attr :at :by :docs

@@ -4,6 +4,13 @@
             [dk.cst.corpus-probe.views.corpus :as corpus]
             [dk.cst.corpus-probe.views.layout :as layout]))
 
+(defn summaries
+  "The text of every disclosure summary in hiccup `html`, in order."
+  [html]
+  (->> (deep html)
+       (filter #(and (vector? %) (= :summary (first %))))
+       (map #(apply str (filter string? (tree-seq coll? seq (rest %)))))))
+
 (deftest corpus-item-test
   (testing "a titled corpus links its title and shows its ID"
     (let [item (corpus/corpus-item en {:id    "VISER"
@@ -61,13 +68,30 @@
                                {:item item :summary label
                                 :open? (constantly false)}
                                litteratur))))))
-    (testing "the summary is computed, so a closed folder can still count"
-      (is (= [:summary "Litteratur · 1 corpora"]
+    (testing "the summary is computed, so a closed folder can still count,
+              the count a side note beside the name"
+      (is (= [:summary (list "Litteratur" " " [:small.count "(1)"] nil)]
              (nth (corpus/folder-view
-                   {:item item :summary (partial corpus/folder-count "en")
-                    :open? (constantly false)}
+                   {:item    item
+                    :summary (partial corpus/folder-summary en #{})
+                    :open?   (constantly false)}
                    litteratur)
-                  2))))
+                  2)))
+      (testing "and whether the selection is inside it"
+        (is (= ["Litteratur (1) · 1 selected"]
+               (summaries (corpus/folder-view
+                           {:item    item
+                            :summary (partial corpus/folder-summary en
+                                              #{"VISER"})
+                            :open?   (constantly false)}
+                           litteratur))))
+        (is (= ["Litteratur (1) · 1 valgt"]
+               (summaries (corpus/folder-view
+                           {:item    item
+                            :summary (partial corpus/folder-summary da
+                                              #{"VISER"})
+                            :open?   (constantly false)}
+                           litteratur))))))
     (testing "a toggle takes its place beside the disclosure, not inside it"
       (let [[tag control disclosure]
             (corpus/folder-view {:item item :summary label
@@ -273,8 +297,9 @@
         ;; VISER's box is still there to be submitted, just not shown
         (is (some #(and (map? %) (= "VISER" (:value %))) html))
         (is (some #{{:hidden true}} html))
-        (is (some #{"Folketinget · 1 corpora"} html))
-        (is (some #{"Litteratur · 0 of 1 corpora"} html))))
+        ;; the count is of what the filter left showing
+        (is (some #{"Folketinget (1)"} (summaries html)))
+        (is (some #{"Litteratur (0)"} (summaries html)))))
     (testing "the region saying nothing was found is there before it says it"
       (let [region (fn [opts]
                      (->> (corpus/chooser en folders
