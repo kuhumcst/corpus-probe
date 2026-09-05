@@ -1,6 +1,7 @@
 (ns dk.cst.corpus-probe.url-test
   (:require [clojure.test :refer [deftest is testing]]
             [dk.cst.corpus-probe.api :as api]
+            [dk.cst.corpus-probe.commands :as commands]
             [dk.cst.corpus-probe.query :as query]
             [dk.cst.corpus-probe.url :as url]
             [dk.cst.corpus-probe.views.page :as page]))
@@ -76,19 +77,75 @@
 
 (deftest defaults-test
   (testing "each default is the one its reader applies to a URL without it"
-    (is (= (:context url/defaults) (str (:context query/kwic-defaults))))
-    (is (= (:sort url/defaults) (ffirst query/sort-modes)))
+    (is (= (:context url/defaults) (str (:context commands/kwic-defaults))))
+    (is (= (:sort url/defaults) (ffirst commands/sort-modes)))
     (is (= (:distance url/defaults) (str page/near-distance)))
     (is (= (:view url/defaults) (second (first api/result-views))))
     (is (= (:attr url/defaults) (api/attr-param nil)))
     (is (= (:in url/defaults) (api/attr-param nil)))
-    (is (= (:within url/defaults) (name (api/within-param nil))))
+    (is (= (:within url/defaults) (name (query/within-param nil))))
     (is (= (:subset-attr url/defaults) (api/attr-param nil)))
     (is (= (:at url/defaults) (api/position-param nil)))
     (is (= (:subset-at url/defaults) (api/position-param nil)))
     (is (= 0 (api/page-param (:page url/defaults))))
-    (is (= (api/->cqp {:q "hund"})
-           (api/->cqp {:q "hund" :mode (:mode url/defaults)})))))
+    (is (= (query/->cqp {:q "hund"})
+           (query/->cqp {:q "hund" :mode (:mode url/defaults)})))
+    (is (= (:mode url/defaults) (first url/modes)))))
+
+(deftest modes-test
+  (testing "every mode has its row of fields, and no row lacks its mode"
+    (is (= (set url/modes) (set (keys url/fields)))))
+  (testing "a URL naming no mode, or one the app does not know, is simple"
+    (is (= "simple" (url/mode {})))
+    (is (= "simple" (url/mode {:mode "nonesuch"})))
+    (is (= "cqp" (url/mode {:mode "cqp"}))))
+  (testing "a mode reads the mode, its own keys and, given tokens, their
+            fields, nothing else"
+    (is (url/reads? "simple" :within))
+    (is (url/reads? "extended" :t2.3.v))
+    (is (url/reads? "cqp" :mode))
+    (is (not (url/reads? "cqp" :in)))
+    (is (not (url/reads? "list" :within)))
+    (is (not (url/reads? "simple" :t1.v)))
+    (testing "the marker standing for the tokens is no key"
+      (is (not (url/reads? "extended" ::url/tokens)))
+      (is (not (url/query-key? ::url/tokens)))))
+  (testing "a query key is one some mode reads; the rest say where and how"
+    (is (every? url/query-key? [:q :mode :in :ci :match :within :t1.v
+                                :t2.3.join]))
+    (is (not-any? url/query-key? [:corpus :sort :f.text_year :page :from nil])))
+  (testing "what the mode does not read is unread, and no URL carries it"
+    (is (= #{:in :ci :match}
+           (url/unread {:q "x" :mode "cqp" :in "lemma" :ci "on"
+                        :match "prefix"})))
+    (is (= {:q "x" :mode "cqp"}
+           (url/canonical {:q "x" :mode "cqp" :in "lemma" :ci "on"
+                           :match "prefix"})))
+    (is (= {:mode "extended" :t1.v "kat"}
+           (url/canonical {:q "hund" :mode "extended" :t1.v "kat"})))
+    (is (= {:q "hund"}
+           (url/canonical {:q "hund" :t1.v "kat" :t1.attr "lemma"})))
+    (is (= {:q "a\nb" :mode "list"}
+           (url/canonical {:q "a\nb" :mode "list" :within "text"})))
+    (testing "while what it reads stays, and what every mode shares"
+      (is (= {:q "a b" :within "text" :sort "word"}
+             (url/canonical {:q "a b" :within "text" :sort "word"}))))))
+
+(deftest unread-query?-test
+  (testing "a query the mode does not read is the form submitted with its
+            radio changed, or a hand-written URL"
+    (is (url/unread-query? {:q "hund" :mode "extended"}))
+    (is (url/unread-query? {:t1.v "hund" :mode "simple"}))
+    (is (url/unread-query? {:t1.v "hund" :mode "cqp" :corpus "PROBE"})))
+  (testing "not a query in its own mode, nor an option carried along"
+    (is (not (url/unread-query? {:q "hund"})))
+    (is (not (url/unread-query? {:q "hund" :mode "cqp" :in "lemma"})))
+    (is (not (url/unread-query? {:mode "extended"}))))
+  (testing "nor the blank field or the blank trailing token every form
+            submits"
+    (is (not (url/unread-query? {:q "" :mode "extended" :in "word"})))
+    (is (not (url/unread-query? {:t1.attr "word" :t1.op "is" :t1.v ""
+                                 :t1.min "1" :t1.max "1" :mode "simple"})))))
 
 (deftest query-string-test
   (testing "what was asked, where, which hits, how shown, where in them"
@@ -196,15 +253,21 @@
                                            {:attr :b :value "y"
                                             :join (:join url/token-defaults)}]}))))
   (testing "a simple query seeds one token per word, carrying its options,
-            and a list one token of alternatives"
+            and a list one token of alternatives, however it is laid out"
     (is (= [{:conditions [{:v "lille" :attr "lemma" :ci "on" :op "prefix"}]}
             {:conditions [{:v "hund" :attr "lemma" :ci "on" :op "prefix"}]}]
            (url/tokens-from-query {:q "lille hund" :in "lemma" :ci "on"
-                                   :match "prefix"})))
+                                   :match "prefix"}
+                                  "simple")))
     (is (= [{:conditions [{:v "hund"} {:v "kat" :join "or"}]}]
-           (url/tokens-from-query {:q "hund\nkat" :mode "list"})))
-    (is (= [] (url/tokens-from-query {:q "  " :mode "list"})))
-    (is (= [] (url/tokens-from-query {})))))
+           (url/tokens-from-query {:q "hund\nkat"} "list")))
+    (is (= [{:conditions [{:v "hund"} {:v "kat" :join "or"}]}]
+           (url/tokens-from-query {:q "hund kat"} "list")))
+    (testing "read as the mode it was typed in, whatever the params say"
+      (is (= [{:conditions [{:v "hund"}]} {:conditions [{:v "kat"}]}]
+             (url/tokens-from-query {:q "hund\nkat" :mode "extended"} nil))))
+    (is (= [] (url/tokens-from-query {:q "  "} "list")))
+    (is (= [] (url/tokens-from-query {} "simple")))))
 
 (deftest metadata-key?-test
   (is (url/metadata-key? :f.text_year))

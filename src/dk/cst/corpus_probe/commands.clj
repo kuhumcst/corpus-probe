@@ -1,11 +1,16 @@
-(ns dk.cst.corpus-probe.query
-  "CQP command generation: the hardened display profile, safe embedding of
-  user input, the simple-search compiler and KWIC page batches.
+(ns dk.cst.corpus-probe.commands
+  "CQP command generation: the hardened display profile, the guards on
+  what is spliced into a command, the queries built around a compiled
+  one (a metadata filter, a position, the QueryLock), the commands that
+  narrow, sample, sort and count a result, and the batches a search
+  runs. The compilers of what a reader asked are
+  dk.cst.corpus-probe.query's.
 
   The commands are generated for CWB 3.5.0, the version the app ships
   with in its own container (PLAN.md section 2); appendix B there records
   the 3.4.27-safe subset for reference."
-  (:require [clojure.string :as str]))
+  (:require [clojure.string :as str]
+            [dk.cst.corpus-probe.query :as query]))
 
 (def hardened-profile
   "Display settings making KWIC output unambiguously parseable: every
@@ -93,173 +98,11 @@
     (throw (ex-info "Invalid cache directory" {:cache-dir dir})))
   dir)
 
-(defn escape-literal
-  "Escape `s` for embedding inside a double-quoted CQP regular expression:
-  backslash-escape the PCRE metacharacters and double the quote character.
-
-  This is the safe superset of the escaping used by CWB::CQP, CEQL and Korp
-  (docs/research/gap-simple-search.md §3)."
-  [s]
-  (-> s
-      (str/replace #"[.?*+|(){}\[\]^$\\]" "\\\\$0")
-      (str/replace "\"" "\"\"")))
-
-(defn flatten-whitespace
-  "Replace newlines and TABs in `s` with spaces.
-
-  Applied to user-supplied CQP before embedding it in a command batch: a
-  newline would detach the QueryLock wrapping and a TAB would collide with
-  the hardened profile's separator frames."
-  [s]
-  (str/replace s #"[\n\r\t]+" " "))
-
-(defn escape-value
-  "Escape `value` for a double-quoted regex on a command line: its
-  metacharacters and quotes as `escape-literal` does, and the control
-  characters a command line cannot carry, TAB (which the hardened profile
-  frames its output with) and the line breaks that end a command, as
-  their regex escapes, which match the same bytes."
-  [value]
-  (-> (escape-literal value)
-      (str/replace "\t" "\\t")
-      (str/replace "\n" "\\n")
-      (str/replace "\r" "\\r")))
-
-(defn simple->cqp
-  "Compile simple-search `input` into a CQP query string.
-
-  Each whitespace-separated word becomes one token pattern, following
-  Korp's simple search: `[word = \"<escaped>\"]` with `.*` affixes for
-  :prefix?/:suffix? and the %c flag for :case-insensitive?, matching the
-  positional attribute :attr (default word) rather than the surface form
-  when one is given. Under :list?, the input is a list of words, one per
-  line, and the query is the one token pattern matching any of them: an
-  alternation, which the affixes and the flag then apply to as a whole.
-  Returns nil for blank input rather than a match-everything query. The
-  region the words are kept within is each corpus's own business (see
-  `within-query`).
-
-  (simple->cqp \"lille hund\" {:case-insensitive? true})
-  ;; => [word = \"lille\" %c] [word = \"hund\" %c]
-
-  (simple->cqp \"hund\" {:attr :lemma})
-  ;; => [lemma = \"hund\"]
-
-  (simple->cqp \"hund\\nkat\" {:list? true :prefix? true})
-  ;; => [word = \"(hund|kat).*\"]"
-  ([input]
-   (simple->cqp input {}))
-  ([input {:keys [case-insensitive? prefix? suffix? attr list?]
-           :or   {attr :word}}]
-   (when-not (str/blank? input)
-     (let [pattern (fn [literal]
-                     (str "[" (name attr) " = \""
-                          (when suffix? ".*")
-                          literal
-                          (when prefix? ".*")
-                          "\"" (when case-insensitive? " %c") "]"))
-           words   (fn [parts] (remove str/blank? (map str/trim parts)))]
-       (if list?
-         (let [alternatives (->> (words (str/split-lines input))
-                                 (distinct)
-                                 (map escape-literal))]
-           (pattern (str "(" (str/join "|" alternatives) ")")))
-         (->> (words (str/split input #"\s+"))
-              (map (comp pattern escape-literal))
-              (str/join " ")))))))
-
-(defn regex-value
-  "The regular expression `value` as a reader wrote it, made safe for a
-  double-quoted CQP literal: quotes doubled and line breaks and TABs
-  flattened (see `flatten-whitespace`). Backslashes are the reader's own,
-  so a regex ending in one is CQP's to refuse, as it is in CQP mode."
-  [value]
-  (str/replace (flatten-whitespace (str value)) "\"" "\"\""))
-
-(defn condition->cqp
-  "The CQP condition of extended-search `condition`: its :attr (a
-  positional attribute name, word by default) related by :op (see
-  dk.cst.corpus-probe.url/operators) to its :value, the literal escaped
-  (see `escape-value`) or, under a regex operator, kept as written (see
-  `regex-value`), with the %c flag under :ci?.
-
-  (condition->cqp {:attr :lemma :op \"is\" :value \"hund\" :ci? true})
-  ;; => lemma = \"hund\" %c"
-  [{:keys [attr op value ci?] :or {attr :word op "is"}}]
-  (let [literal (escape-value (str value))
-        pattern (case op
-                  "prefix"              (str literal ".*")
-                  "suffix"              (str ".*" literal)
-                  "infix"               (str ".*" literal ".*")
-                  ("regex" "not-regex") (regex-value value)
-                  literal)]
-    (str (name attr)
-         (if (#{"not" "not-regex"} op) " != \"" " = \"")
-         pattern "\""
-         (when ci? " %c"))))
-
-(defn condition-groups
-  "The `conditions` of a token in the groups their :join makes (see
-  dk.cst.corpus-probe.url/joins): the first opens the first group, each
-  `or` adds an alternative to the current one and anything else opens a
-  new one."
-  [conditions]
-  (reduce (fn [groups {:keys [join] :as condition}]
-            (if (and (seq groups) (= "or" join))
-              (update groups (dec (count groups)) conj condition)
-              (conj groups [condition])))
-          []
-          conditions))
-
-(defn token->cqp
-  "The CQP token pattern of extended-search `token`: its :conditions (see
-  `condition->cqp`) in the groups their joins make (see
-  `condition-groups`), the alternatives of a group joined by | and the
-  groups by &, in parentheses where both occur, so that KORP's reading
-  holds: the ors bind tighter than the ands, the reverse of CQP's own.
-  Any word when the first condition is `any`. Repeated :min to :max
-  times when that is not once, and opening a sentence under :start? and
-  closing one under :end? as `<s>` tags, which each corpus then names
-  after its own sentence attribute (see `sentence-tags`).
-
-  (token->cqp {:conditions [{:attr :lemma :op \"is\" :value \"hund\"}
-                            {:join \"or\" :attr :lemma :op \"is\" :value \"kat\"}
-                            {:join \"and\" :attr :pos :op \"prefix\" :value \"N\"}]})
-  ;; => [(lemma = \"hund\" | lemma = \"kat\") & pos = \"N.*\"]
-
-  (token->cqp {:conditions [{:op \"any\"}] :min 0 :max 2})
-  ;; => []{0,2}"
-  [{:keys [conditions start? end?] lo :min hi :max :or {lo 1 hi 1}}]
-  (let [groups (map #(map condition->cqp %) (condition-groups conditions))
-        body   (when-not (= "any" (:op (first conditions)))
-                 (str/join " & " (for [alts groups
-                                       :let [alt (str/join " | " alts)]]
-                                   (if (and (next groups) (next alts))
-                                     (str "(" alt ")")
-                                     alt))))]
-    (str (when start? "<s> ")
-         "[" body "]"
-         (when-not (= [1 1] [lo hi])
-           (str "{" lo "," hi "}"))
-         (when end? " </s>"))))
-
-(defn extended->cqp
-  "Compile the extended-search `tokens` (see `token->cqp`) into a CQP
-  query string: one token pattern each, in order; nil without tokens.
-
-  (extended->cqp [{:conditions [{:attr :pos :op \"prefix\" :value \"N\"}]}
-                  {:conditions [{:op \"any\"}] :max 2}
-                  {:conditions [{:attr :word :op \"is\" :value \"hund\"}]}])
-  ;; => [pos = \"N.*\"] []{1,2} [word = \"hund\"]"
-  [tokens]
-  (when (seq tokens)
-    (str/join " " (map token->cqp tokens))))
-
 (defn sentence-tags
   "`query` with its sentence tags, `<s>` and `</s>` standing between
   tokens, named after s-attribute `attr`: a compiled extended search
   opens and closes a sentence by CWB's usual name for one (see
-  `token->cqp`), which is not every corpus's (see
+  dk.cst.corpus-probe.query/token->cqp), which is not every corpus's (see
   dk.cst.corpus-probe.search/units). `query` itself when `attr` is nil
   or `s`. A tag inside a quoted literal is left alone, standing after a
   quote rather than a space.
@@ -301,7 +144,7 @@
   neither."
   [query]
   (let [key   (inc (rand-int 999999))
-        query (-> (flatten-whitespace query)
+        query (-> (query/flatten-whitespace query)
                   (str/trim)
                   (str/replace #";+\s*$" ""))]
     (str "set QueryLock " key ";\n" query "\n;\nunlock " key ";")))
@@ -336,7 +179,8 @@
         group    (fn [pattern] (str "(" (escape-pattern pattern) ")"))
         accepted (fn [values patterns]
                    (str "\""
-                        (str/join "|" (concat (map escape-value (sort values))
+                        (str/join "|" (concat (map query/escape-value
+                                                   (sort values))
                                               (map group patterns)))
                         "\""))]
     (str "<" (name attr) " = " (accepted values patterns) "> "
@@ -419,15 +263,15 @@
   match left without a keyword is deleted. The word is matched literally
   and regardless of case, as a simple search matches one. Both commands
   run outside the QueryLock, being no queries, so the word is escaped as
-  every spliced value is (see `escape-value`).
+  every spliced value is (see dk.cst.corpus-probe.query/escape-value).
 
   (near-command {:word \"kat\" :distance 5})
   ;; => set Last keyword nearest [word = \"kat\" %c] within 5 words from
   ;;    match; delete Last without keyword;"
   [{:keys [word distance]}]
   (when-not (str/blank? word)
-    (str "set Last keyword nearest [word = \"" (escape-value word) "\" %c]"
-         " within " (long distance) " words from match;"
+    (str "set Last keyword nearest [word = \"" (query/escape-value word)
+         "\" %c] within " (long distance) " words from match;"
          " delete Last without keyword;")))
 
 (def positions
@@ -494,13 +338,15 @@
   QueryLock but the sequence query, so `attr` is checked against the
   corpus by the caller and `value` escaped here."
   [{:keys [anchor attr value]}]
-  (let [pattern (str "[_." (name attr) " = \"" (escape-value value) "\"]")
+  (let [pattern (str "[_." (name attr) " = \"" (query/escape-value value)
+                     "\"]")
         beside  (fn [side from]
                   (str "set Last keyword nearest " pattern " within " side
                        " 1 words from " from "; delete Last without keyword;"))
         ;; not `pattern`: CQP refuses the this label in query-initial
         ;; position, and the sequence query opens with its first token
-        token   (fn [s] (str "[" (name attr) " = \"" (escape-value s) "\"]"))]
+        token   (fn [s]
+                  (str "[" (name attr) " = \"" (query/escape-value s) "\"]"))]
     (case (valid-position anchor)
       "match"       (str "Last = subset Last where match: " pattern ";")
       "matchend"    (str "Last = subset Last where matchend: " pattern ";")
@@ -542,27 +388,17 @@
      ["right"   (str external " on matchend[1] .. matchend[5];")]
      ["random"  "sort Last randomize 1;"]]))
 
-(defn attribute-name?
-  "True when `s` is a syntactically valid CQP attribute name: a letter or
-  underscore followed by letters, digits, underscores and hyphens.
-
-  An interpolation guard like `corpus-name?`: an attribute a reader
-  chose to sort by is spliced into a command outside the QueryLock, so
-  it is held to CQP's own lexer rule for a name here and checked against
-  the corpus's inventory by dk.cst.corpus-probe.search."
-  [s]
-  (boolean (re-matches #"[a-zA-Z_][a-zA-Z0-9_-]*" (str s))))
-
 (defn sort-attr
   "The positional attribute the sort mode `mode` orders the matches by:
-  a keyword when `mode` is an attribute name (see `attribute-name?`)
-  rather than one of the `sort-modes`; nil otherwise.
+  a keyword when `mode` is an attribute name (see
+  dk.cst.corpus-probe.query/attribute-name?) rather than one of the
+  `sort-modes`; nil otherwise.
 
   (sort-attr \"lemma\")
   ;; => :lemma"
   [mode]
   (when (and (not (some #{mode} (map first sort-modes)))
-             (attribute-name? mode))
+             (query/attribute-name? mode))
     (keyword mode)))
 
 (defn sort-command

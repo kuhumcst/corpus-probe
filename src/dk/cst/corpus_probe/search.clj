@@ -10,7 +10,7 @@
 
   Every search takes a :filter option, a metadata filter, and a :patterns
   option, the regexes its values may match instead (see
-  dk.cst.corpus-probe.query/filter-query), restricting it to the matching
+  dk.cst.corpus-probe.commands/filter-query), restricting it to the matching
   regions of each corpus.
 
   These functions are the trust boundary for the web layer: only the CQP
@@ -22,7 +22,7 @@
             [dk.cst.corpus-probe.corpus :as corpus]
             [dk.cst.corpus-probe.cqp :as cqp]
             [dk.cst.corpus-probe.parse :as parse]
-            [dk.cst.corpus-probe.query :as query]
+            [dk.cst.corpus-probe.commands :as commands]
             [dk.cst.corpus-probe.tools :as tools]
             [taoensso.telemere :as t])
   (:import [java.text Collator]
@@ -33,7 +33,7 @@
   spliced into commands outside the QueryLock sandbox) and sets the
   corpus's own charset for the CQP round trip."
   [ctx corpus]
-  (query/valid-corpus-name corpus)
+  (commands/valid-corpus-name corpus)
   (assoc ctx :charset (corpus/charset ctx corpus)))
 
 (defn error-map
@@ -115,11 +115,11 @@
   "CQP `query` as `corpus` via `ctx` runs it: kept within `unit` (see
   `within-attr!`; nil for no unit), and its sentence tags named after
   the corpus's own sentence attribute (see
-  dk.cst.corpus-probe.query/sentence-tags)."
+  dk.cst.corpus-probe.commands/sentence-tags)."
   [ctx corpus query unit]
   (-> query
-      (query/sentence-tags (within-attr! ctx corpus :sentence))
-      (query/within-query (within-attr! ctx corpus unit))))
+      (commands/sentence-tags (within-attr! ctx corpus :sentence))
+      (commands/within-query (within-attr! ctx corpus unit))))
 
 (defn countable-attr?
   "True when attribute description `m` is one whose values a result can
@@ -129,7 +129,7 @@
   (or (= :positional (:type m)) (annotated-s-attr? m)))
 
 (defn corpus-subset!
-  "The narrowing `subset` (see dk.cst.corpus-probe.query/subset-command)
+  "The narrowing `subset` (see dk.cst.corpus-probe.commands/subset-command)
   as `corpus` via `ctx` may run it: with its attribute checked against
   the corpus's countable attributes (see `countable-attr?`), since the
   name is spliced into a command outside the QueryLock; nil for none."
@@ -142,13 +142,13 @@
     subset))
 
 (defn corpus-sort!
-  "The sort mode `mode` (see dk.cst.corpus-probe.query/sort-command) as
+  "The sort mode `mode` (see dk.cst.corpus-probe.commands/sort-command) as
   `corpus` via `ctx` may run it: with the positional attribute it names,
-  if any (see dk.cst.corpus-probe.query/sort-attr), checked against the
+  if any (see dk.cst.corpus-probe.commands/sort-attr), checked against the
   corpus's inventory, since the name is spliced into a command outside
   the QueryLock."
   [ctx corpus mode]
-  (when-let [attr (query/sort-attr mode)]
+  (when-let [attr (commands/sort-attr mode)]
     (when-not (some #(and (= attr (:name %)) (= :positional (:type %)))
                     (corpus/attributes! ctx corpus))
       (throw (ex-info "Not a positional attribute of this corpus"
@@ -157,20 +157,20 @@
 
 (defn corpus-context
   "The width of context a corpus with `attributes` shows for `context`
-  (see dk.cst.corpus-probe.query/context-spec): a number of words as it
+  (see dk.cst.corpus-probe.commands/context-spec): a number of words as it
   is, and a unit of text (a key of `units`) as the corpus's own attribute
   for it, or as the default width where the corpus marks no such unit,
   since a hit shown with the usual context beats one not shown at all."
   [attributes context]
   (if (keyword? context)
-    (or (unit-attr attributes context) (:context query/kwic-defaults))
+    (or (unit-attr attributes context) (:context commands/kwic-defaults))
     context))
 
 (defn corpus-filter!
   "Metadata `filter` (a map of attribute to the set of values accepted)
   and `patterns` (a map of attribute to the regexes accepted, see
   dk.cst.corpus-probe.api/pattern-params) as
-  dk.cst.corpus-probe.query/filter-query takes them for `corpus` via
+  dk.cst.corpus-probe.commands/filter-query takes them for `corpus` via
   `ctx`: [attr values patterns] triples, the attribute with the most
   regions first, that being the innermost one the filter query must
   anchor on; nil when neither restricts anything.
@@ -217,7 +217,7 @@
   The KWIC defaults, the corpus's positional attributes and the structural
   attributes to fetch per hit, its context width as the corpus shows it
   (see `corpus-context`), its metadata filter as
-  dk.cst.corpus-probe.query/filter-query takes it, its narrowing and its
+  dk.cst.corpus-probe.commands/filter-query takes it, its narrowing and its
   sort mode checked (see `corpus-subset!` and `corpus-sort!`), and
   whatever the cache adds (see `cache-opts`). Requested structural
   attributes are checked against the corpus's inventory first, since
@@ -226,7 +226,7 @@
   (let [attributes (corpus/attributes! ctx corpus)
         annotated  (attr-names annotated-s-attr? attributes)
         requested  (:struct-attrs opts)
-        opts       (merge query/kwic-defaults opts)]
+        opts       (merge commands/kwic-defaults opts)]
     (when-let [bad (seq (remove (set annotated) requested))]
       (throw (ex-info "Unknown struct attributes"
                       {:corpus corpus :struct-attrs bad})))
@@ -247,7 +247,7 @@
 
 (defn run-kwic-batch!
   "Run KWIC `batch` for `query` in `corpus` via `ctx` and return its
-  sections (see dk.cst.corpus-probe.query/batch-sections).
+  sections (see dk.cst.corpus-probe.commands/batch-sections).
 
   Throws ex-info when CQP reports an error, times out or dies."
   [ctx corpus query batch]
@@ -255,7 +255,7 @@
     (when error
       (throw (ex-info "KWIC query failed"
                       {:corpus corpus :query query :error error})))
-    (query/batch-sections batch results)))
+    (commands/batch-sections batch results)))
 
 (defn batch-matches
   "How many matches the `sections` of a KWIC batch report."
@@ -360,7 +360,7 @@
 
   `fresh-batch` builds the batch from the corpus, the query and the
   options: the page batch for a page (see
-  dk.cst.corpus-probe.query/kwic-batch and `kwic-sections!`), the
+  dk.cst.corpus-probe.commands/kwic-batch and `kwic-sections!`), the
   export batch for `export!`."
   [ctx corpus query {:keys [nqr] :as opts} fresh-batch]
   (let [pending (when nqr (cache/pending-name nqr))
@@ -400,18 +400,18 @@
   remember to add it."
   [ctx corpus query {:keys [nqr] :as opts}]
   (let [fetch #(or (stored-sections! ctx corpus query opts
-                                     query/stored-kwic-batch intact?)
+                                     commands/stored-kwic-batch intact?)
                    (fresh-sections! ctx corpus query opts
-                                    query/kwic-batch))]
+                                    commands/kwic-batch))]
     (if nqr
-      (cache/share! (query/stored-kwic-batch corpus nqr opts) fetch)
+      (cache/share! (commands/stored-kwic-batch corpus nqr opts) fetch)
       (fetch))))
 
 (declare size!)
 
 (defn narrowing-nothing?
   "True when `opts` narrow a result of `query` in `corpus` via `ctx` (see
-  dk.cst.corpus-probe.query/narrowing) that is empty before one of the
+  dk.cst.corpus-probe.commands/narrowing) that is empty before one of the
   narrowings runs: nothing to narrow.
 
   CQP cannot be asked to narrow nothing. `set keyword` on an empty
@@ -424,7 +424,7 @@
   narrowed already made, and `size!` remembers every count, so asking
   is usually free."
   [ctx corpus query opts]
-  (let [steps (mapv first (query/narrowing opts))]
+  (let [steps (mapv first (commands/narrowing opts))]
     (boolean
      (some (fn [k]
              (zero? (size! ctx corpus query
@@ -440,14 +440,14 @@
   :hits [hit ...]} where each hit combines the parsed KWIC line (:cpos :left
   :match :right), its anchors from `dump` (:anchors) and its structural
   metadata (:structs). `opts` accepts :rows (the [from to] row range, see
-  dk.cst.corpus-probe.query/page-rows; default the first page), :context
+  dk.cst.corpus-probe.commands/page-rows; default the first page), :context
   (a number of tokens, or a unit of text as `corpus-context` resolves
   it), :sort (a sort mode, or a positional attribute to sort by; see
   `corpus-sort!`), :filter (a metadata filter), :sample
   (how many of the matches to keep, drawn at random; see
-  dk.cst.corpus-probe.query/sample-command), :near (a word the matches
+  dk.cst.corpus-probe.commands/sample-command), :near (a word the matches
   must have nearby, marked as their keyword; see
-  dk.cst.corpus-probe.query/near-command), :within (a unit of text the
+  dk.cst.corpus-probe.commands/near-command), :within (a unit of text the
   matches are kept within, see `within-attr!`) and :struct-attrs
   (defaults to every annotated s-attribute of the corpus; anything not in
   that inventory is rejected).
@@ -469,7 +469,7 @@
        {:corpus corpus
         :query  query
         :size   0
-        :rows   (:rows opts (:rows query/kwic-defaults))
+        :rows   (:rows opts (:rows commands/kwic-defaults))
         :hits   []}
        (let [opts     (kwic-opts! ctx corpus query opts)
              {:keys [p-attrs struct-attrs rows]} opts
@@ -528,7 +528,7 @@
 
   A text is a region of the corpus's own text attribute (see `units`),
   read as one match with no context (see
-  dk.cst.corpus-probe.query/text-batch); a corpus marking no texts has
+  dk.cst.corpus-probe.commands/text-batch); a corpus marking no texts has
   none to read, and says so with a :no-texts error. Throws ex-info when
   CQP reports an error, times out or dies."
   [ctx corpus cpos]
@@ -540,10 +540,10 @@
                                         :error  {:type :no-texts}})))
         unit       (or (unit-attr attributes :paragraph)
                        (unit-attr attributes :sentence))
-        query      (str (query/position-query cpos cpos) " expand to "
+        query      (str (commands/position-query cpos cpos) " expand to "
                         (name text))
         annotated  (attr-names annotated-s-attr? attributes)
-        batch      (query/text-batch corpus query
+        batch      (commands/text-batch corpus query
                                      {:p-attrs      [:word]
                                       :struct-attrs annotated
                                       :shown        (some-> unit vector)})
@@ -592,11 +592,11 @@
     (if nothing?
       {:corpus corpus :size 0 :annotations annotations :rows []}
       (let [sections (or (stored-sections! ctx corpus query opts
-                                           query/stored-export-batch
+                                           commands/stored-export-batch
                                            #(cache/holds? ctx corpus nqr
                                                           (batch-matches %)))
                          (fresh-sections! ctx corpus query opts
-                                          query/export-batch))
+                                          commands/export-batch))
             [fixed & structs] (:tabulate sections)]
         {:corpus      corpus
          :size        (batch-matches sections)
@@ -633,15 +633,15 @@
 (defn run-size!
   "Count the matches of CQP `query` in `corpus` via `ctx` under `opts`
   (its :filter as `corpus-filter!` returns one, its :subset and :near as
-  dk.cst.corpus-probe.query/narrowing takes them, and its :sample), by
+  dk.cst.corpus-probe.commands/narrowing takes them, and its :sample), by
   running the query.
 
   Throws ex-info when CQP reports an error, times out or dies."
   [ctx corpus query {:keys [filter sample] :as opts}]
-  (let [sampling (query/sample-command sample)
+  (let [sampling (commands/sample-command sample)
         commands (-> [(str corpus ";")
-                      (query/restricted-query query filter)]
-                     (into (map second (query/narrowing opts)))
+                      (commands/restricted-query query filter)]
+                     (into (map second (commands/narrowing opts)))
                      (cond-> sampling (conj sampling))
                      (conj "size Last;"))
         {:keys [results error]} (cqp/run-batch! ctx commands)]
@@ -669,7 +669,7 @@
   "The number of matches of CQP `query` in `corpus` via `ctx`, within the
   :filter of `opts` when there is one, kept within its :within unit (see
   `within-attr!`), narrowed to its :subset and :near (see
-  dk.cst.corpus-probe.query/narrowing) and reduced to its :sample.
+  dk.cst.corpus-probe.commands/narrowing) and reduced to its :sample.
 
   Counted once and then remembered (see
   dk.cst.corpus-probe.cache/count!), because paging a search over several
@@ -790,7 +790,7 @@
   search.
 
   `opts` accepts :page and :page-size (see
-  dk.cst.corpus-probe.query/page-defaults), :incremental? (see below)
+  dk.cst.corpus-probe.commands/page-defaults), :incremental? (see below)
   and the display options of `kwic!` (:context, :sort, :filter, :subset,
   :near, :sample, :within).
   A :sample is drawn per corpus, each being queried on its own, so over
@@ -816,11 +816,11 @@
    (let [{:keys [page page-size context filter patterns subset near sample
                  incremental?]
           :as   opts}
-         (merge query/page-defaults opts)
+         (merge commands/page-defaults opts)
          kwic-opts (dissoc opts :page :page-size :incremental?)
          deadline  (deadline ctx)
          {:keys [counts hits remaining]}
-         (fill-page! ctx corpora query (query/page-rows page page-size)
+         (fill-page! ctx corpora query (commands/page-rows page page-size)
                      deadline kwic-opts)
          counts    (into counts (if incremental?
                                   (known-sizes ctx remaining query kwic-opts)

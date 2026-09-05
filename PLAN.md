@@ -439,8 +439,10 @@ corpus-probe/
 ├── src/dk/cst/corpus_probe/
 │   ├── cqp.clj                     ; child-process driver (§5)
 │   ├── parse.clj                   ; output parsers -> data (§6)
-│   ├── query.clj                   ; CQP generation: simple-search compiler,
-│   │                               ;   escaping, QueryLock wrapping (§8)
+│   ├── query.cljc                  ; the query compilers: words, lists and
+│   │                               ;   tokens to CQP, escaping (§8)
+│   ├── commands.clj                ; CQP commands and batches: QueryLock
+│   │                               ;   wrapping, narrowing, sorting, counting
 │   ├── corpus.clj                  ; registry, show cd, info -> corpus facts
 │   ├── search.clj                  ; KWIC, concordance, frequency tables
 │   ├── tools.clj                   ; cwb-describe-corpus, cwb-lexdecode

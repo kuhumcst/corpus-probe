@@ -27,9 +27,9 @@
   "search-form")
 
 (defn sort-label
-  "What the sort mode `value` (see dk.cst.corpus-probe.query/sort-modes)
+  "What the sort mode `value` (see dk.cst.corpus-probe.commands/sort-modes)
   is called, in `ui`; a mode naming a positional attribute (see
-  dk.cst.corpus-probe.query/sort-attr) is the match by that attribute.
+  dk.cst.corpus-probe.commands/sort-attr) is the match by that attribute.
 
   Naming them here rather than in the query namespace keeps the CQP
   command table free of anything the interface decides."
@@ -45,7 +45,7 @@
 
 (defn sort-control
   "The sort control of the concordance in `ui`: a select over
-  the `sort-modes` values (see dk.cst.corpus-probe.query/sort-modes)
+  the `sort-modes` values (see dk.cst.corpus-probe.commands/sort-modes)
   with `sort` chosen and each named by `sort-label`.
 
   It names the form it submits with, so it can sit beside the table it
@@ -94,7 +94,7 @@
   numbers of words, then the units of text a corpus marks (see
   dk.cst.corpus-probe.search/units), one region of which is shown either
   side. The first is the usual width (see
-  dk.cst.corpus-probe.query/kwic-defaults). A hand-written URL may name
+  dk.cst.corpus-probe.commands/kwic-defaults). A hand-written URL may name
   any other number of words, which `context-control` then shows beside
   these."
   [5 10 20 :sentence :paragraph])
@@ -249,7 +249,7 @@
 
 (defn position-label
   "What the `position` of a match (see
-  dk.cst.corpus-probe.query/positions) is called, in `ui`, worded to
+  dk.cst.corpus-probe.commands/positions) is called, in `ui`, worded to
   follow an attribute name; the position itself for one nothing names."
   [ui position]
   (case position
@@ -542,11 +542,11 @@
     (i18n/tr ui "one word, or several words in order")))
 
 (defn list-words
-  "The words of the list `q` a list-mode search asked for: one per
-  line, blank lines and surrounding space dropped, as
-  dk.cst.corpus-probe.query/simple->cqp reads them."
+  "The words of the list `q` a list-mode search asked for, as
+  dk.cst.corpus-probe.query/simple->cqp reads them: one per line, or
+  several to a line."
   [q]
-  (remove str/blank? (map str/trim (str/split-lines (str q)))))
+  (remove str/blank? (str/split (str q) #"\s+")))
 
 (defn query-phrase
   "The query of `params` in words for a title, in `ui`: the query as
@@ -561,13 +561,26 @@
     "extended" cqp
     q))
 
+(defn one-line
+  "The query `q` on one line: each line break, with the space around it,
+  as one space, and none at either end. What a search box holds, since
+  it cannot hold a line break and drops one rather than keep it: a list
+  typed one word per line and submitted under another mode arrives with
+  its line breaks."
+  [q]
+  ;; TODO: the citation of such a search still carries the line breaks,
+  ;; url/canonical keeping q as it arrived, while the box resubmits it
+  ;; with spaces; the printer of the query value will cite the words
+  (str/trim (str/replace (str q) #"\s*[\r\n]+\s*" " ")))
+
 (defn query-field
   "The query field of the search form in `ui`, holding `q`: a search
-  box, or, in list `mode`, a text area taking one word per line. Both
-  are named q, so either submits the query, and both carry the one id
-  the client finds the field by. Neither has a visible label: a field
-  with a search button beside it needs none to say what it is, so the
-  name it keeps is the one only a screen reader reads.
+  box, on one line (see `one-line`), or, in list `mode`, a text area
+  taking one word per line. Both are named q, so either submits the
+  query, and both carry the one id the client finds the field by.
+  Neither has a visible label: a field with a search button beside it
+  needs none to say what it is, so the name it keeps is the one only a
+  screen reader reads.
 
   Required when `required?`: a search of nothing is then reported by the
   browser before it is sent, rather than answered with the guide again.
@@ -585,7 +598,7 @@
       ;; the text is the element's content: a text area has no value
       ;; attribute for a document to carry it in
       [:textarea (assoc attrs :rows 4) (or q "")]
-      [:input (assoc attrs :type "search" :value (or q ""))])))
+      [:input (assoc attrs :type "search" :value (one-line q))])))
 
 (defn attribute-options
   "The options of a select over the positional `attrs` (attribute
@@ -818,7 +831,7 @@
   "The control choosing the unit of text an extended search of several
   tokens is kept within, in `ui`: a select over the
   dk.cst.corpus-probe.url/units with `within` chosen, the sentence when
-  it names none (see dk.cst.corpus-probe.api/within-unit)."
+  it names none (see dk.cst.corpus-probe.query/within-unit)."
   [ui within]
   [:label (i18n/tr ui "within") " "
    [:select {:name "within"}
@@ -829,7 +842,7 @@
 (defn match-label
   "What the `match` param value is called, in `ui`: how much of the
   form a simple search must cover (see
-  dk.cst.corpus-probe.api/match-param); the whole word for a value
+  dk.cst.corpus-probe.query/match-param); the whole word for a value
   naming none."
   [ui match]
   (case match
@@ -1039,6 +1052,10 @@
       ;; every corpus and submitting is indistinguishable from arriving
       ;; with no corpus named, which searches them all
       [:input {:type "hidden" :name "scope" :value "chosen"}]
+      ;; names the mode this form was rendered in, so that a submit whose
+      ;; radio was changed can read the query field as it was typed (see
+      ;; dk.cst.corpus-probe.api/token-fields); no URL cites it
+      [:input {:type "hidden" :name "from" :value (url/mode params)}]
       (corpus-views/chooser ui folders
                             {:selected (set corpus)
                              :served   (set (or served-corpus corpus))
@@ -1136,16 +1153,22 @@
   "The question a `result` answered, less the query itself, as short
   phrases in `ui`, each naming what one control holds: the attribute a
   simple search of `params` matched and the part of the form, when not
-  the usual ones; the corpora searched, those still being counted among
-  them; the metadata filter; the narrowings; the sample. For the line
-  under the heading (see `results-region`), where the heading says what
-  was found and this what was asked."
-  [ui {:keys [in match]} {:keys [counts size sample remaining] :as result}]
-  (let [searched (concat (map :corpus (filter :size counts)) remaining)]
+  the usual ones and when the mode read them (see
+  dk.cst.corpus-probe.url/reads?); the corpora searched, those still
+  being counted among them; the metadata filter; the narrowings; the
+  sample. For the line under the heading (see `results-region`), where
+  the heading says what was found and this what was asked."
+  [ui {:keys [in match] :as params}
+   {:keys [counts size sample remaining] :as result}]
+  (let [searched (concat (map :corpus (filter :size counts)) remaining)
+        ;; an option the mode does not read may still ride in the params,
+        ;; as memory for the form's disabled control; the search never saw
+        ;; it, so the line must not say it did
+        reads?   (partial url/reads? (url/mode params))]
     (remove nil?
-            [(when-not (contains? #{nil "" "word"} in)
+            [(when (and (reads? :in) (not (contains? #{nil "" "word"} in)))
                (list (i18n/tr ui "attribute") " " [:code in]))
-             (when-not (str/blank? match)
+             (when (and (reads? :match) (not (str/blank? match)))
                (match-label ui match))
              (when (seq searched)
                (str (i18n/tr ui "in") " " (corpora-phrase ui searched)))

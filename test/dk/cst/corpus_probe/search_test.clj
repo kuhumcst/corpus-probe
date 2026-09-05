@@ -7,6 +7,7 @@
             [dk.cst.corpus-probe.cqp :as cqp]
             [dk.cst.corpus-probe.cqp-test :refer [ctx when-cwb]]
             [dk.cst.corpus-probe.frequency :as frequency]
+            [dk.cst.corpus-probe.commands :as commands]
             [dk.cst.corpus-probe.query :as query]
             [dk.cst.corpus-probe.search :as search]
             [taoensso.telemere :as t]
@@ -279,7 +280,7 @@
 (deftest context-expansion-test
   (when-cwb
    (testing "a hit re-fetched by position returns wider context"
-     (let [q (query/position-query 9 9)
+     (let [q (commands/position-query 9 9)
            {:keys [hits size]} (search/kwic! ctx "PROBE" q
                                              {:context      50
                                               :rows         [0 0]

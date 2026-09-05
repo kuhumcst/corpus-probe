@@ -7,6 +7,7 @@
             [dk.cst.corpus-probe.corpus :as corpus]
             [dk.cst.corpus-probe.cqp-test :refer [ctx when-cwb]]
             [dk.cst.corpus-probe.frequency :as frequency]
+            [dk.cst.corpus-probe.query :as query]
             [dk.cst.corpus-probe.url :as url]
             [dk.cst.corpus-probe.views.hiccup :refer [da en]]
             [dk.cst.corpus-probe.views.page :as page]
@@ -18,49 +19,6 @@
   [s]
   (let [in (ByteArrayInputStream. (.getBytes s "UTF-8"))]
     (transit/read (transit/reader in :json))))
-
-(deftest ->cqp-test
-  (testing "CQP mode passes the query through verbatim"
-    (is (= "[lemma = \"hund\"]"
-           (api/->cqp {:q "[lemma = \"hund\"]" :mode "cqp"}))))
-  (testing "simple mode compiles the query"
-    (is (= "[word = \"hund.*\" %c]"
-           (api/->cqp {:q "hund" :mode "simple" :match "prefix" :ci "on"}))))
-  (testing "the in param names the attribute matched, word when blank"
-    (is (= "[lemma = \"hund\"]" (api/->cqp {:q "hund" :in "lemma"})))
-    (is (= "[word = \"hund\"]" (api/->cqp {:q "hund" :in ""}))))
-  (testing "blank input yields nil"
-    (is (nil? (api/->cqp {:q "   " :mode "cqp"})))
-    (is (nil? (api/->cqp {:mode "simple"}))))
-  (testing "simple is the default: a bare word is a word search, not CQP"
-    (is (= "[word = \"hund\"]" (api/->cqp {:q "hund"})))
-    (is (= "[word = \"hund\"]" (api/->cqp {:q "hund" :mode ""})))
-    (testing "and its options still apply"
-      (is (= "[word = \"hund.*\" %c]"
-             (api/->cqp {:q "hund" :match "prefix" :ci "on"}))))))
-
-(deftest match-param-test
-  (testing "one param says how much of the form the query must cover"
-    (is (= {} (api/match-param nil)))
-    (is (= {} (api/match-param "")))
-    (is (= {:prefix? true} (api/match-param "prefix")))
-    (is (= {:suffix? true} (api/match-param "suffix")))
-    (is (= {:prefix? true :suffix? true} (api/match-param "infix"))))
-  (testing "so a query may fall anywhere in the form without two params
-            both set having to mean that"
-    (is (= "[word = \".*hund.*\"]" (api/->cqp {:q "hund" :match "infix"})))
-    (is (= "[word = \".*hund\"]" (api/->cqp {:q "hund" :match "suffix"})))))
-
-(deftest within-unit-test
-  (testing "a simple search of several words is kept within a sentence"
-    (is (= :sentence (api/within-unit {:q "lille hund"})))
-    (is (= :sentence (api/within-unit {:q " lille  hund " :mode "simple"}))))
-  (testing "one word cannot straddle a boundary"
-    (is (nil? (api/within-unit {:q "hund"})))
-    (is (nil? (api/within-unit {:q "  "})))
-    (is (nil? (api/within-unit {}))))
-  (testing "CQP says so itself"
-    (is (nil? (api/within-unit {:q "[] []" :mode "cqp"})))))
 
 (deftest position-param-test
   (is (= "match[-1]" (api/position-param "match[-1]")))
@@ -615,7 +573,36 @@
   (testing "so does the sample, which decides which hits there are; the
             sort, which only decides their order, still does not"
     (is (= {:q "hund" :sample "100"}
-           (api/search-params {:q "hund" :sample "100" :sort "word"})))))
+           (api/search-params {:q "hund" :sample "100" :sort "word"}))))
+  (testing "and so does the unit the words are kept within"
+    (is (= {:q "lille hund" :within "text"}
+           (api/search-params {:q "lille hund" :within "text" :sort "word"})))))
+
+(deftest switched-frequency-test
+  (when-cwb
+   (testing "a form submitted from the frequency view with its mode changed
+             counts nothing, rather than every token of the corpora"
+     (let [{:keys [result error tokens]}
+           (api/search-view-data ctx {:query-params {:q      "hund"
+                                                     :mode   "extended"
+                                                     :view   "frequencies"
+                                                     :corpus "PROBE"}})]
+       (is (nil? result))
+       (is (nil? error))
+       (is (= [{:id 1 :conditions [{:id 1 :v "hund"}]}
+               {:id 2 :conditions [{:id 1}]}]
+              tokens))))
+   (testing "while a blank query still counts them all, from a form whose
+             radio was changed too"
+     (is (some? (:result (api/search-view-data
+                          ctx {:query-params {:view "frequencies"
+                                              :corpus "PROBE"}}))))
+     (is (some? (:result (api/search-view-data
+                          ctx {:query-params {:t1.attr "word" :t1.op "is"
+                                              :t1.v "" :t1.min "1"
+                                              :t1.max "1" :mode "simple"
+                                              :view "frequencies"
+                                              :corpus "PROBE"}})))))))
 
 (deftest sample-param-test
   (is (= 100 (api/sample-param "100")))
@@ -770,40 +757,6 @@
       (is (= 404 (:status (export nil {:corpus "REGISTRY-PROBE" :q "hund"})))))))
 
 (deftest extended-mode-test
-  (testing "the tokens compile to CQP, defaults applied and bad values read
-            as them"
-    (is (= [{:conditions [{:attr :lemma :op "is" :value "hund" :ci? true}]
-             :min 1 :max 1 :start? false :end? false}
-            {:conditions [{:attr :word :op "any" :value "" :ci? false}]
-             :min 0 :max 2 :start? false :end? true}]
-           (api/token-params {:t1.attr "lemma" :t1.v "hund" :t1.ci "on"
-                              :t2.op   "any" :t2.min "0" :t2.max "2"
-                              :t2.end  "on"
-                              :t3.attr "pos" :t3.op "prefix"})))
-    (is (= [{:conditions [{:attr :word :op "is" :value "x" :ci? false}
-                          {:attr :pos :op "is" :value "N" :ci? false
-                           :join "and"}]
-             :min 2 :max 2 :start? false :end? false}]
-           (api/token-params {:t1.v "x" :t1.attr "no such" :t1.op "nope"
-                              :t1.min "2" :t1.max "1"
-                              :t1.2.attr "pos" :t1.2.v "N" :t1.2.join "nor"
-                              :t1.3.attr "pos" :t1.3.join "or"})))
-    (is (= "[lemma = \"hund\" %c] []{0,2} </s>"
-           (api/->cqp {:mode "extended" :t1.attr "lemma" :t1.v "hund"
-                       :t1.ci "on" :t2.op "any" :t2.min "0" :t2.max "2"
-                       :t2.end "on"})))
-    (is (nil? (api/->cqp {:mode "extended" :q "hund"}))))
-  (testing "several tokens are kept within the unit the params name, the
-            sentence by default; one is not, unless it opens or closes a
-            sentence"
-    (is (= :sentence (api/within-unit {:mode "extended" :t1.v "a" :t2.v "b"})))
-    (is (= :paragraph (api/within-unit {:mode "extended" :t1.v "a" :t2.v "b"
-                                        :within "paragraph"})))
-    (is (= :paragraph (api/within-unit {:q "a b" :within "paragraph"})))
-    (is (= :sentence (api/within-unit {:q "a b" :within "nonesuch"})))
-    (is (nil? (api/within-unit {:mode "extended" :t1.v "a"})))
-    (is (= :sentence (api/within-unit {:mode "extended" :t1.v "a"
-                                       :t1.start "on"}))))
   (testing "the titles name the CQP the rows compiled to"
     (let [params {:mode "extended" :cqp "[lemma = \"hund\"]" :corpus ["PROBE"]}]
       (is (str/starts-with? (api/search-title en params {:size   5
@@ -828,10 +781,16 @@
                               :t1.3.v "c" :t1.3.join "or"
                               :t2.ci "on" :t5.op "any" :t5.max "2"})))
     (is (= [{:id 1 :conditions [{:id 1}]}] (api/token-fields {:q "x"})))
-    (testing "seeded from the query a reader typed before switching mode"
+    (testing "seeded from the query a reader typed before switching mode,
+              read as the mode they typed it in"
       (is (= [{:id 1 :conditions [{:id 1 :v "hund" :ci "on"}]}
               {:id 2 :conditions [{:id 1}]}]
-             (api/token-fields {:q "hund" :ci "on" :mode "extended"})))))
+             (api/token-fields {:q "hund" :ci "on" :mode "extended"})))
+      (is (= [{:id 1 :conditions [{:id 1 :v "hund"}
+                                  {:id 2 :v "kat" :join "or"}]}
+              {:id 2 :conditions [{:id 1}]}]
+             (api/token-fields {:q "hund\nkat" :mode "extended"
+                                :from "list"})))))
   (when-cwb
    (testing "an extended search runs, and the page knows its CQP, its
              tokens and the values its fields suggest"
@@ -919,9 +878,9 @@
 (deftest list-mode-test
   (testing "a list compiles to one token pattern"
     (is (= "[lemma = \"(hund|kat)\"]"
-           (api/->cqp {:q "hund\nkat" :mode "list" :in "lemma"}))))
+           (query/->cqp {:q "hund\nkat" :mode "list" :in "lemma"}))))
   (testing "a list is one token, so it is kept within nothing"
-    (is (nil? (api/within-unit {:q "hund\nkat" :mode "list"}))))
+    (is (nil? (query/within-unit {:q "hund\nkat" :mode "list"}))))
   (testing "a list is titled by its length, a title being one line"
     (is (str/starts-with? (api/search-title en {:q "hund\nkat\n" :mode "list"})
                           "2 words"))))

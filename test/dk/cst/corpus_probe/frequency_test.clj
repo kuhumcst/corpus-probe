@@ -6,7 +6,7 @@
             [dk.cst.corpus-probe.cache :as cache]
             [dk.cst.corpus-probe.cqp-test :refer [ctx when-cwb]]
             [dk.cst.corpus-probe.frequency :as frequency]
-            [dk.cst.corpus-probe.query :as query]
+            [dk.cst.corpus-probe.commands :as commands]
             [dk.cst.corpus-probe.search :as search]
             [dk.cst.corpus-probe.search-test :refer [da-collator]]
             [dk.cst.corpus-probe.tools-test :refer [with-value-limit]]
@@ -216,7 +216,7 @@
                                             {:docs true :sort "word"})
          fresh     (breakdown)
          opts      (search/cache-opts ctx "PROBE" q {:sort "word"})
-         counting  [(query/count-command "match" :lemma)]
+         counting  [(commands/count-command "match" :lemma)]
          file      (cache/result-file ctx "PROBE" (:nqr opts))]
      (testing "until a concordance saves the result there is nothing to read"
        (is (nil? (frequency/stored-breakdown! ctx "PROBE" q opts counting))))

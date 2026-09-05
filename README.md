@@ -307,6 +307,8 @@ clojure -M:dev:nrepl   # start a REPL; see dev/user.clj for entry points
 clojure -X:test        # run the tests
 clojure -M:i18n        # re-extract the translation template
 clojure -M:cljs -m shadow.cljs.devtools.cli compile app   # build the client
+clojure -M:cljs -m shadow.cljs.devtools.cli compile test && node target/test.js
+                       # run the shared query compiler's tests in JavaScript
 clojure -M -m dk.cst.corpus-probe.server                  # serve (config.edn)
 ```
 

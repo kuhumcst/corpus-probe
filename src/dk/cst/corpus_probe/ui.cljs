@@ -102,6 +102,12 @@
                            :else         [had v])))))
     @m))
 
+(defn form-params
+  "The fields of `form` as a submit would send them, as the params map
+  the server reads them into (see `params-of`)."
+  [form]
+  (params-of (js/URLSearchParams. (js/FormData. form))))
+
 (defn location-params
   "The query params of the current location (see `params-of`)."
   []
@@ -454,7 +460,7 @@
   [mode q]
   (if (= "list" mode)
     (str/replace (str/trim (str q)) #"\s+" "\n")
-    (str/replace (str q) #"\s*[\r\n]+\s*" " ")))
+    (page/one-line q)))
 
 (defn focus-field!
   "Move focus to the form control named `name`, once the render that put
@@ -565,24 +571,30 @@
     ;; than left behind in the old one; the extended mode has no field,
     ;; so leaving it keeps the query the state already holds, and
     ;; entering it with nothing asked yet seeds the tokens from the query
-    :set-mode (swap! state (fn [s]
-                             (let [q (some-> (.getElementById js/document "q")
-                                             (.-value))
-                                   s (cond-> (assoc-in s [:params :mode] arg)
-                                       q (assoc-in [:params :q]
-                                                   (carried-query arg q)))]
-                               ;; entering the mode with nothing asked yet
-                               ;; leaves tokens the handlers below can
-                               ;; edit: the seeded ones, or one blank
-                               (if (and (= "extended" arg)
-                                        (not (some url/asks? (:tokens s))))
-                                 (let [seeded (url/form-tokens
-                                               (url/tokens-from-query
-                                                (:params s)))]
-                                   (assoc s :tokens (if (seq seeded)
-                                                      seeded
-                                                      [(url/blank-token 1)])))
-                                 s))))
+    :set-mode
+    ;; the form as it stands, not the served params: the query and the
+    ;; options the reader may have changed since the last search.
+    ;; TODO: what was built in the extended form is not carried out of
+    ;; it (the field shows the query typed before entering it), and CQP
+    ;; text entering it is seeded as words; both wait for the query to
+    ;; be one value that each form projects
+    (let [live (form-params (.-form (.-target (:replicant/dom-event data))))
+          from (url/mode (:params @state))]
+      (swap! state (fn [s]
+                     (let [q (:q live)
+                           s (cond-> (assoc-in s [:params :mode] arg)
+                               q (assoc-in [:params :q] (carried-query arg q)))]
+                       ;; entering the mode with nothing asked yet leaves
+                       ;; tokens the handlers below can edit: the seeded
+                       ;; ones, or one blank
+                       (if (and (= "extended" arg)
+                                (not (some url/asks? (:tokens s))))
+                         (let [seeded (url/form-tokens
+                                       (url/tokens-from-query live from))]
+                           (assoc s :tokens (if (seq seeded)
+                                              seeded
+                                              [(url/blank-token 1)])))
+                         s)))))
     :add-token        (add-token!)
     :remove-token     (remove-token! arg)
     :add-condition    (add-condition! arg)
@@ -670,7 +682,11 @@
   recorded (see `shown`), so a fragment jump is not taken for a page to
   fetch."
   []
-  (when (= url/search js/location.pathname)
+  ;; a switch URL, carrying the query of the mode the form was in, is
+  ;; left as it is: the rule would drop that query, and a reload would
+  ;; then find an empty form (see dk.cst.corpus-probe.api/token-fields)
+  (when (and (= url/search js/location.pathname)
+             (not (url/unread-query? (location-params))))
     (let [url    (current-url)
           ks     (sort (keys (:expanded @state)))
           params (cond-> (dissoc (location-params) :expand)
@@ -1003,12 +1019,6 @@
        (not (or (.-metaKey event) (.-ctrlKey event)
                 (.-shiftKey event) (.-altKey event)))
        (not= 1 (.-button event))))
-
-(defn form-params
-  "The fields of `form` as a submit would send them, as the params map
-  the server reads them into (see `params-of`)."
-  [form]
-  (params-of (js/URLSearchParams. (js/FormData. form))))
 
 (defn selectable-corpora
   "The IDs of every corpus `form` lets the reader choose: its corpus

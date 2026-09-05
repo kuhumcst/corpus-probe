@@ -18,6 +18,7 @@
   (:require [clojure.java.io :as io]
             [clojure.string :as str]
             [cognitect.transit :as transit]
+            [dk.cst.corpus-probe.commands :as commands]
             [dk.cst.corpus-probe.corpus :as corpus]
             [dk.cst.corpus-probe.docs :as docs]
             [dk.cst.corpus-probe.export :as export]
@@ -335,10 +336,10 @@
 
 (defn position-param
   "The position of the match the `at` query param value `v` names, among
-  dk.cst.corpus-probe.query/positions; the start of the match for
+  dk.cst.corpus-probe.commands/positions; the start of the match for
   anything else."
   [v]
-  (if (some #{v} query/positions) v "match"))
+  (if (some #{v} commands/positions) v "match"))
 
 (defn by-param
   "The attribute the `by` query param value `v` asks a frequency table to
@@ -352,7 +353,7 @@
 (defn subset-param
   "The narrowing the `subset`, `subset-at` and `subset-attr` query params
   of `params` ask for: {:anchor ... :attr ... :value ...} as
-  dk.cst.corpus-probe.query/subset-command takes it, or nil without a
+  dk.cst.corpus-probe.commands/subset-command takes it, or nil without a
   value. The attribute is checked against each corpus by the search, as
   every attribute is."
   [{:keys [subset subset-at subset-attr]}]
@@ -372,12 +373,12 @@
       (and n (pos? n))                             n
       (and v (contains? search/units (keyword v))) (keyword v)
       :else                                        (:context
-                                                    query/kwic-defaults))))
+                                                    commands/kwic-defaults))))
 
 (defn near-param
   "The word the `near` query param value `word` asks every hit to have
   nearby, at most `distance` (the query param value) words away: {:word
-  ... :distance ...} as dk.cst.corpus-probe.query/near-command takes it,
+  ... :distance ...} as dk.cst.corpus-probe.commands/near-command takes it,
   or nil for a blank word. A distance that is not a positive integer is
   dk.cst.corpus-probe.views.page/near-distance."
   [word distance]
@@ -459,9 +460,11 @@
   (url/results-href (assoc (dissoc params :expand) :page (inc page))))
 
 (defn search-params
-  "The `params` that identify a search (its corpora, query or the
-  tokens of an extended one, metadata filter, the narrowings of its
-  hits, the sample of them), for linking the views of the same hits.
+  "The `params` that identify a search: its corpora, its query as any
+  mode reads it (see dk.cst.corpus-probe.url/query-key?; what the mode
+  does not read, the URL rule drops from a link), the metadata filter,
+  the narrowings of its hits and the sample of them, for linking the
+  views of the same hits.
   The interface language is not among them: it is the reader's
   preference, not part of the search.
 
@@ -471,10 +474,9 @@
   param so that returning to the concordance returns to the sample it
   was left in."
   [params]
-  (into (select-keys params [:corpus :q :mode :in :ci :match
-                             :subset :subset-at :subset-attr
+  (into (select-keys params [:corpus :subset :subset-at :subset-attr
                              :near :distance :sample])
-        (filter (comp (some-fn url/metadata-key? url/token-key?) key))
+        (filter (comp (some-fn url/query-key? url/metadata-key?) key))
         params))
 
 (defn export-hrefs
@@ -483,73 +485,6 @@
   [view params]
   (into {} (for [format (keys export/formats)]
              [(keyword format) (url/export-href view format params)])))
-
-(defn match-param
-  "The affixes the `match` query param value `v` asks
-  dk.cst.corpus-probe.query/simple->cqp for, as its options: the start
-  of the form matched for prefix, the end for suffix, either for infix,
-  and none for the whole form, which is what a URL leaves out.
-
-  One param rather than one per end, because a query that may fall at
-  either end may fall anywhere, and two params both set said so to
-  nobody."
-  [v]
-  (case v
-    "prefix" {:prefix? true}
-    "suffix" {:suffix? true}
-    "infix"  {:prefix? true :suffix? true}
-    {}))
-
-(defn repeat-param
-  "The repeat query param value `v` as a number of tokens: an integer
-  from 0 to 99, else `default`."
-  [v default]
-  (let [n (some-> v str parse-long)]
-    (if (and n (<= 0 n 99)) n default)))
-
-(defn within-param
-  "The unit of text the `within` query param value `v` names (see
-  dk.cst.corpus-probe.url/units): the sentence unless it names another."
-  [v]
-  (if (some #{v} url/units) (keyword v) :sentence))
-
-(defn condition-params
-  "The condition `row` of an extended-search token (see
-  dk.cst.corpus-probe.url/token-rows) as
-  dk.cst.corpus-probe.query/condition->cqp takes it: its :attr (a
-  keyword; word unless the name is a plausible attribute name, since it
-  is spliced into the query), its :op (one of
-  dk.cst.corpus-probe.url/operators, equality otherwise), its :value as
-  typed, :ci? for its ignore-case box and, when it has one, its :join
-  (one of dk.cst.corpus-probe.url/joins, and otherwise)."
-  [{:keys [attr op v ci join]}]
-  (cond-> {:attr  (keyword (if (query/attribute-name? (str attr)) attr "word"))
-           :op    (if (some #{op} url/operators) op "is")
-           :value (str v)
-           :ci?   (some? ci)}
-    (some? join) (assoc :join (if (some #{join} url/joins) join "and"))))
-
-(defn token-params
-  "The tokens of the extended search `params` describe, as
-  dk.cst.corpus-probe.query/extended->cqp takes them: each token asking
-  for anything (see dk.cst.corpus-probe.url/asks?), in order, with the
-  :conditions of it that ask (see dk.cst.corpus-probe.url/condition-asks?
-  and `condition-params`), its repeat as :min and :max (see
-  `repeat-param`), the most never below the least, and :start? and :end?
-  for the sentence edges it stands at."
-  [params]
-  (into []
-        (comp (filter url/asks?)
-              (map (fn [{:keys [conditions start end] lo :min hi :max}]
-                     (let [lo (repeat-param lo 1)]
-                       {:conditions (mapv condition-params
-                                          (filter url/condition-asks?
-                                                  conditions))
-                        :min        lo
-                        :max        (max lo (repeat-param hi lo))
-                        :start?     (some? start)
-                        :end?       (some? end)}))))
-        (url/token-rows params)))
 
 (defn token-fields
   "The tokens of the extended-search form for `params`: each token that
@@ -560,13 +495,19 @@
 
   A form asked for in the extended mode with no token but a query is
   seeded from that query (see dk.cst.corpus-probe.url/tokens-from-query),
-  so a reader switching mode without the client finds what they typed;
-  the search itself waits for them to send it."
-  [{:keys [mode] :as params}]
+  read as the mode `from` says it was typed, which the form names in a
+  hidden field (see dk.cst.corpus-probe.views.page/search-form), words in
+  order without one, so a reader switching mode without the client finds
+  what they typed; the search itself waits for them to send it.
+
+  TODO: the links of such a page cite no query, the URL rule dropping
+  what the mode does not read; a switch page will cite the search it was
+  seeded from once the query is one value."
+  [{:keys [mode from] :as params}]
   (let [asked (for [token (url/token-rows params) :when (url/asks? token)]
                 (update token :conditions #(filterv url/condition-asks? %)))
         rows  (if (and (empty? asked) (= "extended" mode))
-                (url/tokens-from-query params)
+                (url/tokens-from-query params from)
                 asked)]
     (url/form-tokens (concat rows [{:conditions [{}]}]))))
 
@@ -593,48 +534,6 @@
                 :let [values (map #(get % attr) lists)]
                 :when (and (seq values) (every? some? values))]
             [attr (vec (sort collator (distinct (apply concat values))))]))))
-
-(defn ->cqp
-  "The CQP query for `params`: CQP-mode input as typed, an extended
-  search compiled from its tokens (see `token-params` and
-  dk.cst.corpus-probe.query/extended->cqp), and simple-mode input, or a
-  list of words in list mode, compiled (see
-  dk.cst.corpus-probe.query/simple->cqp); nil when there is nothing to
-  search for.
-
-  Simple is the default and CQP mode is opt-in: a request naming no mode
-  is read as a plain word search, since CQP mode answers a bare word with
-  a parse error naming a corpus the reader never mentioned. Every URL the
-  form builds names its mode, so only a hand-written one changes meaning."
-  [{:keys [q mode ci match in] :as params}]
-  (case mode
-    "cqp"      (when-not (str/blank? q) q)
-    "extended" (query/extended->cqp (token-params params))
-    (when-not (str/blank? q)
-      (query/simple->cqp q (assoc (match-param match)
-                                  :case-insensitive? (some? ci)
-                                  :attr              (keyword (attr-param in))
-                                  :list?             (= mode "list"))))))
-
-(defn within-unit
-  "The unit of text the search `params` describe is kept within (see
-  dk.cst.corpus-probe.search/units): the one the `within` param names,
-  the sentence by default (see `within-param`), for a simple or an
-  extended search of several tokens, which should not be matched across
-  a boundary, and for an extended search of a token that opens or
-  closes a sentence.
-
-  Nil for one token, which cannot straddle a boundary and could only be
-  refused, where it stands outside every sentence; nil for a list, which
-  is one token; and nil for CQP, which says so itself."
-  [{:keys [q mode within] :as params}]
-  (when (case mode
-          ("cqp" "list") false
-          "extended"     (let [tokens (token-params params)]
-                           (or (next tokens)
-                               (some #(or (:start? %) (:end? %)) tokens)))
-          (next (str/split (str/trim (str q)) #"\s+")))
-    (within-param within)))
 
 (def follow-on-errors
   "The errors CQP adds for the later commands of a batch once an earlier
@@ -845,12 +744,13 @@
   corpora, the corpus names `named` in the params, the names `selected`
   to search, those split into the `known` and the `unknown` (see
   `split-known`), the CQP query the params compile to (see
-  `->cqp`) and the `opts` every search of it takes: its metadata :filter
-  (see `filter-params`) and the :patterns beside it (see
-  `pattern-params`), the unit of text it is kept :within (see
-  `within-unit`), the :subset of its hits kept (see `subset-param`) and
-  the word its hits are :near (see `near-param`). A request naming no
-  corpus searches every readable one (see `selected-corpora`).
+  dk.cst.corpus-probe.query/->cqp) and the `opts` every search of it
+  takes: its metadata :filter (see `filter-params`) and the :patterns
+  beside it (see `pattern-params`), the unit of text it is kept :within
+  (see dk.cst.corpus-probe.query/within-unit), the :subset of its hits
+  kept (see `subset-param`) and the word its hits are :near (see
+  `near-param`). A request naming no corpus searches every readable one
+  (see `selected-corpora`).
 
   Every handler that answers a search starts from this."
   [ctx request]
@@ -864,10 +764,10 @@
      :selected selected
      :known    known
      :unknown  unknown
-     :cqp      (->cqp params)
+     :cqp      (query/->cqp params)
      :opts     {:filter   (filter-params params)
                 :patterns (pattern-params params)
-                :within   (within-unit params)
+                :within   (query/within-unit params)
                 :subset   (subset-param params)
                 :near     (near-param (:near params) (:distance params))}}))
 
@@ -968,10 +868,10 @@
 (defn sort-options
   "The sort modes offered over corpora whose positional attributes are
   `attrs` (keywords): the fixed modes (see
-  dk.cst.corpus-probe.query/sort-modes), then a sort by each attribute
+  dk.cst.corpus-probe.commands/sort-modes), then a sort by each attribute
   but word, which the match sort already is."
   [attrs]
-  (into (mapv first query/sort-modes)
+  (into (mapv first commands/sort-modes)
         (comp (remove #{:word}) (map name))
         attrs))
 
@@ -1011,7 +911,12 @@
         page-n  (page-param (:page params))
         freq?   (= :frequencies view)
         outcome (cond
-                  (and freq? (or cqp (seq known) (seq unknown)))
+                  ;; a blank query counts every token of the corpora, but
+                  ;; not one blank only because the mode was changed under
+                  ;; a query the new mode does not read: that request seeds
+                  ;; the form (see `token-fields`) and searches nothing
+                  (and freq? (or cqp (and (not (url/unread-query? params))
+                                          (or (seq known) (seq unknown)))))
                   (-> (frequency-outcome! ctx known unknown cqp attr
                                           (assoc opts
                                                  :at   at
@@ -1036,7 +941,9 @@
                                           ;; (see `counts-page`)
                                           :incremental? (wants-transit?
                                                          request))))
-        params* (assoc params
+        ;; the form's marker of the mode it was rendered in (see
+        ;; `token-fields`) is no param of the search
+        params* (assoc (dissoc params :from)
                        :corpus (if outcome selected named)
                        :attr   attr
                        :at     at
@@ -1065,7 +972,7 @@
                              selected)}
       freq?
       (assoc :attrs        attrs
-             :positions    query/positions
+             :positions    commands/positions
              :export-hrefs (when (:result outcome)
                              (export-hrefs :frequencies
                                            (assoc (search-params cited)
@@ -1278,7 +1185,8 @@
   be counted."
   [ctx request format]
   (let [{:keys [params known cqp opts]} (search-request ctx request)]
-    (if-not (and (seq known) (export/formats format))
+    (if-not (and (seq known) (export/formats format)
+                 (not (and (nil? cqp) (url/unread-query? params))))
       {:status 400 :body "bad request"}
       (let [table (frequency/frequency-table!
                    ctx known (or cqp "") (attr-param (:attr params))
@@ -1329,7 +1237,7 @@
   [ctx request]
   (let [lang   (request-language request)
         corpus (str/upper-case (str (get-in request [:path-params :id])))
-        file   (when (query/corpus-name? corpus)
+        file   (when (commands/corpus-name? corpus)
                  (corpus/registry-file ctx corpus))]
     (if-not (and file (corpus/registry-file? file))
       {:status 404 :body "not found"}
@@ -1363,7 +1271,7 @@
   [ctx request]
   (let [lang     (request-language request)
         corpus   (str/upper-case (str (get-in request [:path-params :id])))
-        file     (when (query/corpus-name? corpus)
+        file     (when (commands/corpus-name? corpus)
                    (corpus/registry-file ctx corpus))
         {:keys [cpos matchend]} (:query-params request)
         cpos*    (parse-long (str cpos))]
@@ -1501,10 +1409,10 @@
   (let [{:keys [corpus cpos matchend]} (:query-params request)
         cpos*     (parse-long (str cpos))
         matchend* (parse-long (str matchend))]
-    (if-not (and (query/corpus-name? corpus) cpos* matchend*)
+    (if-not (and (commands/corpus-name? corpus) cpos* matchend*)
       {:status 400 :body "bad request"}
       (try
-        (let [q      (query/position-query cpos* matchend*)
+        (let [q      (commands/position-query cpos* matchend*)
               ;; one hit at a position nothing will ask for again, so
               ;; saving it would only fill the cache (see
               ;; dk.cst.corpus-probe.cache)
@@ -1546,7 +1454,7 @@
                          ctx known cqp (search/deadline ctx)
                          (assoc opts :sample (sample-param (:sample params))))
                         (into (unknown-counts unknown)))
-            result  (public-result (assoc query/page-defaults
+            result  (public-result (assoc commands/page-defaults
                                           :page   page-n
                                           :counts counts
                                           :size   (reduce + (keep :size counts))))

@@ -52,7 +52,7 @@
 
 (defn position-control
   "The control choosing where in the match the table counts, in `ui`: a
-  select over the `positions` (see dk.cst.corpus-probe.query/positions),
+  select over the `positions` (see dk.cst.corpus-probe.commands/positions),
   each named by dk.cst.corpus-probe.views.page/position-label, with `at`
   chosen. It follows the attribute it qualifies and names the form it
   submits with, as `attr-control` does."

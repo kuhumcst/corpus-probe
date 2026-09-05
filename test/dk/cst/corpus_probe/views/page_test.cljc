@@ -2,7 +2,7 @@
   (:require [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]
             [dk.cst.corpus-probe.views.hiccup :refer [da deep en]]
-            [dk.cst.corpus-probe.query :as query]
+            [dk.cst.corpus-probe.commands :as commands]
             [dk.cst.corpus-probe.views.layout :as layout]
             [dk.cst.corpus-probe.views.page :as page]))
 
@@ -463,8 +463,8 @@
     ;; in Danish, where no label can coincide with the param value
     (is (= ["korpusrækkefølge" "match" "match bagfra" "venstre kontekst"
             "højre kontekst" "tilfældig"]
-           (map (comp (partial page/sort-label da) first) query/sort-modes)))
-    (doseq [[value] query/sort-modes]
+           (map (comp (partial page/sort-label da) first) commands/sort-modes)))
+    (doseq [[value] commands/sort-modes]
       (is (not (str/blank? (page/sort-label en value)))
           (str "sort mode " value " has no label"))))
   (testing "a mode naming an attribute is the match by that attribute"
@@ -899,7 +899,15 @@
       (is (= ["attribute lemma" "part of word" "in 2 corpora"]
              (phrases en {:in "lemma" :match "infix"} example-result)))
       (is (= ["in 2 corpora"]
-             (phrases en {:in "word" :match ""} example-result))))
+             (phrases en {:in "word" :match ""} example-result)))
+      (testing "and only where the mode read them: a CQP query names its
+                own attribute, and the options ride along as memory"
+        (is (= ["in 2 corpora"]
+               (phrases en {:q "[]" :mode "cqp" :in "lemma" :match "infix"}
+                        example-result)))
+        (is (= ["in 2 corpora"]
+               (phrases en {:mode "extended" :t1.v "x" :in "lemma"}
+                        example-result)))))
     (testing "the filter, the narrowings and the sample, in that order"
       (is (= ["in 2 corpora" "within text_year 1591"
               "lemma at the start of the match = hund" "near og"
@@ -1146,11 +1154,37 @@
       (is (true? (:required attrs)))
       (is (= "hund\nkat" text)))
     (is (= "ét ord pr. linje"
-           (:placeholder (second (page/query-field da "list" nil true)))))))
+           (:placeholder (second (page/query-field da "list" nil true))))))
+  (testing "a list submitted under another mode stands on one line in the
+            box, which would otherwise drop its line breaks"
+    (is (= "hund kat" (page/one-line "hund\r\nkat")))
+    (is (= "hund kat" (page/one-line " hund \n\n kat ")))
+    (is (= "" (page/one-line nil)))
+    (is (= "hund kat"
+           (:value (second (page/query-field en nil "hund\r\nkat" true)))))
+    (is (= "hund\r\nkat"
+           (last (page/query-field en "list" "hund\r\nkat" true))))))
+
+(deftest from-input-test
+  (testing "the form names the mode it was rendered in, so a submit whose
+            radio was changed can read the query as it was typed"
+    (let [from (fn [params]
+                 (some #(and (map? %) (= "from" (:name %)) (:value %))
+                       (deep (page/search-form {:ui en :folders []
+                                                :params params}
+                                               "/" nil))))]
+      (is (= "simple" (from {})))
+      (is (= "simple" (from {:mode "nonesuch"})))
+      (is (= "list" (from {:mode "list" :q "a\nb"})))
+      (is (= "extended" (from {:mode "extended"})))
+      (is (= "cqp" (from {:mode "cqp"}))))))
 
 (deftest query-phrase-test
   (is (= "hund" (page/query-phrase en {:q "hund"})))
   (is (= "2 words" (page/query-phrase en {:q "hund\n\nkat\n" :mode "list"})))
+  (testing "a list counts its words however they are laid out"
+    (is (= "3 words"
+           (page/query-phrase en {:q "lille hund\nkat" :mode "list"}))))
   (is (= "1 ord" (page/query-phrase da {:q "hund" :mode "list"}))))
 
 (deftest sidebar-text-link-test

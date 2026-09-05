@@ -9,7 +9,7 @@
             [clojure.string :as str]
             [dk.cst.corpus-probe.cqp :as cqp]
             [dk.cst.corpus-probe.parse :as parse]
-            [dk.cst.corpus-probe.query :as query]))
+            [dk.cst.corpus-probe.commands :as commands]))
 
 (defn- registry-line
   "Parse one registry `line` into a [k v] entry, or nil for comments."
@@ -184,7 +184,7 @@
   The corpus name is validated first, since it is spliced into the
   activation command; the batch runs in the corpus's own charset."
   [ctx corpus command parse-fn]
-  (query/valid-corpus-name corpus)
+  (commands/valid-corpus-name corpus)
   (with-facts-cache!
     ctx corpus command
     (fn []

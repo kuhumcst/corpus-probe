@@ -18,7 +18,7 @@
             [dk.cst.corpus-probe.corpus :as corpus]
             [dk.cst.corpus-probe.cqp :as cqp]
             [dk.cst.corpus-probe.parse :as parse]
-            [dk.cst.corpus-probe.query :as query]
+            [dk.cst.corpus-probe.commands :as commands]
             [dk.cst.corpus-probe.search :as search]
             [dk.cst.corpus-probe.tools :as tools]
             [taoensso.telemere :as t])
@@ -68,14 +68,14 @@
 (defn fresh-breakdown!
   "The output sections of the `counting` commands over the matches of
   `query` in `corpus` via `ctx`, run afresh: within the :filter of
-  `opts` (see dk.cst.corpus-probe.query/restricted-query) and narrowed
-  to its :subset and :near (see dk.cst.corpus-probe.query/narrowing)."
+  `opts` (see dk.cst.corpus-probe.commands/restricted-query) and narrowed
+  to its :subset and :near (see dk.cst.corpus-probe.commands/narrowing)."
   [ctx corpus query {:keys [filter] :as opts} counting]
   (take-last (count counting)
              (run-breakdown! ctx corpus query
                              (-> [(str corpus ";")
-                                  (query/restricted-query query filter)]
-                                 (into (map second (query/narrowing opts)))
+                                  (commands/restricted-query query filter)]
+                                 (into (map second (commands/narrowing opts)))
                                  (into counting)))))
 
 (defn stored-breakdown!
@@ -97,7 +97,7 @@
     (try
       (let [results (run-breakdown!
                      ctx corpus query
-                     (-> [(query/load-command corpus nqr cache-dir)
+                     (-> [(commands/load-command corpus nqr cache-dir)
                           "size Last;"
                           "sort Last;"]
                          (into counting)))
@@ -137,11 +137,11 @@
                                                          patterns)
                           :subset (search/corpus-subset! ctx corpus subset)
                           :sample nil))
-        whole?    (query/whole-match? at)
+        whole?    (commands/whole-match? at)
         text      (when (and docs (not whole?) (not by))
                     (search/within-attr! ctx corpus :text))
-        counting  (cond-> [(query/count-command at attr {:by by})]
-                    text (conj (query/count-command at attr {:within text})))
+        counting  (cond-> [(commands/count-command at attr {:by by})]
+                    text (conj (commands/count-command at attr {:within text})))
         parse     (cond
                     whole? parse/count->freqs
                     by     parse/group-pairs->freqs
@@ -157,14 +157,14 @@
 
 (defn frequencies!
   "Count the matches of CQP `query` in `corpus` by `attr` at the :at
-  position of `opts` (a dk.cst.corpus-probe.query/positions entry; the
+  position of `opts` (a dk.cst.corpus-probe.commands/positions entry; the
   start of the match by default) via the installation described by `ctx`,
   within the :filter of `opts` when there is one, kept within its :within
   unit (see dk.cst.corpus-probe.search/within-attr!) and narrowed to its
-  :subset and :near (see dk.cst.corpus-probe.query/narrowing), returning
+  :subset and :near (see dk.cst.corpus-probe.commands/narrowing), returning
   [{:values [...] :freq <n>} ...] sorted by frequency. Under :docs, each
   map also carries the number of texts the value occurs in (its document
-  frequency, see dk.cst.corpus-probe.query/count-command) as :docs, where
+  frequency, see dk.cst.corpus-probe.commands/count-command) as :docs, where
   the corpus marks texts. Under :by, another attribute of the corpus, the
   values are counted against each value of it at the match, and the
   :values of each map are then the value of `attr` and the value of :by
@@ -178,7 +178,7 @@
   concordance is never read, a count of a sample being no count.
 
   A thin wrapper over CQP's `group`, or its `count` over the whole match
-  (see dk.cst.corpus-probe.query/count-command); `attr` and :by must name
+  (see dk.cst.corpus-probe.commands/count-command); `attr` and :by must name
   the corpus's `groupable-attrs!` (see `groupable!`). A narrowing of
   nothing is answered without CQP (see
   dk.cst.corpus-probe.search/narrowing-nothing?)."
@@ -254,7 +254,7 @@
   (try
     (let [blank?  (str/blank? query)
           whole?  (and (empty? filter) (empty? patterns))
-          sizes   (when-not (query/whole-match? at)
+          sizes   (when-not (commands/whole-match? at)
                     (value-sizes! ctx corpus (or by attr) opts))
           freqs   (cond
                     (and blank? whole? (not by) sizes) (sizes->freqs sizes)
@@ -377,7 +377,7 @@
   ([ctx corpora query attr]
    (frequency-table! ctx corpora query attr {}))
   ([ctx corpora query attr {:keys [at docs by] :as opts}]
-   (let [whole?   (query/whole-match? at)
+   (let [whole?   (commands/whole-match? at)
          by       (when-not whole? (some-> by keyword))
          opts     (assoc opts :by by)
          results  (vec (search/pmap-n

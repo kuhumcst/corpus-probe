@@ -1,5 +1,10 @@
 {:deps   {:aliases [:cljs]}
- :builds {:app {:target     :browser
-                :output-dir "resources/public/js"
-                :asset-path "/js"
-                :modules    {:main {:init-fn dk.cst.corpus-probe.ui/init!}}}}}
+ :builds {:app  {:target     :browser
+                 :output-dir "resources/public/js"
+                 :asset-path "/js"
+                 :modules    {:main {:init-fn dk.cst.corpus-probe.ui/init!}}}
+          ;; the tests of what both sides build from, on the JavaScript
+          ;; host: `shadow-cljs compile test`, then `node target/test.js`
+          :test {:target    :node-test
+                 :output-to "target/test.js"
+                 :ns-regexp "query-test$"}}}

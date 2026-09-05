@@ -35,8 +35,11 @@
   ;; Regenerate the translation template: clojure -M:i18n
   :i18n {:main-opts ["-m" "dk.cst.corpus-probe.i18n-scan"]}
 
-  :cljs {:extra-deps {thheller/shadow-cljs        {:mvn/version "3.5.0"}
-                      com.cognitect/transit-cljs  {:mvn/version "0.8.280"}}}
+  ;; the test path too: the shadow :test build compiles the tests of what
+  ;; both sides build from (see shadow-cljs.edn)
+  :cljs {:extra-paths ["test"]
+         :extra-deps  {thheller/shadow-cljs        {:mvn/version "3.5.0"}
+                       com.cognitect/transit-cljs  {:mvn/version "0.8.280"}}}
 
   :nrepl {:extra-deps {nrepl/nrepl {:mvn/version "1.3.1"}}
           :main-opts  ["-m" "nrepl.cmdline"]}

@@ -84,6 +84,28 @@
    :at          "match"
    :page        "1"})
 
+(def modes
+  "The query modes, in display order, each as its `mode` param value: words
+  in order, a list of words, a builder of tokens, and CQP as the reader
+  wrote it (see dk.cst.corpus-probe.query/->cqp). The first is the default,
+  which no URL carries."
+  ["simple" "list" "extended" "cqp"])
+
+(def fields
+  "What each of the `modes` reads of the query params: the keys that say
+  what was asked, by the mode that reads them. `::tokens` stands for the
+  fields of an extended search's tokens (see `token-key?`). A param outside
+  its mode's set says nothing to the search, so a URL does not carry it
+  (see `canonical`).
+
+  TODO: the simple form has no control for within, though a simple search
+  of several words honours it; the form gets one when it derives its
+  controls from this table."
+  {"simple"   #{:q :in :ci :match :within}
+   "list"     #{:q :in :ci :match}
+   "extended" #{::tokens :within}
+   "cqp"      #{:q}})
+
 (def operators
   "The operators of an extended-search condition, in display order: how
   the value of the condition's attribute must relate to what the reader
@@ -211,14 +233,19 @@
     (get defaults k)))
 
 (defn tokens-from-query
-  "The extended-search tokens the simple or list query of `params` (its
-  :q, :mode, :in, :ci and :match, see dk.cst.corpus-probe.query/simple->cqp)
-  amounts to, as `token-rows` shapes them without their numbers: one
-  token per word, or one token whose conditions are the words of a list,
-  each an alternative to the one before. Empty for a blank query, so a
-  reader switching to the extended mode finds what they typed rather
-  than an empty form."
-  [{:keys [q mode in ci match]}]
+  "The extended-search tokens the query of `params` (its :q, :in, :ci and
+  :match, see dk.cst.corpus-probe.query/simple->cqp) amounts to, read as
+  `mode` reads it, as `token-rows` shapes them without their numbers: one
+  token per word, or, for a list, one token whose conditions are the
+  words, each an alternative to the one before. Empty for a blank query,
+  so a reader switching to the extended mode finds what they typed rather
+  than an empty form.
+
+  `mode` is the one the query was typed in, which the params of a form
+  whose mode was changed no longer say (see
+  dk.cst.corpus-probe.api/token-fields): a list when it is list, words
+  in order otherwise."
+  [{:keys [q in ci match]} mode]
   (let [words     (remove str/blank? (map str/trim (str/split (str q) #"\s+")))
         condition (fn [word]
                     (cond-> {:v word}
@@ -331,12 +358,69 @@
       (nil? (:near params))   (dissoc :distance)
       (nil? (:subset params)) (dissoc :subset-at :subset-attr))))
 
+(defn mode
+  "The mode of the search `params`: the one of the `modes` their `mode`
+  param names, or the default when it names none or one the app does
+  not know."
+  [params]
+  (let [m (:mode params)]
+    (if (contains? fields m) m (:mode defaults))))
+
+(defn query-key?
+  "True when param key `k` says what was asked: the mode, a key some mode
+  reads (see `fields`) or the field of a token."
+  [k]
+  (boolean (and k (not= ::tokens k)
+                (or (= :mode k)
+                    (some #(contains? % k) (vals fields))
+                    (token-key? k)))))
+
+(defn reads?
+  "True when mode `m` reads param key `k` (see `fields`): the mode itself,
+  one of the mode's keys or, where it reads tokens, the field of one.
+  The marker standing for the tokens is no key of its own."
+  [m k]
+  (let [own (get fields m)]
+    (boolean (and (not= ::tokens k)
+                  (or (= :mode k)
+                      (contains? own k)
+                      (and (contains? own ::tokens) (token-key? k)))))))
+
+(defn unread
+  "The keys of the query params among `params` that their mode (see
+  `mode`) does not read: what the form of another mode, or a hand-written
+  URL, carried along, which the search never sees."
+  [params]
+  (let [m (mode params)]
+    (into #{}
+          (filter #(and (query-key? %) (not (reads? m %))))
+          (keys params))))
+
+(defn without-unread
+  "`params` less what their mode does not read (see `unread`)."
+  [params]
+  (apply dissoc params (unread params)))
+
+(defn unread-query?
+  "True when `params` carry a query their mode does not read (see
+  `unread`) that says something: a q with words in it under the extended
+  mode, or a token that asks (see `asks?`) under any other. What the
+  form submits when its mode radio is changed before the query is
+  retyped, and what a hand-written URL may carry; the blank field or the
+  blank trailing token every form submits is no query."
+  [params]
+  (let [unread (unread params)]
+    (boolean (or (and (unread :q) (present (:q params)))
+                 (and (some token-key? unread)
+                      (some asks? (token-rows params)))))))
+
 (defn canonical
   "The search `params` (param keys to their string or vector values, as a
   request or a form carries them) as the URL cites them, against the set
   `all` of every corpus that can be searched: nothing nil, blank or
   default (see `defaults`), nothing that qualifies an absent param (see
-  `without-orphans`), nothing the app does not read (see `known?`), and
+  `without-orphans`), nothing the mode does not read (see
+  `without-unread`), nothing the app does not read (see `known?`), and
   the corpora as one param (see `with-corpora`).
 
   Applying it to its own result changes nothing, so a link can be built
@@ -350,7 +434,8 @@
                   (when (and (known? k) v (not= v (default k)))
                     [k v]))))
         (into {})
-        (without-orphans))))
+        (without-orphans)
+        (without-unread))))
 
 (defn pairs
   "Canonical `params` as [name value] string pairs in `param-order`, a

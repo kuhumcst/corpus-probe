@@ -10,7 +10,7 @@
             [dk.cst.corpus-probe.corpus :as corpus]
             [dk.cst.corpus-probe.cqp :as cqp]
             [dk.cst.corpus-probe.parse :as parse]
-            [dk.cst.corpus-probe.query :as query]))
+            [dk.cst.corpus-probe.commands :as commands]))
 
 (defn run-tool!
   "Run the cwb tool command vector `cmd` for `corpus` (a name already
@@ -44,7 +44,7 @@
   the tool exits 0 for a registry entry whose data files are gone,
   printing ERROR in place of the size."
   [ctx corpus]
-  (query/valid-corpus-name corpus)
+  (commands/valid-corpus-name corpus)
   (corpus/with-facts-cache!
     ctx corpus "cwb-describe-corpus -s"
     (fn []
@@ -72,7 +72,7 @@
   ;; TODO: stream large lexicons and exports row by row instead of
   ;; building them in memory (milestone 5, with the NQR caching).
   [ctx corpus attr]
-  (query/valid-corpus-name corpus)
+  (commands/valid-corpus-name corpus)
   (let [p-attrs (->> (corpus/attributes! ctx corpus)
                      (filter #(= :positional (:type %)))
                      (map :name)
@@ -121,7 +121,7 @@
   the corpus name is validated and anything but an annotated
   s-attribute of the corpus is rejected."
   [ctx corpus attr]
-  (query/valid-corpus-name corpus)
+  (commands/valid-corpus-name corpus)
   (let [attr  (keyword attr)
         stats (some #(when (= attr (:name %)) %)
                     (:s-attrs (describe-corpus! ctx corpus)))]

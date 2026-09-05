@@ -25,7 +25,7 @@
             [clojure.java.io :as io]
             [clojure.string :as str]
             [dk.cst.corpus-probe.corpus :as corpus]
-            [dk.cst.corpus-probe.query :as query]
+            [dk.cst.corpus-probe.commands :as commands]
             [taoensso.telemere :as t])
   (:import [java.io File]
            [java.nio.file CopyOption Files StandardCopyOption]
@@ -80,11 +80,11 @@
   The registry is there because two of them can define one corpus name,
   and the filter's values are sorted because it holds them in sets, whose
   printed order is no part of their value. The narrowings (see
-  dk.cst.corpus-probe.query/narrowing) and the sample belong here rather
+  dk.cst.corpus-probe.commands/narrowing) and the sample belong here rather
   than in `result-key` because they decide which matches there are and
   how many, not what order they come in; the seed the sample is drawn
   with does not, being the same one every time (see
-  dk.cst.corpus-probe.query/sample-seed). Nothing about ordering or
+  dk.cst.corpus-probe.commands/sample-seed). Nothing about ordering or
   display belongs here."
   [ctx corpus query {filter-by :filter sample :sample near :near
                      subset :subset}]
@@ -113,7 +113,7 @@
   applied when a result is read, not when it is saved."
   [ctx corpus query {sort-mode :sort :as opts}]
   (conj (match-key ctx corpus query opts)
-        (query/sort-command sort-mode)
+        (commands/sort-command sort-mode)
         (:sort-locale ctx)))
 
 (defn result-name
@@ -121,7 +121,7 @@
   via `ctx`: `q_` followed by the digest of its `result-key`.
 
   The `q_` prefix is what keeps the name inside CQP's rule for one (see
-  dk.cst.corpus-probe.query/valid-result-name)."
+  dk.cst.corpus-probe.commands/valid-result-name)."
   [ctx corpus query opts]
   (str "q_" (digest (pr-str (result-key ctx corpus query opts)))))
 
@@ -217,7 +217,7 @@
   docstring). The corpus name is validated, since it becomes a path."
   ^File [ctx corpus]
   (when-let [dir (directory ctx)]
-    (io/file dir (query/valid-corpus-name corpus))))
+    (io/file dir (commands/valid-corpus-name corpus))))
 
 (defn corpus-directory!
   "`corpus-directory`, created if it is not there yet: CQP given a data
