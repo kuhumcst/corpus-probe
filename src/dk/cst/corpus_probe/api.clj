@@ -562,6 +562,20 @@
   [{:keys [size page-size]}]
   (max 1 (long (Math/ceil (/ size (double page-size))))))
 
+(defn page-hrefs
+  "The links from page `page` of the concordance `result` of the search
+  `params` cite to the pages before and after it, as `:prev-href` and
+  `:next-href`, nil where there is none.
+
+  A result still being counted (see
+  dk.cst.corpus-probe.search/concordance!) has no last page yet, but the
+  hits counted so far may already reach past this page, and then the
+  next one is there whatever the rest turn out to hold."
+  [params page result]
+  {:prev-href (when (pos? page) (page-href params (dec page)))
+   :next-href (when (and result (< (inc page) (page-count result)))
+                (page-href params (inc page)))})
+
 (defn content-lang
   "The language code of the corpus named `corpus` among the registry entry
   maps `corpora`, when its entry records a plausible one."
@@ -643,19 +657,26 @@
   (update result :counts
           (partial mapv #(cond-> % (:error %) (update :error public-error)))))
 
+(defn public-result
+  "`result` with its counts prepared for display (see `public-counts`)
+  and its :pages, once every corpus is counted."
+  [result]
+  (cond-> (public-counts result)
+    (not (:remaining result)) (assoc :pages (page-count result))))
+
 (defn search-outcome!
   "Search the `known` corpora for `cqp` via `ctx` with `opts` (the :page,
-  :sort, :context, :sample, :filter, :near and :within of
-  dk.cst.corpus-probe.search/concordance!): {:result
-  <concordance with its :pages>}, the `unknown` corpus names reported
-  among its counts, or {:error ...} when no corpus was selected at all.
-  Per-corpus errors travel inside the result."
+  :sort, :context, :sample, :filter, :near, :within and :incremental? of
+  dk.cst.corpus-probe.search/concordance!): {:result <concordance with
+  its :pages, once every corpus is counted>}, the `unknown` corpus names
+  reported among its counts, or {:error ...} when no corpus was selected
+  at all. Per-corpus errors travel inside the result."
   [ctx known unknown cqp opts]
   (if (and (empty? known) (empty? unknown))
     {:error {:type :no-corpus}}
-    (let [result (-> (search/concordance! ctx known cqp opts)
-                     (update :counts into (unknown-counts unknown)))]
-      {:result (assoc (public-counts result) :pages (page-count result))})))
+    {:result (-> (search/concordance! ctx known cqp opts)
+                 (update :counts into (unknown-counts unknown))
+                 (public-result))}))
 
 (defn pattern-fields
   "What the pattern and range fields of the metadata filter hold, from
@@ -893,8 +914,12 @@
                                           :context (context-param
                                                     (:context params))
                                           :sample  (sample-param
-                                                    (:sample params)))))
-        pages   (some-> outcome :result :pages)
+                                                    (:sample params))
+                                          ;; a document waits for the count;
+                                          ;; the client asks for it itself
+                                          ;; (see `counts-page`)
+                                          :incremental? (wants-transit?
+                                                         request))))
         params* (assoc params
                        :corpus (if outcome selected named)
                        :attr   attr
@@ -931,17 +956,14 @@
                                                   :docs (:docs params)))))
 
       (not freq?)
-      (assoc :sort-modes   (sort-options p-attrs)
-             :export-limit export/hit-limit
-             :export-hrefs (when (:result outcome)
-                             (export-hrefs :kwic
-                                           (assoc (search-params cited)
-                                                  :sort    (:sort params)
-                                                  :context (:context params))))
-             :prev-href    (when (pos? page-n)
-                             (page-href cited (dec page-n)))
-             :next-href    (when (and pages (< (inc page-n) pages))
-                             (page-href cited (inc page-n)))))))
+      (merge {:sort-modes   (sort-options p-attrs)
+              :export-limit export/hit-limit
+              :export-hrefs (when (:result outcome)
+                              (export-hrefs :kwic
+                                            (assoc (search-params cited)
+                                                   :sort    (:sort params)
+                                                   :context (:context params))))}
+             (page-hrefs cited page-n (:result outcome))))))
 
 (defn nav-hrefs
   "The URL of each top-level page for `params`.
@@ -1381,6 +1403,41 @@
         (catch Exception _
           {:status 404 :body "not found"})))))
 
+(defn counts-page
+  "Answer the count of the search `request` describes against `ctx`, as
+  transit: the per-corpus `:counts`, the `:size` and `:pages` of the
+  whole result, the `:prev-href` and `:next-href` of the page the
+  request names and the document `:title`, everything about a page that
+  the count decides. For the client, whose page arrived while its
+  corpora were still being counted (see `search-view-data`).
+
+  Asked with the page's own params, so it counts the question the page
+  answered. The corpora the page showed were remembered as it was filled
+  (see dk.cst.corpus-probe.search/remember-size!), so only the rest cost
+  a query, and each count is remembered for the next page. A request
+  describing no search is refused."
+  [ctx request]
+  (let [{:keys [params corpora selected known unknown cqp opts]}
+        (search-request ctx request)]
+    (if-not cqp
+      {:status 400 :body "bad request"}
+      (let [page-n  (page-param (:page params))
+            params* (assoc params :corpus selected)
+            counts  (-> (search/corpus-sizes!
+                         ctx known cqp (search/deadline ctx)
+                         (assoc opts :sample (sample-param (:sample params))))
+                        (into (unknown-counts unknown)))
+            result  (public-result (assoc query/page-defaults
+                                          :page   page-n
+                                          :counts counts
+                                          :size   (reduce + (keep :size counts))))
+            cited   (url/canonical params* (set (readable-corpora ctx corpora)))]
+        (transit-response
+         (merge (select-keys result [:counts :size :pages])
+                (page-hrefs cited page-n result)
+                {:title (search-title (i18n/->ui (request-language request))
+                                      params* result)}))))))
+
 (defn stylesheet
   "Serve the bundled stylesheet."
   [_request]
@@ -1422,5 +1479,7 @@
      :route-name ::context]
     ["/api/filters"               :get (partial filters-page ctx)
      :route-name ::filters]
+    ["/api/counts"                :get (partial counts-page ctx)
+     :route-name ::counts]
     ["/css/style.css"             :get stylesheet :route-name ::stylesheet]
     ["/js/*path"                  :get js-file    :route-name ::js]})

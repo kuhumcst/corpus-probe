@@ -884,6 +884,43 @@
       (is (not (some #{"/e?format=tsv"} (deep html))))
       (is (not (some #{"/frequencies?q=x"} (deep html)))))))
 
+(deftest counting-test
+  (testing "a result is being counted while corpora remain"
+    (is (page/counting? {:remaining ["X"]}))
+    (is (not (page/counting? {:remaining []})))
+    (is (not (page/counting? {}))))
+  (testing "the heading gives the hits counted so far as a floor"
+    (is (= "at least 6 hits for hund"
+           (text (page/hits-heading en {:q "hund"} 6 true))))
+    (is (= "mindst 6 forekomster af hund"
+           (text (page/hits-heading da {:q "hund"} 6 true)))))
+  (testing "the page is placed without a last page"
+    (is (= "page 3" (page/page-phrase en {:page 2})))
+    (is (= "side 3" (page/page-phrase da {:page 2}))))
+  (testing "corpora still being counted count as searched"
+    (is (page/searched? {:counts [] :remaining ["X"]}))
+    (is (= ["in 3 corpora"]
+           (map text (page/qualifiers en {} {:counts    [{:corpus "A" :size 1}]
+                                             :remaining ["B" "C"]})))))
+  (let [state {:ui        en
+               :view      :kwic
+               :params    {:q "hund"}
+               :next-href "/?page=2"}
+        html  (page/result-section
+               (assoc state :result (assoc example-result
+                                           :pages     nil
+                                           :remaining ["X" "Y"])))]
+    (testing "the heading says at least, and a status line says what is
+              still being counted"
+      (is (= "at least 6 hits for hund"
+             (text (drop 2 (second (nth html 2))))))
+      (is (some #{[:p "Counting hits in 2 corpora …"]} (deep html)))
+      (is (some #{[:li "page 1"]} (deep html))))
+    (testing "the status line is a live region that stands even when silent"
+      (is (some #{[:div.status {:role "status"} nil]}
+                (deep (page/result-section
+                       (assoc state :result example-result))))))))
+
 (deftest attribute-value-test
   (testing "a title is a cited work"
     (is (= [:cite "Hverdag"] (page/attribute-value :text_title "Hverdag"))))

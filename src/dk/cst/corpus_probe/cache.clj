@@ -225,6 +225,12 @@
     ;; without `share!` eight readers asking at once count eight times
     (cw/lookup-or-miss counts k (fn [_] (share! [::count k] f)))))
 
+(defn known-count
+  "How many matches `query` has in `corpus` under `ctx` and the filter of
+  `opts` when `count!` has remembered it, else nil. Runs nothing."
+  [ctx corpus query opts]
+  (cw/lookup counts (match-key ctx corpus query opts)))
+
 (defn pending-name
   "A name to save the result `nqr` under until `commit!` gives it that
   name, so that a file CQP is still writing is never the one a reader

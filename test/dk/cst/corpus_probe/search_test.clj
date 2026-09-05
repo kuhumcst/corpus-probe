@@ -420,6 +420,46 @@
          (is (= [:timeout :timeout] (map (comp :type :error) (:counts page))))
          (is (empty? (:hits page))))))))
 
+(deftest incremental-concordance-test
+  (when-cwb
+   (let [q       "[]"
+         corpora ["PROBE" "VISER" "TALER"]
+         page    #(select-keys (search/concordance! ctx corpora q
+                                                    {:incremental? true})
+                               [:counts :size :remaining])]
+     (testing "the corpora past the page are left uncounted, and named"
+       (is (= {:counts    [{:corpus "PROBE" :size 47}]
+               :size      47
+               :remaining ["VISER" "TALER"]}
+              (page))))
+     (testing "a count made before is reported from memory"
+       (search/size! ctx "VISER" q)
+       (is (= {:counts    [{:corpus "PROBE" :size 47} {:corpus "VISER" :size 48}]
+               :size      95
+               :remaining ["TALER"]}
+              (page))))
+     (testing "and once every corpus is counted nothing remains"
+       (search/size! ctx "TALER" q)
+       (is (= {:counts [{:corpus "PROBE" :size 47} {:corpus "VISER" :size 48}
+                        {:corpus "TALER" :size 42}]
+               :size   137}
+              (page)))))))
+
+(deftest remember-size-test
+  (when-cwb
+   (let [q "\"hund.*\" %c"]
+     (is (nil? (search/known-size ctx "PROBE" q {})))
+     (testing "a page remembers the count its batch made"
+       (search/concordance! ctx ["PROBE"] q {:incremental? true})
+       (is (= 5 (search/known-size ctx "PROBE" q {})))
+       (with-redefs [search/run-size!
+                     (fn [& _] (throw (ex-info "counted again" {})))]
+         (is (= 5 (search/size! ctx "PROBE" q)))))
+     (testing "a narrowing of nothing is remembered like any other count"
+       (let [opts {:near {:word "x" :distance 5}}]
+         (is (= 0 (search/size! ctx "PROBE" "\"nonesuch\"" opts)))
+         (is (= 0 (search/known-size ctx "PROBE" "\"nonesuch\"" opts))))))))
+
 (def da-collator
   "The collator of a Danish installation, as the handlers build it."
   (delay (search/->collator {:sort-locale "da_DK.UTF-8"})))

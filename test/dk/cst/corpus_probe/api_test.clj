@@ -3,6 +3,7 @@
             [clojure.test :refer [deftest is testing]]
             [cognitect.transit :as transit]
             [dk.cst.corpus-probe.api :as api]
+            [dk.cst.corpus-probe.cache :as cache]
             [dk.cst.corpus-probe.corpus :as corpus]
             [dk.cst.corpus-probe.cqp-test :refer [ctx when-cwb]]
             [dk.cst.corpus-probe.frequency :as frequency]
@@ -648,6 +649,61 @@
              (:counts result)))
       (is (= 0 (:size result)))
       (is (= 1 (:pages result))))))
+
+(deftest page-hrefs-test
+  (let [params {:q "hund"}]
+    (testing "the first page links onward only when the hits reach past it"
+      (is (= {:prev-href nil :next-href nil}
+             (api/page-hrefs params 0 {:size 25 :page-size 25})))
+      (is (str/ends-with? (:next-href (api/page-hrefs params 0 {:size      26
+                                                                :page-size 25}))
+                          "page=2#results")))
+    (testing "a result still being counted links onward on what it has so far"
+      (is (some? (:next-href (api/page-hrefs params 0 {:size      26
+                                                       :page-size 25
+                                                       :remaining ["X"]}))))
+      (is (nil? (:next-href (api/page-hrefs params 0 {:size      10
+                                                      :page-size 25
+                                                      :remaining ["X"]})))))
+    (testing "and back from any page but the first, result or no result"
+      (is (str/ends-with? (:prev-href (api/page-hrefs params 2 nil))
+                          "page=2#results"))
+      (is (nil? (:next-href (api/page-hrefs params 2 nil)))))))
+
+(deftest counts-page-test
+  (when-cwb
+   (cache/forget-counts!)
+   (let [request {:headers      {"accept" "application/transit+json"}
+                  :query-params {:q "[]" :mode "cqp"}}
+         view    #(api/search-view-data ctx request)]
+     (testing "a page the client renders arrives before the corpora past it
+               are counted, linking onward on the hits it has"
+       (let [{:keys [result next-href]} (view)]
+         (is (= [{:corpus "PROBE" :size 47}] (:counts result)))
+         (is (= ["TALER" "VISER"] (:remaining result)))
+         (is (nil? (:pages result)))
+         (is (some? next-href))))
+     (testing "the count of the whole search follows, with what depends on it"
+       (let [{:keys [status body]} (api/counts-page ctx request)
+             counted (transit-> body)]
+         (is (= 200 status))
+         (is (= ["PROBE" "TALER" "VISER"] (map :corpus (:counts counted))))
+         (is (= 137 (:size counted)))
+         (is (= 6 (:pages counted)))
+         (is (str/ends-with? (:next-href counted) "page=2#results"))
+         (is (str/includes? (:title counted) "137"))))
+     (testing "after which the page is counted in full, from memory"
+       (let [{:keys [result]} (view)]
+         (is (nil? (:remaining result)))
+         (is (= 6 (:pages result)))))
+     (testing "a document waits for the count, having no script to ask with"
+       (cache/forget-counts!)
+       (let [{:keys [result]} (api/search-view-data ctx (dissoc request :headers))]
+         (is (nil? (:remaining result)))
+         (is (= 6 (:pages result)))))
+     (testing "a request describing no search is refused"
+       (is (= 400 (:status (api/counts-page ctx {:query-params {}})))))
+     (cache/forget-counts!))))
 
 (deftest public-counts-test
   (testing "per-corpus errors are prepared for display"

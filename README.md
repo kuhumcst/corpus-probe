@@ -142,6 +142,17 @@ narrowing and the sample travel with the search into the frequency view
 and the exports. Without a script, the controls apply through a button.
 A browser with a script never shows this button.
 
+### Several corpora
+
+A search of several corpora queries them one at a time until the page
+is full. The corpora after the page are only counted. Without a script,
+the page waits for every count. With a script, the page arrives as soon
+as it is full, and the count follows. Until it arrives, the heading
+says "at least" and the hits counted so far, and a status line says how
+many corpora are being counted. A count that was made before is not
+made again. Thus a page turn, and a return to a result, wait for
+nothing.
+
 ### Frequencies
 
 The frequency view counts at each position that CQP has:

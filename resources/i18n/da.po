@@ -31,6 +31,9 @@ msgstr "annotationer"
 msgid "Apply"
 msgstr "Anvend"
 
+msgid "at least"
+msgstr "mindst"
+
 msgid "attribute"
 msgstr "attribut"
 
@@ -71,6 +74,9 @@ msgstr "korpus"
 
 msgid "Corpus"
 msgstr "Korpus"
+
+msgid "Counting hits in"
+msgstr "Tæller forekomster i"
 
 msgid "CQP error"
 msgstr "CQP-fejl"

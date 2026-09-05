@@ -738,6 +738,48 @@
           :when hit]
     (fetch-context! corpus cpos (:matchend (:anchors hit)))))
 
+(defn fetch-counts!
+  "Fetch the count of the search on screen while its corpora are still
+  being counted (see dk.cst.corpus-probe.search/concordance!), and put it
+  in the state: the counts, the size and the number of pages of the
+  result, the page links and the document title, all of which the count
+  decides.
+
+  Asked with the page's own query string, so the server counts the
+  question the page answered. Applied only while that page is still the
+  one on screen, so a count arriving after the reader has moved on is
+  dropped rather than written over the answer to their next question. A
+  count that fails falls back to a real navigation, as a page that fails
+  does: the server renders the page with its count in full."
+  []
+  (when (seq (get-in @state [:result :remaining]))
+    (let [key (page-key)]
+      (-> (js/fetch (str "/api/counts" js/location.search)
+                    #js {:headers #js {"Accept" transit-type}})
+          (.then (fn [response]
+                   (if (.-ok response)
+                     (.text response)
+                     (throw (js/Error. "counts request failed")))))
+          (.then (fn [body]
+                   (when (= key @shown)
+                     (let [counted (read-transit body)]
+                       (set! (.-title js/document) (:title counted))
+                       (swap! state
+                              (fn [s]
+                                (-> s
+                                    (update :result
+                                            #(-> (merge % (select-keys
+                                                           counted
+                                                           [:counts :size
+                                                            :pages]))
+                                                 (dissoc :remaining)))
+                                    (merge (select-keys counted
+                                                        [:prev-href
+                                                         :next-href])))))))))
+          (.catch (fn [_]
+                    (when (= key @shown)
+                      (set! (.-href js/location) js/location.href))))))))
+
 (defn landed-href
   "The address a routed navigation to `href` answered by `response` lands
   on: where the response came from, which is elsewhere after a redirect,
@@ -799,6 +841,7 @@
                    (set! (.-title js/document) (:title data))
                    (reset! state (client-state data))
                    (fetch-expansions!)
+                   (fetch-counts!)
                    (land!))))
         (.catch (fn [_]
                   ;; an abort leaves the timer alone: it belongs to the

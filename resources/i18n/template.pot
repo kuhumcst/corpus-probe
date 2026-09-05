@@ -498,6 +498,10 @@ msgid "for"
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/page.cljc
+msgid "at least"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/page.cljc
 msgid "Hits per corpus"
 msgstr ""
 
@@ -583,6 +587,10 @@ msgstr ""
 
 #: src/dk/cst/corpus_probe/views/page.cljc
 msgid "Result view"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/page.cljc
+msgid "Counting hits in"
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/page.cljc

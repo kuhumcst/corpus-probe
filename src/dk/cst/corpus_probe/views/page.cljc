@@ -679,7 +679,8 @@
    ;; 450ms still flashes past `dk.cst.corpus-probe.ui/pending-delay-ms`;
    ;; and whether waiting should say more than that it is waiting. The
    ;; metadata filter has the same decision pending (see
-   ;; `filter-fieldset`), and the two should be answered together.
+   ;; `filter-fieldset`), as does the count of a result still being made
+   ;; (see `results-region`), and the three should be answered together.
    (when pending? [:p (i18n/tr ui "Loading …")])])
 
 (defn search-form
@@ -821,9 +822,11 @@
        (i18n/trn ui "hit" "hits" n)))
 
 (defn page-phrase
-  "Where in a paged `result` the reader is, in `ui`."
+  "Where in a paged `result` the reader is, in `ui`: the page, and of how
+  many once the result is counted (see `counting?`)."
   [ui {:keys [page pages] :as result}]
-  (str (i18n/tr ui "page") " " (inc page) " " (i18n/tr ui "of") " " pages))
+  (str (i18n/tr ui "page") " " (inc page)
+       (when pages (str " " (i18n/tr ui "of") " " pages))))
 
 (defn sample-phrase
   "That a result holds a random `sample` of the matches rather than all
@@ -852,24 +855,35 @@
 
 (defn hits-heading
   "What a search found, as the heading of its result in `ui`: how many
-  hits, `size`, for the query of `params` (see `query-mark`); every
-  token when the query is blank, which only a frequency table asks for."
-  [ui {:keys [q] :as params} size]
-  (if (str/blank? q)
-    (i18n/tr ui "All tokens")
-    (list (hits-phrase ui size) " " (i18n/tr ui "for") " "
-          (query-mark ui params))))
+  hits, `size`, for the query of `params` (see `query-mark`), at least
+  that many while `counting?`; every token when the query is blank,
+  which only a frequency table asks for."
+  ([ui params size]
+   (hits-heading ui params size false))
+  ([ui {:keys [q] :as params} size counting?]
+   (if (str/blank? q)
+     (i18n/tr ui "All tokens")
+     (concat (when counting? [(i18n/tr ui "at least") " "])
+             (list (hits-phrase ui size) " " (i18n/tr ui "for") " "
+                   (query-mark ui params))))))
+
+(defn counting?
+  "True while the corpora of `result` are still being counted: some of
+  them are `:remaining` (see dk.cst.corpus-probe.search/concordance!),
+  and its size is the hits counted so far."
+  [{:keys [remaining] :as result}]
+  (boolean (seq remaining)))
 
 (defn qualifiers
   "The question a `result` answered, less the query itself, as short
   phrases in `ui`, each naming what one control holds: the attribute a
   simple search of `params` matched and the part of the form, when not
-  the usual ones; the corpora searched; the metadata filter; the
-  narrowings; the sample. For the line under the heading (see
-  `results-region`), where the heading says what was found and this
-  what was asked."
-  [ui {:keys [in match]} {:keys [counts size sample] :as result}]
-  (let [searched (map :corpus (filter :size counts))]
+  the usual ones; the corpora searched, those still being counted among
+  them; the metadata filter; the narrowings; the sample. For the line
+  under the heading (see `results-region`), where the heading says what
+  was found and this what was asked."
+  [ui {:keys [in match]} {:keys [counts size sample remaining] :as result}]
+  (let [searched (concat (map :corpus (filter :size counts)) remaining)]
     (remove nil?
             [(when-not (contains? #{nil "" "word"} in)
                (list (i18n/tr ui "attribute") " " [:code in]))
@@ -1030,10 +1044,11 @@
                   [:a {:href href} (str/upper-case (name format))]))]))
 
 (defn searched?
-  "True when any corpus of `result` could be searched, so its counts are an
-  answer rather than a report of failure."
+  "True when any corpus of `result` could be searched, or is still being
+  counted (see `counting?`), so its counts are an answer rather than a
+  report of failure."
   [{:keys [counts] :as result}]
-  (boolean (some :size counts)))
+  (boolean (or (some :size counts) (counting? result))))
 
 (defn view-label
   "What the result view `k` is called, in `ui` (see
@@ -1072,7 +1087,7 @@
   count of nothing."
   [ui params {:keys [counts size] :as result} error]
   (if (searched? result)
-    (hits-heading ui params size)
+    (hits-heading ui params size (counting? result))
     (error-name ui (or error (some :error counts)))))
 
 (defn results-region
@@ -1080,11 +1095,12 @@
   that heading and focusable, so a GET search can land on it.
 
   Every view of a result shares this: the heading, with the `subheading`
-  phrases (see `qualifiers`) under it, the switch between the views, the
-  error that replaced the result or the errors of individual corpora,
-  and then `body`, the view's own content. The two views differ only in
-  what they say about the same hits, so they differ only in what they
-  pass here.
+  phrases (see `qualifiers`) under it, a status line while the result is
+  still being counted (see `counting?`), the switch between the views,
+  the error that replaced the result or the errors of individual
+  corpora, and then `body`, the view's own content. The two views differ
+  only in what they say about the same hits, so they differ only in what
+  they pass here.
 
   The heading is the page's h1: the search page has no other, so what a
   search found, or why it found nothing, is what the page is about. It
@@ -1108,6 +1124,12 @@
     [:h1 {:id "results-heading"} heading]
     (when (seq subheading)
       [:p (interpose " · " subheading)])]
+   ;; always rendered, and before anything whose kind can change (see
+   ;; `navigation-status`)
+   [:div.status {:role "status"}
+    (when (counting? result)
+      [:p (str (i18n/tr ui "Counting hits in") " "
+               (corpora-phrase ui (:remaining result)) " …")])]
    (view-switch ui view view-hrefs)
    (when error (error-body ui error nil))
    (for [[e corpora] (error-groups (:counts result))]
