@@ -346,7 +346,17 @@ structure:
 
 ## 8. Search input
 
-Two entry modes in v1, one query engine:
+Four query modes, one query engine and one query value. Simple (words in
+order), List (any one of the words) and Extended (KORP's builder of
+tokens with conditions, repeats and sentence edges) all read the form
+into one value, the tokens of a search kept within a unit of text, which
+`dk.cst.corpus-probe.query` compiles to CQP; the CQP mode passes text
+through. Each mode reads the params its row of `url/fields` names and no
+other, so a URL carries only what its mode reads, and a change of mode
+holds the query in the new form as far as that form can, saying the
+rest in a status line, on both sides and without a round trip where the
+client runs (built 2026-09-05, milestone 6). The two modes the plan
+started from:
 
 **Raw CQP** — passed through verbatim, wrapped in CQP's own sandbox designed
 for exactly this (verified: it blocks every non-query command including the
@@ -370,9 +380,11 @@ unescaped `.*` outside the literal, `%c` when case-insensitive, join, append
 `{lemma}`, `_POS`) are a possible v2 layer over the same compiler; the full
 CEQL grammar is documented in the research if ever wanted.
 
-An extended (attribute/operator/value row) builder is v2; with the actual KU
-attribute inventories (often just word/pos/lemma/msd, and word-only for FT)
-the simple box plus raw CQP brackets most of the space.
+The extended (attribute/operator/value row) builder, planned as v2, is
+built; with the actual KU attribute inventories (often just
+word/pos/lemma/msd, and word-only for FT) the simple box plus raw CQP
+still brackets most of the space, and the builder is the third form of
+the same value.
 
 ## 9. Pagination, sorting, caching (no database)
 

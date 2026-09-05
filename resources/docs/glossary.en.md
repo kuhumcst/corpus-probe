@@ -55,7 +55,9 @@ CQP {#cqp}:
   such as `"x"`, or a condition in brackets, such as `[lemma = "x"]`.
   Each value is a [regular expression](/glossary#regex) over an
   [attribute](/glossary#positional-attributes). In the query mode CQP,
-  the query goes to CQP as you typed it. In the simple mode, the
+  the query goes to CQP as you typed it, but for two names: a sentence
+  tag, `<s>`, and the unit of a `within` clause, `within s`, which each
+  corpus renames after its own attribute. In the simple mode, the
   interface writes the query for you. [The CQP
   manual](https://cwb.sourceforge.io/files/CQP_Manual/) has the full
   syntax.
