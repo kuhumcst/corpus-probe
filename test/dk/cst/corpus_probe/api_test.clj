@@ -581,13 +581,13 @@
 (deftest switched-frequency-test
   (when-cwb
    (testing "a form submitted from the frequency view with its mode changed
-             counts nothing, rather than every token of the corpora"
+             counts the query it carried, never every token of the corpora"
      (let [{:keys [result error tokens]}
            (api/search-view-data ctx {:query-params {:q      "hund"
                                                      :mode   "extended"
                                                      :view   "frequencies"
                                                      :corpus "PROBE"}})]
-       (is (nil? result))
+       (is (= 3 (get-in result [:counts 0 :size])))
        (is (nil? error))
        (is (= [{:id 1 :conditions [{:id 1 :v "hund"}]}
                {:id 2 :conditions [{:id 1}]}]
@@ -775,30 +775,6 @@
     (is (= {:mode "extended" :t1.v "a" :t2.op "any"}
            (api/search-params {:mode "extended" :t1.v "a" :t2.op "any"
                                :page "2"}))))
-  (testing "the form's tokens are those asked for, their conditions
-            likewise, and one blank, numbered afresh"
-    (is (= [{:id 1 :conditions [{:id 1 :v "a"} {:id 2 :v "c" :join "or"}]}
-            {:id 2 :max "2" :conditions [{:id 1 :op "any"}]}
-            {:id 3 :conditions [{:id 1}]}]
-           (api/token-fields {:mode "extended"
-                              :t1.v "a" :t1.2.attr "pos" :t1.2.join "and"
-                              :t1.3.v "c" :t1.3.join "or"
-                              :t2.ci "on" :t5.op "any" :t5.max "2"})))
-    (is (= [{:id 1 :conditions [{:id 1}]}] (api/token-fields {:q "x"})))
-    (testing "and the blank alone under any other mode, whose form has no
-              tokens, whatever the URL carries"
-      (is (= [{:id 1 :conditions [{:id 1}]}]
-             (api/token-fields {:t1.v "a" :mode "simple"}))))
-    (testing "seeded from the query a reader typed before switching mode,
-              read as the mode they typed it in"
-      (is (= [{:id 1 :conditions [{:id 1 :v "hund" :ci "on"}]}
-              {:id 2 :conditions [{:id 1}]}]
-             (api/token-fields {:q "hund" :ci "on" :mode "extended"})))
-      (is (= [{:id 1 :conditions [{:id 1 :v "hund"}
-                                  {:id 2 :v "kat" :join "or"}]}
-              {:id 2 :conditions [{:id 1}]}]
-             (api/token-fields {:q "hund\nkat" :mode "extended"
-                                :from "list"})))))
   (when-cwb
    (testing "an extended search runs, and the page knows its CQP, its
              tokens and the values its fields suggest"
@@ -829,6 +805,56 @@
      (is (= [:word]
             (sort (keys (api/value-lists! ctx ["PROBE" "TALER"]
                                           [:word :pos :lemma]))))))))
+
+(deftest switch-page-test
+  (when-cwb
+   (let [page (fn [params]
+                (api/search-view-data ctx {:query-params (assoc params
+                                                                :corpus "PROBE")}))]
+     (testing "a form submitted into the extended mode runs the words it
+               was typed as, as tokens, and cites them so"
+       (let [{:keys [result params tokens switch cited]}
+             (page {:q "hund" :in "lemma" :mode "extended" :from "simple"})]
+         (is (= 5 (:size result)))
+         (is (= "[lemma = \"hund\"]" (:cqp params)))
+         (is (= [{:id 1 :conditions [{:id 1 :attr "lemma" :v "hund"}]}
+                 {:id 2 :conditions [{:id 1}]}]
+                tokens))
+         (is (= {:loss [] :unread #{}} switch))
+         (is (= {:mode "extended" :t1.attr "lemma" :t1.v "hund"
+                 :corpus "PROBE"}
+                cited))
+         (testing "with the field it came from kept as memory, uncited"
+           (is (= "hund" (:q params))))))
+     (testing "a form submitted out of the extended mode with a part of the
+               query the field cannot hold runs nothing, holds the rest and
+               says what it dropped"
+       (let [{:keys [result error params switch tokens]}
+             (page {:t1.attr "lemma" :t1.v "hund" :t2.op "any" :t2.max "3"
+                    :mode "simple" :from "extended"})]
+         (is (nil? result))
+         (is (nil? error))
+         (is (= "hund" (:q params)))
+         (is (= "lemma" (:in params)))
+         (is (= [[:any-word 2] [:repeat 2]] (:loss switch)))
+         (is (= [{:id 1 :conditions [{:id 1}]}] tokens))
+         (testing "in the frequency view too"
+           (is (nil? (:result (page {:t1.attr "lemma" :t1.v "hund"
+                                     :t2.op "any" :mode "simple"
+                                     :from "extended"
+                                     :view "frequencies"})))))))
+     (testing "a form submitted out of the extended mode into CQP runs the
+               tokens' CQP, kept within their unit"
+       (let [{:keys [result params]}
+             (page {:t1.v "lille" :t2.v "hund" :mode "cqp" :from "extended"})]
+         (is (= "[word = \"lille\"] [word = \"hund\"] within s" (:q params)))
+         (is (= 1 (:size result)))))
+     (testing "CQP read as words runs the words and says so"
+       (let [{:keys [result params switch]}
+             (page {:q "[lemma = \"hund\"]" :mode "simple" :from "cqp"})]
+         (is (= 0 (:size result)))
+         (is (= "[lemma = \"hund\"]" (:q params)))
+         (is (= [[:reading]] (:loss switch))))))))
 
 (deftest export-hrefs-test
   (testing "the view of the search as a file, one URL per format"

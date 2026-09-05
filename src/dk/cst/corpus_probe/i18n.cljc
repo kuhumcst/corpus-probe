@@ -59,13 +59,31 @@
   [lang]
   {:lang lang :table (get tables lang {})})
 
+(defn fill
+  "`s` with each `{key}` in it replaced by the value under that key in
+  `values`: what a translated string takes after lookup, so that a
+  translator can put the value where their language wants it. A value
+  goes in as it is, so a number that wants its digits grouped is
+  formatted by the caller (see `group-digits`); a key the map lacks is
+  left as it stands, which is what a translation with a key of its own
+  shows.
+
+  (fill \"token {n}\" {:n 2})
+  ;; => \"token 2\""
+  [s values]
+  (str/replace s #"\{(\w+)\}"
+               (fn [[whole k]] (str (get values (keyword k) whole)))))
+
 (defn tr
-  "The translation of English UI string `s` under `ui`, or `s` itself.
+  "The translation of English UI string `s` under `ui`, or `s` itself,
+  its placeholders filled from `values` when given (see `fill`).
 
   (tr (->ui \"da\") \"Search\")
   ;; => \"Søgning\""
-  [ui s]
-  (get (:table ui) s s))
+  ([ui s]
+   (get (:table ui) s s))
+  ([ui s values]
+   (fill (get (:table ui) s s) values)))
 
 (defn trx
   "The translation of English UI string `s` in the disambiguating
@@ -91,11 +109,17 @@
   plural. A language that divides them otherwise needs its rule added,
   and a PO reader that keeps more than two forms.
 
+  The count may stand in the string itself, as `{n}`, filled from
+  `values` when given (see `fill`).
+
   (trn (->ui \"da\") \"region\" \"regions\" 2)
   ;; => \"regioner\""
-  [ui s1 s2 n]
-  (let [[one many] (get (:table ui) [s1 s2] [s1 s2])]
-    (if (= 1 n) one many)))
+  ([ui s1 s2 n]
+   (let [[one many] (get (:table ui) [s1 s2] [s1 s2])]
+     (if (= 1 n) one many)))
+  ([ui s1 s2 n values]
+   (let [[one many] (get (:table ui) [s1 s2] [s1 s2])]
+     (fill (if (= 1 n) one many) values))))
 
 (def number-formats
   "How each language writes a number: its thousands and decimal

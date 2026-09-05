@@ -539,3 +539,51 @@ msgstr "Ingen valgt"
 
 msgid "for"
 msgstr "af"
+
+msgid "condition {c} of token {n}"
+msgstr "betingelse {c} i token {n}"
+
+msgid "the repeat of token {n}"
+msgstr "gentagelsen af token {n}"
+
+msgid "the sentence edge of token {n}"
+msgstr "sætningsgrænsen for token {n}"
+
+msgid "token {n} (any word)"
+msgstr "token {n} (ethvert ord)"
+
+msgid "the options of token {n}"
+msgstr "indstillingerne for token {n}"
+
+msgid "the value of token {n}"
+msgstr "værdien for token {n}"
+
+msgid "List finds any one of the words, not the words in order."
+msgstr "Liste finder ét af ordene, ikke ordene i rækkefølge."
+
+msgid "Simple finds the words in order, not any one of them."
+msgstr "Simpel finder ordene i rækkefølge, ikke ét af dem."
+
+msgid "List reads the text as one word per line, not as CQP."
+msgstr "Liste læser teksten som ét ord pr. linje, ikke som CQP."
+
+msgid "Simple reads the text as words, not as CQP."
+msgstr "Simpel læser teksten som ord, ikke som CQP."
+
+msgid "Extended cannot read CQP. The query is not kept:"
+msgstr "Udvidet kan ikke læse CQP. Søgeudtrykket bevares ikke:"
+
+msgid "A list of {n} words is not kept in Extended."
+msgstr "En liste på {n} ord bevares ikke i Udvidet."
+
+msgid "Not kept in {form}: {parts}."
+msgstr "Ikke bevaret i {form}: {parts}."
+
+msgid "Not used in {form}: {params}."
+msgstr "Bruges ikke i {form}: {params}."
+
+msgid "the query"
+msgstr "søgeudtrykket"
+
+msgid "the tokens"
+msgstr "tokens"

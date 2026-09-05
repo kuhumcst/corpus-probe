@@ -609,3 +609,57 @@
   [query]
   (url/form-tokens (concat (url/token-rows (params "extended" query))
                            [{:conditions [{}]}])))
+
+(def reading-items
+  "The kinds of loss item (see `loss`) that change how a query is read
+  rather than take a part of it away: a form holding one runs the query
+  as it reads it, and says so."
+  #{:order :any :reading})
+
+(defn arrived
+  "What the search `params` of a submitted form ask, once a change of its
+  mode radio is allowed for: the `:form` shown, which is the ticked mode
+  (see dk.cst.corpus-probe.url/mode), the query `:held` by that form
+  (see `project`), the `:query` that runs, what the form could not keep
+  as `:loss` items (see `loss`) and, for a hand-written URL, the
+  `:unread` keys it carried (see dk.cst.corpus-probe.url/unread).
+
+  A form whose mode radio was changed submits the old mode's field under
+  the new mode's name, and names the old mode in `from`. The ticked mode
+  reads the query field, since text typed after ticking is in that mode.
+  Across the field and the tokens, the shape decides: a q under the
+  extended mode, which reads none, is read as `from` says it was typed,
+  words in order without one, and seeds the tokens; tokens under a mode
+  that reads none are projected into its field. Between the modes that
+  share the field a change is one of reading alone, which `from` says
+  so that the reader can be told.
+
+  A form holds what it holds and runs it, unless part of the query was
+  lost: then nothing runs, the form shows what it kept and the line says
+  the rest, so that the reader is told before the loss. What arrived
+  with a switch is the switch's own business, so only a URL that names
+  no switch has unread params to report."
+  [{:keys [q from] :as params}]
+  (let [form   (url/mode params)
+        own    (of params)
+        from   (when (and (contains? url/fields from) (not= from form))
+                 from)
+        blank? (nil? own)
+        switch (cond
+                 (and blank? (= "extended" form) (url/present q))    :in
+                 (and blank? (not= "extended" form)
+                      (url/unread-query? params))                    :out
+                 (and own from (not= "extended" from))               :reading)
+        other  (case switch
+                 :in      (of (assoc params :mode (or from "simple")))
+                 :out     (of (assoc params :mode "extended"))
+                 :reading (of (assoc params :mode from))
+                 nil)
+        loss   (if other (loss form other) [])
+        held   (if (contains? #{:in :out} switch) (project form other) own)
+        lost?  (some (complement (comp reading-items first)) loss)]
+    {:form   form
+     :held   held
+     :query  (when-not lost? held)
+     :loss   loss
+     :unread (if switch #{} (url/unread params))}))

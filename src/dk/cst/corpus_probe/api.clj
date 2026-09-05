@@ -486,29 +486,12 @@
   (into {} (for [format (keys export/formats)]
              [(keyword format) (url/export-href view format params)])))
 
-(defn token-fields
-  "The tokens of the extended-search form for `params`: the query they
-  carry (see dk.cst.corpus-probe.query/of) as that form holds it (see
-  dk.cst.corpus-probe.query/project), then one blank token, numbered as
-  the form wants them (see dk.cst.corpus-probe.query/form-rows); the
-  blank one alone for any other form.
-
-  A form asked for in the extended mode with no token but a query is
-  seeded from that query, read as the mode `from` says it was typed,
-  which the form names in a hidden field (see
-  dk.cst.corpus-probe.views.page/search-form), words in order without
-  one, so a reader switching mode without the client finds what they
-  typed; the search itself waits for them to send it. CQP is not read,
-  so a switch from it finds the blank token.
-
-  TODO: the links of such a page cite no query, the URL rule dropping
-  what the mode does not read; a switch page will cite the search it was
-  seeded from once the switch is one function on both sides."
-  [{:keys [mode from] :as params}]
-  (let [query (when (= "extended" mode)
-                (or (query/of params)
-                    (query/of (assoc params :mode (or from "simple")))))]
-    (query/form-rows (query/project "extended" query))))
+(defn read-keys
+  "The query params among `params` that the form of `mode` reads (see
+  dk.cst.corpus-probe.url/reads?), as keys."
+  [mode params]
+  (filter #(and (url/query-key? %) (not= :mode %) (url/reads? mode %))
+          (keys params)))
 
 (defn value-lists!
   "The values of each positional attribute among `attrs` (keywords) that
@@ -742,9 +725,10 @@
   "What `request` asks of `ctx`: its scalar query params, the registry's
   corpora, the corpus names `named` in the params, the names `selected`
   to search, those split into the `known` and the `unknown` (see
-  `split-known`), the `query` the params carry (see
-  dk.cst.corpus-probe.query/of), the CQP it compiles to (see
-  dk.cst.corpus-probe.query/->cqp) and the `opts` every search of it
+  `split-known`), what `arrived` with the form, a change of its mode
+  allowed for (see dk.cst.corpus-probe.query/arrived), the `query` that
+  runs, the CQP it compiles to (see dk.cst.corpus-probe.query/->cqp) and
+  the `opts` every search of it
   takes: its metadata :filter (see `filter-params`) and the :patterns
   beside it (see `pattern-params`), the unit of text it is kept :within
   (see dk.cst.corpus-probe.query/within), the :subset of its hits kept
@@ -755,11 +739,13 @@
   Every handler that answers a search starts from this."
   [ctx request]
   (let [params   (scalar-params (:query-params request))
-        query    (query/of params)
+        arrived  (query/arrived params)
+        query    (:query arrived)
         corpora  (corpus/corpora ctx)
         selected (selected-corpora ctx corpora params)
         [known unknown] (split-known corpora selected)]
     {:params   params
+     :arrived  arrived
      :query    query
      :corpora  corpora
      :named    (url/corpora-param (:corpus params))
@@ -890,21 +876,29 @@
 
   Links are built from `:cited`, the params as the URL cites them (see
   dk.cst.corpus-probe.url/canonical); `:params`, which fills the form,
-  names every corpus searched, or only what the URL named when nothing
-  was searched: a reader arriving at the form starts with no corpus
-  selected, while a URL naming no corpus still searches every readable
-  one and shows them all. It also carries `:cqp`, the CQP the params
-  compiled to, which the heading and the title of an extended search
-  show; no URL carries it, the URL rule not knowing it. The tokens of an
-  extended search's form are `:tokens` (see `token-fields`) and the
-  values its fields suggest `:value-lists` (see `value-lists!`).
+  holds the query the form holds in the form's own spelling (see
+  dk.cst.corpus-probe.query/arrived and /params), over what arrived, so
+  that a control the form's mode does not read keeps what it carried, as
+  memory. It names every corpus searched, or only what the URL named
+  when nothing was searched: a reader arriving at the form starts with
+  no corpus selected, while a URL naming no corpus still searches every
+  readable one and shows them all. It also carries `:cqp`, the CQP the
+  query compiled to, which the heading and the title of an extended
+  search show; no URL carries it, the URL rule not knowing it. The
+  tokens of the extended form are `:tokens` (see
+  dk.cst.corpus-probe.query/form-rows), the values its fields suggest
+  `:value-lists` (see `value-lists!`), and what a change of mode could
+  not keep is `:switch`, its `:loss` and the `:unread` params, for the
+  form's status line (see dk.cst.corpus-probe.views.page/switch-notice).
 
   The same map is embedded as transit for the client to take over from,
   so it holds corpus overviews only: the full registry maps carry
   absolute server paths and stay here."
   [ctx request]
-  (let [{:keys [params corpora named selected known unknown cqp opts]}
+  (let [{:keys [params arrived corpora named selected known unknown cqp
+                opts]}
         (search-request ctx request)
+        {:keys [form held loss unread]} arrived
         lang    (request-language request)
         view    (view-param (:view params))
         attr    (attr-param (:attr params))
@@ -915,8 +909,8 @@
         outcome (cond
                   ;; a blank query counts every token of the corpora, but
                   ;; not one blank only because the mode was changed under
-                  ;; a query the new mode does not read: that request seeds
-                  ;; the form (see `token-fields`) and searches nothing
+                  ;; a query the new mode could not keep whole: that request
+                  ;; shows the form and searches nothing (see `arrived`)
                   (and freq? (or cqp (and (not (url/unread-query? params))
                                           (or (seq known) (seq unknown)))))
                   (-> (frequency-outcome! ctx known unknown cqp attr
@@ -943,13 +937,15 @@
                                           ;; (see `counts-page`)
                                           :incremental? (wants-transit?
                                                          request))))
-        ;; the form's marker of the mode it was rendered in (see
-        ;; `token-fields`) is no param of the search
-        params* (assoc (dissoc params :from)
-                       :corpus (if outcome selected named)
-                       :attr   attr
-                       :at     at
-                       :cqp    cqp)
+        ;; the form's marker of the mode it was rendered in is no param of
+        ;; the search; what its mode reads is the query it holds
+        params* (-> (apply dissoc params :from (read-keys form params))
+                    (merge (query/params form held))
+                    (assoc :mode   form
+                           :corpus (if outcome selected named)
+                           :attr   attr
+                           :at     at
+                           :cqp    cqp))
         cited   (url/canonical params* (set (readable-corpora ctx corpora)))
         attrs   (attr-options! ctx known)
         ;; what a simple search may match, and a concordance sort by: the
@@ -961,7 +957,8 @@
       :folders         (corpus-tree! ctx corpora)
       :filter-controls (filter-controls! ctx known params)
       :search-attrs    p-attrs
-      :tokens          (token-fields params)
+      :tokens          (query/form-rows (when (= "extended" form) held))
+      :switch          {:loss loss :unread unread}
       :value-lists     (value-lists! ctx known p-attrs)
       :params          params*
       :cited           cited

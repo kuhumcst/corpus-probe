@@ -16,6 +16,24 @@
       (is (= "[word = \"<s>\"] </sentence>"
              (commands/sentence-tags "[word = \"<s>\"] </s>" :sentence))))))
 
+(deftest within-clause-test
+  (testing "a within clause naming a unit by CWB's usual name takes the
+            corpus's own, and goes where the corpus marks no such unit"
+    (is (= "[] [] within sentence"
+           (commands/within-clause "[] [] within s" {:sentence :sentence})))
+    (is (= "[] [] within s"
+           (commands/within-clause "[] [] within s;" {:sentence :s})))
+    (is (= "[] [] within text"
+           (commands/within-clause "[] [] within text" {:text :text})))
+    (is (= "[] []" (commands/within-clause "[] [] within p" {:sentence :s}))))
+  (testing "a query without one, or one naming an attribute outright, is
+            left as it is"
+    (is (= "[] []" (commands/within-clause "[] []" {:sentence :sentence})))
+    (is (= "[] [] within sentence"
+           (commands/within-clause "[] [] within sentence" {})))
+    (is (= "[word = \"within s\"]"
+           (commands/within-clause "[word = \"within s\"]" {})))))
+
 (deftest within-query-test
   (is (= "[] [] within s" (commands/within-query "[] []" :s)))
   (testing "no attribute, no clause: the query is left as it was"

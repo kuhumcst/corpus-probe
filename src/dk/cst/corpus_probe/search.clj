@@ -112,14 +112,21 @@
     (unit-attr (corpus/attributes! ctx corpus) unit)))
 
 (defn corpus-query!
-  "CQP `query` as `corpus` via `ctx` runs it: kept within `unit` (see
-  `within-attr!`; nil for no unit), and its sentence tags named after
-  the corpus's own sentence attribute (see
-  dk.cst.corpus-probe.commands/sentence-tags)."
+  "CQP `query` as `corpus` via `ctx` runs it: its sentence tags named
+  after the corpus's own sentence attribute (see
+  dk.cst.corpus-probe.commands/sentence-tags), a within clause of its
+  own likewise, or dropped where the corpus marks no such unit (see
+  dk.cst.corpus-probe.commands/within-clause), and kept within `unit`
+  (see `within-attr!`; nil for no unit)."
   [ctx corpus query unit]
-  (-> query
-      (commands/sentence-tags (within-attr! ctx corpus :sentence))
-      (commands/within-query (within-attr! ctx corpus unit))))
+  (let [attributes (corpus/attributes! ctx corpus)
+        attr       #(unit-attr attributes %)]
+    (-> query
+        (commands/sentence-tags (attr :sentence))
+        (commands/within-clause (into {}
+                                      (map (juxt identity attr))
+                                      (keys units)))
+        (commands/within-query (attr unit)))))
 
 (defn countable-attr?
   "True when attribute description `m` is one whose values a result can

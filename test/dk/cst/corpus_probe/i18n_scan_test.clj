@@ -22,6 +22,10 @@
       (is (= "button|a" (extract '(i18n/trx ui "button" "a")))))
     (testing "a plural pair becomes one entry"
       (is (= ["a" "as"] (extract '(i18n/trn ui "a" "as" n)))))
+    (testing "a string with placeholders filled from a map is the string"
+      (is (= "token {n}" (extract '(i18n/tr ui "token {n}" {:n 2}))))
+      (is (= ["{n} word" "{n} words"]
+             (extract '(i18n/trn ui "{n} word" "{n} words" n {:n n})))))
     (testing "a string unrelated to a lookup does not extract"
       (is (nil? (extract '(str "a" "b")))))))
 
@@ -37,3 +41,20 @@
           "these strings the source shows have no translation")
       (is (empty? (remove @extracted (keys table)))
           "these translations are stale: nothing in the source shows them"))))
+
+(defn placeholders
+  "The placeholder keys of UI string `s` (see dk.cst.corpus-probe.i18n/fill)."
+  [s]
+  (set (map second (re-seq #"\{(\w+)\}" (str s)))))
+
+(deftest placeholders-kept-test
+  (doseq [[lang table] i18n/tables
+          [msgid msgstr] table]
+    (testing (str "the " lang " translation of " (pr-str msgid))
+      ;; a plural entry is a pair of forms, each against its own
+      (doseq [[id str] (if (vector? msgid)
+                         (map vector msgid msgstr)
+                         [[msgid msgstr]])]
+        (is (= (placeholders id) (placeholders str))
+            "the translation must keep the placeholders of its msgid")))))
+

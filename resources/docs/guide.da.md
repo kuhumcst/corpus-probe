@@ -17,6 +17,12 @@ forekomme. Et token kan være det første ord i en sætning eller det
 sidste. En søgning med flere tokens holder sig inden for én sætning, ét
 afsnit eller én tekst. Udfyld den tomme række for at tilføje et token.
 
+For at skifte søgetype skal du vælge en anden søgetype og søge igen.
+Formularen beholder så meget af søgeudtrykket, som den nye søgetype kan
+rumme. En linje under søgetyperne siger, hvad den ikke kunne beholde.
+Hvis en del af søgeudtrykket gik tabt, kører søgningen ikke, før du
+søger igen.
+
 Eksemplerne nedenfor er [CQP](/glossary#cqp)-forespørgsler. Vælg CQP
 som søgetype for at bruge dem. Erstat x og y med dine egne ord.
 

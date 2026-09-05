@@ -791,7 +791,7 @@
   fields draw on (see `value-list-id`). One blank token when there are
   none, since the client may have just switched to the mode; otherwise
   the tokens are the search's own plus the blank one the server ends
-  them in (see dk.cst.corpus-probe.api/token-fields), so a reader
+  them in (see dk.cst.corpus-probe.query/form-rows), so a reader
   without the client adds a token by filling it and searching again.
 
   When `required?`, every token must be filled but that blank last one,
@@ -924,14 +924,90 @@
 
 (defn mode-label
   "What the query `mode` (see dk.cst.corpus-probe.url/modes) is called,
-  in `ui`. CQP is an abbreviation and no link: the click on a label
-  belongs to its radio, and the glossary is in the masthead."
+  in `ui`, as a word."
   [ui mode]
   (case mode
     "list"     (i18n/tr ui "List")
     "extended" (i18n/tr ui "Extended")
-    "cqp"      (layout/term ui :cqp false)
+    "cqp"      "CQP"
     (i18n/tr ui "Simple")))
+
+(defn loss-phrase
+  "The part of a token a change of mode could not keep, `item` (see
+  dk.cst.corpus-probe.query/token-loss), as a phrase in `ui` for the
+  sentence that lists them (see `switch-notice`)."
+  [ui [kind n c]]
+  (case kind
+    :condition (i18n/tr ui "condition {c} of token {n}" {:c c :n n})
+    :repeat    (i18n/tr ui "the repeat of token {n}" {:n n})
+    :edge      (i18n/tr ui "the sentence edge of token {n}" {:n n})
+    :any-word  (i18n/tr ui "token {n} (any word)" {:n n})
+    :options   (i18n/tr ui "the options of token {n}" {:n n})
+    :value     (i18n/tr ui "the value of token {n}" {:n n})))
+
+(defn loss-sentence
+  "What a change of mode to `form` did to the query as a whole, `item`
+  (see dk.cst.corpus-probe.query/loss), as a sentence in `ui`: how the
+  form reads it instead, or that it does not."
+  [ui form [kind x]]
+  (case kind
+    :order   (i18n/tr ui (str "List finds any one of the words, "
+                              "not the words in order."))
+    :any     (i18n/tr ui (str "Simple finds the words in order, "
+                              "not any one of them."))
+    :reading (if (= "list" form)
+               (i18n/tr ui (str "List reads the text as one word per line, "
+                                "not as CQP."))
+               (i18n/tr ui "Simple reads the text as words, not as CQP."))
+    :cqp     (list (i18n/tr ui (str "Extended cannot read CQP. "
+                                    "The query is not kept:"))
+                   " " [:code x])
+    :list    (let [n (i18n/group-digits ui x)]
+               (i18n/tr ui "A list of {n} words is not kept in Extended."
+                        {:n n}))))
+
+(defn param-label
+  "What the query param `k` a URL carried is called in `ui`, for the
+  sentence naming the ones the mode did not read (see `switch-notice`):
+  the query, the tokens, or the option's own label; nil for a key with
+  no name."
+  [ui k]
+  (cond
+    (= :q k)           (i18n/tr ui "the query")
+    (url/token-key? k) (i18n/tr ui "the tokens")
+    (= :in k)          (i18n/tr ui "attribute")
+    (= :match k)       (i18n/tr ui "match")
+    (= :ci k)          (i18n/tr ui "ignore case")
+    (= :within k)      (i18n/tr ui "within")))
+
+(defn switch-notice
+  "What a change of the query mode to `form` could not keep, in `ui`,
+  for the form's status line: the `loss` items (see
+  dk.cst.corpus-probe.query/loss) as sentences, those about the parts of
+  a token gathered into one naming the form, and the `unread` params a
+  hand-written URL carried as one naming the form too, in the URL's own
+  order. Nil when there is nothing to say, which is the line's empty
+  state."
+  [ui form loss unread]
+  (let [part?     (comp #{:condition :repeat :edge :any-word :options :value}
+                        first)
+        parts     (filter part? loss)
+        sentences (concat
+                   (map #(loss-sentence ui form %) (remove part? loss))
+                   (when (seq parts)
+                     [(i18n/tr ui "Not kept in {form}: {parts}."
+                               {:form  (mode-label ui form)
+                                :parts (str/join ", " (map #(loss-phrase ui %)
+                                                           parts))})])
+                   (when (seq unread)
+                     [(i18n/tr ui "Not used in {form}: {params}."
+                               {:form   (mode-label ui form)
+                                :params (->> (sort-by url/rank unread)
+                                             (keep #(param-label ui %))
+                                             (distinct)
+                                             (str/join ", "))})]))]
+    (when (seq sentences)
+      [:p (interpose " " sentences)])))
 
 (defn search-form
   "The search form of `state`: over its `:folders` tree of corpus
@@ -945,7 +1021,8 @@
   extended search (see `token-fieldset`, over the `:tokens` and
   `:value-lists` of `state`), then everything that decides how it is
   read, in one group: the mode, a status line for what a change of mode
-  could not keep, under it the options that only a simple query or a
+  could not keep (its `:switch`, see `switch-notice`), under it the
+  options that only a simple query or a
   list has, what it matches on one row and how loosely on the next, and
   the unit of text a search of several tokens is kept within (see
   `within-control`). Then the scope of the search, the corpus chooser
@@ -985,7 +1062,7 @@
   page was served for, decides which folders of the chooser start open
   while `:params` follows what the reader is choosing now."
   [{:keys [ui view folders filter-controls search-attrs params tokens
-           value-lists client? pending? served-corpus served-filter
+           value-lists switch client? pending? served-corpus served-filter
            corpus-filter value-filter chooser-open? filters-open?
            filters-pending?]
     :as state}
@@ -1037,11 +1114,17 @@
                      [:label [:input {:type    "radio" :name "mode" :value m
                                       :checked (= m mode)
                                       :on      {:change [:set-mode m]}}]
-                      (mode-label ui m)]))]
-       ;; what a change of mode could not keep, once a switch reports it:
+                      ;; CQP as an abbreviation and no link: the click on
+                      ;; a label belongs to its radio, and the glossary is
+                      ;; in the masthead
+                      (if (= "cqp" m)
+                        (layout/term ui :cqp false)
+                        (mode-label ui m))]))]
+       ;; what a change of mode could not keep (see `switch-notice`):
        ;; rendered always, so that the live region exists before it fills,
        ;; and above everything a switch changes
-       [:div.status {:role "status"}]
+       [:div.status {:role "status"}
+        (switch-notice ui mode (:loss switch) (:unread switch))]
        ;; two rows: what a simple search matches, then how loosely. One
        ;; row of four ran the attribute into the options it governs
        [:div {:role "group" :aria-label (i18n/tr ui "Simple-search options")}
@@ -1062,7 +1145,7 @@
       [:input {:type "hidden" :name "scope" :value "chosen"}]
       ;; names the mode this form was rendered in, so that a submit whose
       ;; radio was changed can read the query field as it was typed (see
-      ;; dk.cst.corpus-probe.api/token-fields); no URL cites it
+      ;; dk.cst.corpus-probe.query/arrived); no URL cites it
       [:input {:type "hidden" :name "from" :value (url/mode params)}]
       (corpus-views/chooser ui folders
                             {:selected (set corpus)

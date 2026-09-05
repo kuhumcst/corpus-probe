@@ -92,6 +92,21 @@ removes one, and the form shows no empty row of its own. Every row a
 reader is asked to fill is required, and the browser reports an empty
 one before the search is sent, as it reports an empty query.
 
+### Changing the query mode
+
+A form whose mode radio is changed submits the old mode's field under
+the new mode, and names the old mode in a hidden field. The server
+reads the query as one value (`dk.cst.corpus-probe.query`), holds it in
+the new form as far as that form can, and runs it when the form holds
+it whole or reads it in another way. When a part of the query cannot be
+held, nothing runs: the form shows what it kept, and a status line under
+the modes says what it dropped, so the reader is told before the loss.
+The same line names the params of a hand-written URL that the mode does
+not read. A query kept within a unit of text carries the unit into CQP
+as `within s`, `within p` or `within text`, and each corpus renames the
+unit after its own attribute, or drops the clause where it marks no
+such unit, as it renames the sentence tags.
+
 ### Documents
 
 The frontpage, the guide and the glossary are Markdown. There is one

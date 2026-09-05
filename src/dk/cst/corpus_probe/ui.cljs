@@ -465,7 +465,7 @@
 
 (defn own-rows
   "The tokens of an extended search as this client shows them: the served
-  `tokens` (see dk.cst.corpus-probe.api/token-fields) less the blank
+  `tokens` (see dk.cst.corpus-probe.query/form-rows) less the blank
   last one the server ends them in for a reader without a client, who
   has no button to add one. Kept when it is the only one."
   [tokens]
@@ -593,7 +593,13 @@
           from (url/mode (:params @state))]
       (swap! state (fn [s]
                      (let [q (:q live)
-                           s (cond-> (assoc-in s [:params :mode] arg)
+                           ;; a line a served switch page came with is about
+                           ;; that switch, not this one
+                           ;; TODO: say what this switch could not keep, as
+                           ;; the server does (see
+                           ;; dk.cst.corpus-probe.query/arrived)
+                           s (cond-> (-> (assoc-in s [:params :mode] arg)
+                                         (dissoc :switch))
                                q (assoc-in [:params :q] (carried-query arg q)))]
                        ;; entering the mode with nothing asked yet leaves
                        ;; tokens the handlers below can edit: the query as
@@ -696,7 +702,7 @@
   []
   ;; a switch URL, carrying the query of the mode the form was in, is
   ;; left as it is: the rule would drop that query, and a reload would
-  ;; then find an empty form (see dk.cst.corpus-probe.api/token-fields)
+  ;; then find an empty form (see dk.cst.corpus-probe.query/arrived)
   (when (and (= url/search js/location.pathname)
              (not (url/unread-query? (location-params))))
     (let [url    (current-url)

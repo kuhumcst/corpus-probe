@@ -116,6 +116,27 @@
         (str/replace #"(?<=\s)</s>(?=\s|$)" (str "</" (name attr) ">")))
     query))
 
+(defn within-clause
+  "`query` with a `within` clause at its end naming a unit of text by
+  CWB's usual name for it (see dk.cst.corpus-probe.query/unit-names)
+  renamed after the s-attribute `attrs` gives that unit (unit to
+  attribute), or dropped where it gives none, so that a query kept
+  within a unit runs in each corpus as far as the corpus marks it, as
+  `sentence-tags` does for the tags: the CQP a switch to that mode holds
+  (see dk.cst.corpus-probe.query/project), and a reader's own that says
+  the same. `query` itself without such a clause.
+
+  (within-clause \"[] [] within s\" {:sentence :sentence})
+  ;; => [] [] within sentence"
+  [query attrs]
+  (let [units (zipmap (vals query/unit-names) (keys query/unit-names))]
+    (if-let [[_ head unit] (re-matches #"(?s)(.*\S)\s+within\s+(s|p|text)\s*;?"
+                                       query)]
+      (if-let [attr (get attrs (get units unit))]
+        (str head " within " (name attr))
+        head)
+      query)))
+
 (defn within-query
   "`query` with its matches kept within one region of s-attribute `attr`,
   or `query` itself when `attr` is nil.

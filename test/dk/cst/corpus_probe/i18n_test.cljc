@@ -20,6 +20,20 @@
   (testing "so does a language we have no table for"
     (is (= "Search" (i18n/tr (i18n/->ui "de") "Search")))))
 
+(deftest fill-test
+  (testing "a placeholder takes the value under its key, wherever it stands"
+    (is (= "token 2, condition 1"
+           (i18n/fill "token {n}, condition {c}" {:n 2 :c 1})))
+    (is (= "Betingelse 1 i token 2"
+           (i18n/fill "Betingelse {c} i token {n}" {:n 2 :c 1}))))
+  (testing "a key the map lacks stands as it is, and a value goes in as
+            it is"
+    (is (= "token {n}" (i18n/fill "token {n}" {})))
+    (is (= "1.200 words" (i18n/fill "{n} words" {:n "1.200"}))))
+  (testing "filled after the lookup, so the translation places the value"
+    (is (= "token 2" (i18n/tr en "token {n}" {:n 2})))
+    (is (= "2 regions" (i18n/trn en "{n} region" "{n} regions" 2 {:n 2})))))
+
 (deftest trx-test
   (testing "one English word several languages split takes a context"
     (is (= "Søg" (i18n/trx da "button" "Search")))

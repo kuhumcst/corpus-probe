@@ -134,7 +134,7 @@
     (testing "one status region in the form, for what a change of mode
               could not keep, empty until then; the navigation's only with
               a client to put anything in it"
-      (is (= [[:div.status {:role "status"}]]
+      (is (= [[:div.status {:role "status"} nil]]
              (filter #(and (vector? %) (= :div.status (first %)))
                      (deep html)))))
     (testing "with one, the navigation's follows the form, inside the same
@@ -302,6 +302,59 @@
         (is (some #{"ethvert ord"} da))
         (is (some #{"eller"} da))
         (is (some #{"sætningsbegyndelse"} da))))))
+
+(deftest switch-notice-test
+  (testing "nothing to say is nothing, the line's empty state"
+    (is (nil? (page/switch-notice en "simple" [] #{}))))
+  (testing "a change of reading is one sentence"
+    (is (= "List finds any one of the words, not the words in order."
+           (text (page/switch-notice en "list" [[:order]] #{}))))
+    (is (= "Simpel læser teksten som ord, ikke som CQP."
+           (text (page/switch-notice da "simple" [[:reading]] #{})))))
+  (testing "the parts of tokens are gathered into one sentence naming the
+            form, each placed as the language places it"
+    (is (= (str "Not kept in Simple: condition 2 of token 1, the repeat of "
+                "token 2, token 3 (any word).")
+           (text (page/switch-notice en "simple"
+                                     [[:condition 1 2] [:repeat 2]
+                                      [:any-word 3]]
+                                     #{}))))
+    (is (= (str "Ikke bevaret i Simpel: betingelse 2 i token 1, "
+                "gentagelsen af token 2, token 3 (ethvert ord).")
+           (text (page/switch-notice da "simple"
+                                     [[:condition 1 2] [:repeat 2]
+                                      [:any-word 3]]
+                                     #{})))))
+  (testing "after what the whole query lost"
+    (is (= (str "List finds any one of the words, not the words in order. "
+                "Not kept in List: the repeat of token 2.")
+           (text (page/switch-notice en "list" [[:order] [:repeat 2]] #{})))))
+  (testing "CQP the extended form cannot read is quoted as code"
+    (let [notice (page/switch-notice en "extended" [[:cqp "[] []"]] #{})]
+      (is (= "Extended cannot read CQP. The query is not kept: [] []"
+             (text notice)))
+      (is (some #{[:code "[] []"]} (deep notice)))))
+  (testing "a list past the cap, its length written as the language does"
+    (is (= "A list of 1,200 words is not kept in Extended."
+           (text (page/switch-notice en "extended" [[:list 1200]] #{})))))
+  (testing "the params of a hand-written URL the mode did not read, each
+            named once, in the URL's order"
+    (is (= "Not used in CQP: the tokens, attribute, ignore case."
+           (text (page/switch-notice en "cqp" []
+                                     #{:in :ci :t1.v :t2.op})))))
+  (testing "in the form's status line, which is empty otherwise"
+    (let [status (fn [state]
+                   (some #(when (and (vector? %) (= :div.status (first %)))
+                            %)
+                         (deep (page/search-form state "/" nil))))]
+      (is (= [:div.status {:role "status"} nil]
+             (status {:ui en :folders [] :params {}})))
+      (is (= "Simple finds the words in order, not any one of them."
+             (text (drop 2 (status {:ui     en
+                                    :folders []
+                                    :params  {:q "hund kat"}
+                                    :switch  {:loss   [[:any]]
+                                              :unread #{}}}))))))))
 
 (deftest guide-test
   (let [blocks [[:h1 {:id "query-help"} "Query help"]

@@ -52,6 +52,16 @@
                                                          :match "prefix"
                                                          :ci    "on"}))))))))
 
+(deftest corpus-query-test
+  (when-cwb
+   (testing "a query's own within clause is named for the corpus, or dropped
+             where the corpus marks no such unit, as the tags are"
+     (is (= "<s> [] </s> within s"
+            (search/corpus-query! ctx "PROBE" "<s> [] </s> within s" nil)))
+     (is (= "[] []" (search/corpus-query! ctx "PROBE" "[] [] within p" nil)))
+     (is (= "[] [] within text"
+            (search/corpus-query! ctx "PROBE" "[] []" :text))))))
+
 (deftest unit-attr-test
   (let [attrs (fn [& names]
                 (mapv (fn [n] {:type :structural :name n}) names))]

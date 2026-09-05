@@ -16,6 +16,11 @@ sentence or the last. A search of several tokens stays within one
 sentence, one paragraph or one text. To add a token, fill in the empty
 row.
 
+To change the query mode, select another mode and search again. The
+form keeps as much of the query as the new mode can hold. A line under
+the modes says what it could not keep. If a part of the query was lost,
+the search does not run until you search again.
+
 The examples below are [CQP](/glossary#cqp) queries. To use one, select
 CQP as the query mode. Replace x and y with your own words.
 

@@ -419,3 +419,80 @@
                                        :ci "on"})))))
   (testing "the blank alone for no query"
     (is (= [{:id 1 :conditions [{:id 1}]}] (query/form-rows nil)))))
+
+(deftest arrived-test
+  (let [arrived (fn [params]
+                  (select-keys (query/arrived params) [:form :loss :unread]))
+        runs?   (fn [params] (some? (:query (query/arrived params))))
+        held-as (fn [params]
+                  (let [{:keys [form held]} (query/arrived params)]
+                    (query/params form held)))]
+    (testing "no switch: the form holds what its mode reads and runs it,
+              naming what a hand-written URL carried that it does not read"
+      (is (= {:form "simple" :loss [] :unread #{}} (arrived {:q "hund"})))
+      (is (runs? {:q "hund"}))
+      (is (= {:form "cqp" :loss [] :unread #{:in :ci}}
+             (arrived {:q "[]" :mode "cqp" :in "lemma" :ci "on"})))
+      (is (= {:form "simple" :loss [] :unread #{:t1.v}}
+             (arrived {:q "hund" :t1.v "kat"})))
+      (testing "and nothing when the field is blank"
+        (is (= {:form "simple" :loss [] :unread #{}}
+               (arrived {:q "" :from "simple"})))
+        (is (not (runs? {:q "" :from "simple"})))))
+    (testing "into the tokens: the field read as the mode it was typed in
+              seeds them and runs as them, unless it was CQP"
+      (is (= {:mode "extended" :t1.attr "lemma" :t1.v "lille"
+              :t2.attr "lemma" :t2.v "hund"}
+             (held-as {:q "lille hund" :in "lemma" :mode "extended"
+                       :from "simple"})))
+      (is (runs? {:q "lille hund" :in "lemma" :mode "extended"
+                  :from "simple"}))
+      (is (= {:mode "extended" :t1.v "hund" :t1.2.v "kat" :t1.2.join "or"}
+             (held-as {:q "hund\nkat" :mode "extended" :from "list"})))
+      (is (= {:mode "extended" :t1.v "hund" :t2.v "kat"}
+             (held-as {:q "hund kat" :mode "extended"})))
+      (let [params {:q "[lemma = \"x\"]" :mode "extended" :from "cqp"}]
+        (is (= {:form "extended" :loss [[:cqp "[lemma = \"x\"]"]] :unread #{}}
+               (arrived params)))
+        (is (nil? (:held (query/arrived params))))
+        (is (not (runs? params)))))
+    (testing "out of the tokens: projected into the field, run when the
+              field holds them whole, held back when part of them was lost"
+      (let [tokens {:t1.attr "lemma" :t1.v "hund" :t2.op "any" :t2.max "3"
+                    :from "extended"}]
+        (is (= {:q "hund" :in "lemma"} (held-as (assoc tokens :mode "simple"))))
+        (is (= [[:any-word 2] [:repeat 2]]
+               (:loss (query/arrived (assoc tokens :mode "simple")))))
+        (is (not (runs? (assoc tokens :mode "simple"))))
+        (is (= {:mode "cqp" :q "[lemma = \"hund\"] []{1,3} within s"}
+               (held-as (assoc tokens :mode "cqp"))))
+        (is (runs? (assoc tokens :mode "cqp"))))
+      (is (runs? {:t1.v "hund" :from "extended" :mode "simple"}))
+      (is (= {:q "hund"} (held-as {:t1.v "hund" :from "extended"
+                                   :mode "simple"}))))
+    (testing "between the modes that share the field: the ticked one reads
+              it and runs, and the change of reading is said"
+      (is (= [[:order]]
+             (:loss (query/arrived {:q "lille hund" :mode "list"
+                                    :from "simple"}))))
+      (is (= {:q "lille\nhund" :mode "list"}
+             (held-as {:q "lille hund" :mode "list" :from "simple"})))
+      (is (runs? {:q "lille hund" :mode "list" :from "simple"}))
+      (is (= [[:any]]
+             (:loss (query/arrived {:q "hund\nkat" :mode "simple"
+                                    :from "list"}))))
+      (is (= {:q "hund kat"}
+             (held-as {:q "hund\nkat" :mode "simple" :from "list"})))
+      (is (= [[:reading]]
+             (:loss (query/arrived {:q "[] []" :mode "simple" :from "cqp"}))))
+      (is (runs? {:q "[] []" :mode "simple" :from "cqp"}))
+      (testing "and CQP reads the text as typed, whatever it was"
+        (let [params {:q "hund" :mode "cqp" :from "simple" :in "lemma"}]
+          (is (= {:form "cqp" :loss [] :unread #{}} (arrived params)))
+          (is (= {:mode "cqp" :q "hund"} (held-as params))))))
+    (testing "a from naming the mode ticked, or none the app knows, is no
+              switch"
+      (is (= {:form "simple" :loss [] :unread #{:t1.v}}
+             (arrived {:q "hund" :t1.v "kat" :from "simple"})))
+      (is (= {:form "simple" :loss [] :unread #{}}
+             (arrived {:q "hund" :from "nonesuch"}))))))
