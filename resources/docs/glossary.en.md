@@ -7,6 +7,8 @@ Alignment attributes {#alignment-attributes}:
   Links between the [regions](/glossary#region) of two corpora. The two
   corpora are translations of each other. A corpus page lists the
   alignment attributes of a corpus, if the corpus has any.
+  [Section 5 of the CQP manual](https://cwb.sourceforge.io/files/CQP_Manual/5.html)
+  describes queries over aligned corpora.
 
 Concordance {#concordance}:
   A list of all occurrences of the search term. Each occurrence is shown
@@ -19,17 +21,23 @@ Context {#context}:
   number of words, or the sentence or paragraph that contains the match.
   The [position](/glossary#cpos) of a hit opens more context for that
   hit.
+  [Section 2.3 of the CQP manual](https://cwb.sourceforge.io/files/CQP_Manual/2_3.html)
+  describes the display options of CQP, the context among them.
 
 Corpus {#corpus}:
   A collection of texts that is encoded for the Corpus Workbench. Each
   word is a [token](/glossary#token). Each token has annotations. Each
   text has [metadata](/glossary#metadata). The page [Corpora](/corpora)
   lists the corpora with their size and their attributes.
+  [Section 1.2 of the CQP manual](https://cwb.sourceforge.io/files/CQP_Manual/1_2.html)
+  describes the data model of a corpus.
 
 Corpus order {#corpus-order}:
   The order of the [hits](/glossary#hit) in the corpus. CWB returns the
   hits in this order. It is the default order of a
   [KWIC](/glossary#kwic).
+  [Section 2.9 of the CQP manual](https://cwb.sourceforge.io/files/CQP_Manual/2_9.html)
+  describes the other orders.
 
 cpos {#cpos}:
   Corpus position: the number of a [token](/glossary#token), counted
@@ -37,6 +45,8 @@ cpos {#cpos}:
   a token. The first column of the [KWIC](/glossary#kwic) shows the
   position of each match. A result URL contains positions when hits are
   expanded.
+  [Section 1.2 of the CQP manual](https://cwb.sourceforge.io/files/CQP_Manual/1_2.html)
+  describes corpus positions.
 
 CQP {#cqp}:
   The Corpus Query Processor: the query language of
@@ -61,6 +71,8 @@ Frequency {#frequency}:
   at a position of the [match](/glossary#match). It counts in each
   corpus and in all corpora together. It also gives each frequency
   [per million](/glossary#per-million).
+  [Section 3.4 of the CQP manual](https://cwb.sourceforge.io/files/CQP_Manual/3_4.html)
+  describes frequency distributions.
 
 Hit {#hit}:
   One occurrence of the search term. A hit is one line of the
@@ -76,6 +88,8 @@ KWIC {#kwic}:
   bottom. CWB calls this display KWIC, and so does this interface. The
   KWIC view lists the hits of a result, and the
   [frequencies](/glossary#frequency) view counts them.
+  [Section 2.3 of the CQP manual](https://cwb.sourceforge.io/files/CQP_Manual/2_3.html)
+  describes the display options of a KWIC.
 
 Match {#match}:
   The [tokens](/glossary#token) that the query matched in one
@@ -86,6 +100,8 @@ Match {#match}:
   underlines it. A [frequency](/glossary#frequency) table counts at one
   position of the match: before it, at its start or its end, over all
   of it, or after it.
+  [Section 3.3 of the CQP manual](https://cwb.sourceforge.io/files/CQP_Manual/3_3.html)
+  describes the anchors match, matchend, target and keyword.
 
 Metadata {#metadata}:
   The values of the annotated [structural
@@ -94,6 +110,8 @@ Metadata {#metadata}:
   some of the texts. It lists the values that the selected corpora have.
   It also accepts a pattern for each attribute, and a range for an
   attribute whose values are numbers.
+  [Section 4.2 of the CQP manual](https://cwb.sourceforge.io/files/CQP_Manual/4_2.html)
+  describes structural attributes with annotations.
 
 Per million {#per-million}:
   A [frequency](/glossary#frequency) scaled to one million
@@ -108,6 +126,8 @@ Positional attributes {#positional-attributes}:
   A simple search matches one attribute, and a [CQP](/glossary#cqp)
   query names the attributes in its brackets. The attribute control
   lists the attributes that the selected corpora share.
+  [Section 2.5 of the CQP manual](https://cwb.sourceforge.io/files/CQP_Manual/2_5.html)
+  describes how a query uses them.
 
 Region {#region}:
   One stretch of a [structural
@@ -115,6 +135,8 @@ Region {#region}:
   text. The [metadata](/glossary#metadata) filter shows the number of
   regions with each value. For example, `1591 · 3 regions` means that
   three texts have the year 1591.
+  [Section 4.2 of the CQP manual](https://cwb.sourceforge.io/files/CQP_Manual/4_2.html)
+  describes regions and their attributes.
 
 Registry {#registry}:
   The list of corpora that CWB has. The registry has one file for each
@@ -128,6 +150,8 @@ Regular expression {#regex}:
   starts with x, and `x|y` matches x or y. In a CQP query, each string
   in quotation marks is a regular expression. The simple search escapes
   the characters that you type. Thus a dot in a simple search is a dot.
+  [Appendix A.1 of the CQP manual](https://cwb.sourceforge.io/files/CQP_Manual/A_1.html)
+  summarises the syntax.
 
 Sample {#sample}:
   A random selection of a given number of [hits](/glossary#hit). The
@@ -135,6 +159,8 @@ Sample {#sample}:
   you can read a part of a result that is too large to read in full.
   The selection is fixed: the same URL always gives the same sample.
   The interface takes a sample in each corpus separately.
+  [Section 3.6 of the CQP manual](https://cwb.sourceforge.io/files/CQP_Manual/3_6.html)
+  describes random subsets.
 
 Structural attributes {#structural-attributes}:
   The markup of stretches of [tokens](/glossary#token): sentences
@@ -143,9 +169,13 @@ Structural attributes {#structural-attributes}:
   token. An annotated structural attribute has a value for each region,
   for example `text_year`. The [metadata](/glossary#metadata) filter
   offers these values.
+  [Section 4.2 of the CQP manual](https://cwb.sourceforge.io/files/CQP_Manual/4_2.html)
+  describes them.
 
 Token {#token}:
   One unit of text, as the corpus is encoded: a word, a number or a
   punctuation mark. The size of a [corpus](/glossary#corpus) is its
   number of tokens. A *type* is one distinct value. A corpus has as many
   types of `word` as it has different word forms.
+  [Section 1.2 of the CQP manual](https://cwb.sourceforge.io/files/CQP_Manual/1_2.html)
+  describes tokens and their attributes.

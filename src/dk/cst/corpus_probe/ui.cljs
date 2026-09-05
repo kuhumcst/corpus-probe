@@ -473,8 +473,10 @@
   `:apply-view` submits the search again with a result control as it now
   stands, so choosing an order is asking for it.
   `:toggle-corpora` records a corpus box or a whole folder being selected
-  or cleared, and `:set-indeterminate`, a render hook rather than an
-  event, marks a folder holding only part of the selection.
+  or cleared, and `:set-checkbox-state`, a render hook rather than an
+  event, writes the states of a checkbox that no attribute carries: partly
+  checked, for a folder holding only part of the selection, and invalid,
+  for the corpus chooser while nothing is chosen.
   `:toggle-filter-values` records metadata values being chosen or dropped,
   one or a whole attribute at a time, so the filter counts what the boxes
   say rather than what the last search asked, and `:clear-filter` empties
@@ -534,9 +536,12 @@
       (when (= "Enter" (.-key event))
         (.preventDefault event)))
     ;; a checkbox has three states and only two of them are attributes,
-    ;; so the third is written to the element itself on every render
-    :set-indeterminate
-    (set! (.-indeterminate (:replicant/node data)) arg)
+    ;; and the constraint of a group of them is no attribute of any one
+    ;; box, so both are written to the element itself on every render
+    :set-checkbox-state
+    (let [node (:replicant/node data)]
+      (set! (.-indeterminate node) (:indeterminate arg))
+      (.setCustomValidity node (or (:invalid arg) "")))
     :inspect (swap! state assoc :selected arg)
     :close   (close-panel!)
     :move-cursor (move-cursor! (:replicant/dom-event data) arg)

@@ -50,8 +50,13 @@
   would do nothing and a control that can do nothing is one a reader has
   to reason about; the others are controls, because choosing them does
   something. So the switch says both what the page is in and what it could
-  be in, and the difference between the two is the difference between text
-  and a button rather than a mark a reader has to notice.
+  be in. The one in use is marked current, which the stylesheet shows in
+  bold, as it shows the current page in the navigation beside it.
+
+  No visible name: a row of language names at the end of the masthead is
+  a language switch, and saying so would say what the row already says.
+  The form carries the name instead, so it is a named landmark for a
+  reader who cannot see the row.
 
   A form rather than links, because the language a reader wants is their
   preference rather than a property of the page they are on: the same URL
@@ -59,19 +64,20 @@
   carries its own language, since none of them is in the language of the
   page around it."
   [ui path]
-  [:form.languages {:method "post" :action preferences-path}
+  [:form.languages {:method     "post"
+                    :action     preferences-path
+                    :aria-label (i18n/tr ui "Language")}
    [:input {:type "hidden" :name "return" :value path}]
-   [:p (i18n/tr ui "Language") ": "
-    (interpose
-     " · "
-     (for [code i18n/languages]
-       (if (= code (:lang ui))
-         [:span {:lang code :aria-current "true"} (language-names code)]
-         [:button {:type  "submit"
-                   :name  "lang"
-                   :value code
-                   :lang  code}
-          (language-names code)])))]])
+   [:p (interpose
+        " · "
+        (for [code i18n/languages]
+          (if (= code (:lang ui))
+            [:span {:lang code :aria-current "true"} (language-names code)]
+            [:button {:type  "submit"
+                      :name  "lang"
+                      :value code
+                      :lang  code}
+             (language-names code)])))]])
 
 (def nav-items
   "The top-level navigation, in display order: the key naming each page
@@ -151,18 +157,41 @@
              (nav-label ui k)]])]]
    (language-switch ui path)])
 
+(defn year
+  "The current year, as the copyright line states it: the server's clock,
+  or the browser's."
+  []
+  #?(:clj  (.getValue (java.time.Year/now))
+     :cljs (.getFullYear (js/Date.))))
+
 (defn site-footer
-  "The site's contentinfo in `ui`: what this app is, and what
-  it is a front end for, credited where a reader can follow it.
+  "The site's contentinfo in `ui`: what this app is, what it is a front
+  end for, where its manual and its source are, and whose it is.
 
-  Both belong here rather than in the masthead, where a tagline would
-  compete with the site's name for the same row on every page.
+  All of it belongs here rather than in the masthead, where a tagline and
+  a row of links would compete with the site's name and its navigation on
+  every page: a reader of a tool needs these once, and looks for them at
+  the foot.
 
-  One line. Rendered as a direct child of <body>, so it is the document's
+  Rendered as a direct child of <body>, so it is the document's
   contentinfo rather than a section footer inside the main content."
   [ui]
   [:footer
    [:p (i18n/tr ui "CWB corpus search") ". "
     (i18n/tr ui "Powered by") " "
     [:a {:href "https://cwb.sourceforge.io/"} "IMS Open Corpus Workbench"]
-    "."]])
+    "."]
+   [:ul.row
+    [:li [:a {:href "https://cwb.sourceforge.io/files/CQP_Manual/"}
+          (i18n/tr ui "CQP manual")]]
+    [:li [:a {:href "https://github.com/kuhumcst/corpus-probe"}
+          (i18n/tr ui "Source code")]]]
+   ;; TODO: no licence is named anywhere yet, and the holder is a guess:
+   ;; the university whose organisation publishes the source
+   [:p [:small "© " (year) " "
+        ;; the institution's own site is Danish, with an English edition
+        [:a {:href (if (= "da" (:lang ui))
+                     "https://cst.ku.dk/"
+                     "https://cst.ku.dk/english/")}
+         (i18n/tr ui "Centre for Language Technology")]
+        ", " (i18n/tr ui "University of Copenhagen")]]])

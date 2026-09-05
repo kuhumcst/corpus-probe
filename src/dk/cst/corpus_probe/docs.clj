@@ -79,22 +79,9 @@
   [name langs]
   (some-> (resource name langs) slurp ->hiccup))
 
-(def heading-below
-  "Each heading tag and the one a level below it; an h6 has none."
-  (zipmap headings (rest headings)))
-
-(defn demote
-  "The hiccup `blocks` with every heading one level lower, for a document
-  shown under a page's own heading: the document's `#` becomes the
-  page's h2."
-  [blocks]
-  (walk/postwalk (fn [x]
-                   (if (heading? x) (update x 0 #(heading-below % %)) x))
-                 blocks))
-
 (comment
   (hiccup "guide" ["da"])
-  (demote (hiccup "guide" ["xx" "en"]))
+  (hiccup "guide" ["xx" "en"])
   (->hiccup "# A\n\n<!-- dropped -->\n\nsome *prose*")
   ;; => ([:h1 {:id "a"} "A"] [:p "some " [:em "prose"]])
 

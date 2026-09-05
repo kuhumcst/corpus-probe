@@ -35,10 +35,17 @@
   nothing (see dk.cst.corpus-probe.views.page/clear-toggle): the control
   keeps its shape and its three states, and is disabled while nothing is
   chosen, which is the only state from which it could do the thing it
-  must not. A caller asking for it pairs it with an action that clears."
+  must not. A caller asking for it pairs it with an action that clears.
+
+  `:invalid` in `opts` is the message the control reports while a group
+  that must not be left empty is. HTML can require one box but not one
+  of a group, so the group's constraint goes on the control that governs
+  it, which is in view whether or not the disclosure is open, and the
+  browser reports it there on submit. No attribute carries a custom
+  validity either, so it is set with the third state."
   ([label items chosen? action]
    (select-all label items chosen? action nil))
-  ([label items chosen? action {:keys [clear-only?]}]
+  ([label items chosen? action {:keys [clear-only? invalid]}]
    (when (seq items)
      (let [n (count (filter chosen? items))]
        [:input {:type                "checkbox"
@@ -48,7 +55,9 @@
                 ;; boolean attribute would disable the control outright
                 :disabled            (boolean (and clear-only? (zero? n)))
                 :aria-label          label
-                :replicant/on-render [:set-indeterminate (< 0 n (count items))]
+                :replicant/on-render [:set-checkbox-state
+                                      {:indeterminate (< 0 n (count items))
+                                       :invalid       invalid}]
                 :on                  {:change action}}]))))
 
 (defn toggled

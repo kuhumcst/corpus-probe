@@ -1,7 +1,8 @@
 (ns dk.cst.corpus-probe.views.corpus-test
   (:require [clojure.test :refer [deftest is testing]]
             [dk.cst.corpus-probe.views.hiccup :refer [da deep en]]
-            [dk.cst.corpus-probe.views.corpus :as corpus]))
+            [dk.cst.corpus-probe.views.corpus :as corpus]
+            [dk.cst.corpus-probe.views.layout :as layout]))
 
 (deftest corpus-item-test
   (testing "a titled corpus links its title and shows its ID"
@@ -106,10 +107,14 @@
       (is (not (:checked (attrs #{"TALER"}))))
       (is (not (:checked (attrs #{})))))
     (testing "part of a folder is the third state, set as a property"
-      (is (= [:set-indeterminate true] (:replicant/on-render (attrs #{"TALER"}))))
-      (is (= [:set-indeterminate false] (:replicant/on-render (attrs #{}))))
-      (is (= [:set-indeterminate false]
+      (is (= [:set-checkbox-state {:indeterminate true :invalid nil}]
+             (:replicant/on-render (attrs #{"TALER"}))))
+      (is (= [:set-checkbox-state {:indeterminate false :invalid nil}]
+             (:replicant/on-render (attrs #{}))))
+      (is (= [:set-checkbox-state {:indeterminate false :invalid nil}]
              (:replicant/on-render (attrs #{"TALER" "REFERAT"})))))
+    (testing "a folder is never required: only the whole chooser is"
+      (is (nil? (:invalid (second (:replicant/on-render (attrs #{})))))))
     (testing "it names the folder, having no visible label of its own"
       (is (= "All corpora in Folketinget" (:aria-label (attrs #{}))))
       (is (= "Alle korpusser i Folketinget"
@@ -248,6 +253,19 @@
       (is (= [:toggle-corpora ["VISER" "TALER"]]
              (get-in (second (corpus/all-toggle en #{} folders))
                      [:on :change]))))
+    (testing "and is invalid while nothing is selected, saying what the
+              summary says, so the browser refuses a search of no corpus
+              on the control that can put it right"
+      (let [invalid (fn [ui opts]
+                      (->> (deep (corpus/chooser ui folders
+                                                 (assoc opts :client? true)))
+                           (filter #(and (map? %) (:replicant/on-render %)))
+                           (keep (comp :invalid second :replicant/on-render))))]
+        (is (= ["Select at least one corpus"] (invalid en {:selected #{}})))
+        (is (= ["Vælg mindst ét korpus"] (invalid da {:selected #{}})))
+        (is (empty? (invalid en {:selected #{"VISER"}})))
+        ;; a selection the filter hides is still a selection
+        (is (empty? (invalid en {:selected #{"VISER"} :filter "taler"})))))
     (testing "a filter hides what does not answer it and opens what does"
       (let [html (deep (corpus/chooser en folders {:selected #{}
                                                      :client?  true
@@ -332,6 +350,46 @@
     (testing "the legend is in the chosen language"
       (is (some #{[:legend "Korpusser"]}
                 (deep (corpus/chooser da folders {:selected #{}})))))))
+
+(deftest index-view-test
+  (let [folders [{:label   "Litteratur"
+                  :corpora []
+                  :folders [{:label   "Folkeviser"
+                             :corpora [{:id "VISER" :title "Folkeviser"
+                                        :size 48}]
+                             :folders []}]}
+                 {:label   nil
+                  :corpora [{:id "PROBE" :size 47}]
+                  :folders []}]
+        html    (corpus/index-view en {:folders folders})
+        tags    (fn [html] (->> (deep html)
+                                (filter #(and (vector? %) (not (map-entry? %))
+                                              (keyword? (first %))))
+                                (map first)))]
+    (testing "a document: the page's heading, then a heading per folder,
+              a level deeper per folder inside, and a list per folder's
+              corpora, with nothing folded away"
+      (is (= layout/main-attrs (second html)))
+      (is (= [:main :h1 :h2 :h3 :ul :li :a :code :data.size :h2 :ul :li :a
+              :data.size]
+             (tags html)))
+      (is (= [[:h1 "Corpora"] [:h2 "Litteratur"] [:h3 "Folkeviser"]
+              [:h2 "Other"]]
+             (filter #(and (vector? %) (#{:h1 :h2 :h3} (first %)))
+                     (deep html))))
+      (is (not (some #{:details :summary} (tags html)))))
+    (testing "each corpus links to its page"
+      (is (some #{[:a {:href "/corpora/viser"} "Folkeviser"]} (deep html)))
+      (is (some #{[:a {:href "/corpora/probe"} "PROBE"]} (deep html))))
+    (testing "a registry without folders is one list under the heading"
+      (is (= [:main :h1 :ul :li :a :data.size]
+             (tags (corpus/index-view en {:folders [(second folders)]})))))
+    (testing "a folder nested too deep for HTML's headings keeps the last"
+      (is (= :h6 (corpus/heading 7)))
+      (is (= :h2 (corpus/heading 2))))
+    (testing "in Danish"
+      (is (some #{[:h2 "Andre"]}
+                (deep (corpus/index-view da {:folders folders})))))))
 
 (deftest info-view-navigation-test
   (let [html (deep (corpus/info-view en {:corpus "VISER" :stats {} :info {}}))]

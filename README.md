@@ -105,7 +105,9 @@ Each page has a plain address:
 | an export | `/search/kwic.tsv` |
 
 The terms of the glossary name their own ids, `KWIC {#kwic}:`. Thus a
-term in the interface links to its entry in each language.
+term in the interface links to its entry in each language. Where the
+[CQP manual](https://cwb.sourceforge.io/files/CQP_Manual/) has more,
+the entry links to its section.
 
 A result URL is a citation. One rule builds it on the server and on the
 client (`dk.cst.corpus-probe.url`). The URL names only the settings
@@ -113,6 +115,9 @@ that differ from the defaults. A simple search of the word attribute,
 in corpus order, with five words of context, is `/search?q=x`. The
 corpora are one comma-separated parameter. When each readable corpus is
 selected, the URL names no corpus, because that is the same search.
+The search page itself starts with no corpus selected. The reader
+selects the corpora first, and the browser refuses a search without
+one.
 Pages are numbered from one, as the page numbers itself.
 
 ### Result controls

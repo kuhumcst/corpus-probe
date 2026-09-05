@@ -7,7 +7,7 @@
 
 (def guide
   "A search guide, as api/search-page puts one in the data."
-  [[:h2 {:id "query-help"} "Query help"] [:p "Type a word."]])
+  [[:h1 {:id "query-help"} "Query help"] [:p "Type a word."]])
 
 (def base
   "A search page with nothing searched for yet."
@@ -18,16 +18,25 @@
   [[:kwic "/search?q=hund#results"]
    [:frequencies "/search?q=hund&view=frequencies#results"]])
 
+(defn h1s
+  "The h1 headings among hiccup `html`."
+  [html]
+  (filter #(and (vector? %) (= :h1 (first %))) (deep html)))
+
 (deftest search-view-test
-  (testing "the page names itself and the bypass link can reach it"
-    (let [html (app-views/search-view base)]
-      (is (= layout/main-attrs (second html)))
-      (is (some #{[:h1 "Search"]} (deep html)))))
+  (testing "the bypass link can reach the page"
+    (is (= layout/main-attrs (second (app-views/search-view base)))))
+  (testing "nothing heads the page but what it shows: the guide until there
+            is an answer, then the answer"
+    (is (= [[:h1 {:id "query-help"} "Query help"]]
+           (h1s (app-views/search-view base))))
+    (is (= [[:h1 {:id "results-heading"} "The search did not finish in time"]]
+           (h1s (app-views/search-view (assoc base :error {:type :timeout}))))))
   (testing "the form submits to the results, so a search lands on its answer"
     (is (= "/search#results"
-           (get-in (app-views/search-view base) [3 1 1 :action])))
+           (get-in (app-views/search-view base) [2 1 1 :action])))
     (is (= (str url/search url/results-fragment)
-           (get-in (app-views/search-view base) [3 1 1 :action]))))
+           (get-in (app-views/search-view base) [2 1 1 :action]))))
   (testing "no query renders no results region at all, but the guide
             where the results will be"
     (is (not (some #{"results"} (deep (app-views/search-view base)))))

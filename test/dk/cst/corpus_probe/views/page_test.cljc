@@ -22,6 +22,15 @@
                 (deep html))))
     (testing "the query field is a search input"
       (is (some #{"search"} (deep html))))
+    (testing "the query is required, except from the frequency view, which
+              counts every token of a blank one"
+      (let [required (fn [state]
+                       (->> (deep (page/search-form state "/" nil))
+                            (filter #(and (map? %) (= "q" (:id %))))
+                            (first)
+                            (:required)))]
+        (is (true? (required state)))
+        (is (false? (required (assoc state :view :frequencies))))))
     (testing "grouped controls have legends"
       (is (some #{:legend} (deep html))))
     (testing "the example is the one for the mode being searched in"
@@ -111,7 +120,7 @@
         (is (not (some #(and (map? %) (= "lang" (:name %))) da)))))))
 
 (deftest guide-test
-  (let [blocks [[:h2 {:id "query-help"} "Query help"]
+  (let [blocks [[:h1 {:id "query-help"} "Query help"]
                 [:ul [:li [:code "\"hund\""] " finds a word form."]]]
         html   (page/guide blocks)]
     (testing "a region named by the guide's own heading, holding it"
@@ -387,7 +396,16 @@
       (is (some #(and (map? %) (= "ff.text_year" (:name %)) (= "1583" (:value %)))
                 (deep html)))
       (is (some #(and (map? %) (= "ft.text_year" (:name %)) (= "" (:value %)))
-                (deep html))))
+                (deep html)))
+      (testing "either end takes a whole number, and says so, so the
+                browser reports anything else rather than the server
+                dropping it"
+        (is (= [["-?[0-9]*" "a whole number"] ["-?[0-9]*" "a whole number"]]
+               (->> (deep html)
+                    (filter #(and (map? %) (:pattern %)))
+                    (map (juxt :pattern :title)))))
+        (is (not (some #(and (map? %) (= "fp.text_year" (:name %)) (:pattern %))
+                       (deep html))))))
     (testing "and no range over values that are not"
       (is (not (some #(and (map? %) (= "ff.text_title" (:name %)))
                      (deep (page/pattern-row en :text_title
@@ -395,7 +413,7 @@
                                              nil nil)))))
       (is (not (page/numeric-values? []))))
     (testing "in Danish"
-      (is (some #{"mønster" "fra" "til"}
+      (is (some #{"mønster" "fra" "til" "et helt tal"}
                 (deep (page/pattern-row da :text_year years nil nil)))))))
 
 (deftest filter-fieldset-test
@@ -549,11 +567,11 @@
                   must not act from"
           (is (true? (:disabled (root {}))))
           (is (false? (:checked (root {}))))
-          (is (= [:set-indeterminate false]
+          (is (= [:set-checkbox-state {:indeterminate false :invalid nil}]
                  (:replicant/on-render (root {})))))
         (testing "something chosen: live, partly checked, and it clears"
           (is (false? (:disabled (root {:a #{"1"}}))))
-          (is (= [:set-indeterminate true]
+          (is (= [:set-checkbox-state {:indeterminate true :invalid nil}]
                  (:replicant/on-render (root {:a #{"1"}}))))
           (is (= [:clear-filter] (get-in (root {:a #{"1"}}) [:on :change]))))
         (testing "everything chosen: checked, and it still only clears"
@@ -569,7 +587,8 @@
                       (filter #(and (map? %) (= "Clear filter" (:aria-label %))))
                       first)]
         (is (false? (:disabled root)))
-        (is (= [:set-indeterminate true] (:replicant/on-render root)))))
+        (is (= [:set-checkbox-state {:indeterminate true :invalid nil}]
+               (:replicant/on-render root)))))
     (testing "one disclosure over the filter, open only while it is active"
       (is (= [true]
              (keep #(when (and (map? %) (contains? % :open)) (:open %))
@@ -644,8 +663,8 @@
   (let [html (page/error-section en {:type :cqp :message "boom"} ["TALER"])]
     (testing "no live region: it is in the document before the page is parsed"
       (is (not (some #{"alert"} (deep html)))))
-    (testing "it heads itself below the region's own h2"
-      (is (some #{[:h3 "CQP error"]} (deep html))))
+    (testing "it heads itself below the region's own h1"
+      (is (some #{[:h2 "CQP error"]} (deep html))))
     (testing "cqp's message is the sample output of another program"
       (is (some #{[:samp "boom"]} (deep html))))
     (is (some #{"boom"} (deep html)))
@@ -767,12 +786,13 @@
     (testing "and is busy while the answer to the next question is coming"
       (is (= "true" (:aria-busy (second (page/result-section
                                          (assoc state :pending? true)))))))
-    (testing "its heading is the summary the caption used to carry"
-      (is (some #{[:h2 {:id "results-heading"}
+    (testing "its heading is the summary the caption used to carry, and it
+              is the page's own: the search page has no other"
+      (is (some #{[:h1 {:id "results-heading"}
                    "6 hits in 2 corpora · page 1 of 1"]}
                 (deep html))))
     (testing "errors are headed sections before the counts and concordance"
-      (is (some #{[:h3 "CQP error"]} (deep html)))
+      (is (some #{[:h2 "CQP error"]} (deep html)))
       (is (some #{[:caption "Hits per corpus"]} (deep html)))
       (is (some #{:table.kwic} (deep html))))
     (testing "the sort travels with the result, not with the query form"
@@ -792,8 +812,8 @@
                               (deep html))))))
     (testing "the errors come before the counts and the concordance"
       (let [order (fn [x] (.indexOf (vec (deep html)) x))]
-        (is (< (order [:h3 "CQP error"]) (order :table.counts)))
-        (is (< (order [:h3 "CQP error"]) (order :table.kwic)))))
+        (is (< (order [:h2 "CQP error"]) (order :table.counts)))
+        (is (< (order [:h2 "CQP error"]) (order :table.kwic)))))
     (testing "but the counts break the hits down, so they follow them"
       (let [order (fn [x] (.indexOf (vec (deep html)) x))]
         (is (< (order :table.kwic) (order :table.counts)))
@@ -820,12 +840,13 @@
                  :result {:page   0 :pages 1 :hits []
                           :counts [{:corpus "X" :error {:type :timeout}}]}})]
       (is (not (some #{:table.kwic} (deep html))))
-      (is (some #{[:h2 {:id "results-heading"} "The search did not finish in time"]}
+      (is (some #{[:h1 {:id "results-heading"}
+                   "The search did not finish in time"]}
                 (deep html)))))
   (testing "a search that failed outright is a results region too"
     (let [html (page/result-section {:lang  "en"
                                      :error {:type :no-corpus}})]
-      (is (some #{[:h2 {:id "results-heading"} "No corpus selected"]}
+      (is (some #{[:h1 {:id "results-heading"} "No corpus selected"]}
                 (deep html)))
       (is (some #{"Select at least one corpus to search."} (deep html)))))
   (testing "a search that found nothing offers no table and no downloads"
@@ -879,17 +900,19 @@
                     :placeholder  "one word, or several words in order"
                     :autocomplete "off"
                     :spellcheck   "false"
+                    :required     true
                     :type         "search"
                     :value        "hund"}]
-           (page/query-field en nil "hund"))))
-  (testing "a list is a text area, its words its content"
-    (let [[tag attrs text] (page/query-field en "list" "hund\nkat")]
+           (page/query-field en nil "hund" true))))
+  (testing "a list is a text area, its words its content, and required too"
+    (let [[tag attrs text] (page/query-field en "list" "hund\nkat" true)]
       (is (= :textarea tag))
       (is (= "q" (:name attrs)))
       (is (= "one word per line" (:placeholder attrs)))
+      (is (true? (:required attrs)))
       (is (= "hund\nkat" text)))
     (is (= "ét ord pr. linje"
-           (:placeholder (second (page/query-field da "list" nil)))))))
+           (:placeholder (second (page/query-field da "list" nil true)))))))
 
 (deftest query-phrase-test
   (is (= "hund" (page/query-phrase en {:q "hund"})))

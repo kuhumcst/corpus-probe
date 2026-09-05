@@ -183,7 +183,7 @@ msgstr ""
 msgid "Language"
 msgstr ""
 
-#: src/dk/cst/corpus_probe/api.clj src/dk/cst/corpus_probe/views/app.cljc src/dk/cst/corpus_probe/views/layout.cljc
+#: src/dk/cst/corpus_probe/api.clj src/dk/cst/corpus_probe/views/layout.cljc
 msgid "Search"
 msgstr ""
 
@@ -237,6 +237,22 @@ msgstr ""
 
 #: src/dk/cst/corpus_probe/views/layout.cljc
 msgid "Powered by"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/layout.cljc
+msgid "CQP manual"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/layout.cljc
+msgid "Source code"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/layout.cljc
+msgid "Centre for Language Technology"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/layout.cljc
+msgid "University of Copenhagen"
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/page.cljc
@@ -338,6 +354,10 @@ msgid "region"
 msgid_plural "regions"
 msgstr[0] ""
 msgstr[1] ""
+
+#: src/dk/cst/corpus_probe/views/page.cljc
+msgid "a whole number"
+msgstr ""
 
 #: src/dk/cst/corpus_probe/views/page.cljc
 msgid "pattern"

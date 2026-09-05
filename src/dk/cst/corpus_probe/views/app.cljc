@@ -33,19 +33,24 @@
 
 (defn search-view
   "The search page's main content from application `state`, in its
-  `:ui`: the page heading, the query form (see
-  dk.cst.corpus-probe.views.page/search-form, carrying the `:view` as a
-  hidden input so that a control applied from one view answers in that
-  view), the inspection panel while a token is `:selected`, and the
-  results region when the params described a search, or the `:guide`
-  (see dk.cst.corpus-probe.views.page/guide) where they did not.
+  `:ui`: the query form (see dk.cst.corpus-probe.views.page/search-form,
+  carrying the `:view` as a hidden input so that a control applied from
+  one view answers in that view), the inspection panel while a token is
+  `:selected`, and the results region when the params described a
+  search, or the `:guide` (see dk.cst.corpus-probe.views.page/guide)
+  where they did not.
+
+  No heading of its own: a search landmark with a search button says
+  what it is, and a heading saying so again was one more thing between
+  the reader and the field. The results region heads the page once there
+  is an answer, and the guide until then, so the page is headed by what
+  it shows.
 
   The form submits to the results fragment, so a search lands the reader
   on its own answer rather than at the top of the form that asked for it.
   The <main> is focusable so the bypass link can move the reader into it."
   [{:keys [ui view result error selected client?] :as state}]
   [:main layout/main-attrs
-   [:h1 (i18n/tr ui "Search")]
    ;; the form has to say which view it is being submitted from, or a
    ;; result regrouped from the frequency table comes back as a
    ;; concordance: one page serves both, and only this says which

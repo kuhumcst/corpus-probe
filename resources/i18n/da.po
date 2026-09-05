@@ -443,3 +443,18 @@ msgstr "korpusposition"
 msgid "Filter"
 msgstr "Filtrér"
 
+
+msgid "CQP manual"
+msgstr "CQP-manualen"
+
+msgid "Source code"
+msgstr "Kildekode"
+
+msgid "Centre for Language Technology"
+msgstr "Center for Sprogteknologi"
+
+msgid "University of Copenhagen"
+msgstr "Københavns Universitet"
+
+msgid "a whole number"
+msgstr "et helt tal"

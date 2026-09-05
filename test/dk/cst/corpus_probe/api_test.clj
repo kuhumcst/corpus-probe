@@ -119,6 +119,22 @@
        (is (= ["PROBE" "TALER" "VISER"]
               (sort (api/selected-corpora ctx (corpus/corpora ctx) {}))))))))
 
+(deftest form-corpora-test
+  (when-cwb
+   (let [form (fn [params]
+                (get-in (api/search-view-data ctx {:query-params params})
+                        [:params :corpus]))]
+     (testing "the form starts with no corpus selected: choosing them is
+               the reader's first move, and the chooser refuses a search
+               without one"
+       (is (= [] (form {}))))
+     (testing "but shows what a search searched, which for a URL naming no
+               corpus is every readable one"
+       (is (= ["PROBE" "TALER" "VISER"] (sort (form {:q "hund"})))))
+     (testing "and what a URL named, searched or not"
+       (is (= ["VISER"] (form {:corpus "viser"})))
+       (is (= ["VISER"] (form {:corpus "viser" :q "hund"})))))))
+
 (deftest results-fragment-hrefs-test
   (testing "a page turn lands on the results, not the top of the form"
     (is (str/ends-with? (api/page-href {:q "hund"} 1) "#results")))

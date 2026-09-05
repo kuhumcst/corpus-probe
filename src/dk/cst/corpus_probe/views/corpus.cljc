@@ -3,13 +3,14 @@
   the per-corpus info pages.
 
   The index and the chooser share one folder-grouped tree over the
-  registry: each folder is a <details> disclosure, so the tree collapses
-  without any script; the index lists each corpus as a link to its info
-  page, the chooser as a checkbox, both with the token count as a
-  machine-readable <data>. The info page maps the facts CWB itself reports
-  (the registry entry, `info;` and `cwb-describe-corpus -s`) onto a
-  definition list and per-attribute statistics tables, following PLAN.md
-  §7."
+  registry. The chooser is a control: each folder is a <details>
+  disclosure, so the tree collapses without any script, and each corpus
+  a checkbox. The index is a document: a heading per folder and a list
+  per folder's corpora, each a link to its info page. Both give the
+  token count as a machine-readable <data>. The info page maps the facts
+  CWB itself reports (the registry entry, `info;` and
+  `cwb-describe-corpus -s`) onto a definition list and per-attribute
+  statistics tables, following PLAN.md §7."
   (:require [clojure.string :as str]
             [dk.cst.corpus-probe.i18n :as i18n]
             [dk.cst.corpus-probe.url :as url]
@@ -143,11 +144,6 @@
     (next folders) (map (fn [f]
                           (update f :label #(or % (i18n/tr ui "Other")))))))
 
-(defn corpus-tree
-  "The `folders` tree of corpus overviews rendered by `opts` (see
-  `folder-view`), the ungrouped tail labelled in `ui`."
-  [ui opts folders]
-  (map (partial folder-view opts) (labelled-folders ui folders)))
 
 (defn folder-count
   "The label of `folder` followed by how many corpora it holds, in
@@ -208,15 +204,19 @@
 
 (defn corpus-toggle
   "dk.cst.corpus-probe.views.controls/select-all over the corpora in
-  `folder`, called `label`, with the set of `selected` IDs.
+  `folder`, called `label`, with the set of `selected` IDs and the
+  select-all's own `opts`.
 
   It precedes the disclosure rather than sitting in the <summary>, so a
   whole folder can be included or excluded without opening it, and so it
   is a control in its own right: a summary is a button, and a button need
   not expose the controls nested in it."
-  [label selected folder]
-  (let [ids (selectable-ids folder)]
-    (controls/select-all label ids selected [:toggle-corpora (vec ids)])))
+  ([label selected folder]
+   (corpus-toggle label selected folder nil))
+  ([label selected folder opts]
+   (let [ids (selectable-ids folder)]
+     (controls/select-all label ids selected [:toggle-corpora (vec ids)]
+                          opts))))
 
 (defn folder-toggle
   "`corpus-toggle` over one `folder`, named for it in `ui`."
@@ -228,9 +228,17 @@
   "`corpus-toggle` over the whole `folders` tree, named for it in `ui`:
   the one control that selects or clears the registry, which is
   otherwise a click per folder and, under a filter, the only way to take
-  everything the filter found at once."
+  everything the filter found at once.
+
+  It also carries the chooser's one constraint, that a search needs a
+  corpus: it is invalid while nothing is `selected`, and says what the
+  summary says (see `chooser-summary`), so the browser refuses the
+  search on the control that can put it right. Whatever the filter
+  shows: a selection the filter has hidden is still a selection."
   [ui selected folders]
-  (corpus-toggle (i18n/tr ui "All corpora") selected {:folders folders}))
+  (corpus-toggle (i18n/tr ui "All corpora") selected {:folders folders}
+                 {:invalid (when (empty? selected)
+                             (i18n/tr ui "Select at least one corpus"))}))
 
 (defn corpus-filter
   "The box narrowing the chooser to the corpora answering what is typed in
@@ -240,22 +248,37 @@
   (controls/filter-box "corpus-filter" (i18n/tr ui "Filter") q
                        [:filter-corpora]))
 
-(defn index-view
-  "The corpus index page body in `ui`: the `folders` tree of
-  corpus overviews, every folder open.
+(defn heading
+  "The heading tag `level` deep, h6 at the deepest: HTML has no h7."
+  [level]
+  (keyword (str "h" (min 6 level))))
 
-  The tree is this page's own content rather than navigation inside it, so
-  it sits directly in <main> under the page's heading, which the bypass
-  link moves the reader to."
+(defn index-folder
+  "One resolved `folder` of the corpus index in `ui`, headed at `level`
+  (2 for a top-level folder, one more for each folder inside it): its
+  label as a heading, when it has one, its corpora as a list (see
+  `corpus-item`) and its subfolders after them, each a level down. A
+  label-less folder is its list alone, and takes no level."
+  [ui level {:keys [label corpora folders]}]
+  (list
+   (when label [(heading level) label])
+   (when (seq corpora) [:ul (map (partial corpus-item ui) corpora)])
+   (map (partial index-folder ui (cond-> level label inc)) folders)))
+
+(defn index-view
+  "The corpus index page body in `ui`: the `folders` tree of corpus
+  overviews laid out as a document, a heading per folder and a list per
+  folder's corpora (see `index-folder`), the ungrouped tail labelled by
+  `labelled-folders`.
+
+  A document rather than the chooser's tree of disclosures: a reader is
+  here to read, not to work a control, so nothing is folded away and the
+  headings give the page an outline. The tree is the page's own content
+  rather than navigation inside it, so it sits directly in <main>."
   [ui {:keys [folders]}]
   [:main layout/main-attrs
    [:h1 (i18n/tr ui "Corpora")]
-   [:div.corpora
-    (corpus-tree ui
-                 {:item    (partial corpus-item ui)
-                  :summary (partial folder-count ui)
-                  :open?   (constantly true)}
-                 folders)]])
+   (map (partial index-folder ui 2) (labelled-folders ui folders))])
 
 (defn chooser
   "The corpus selection of the search form: the `folders` tree as a group
@@ -264,12 +287,15 @@
 
   Closed unless nothing is selected, when choosing a corpus is the
   reader's next move: a registry of a hundred and fifty corpora is an open
-  tree between the reader and every other control in the form, and the
-  default selects them all. A closed <details> keeps its checkboxes in the
-  document and still submits them, so folding the tree away never narrows
-  a search. Inside it, a folder holding part of the selection starts open,
-  and where `:client?` each folder carries a `folder-toggle` selecting or
-  clearing the whole of it. The wording is in `ui`.
+  tree between the reader and every other control in the form. The form
+  starts with nothing selected, so it starts open, its folders shut, and
+  the summary says what to do; `all-toggle` refuses a search until
+  something is. A closed <details>
+  keeps its checkboxes in the document and still submits them, so folding
+  the tree away never narrows a search. Inside it, a folder holding part
+  of the selection starts open, and where `:client?` each folder carries
+  a `folder-toggle` selecting or clearing the whole of it. The wording is
+  in `ui`.
 
   What is checked follows `:selected`, which is live: it changes under the
   reader as they choose. What is open follows `:served`, the selection the
@@ -314,19 +340,19 @@
                   ;; checkboxes are what a search submits
                   nothing-found? (assoc :hidden true))
        [:summary (chooser-summary ui selected corpora)]
-       (corpus-tree ui
-                    {:item    (partial chooser-item ui selected)
-                     :summary (partial folder-selection ui selected)
-                     :toggle  (when client?
-                                (partial folder-toggle ui selected))
-                     :open?   (fn [folder]
-                                (if filtering
-                                  (not (:hidden? folder))
-                                  (and (seq served)
-                                       (not= (count served) total)
-                                       (some (comp served :id)
-                                             (folder-corpora folder)))))}
-                    folders)])]))
+       (map (partial folder-view
+                     {:item    (partial chooser-item ui selected)
+                      :summary (partial folder-selection ui selected)
+                      :toggle  (when client?
+                                 (partial folder-toggle ui selected))
+                      :open?   (fn [folder]
+                                 (if filtering
+                                   (not (:hidden? folder))
+                                   (and (seq served)
+                                        (not= (count served) total)
+                                        (some (comp served :id)
+                                              (folder-corpora folder)))))})
+            (labelled-folders ui folders))])]))
 
 (defn facts-list
   "The general facts of a corpus as a definition list: its token count and

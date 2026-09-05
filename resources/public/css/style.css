@@ -19,6 +19,16 @@
 .skip { position: absolute; inset-inline-start: -100vw; }
 .skip:focus { position: static; }
 
+/* the footer sits at the foot of the viewport on a page shorter than the
+   viewport, rather than half way up it: the root and the body are
+   columns, the body fills the root (as a flex item its margin box does,
+   so the user agent's body margin adds no scrollbar), and the footer
+   takes whatever room is left above it. The body's own footer only, so
+   a footer inside the content is not sent down with it */
+html { display: flex; flex-direction: column; min-block-size: 100%; }
+body { flex: 1; display: flex; flex-direction: column; }
+body > footer { margin-block-start: auto; }
+
 /* the masthead is one row, not four stacked blocks */
 header { display: flex; flex-wrap: wrap; align-items: baseline;
          column-gap: 1.5rem; row-gap: 0.25rem; }
@@ -92,8 +102,8 @@ pre { overflow-x: auto; }
 /* the expanded-context row spans all columns and wraps */
 .kwic .expanded td { white-space: normal; text-align: left; }
 
-/* the page you are on is marked */
-header nav [aria-current] { font-weight: bold; }
+/* the page you are on is marked, and so is the language it is in */
+header [aria-current] { font-weight: bold; }
 
 /* The sheet, above the wider layout so that it can reset these: at equal
    specificity the later rule wins. Named because the sheet's height and
@@ -129,17 +139,12 @@ body:has(.sidebar) { padding-block-end: var(--sheet-block-size); }
   main:has(> .result, > .help) {
     display: grid;
     grid-template-columns: minmax(16rem, 22rem) minmax(0, 1fr);
-    grid-template-areas: "heading results" "query results";
-    /* the heading row is the heading: without this the results, which span
-       both rows, have their height shared out between them and push the
-       rail hundreds of pixels down the page */
-    grid-template-rows: min-content 1fr;
+    grid-template-areas: "query results";
     column-gap: 2rem;
     /* the rail keeps its own height rather than stretching to the results,
        which is also what lets it stick */
     align-items: start;
   }
-  main:has(> .result, > .help) > h1      { grid-area: heading; }
   main:has(> .result, > .help) > .result,
   main:has(> .result, > .help) > .help   { grid-area: results; }
 
@@ -207,8 +212,9 @@ summary { cursor: pointer; }
 .frequencies th, .frequencies td { padding: 0 0.5em; text-align: left; }
 .attributes .n, .counts .n, .frequencies .n { text-align: right; }
 
-/* the corpus tree (index and chooser) and the metadata filter's value
-   lists: indent by nesting, no bullets */
+/* the corpus chooser's tree and the metadata filter's value lists: indent
+   by nesting, no bullets. The corpus index is a document and keeps the
+   user agent's lists */
 .corpora ul, .filters ul { list-style: none; padding-left: 1em; }
 
 /* a concordance's corpus header row, its column headings and its position

@@ -41,7 +41,7 @@
               :aria-labelledby "results-heading"}
              (second html))))
     (testing "its heading is the summary the caption used to carry"
-      (is (some #{[:h2 {:id "results-heading"}
+      (is (some #{[:h1 {:id "results-heading"}
                    "5 hits in PROBE by word · 1 value"]}
                 (deep html))))
     (testing "the view switch marks the frequency view as the current one"

@@ -43,13 +43,6 @@
          (docs/title [[:h2 {:id "a"} "The " [:code "cpos"] " column"]])))
   (is (nil? (docs/title [[:p "x"]]))))
 
-(deftest demote-test
-  (is (= [[:h2 {:id "a"} "A"] [:p "x"] [:h3 {:id "b"} "B"] [:h6 "z"]]
-         (docs/demote [[:h1 {:id "a"} "A"] [:p "x"] [:h2 {:id "b"} "B"]
-                       [:h6 "z"]])))
-  (testing "a heading inside a block is demoted too"
-    (is (= [[:blockquote [:h2 "q"]]]
-           (docs/demote [[:blockquote [:h1 "q"]]])))))
 
 (deftest documents-test
   (testing "every document exists in every language the interface has"
@@ -102,7 +95,17 @@
                           (map :href)
                           (filter #(str/starts-with? % (str url/glossary "#"))))]
           (is (contains? terms (subs href (inc (count url/glossary))))
-              (str href " from " name " in " lang)))))))
+              (str href " from " name " in " lang))))))
+  (testing "every language deep-links the same sections of the CQP manual"
+    (let [manual-url "https://cwb.sourceforge.io/files/CQP_Manual/"
+          manual     (fn [lang]
+                       (->> (deep (docs/hiccup "glossary" [lang]))
+                            (filter #(and (map? %) (:href %)))
+                            (map :href)
+                            (filter #(str/starts-with? % manual-url))
+                            (sort)))]
+      (is (< 10 (count (manual "en"))))
+      (is (apply = (map manual i18n/languages))))))
 
 (deftest glossary-order-test
   (testing "the glossary is in alphabetical order, as its language sorts"

@@ -694,8 +694,9 @@
 
 (defn search-request
   "What `request` asks of `ctx`: its scalar query params, the registry's
-  corpora, the corpus names selected, those split into the `known` and the
-  `unknown` (see `split-known`), the CQP query the params compile to (see
+  corpora, the corpus names `named` in the params, the names `selected`
+  to search, those split into the `known` and the `unknown` (see
+  `split-known`), the CQP query the params compile to (see
   `->cqp`) and the `opts` every search of it takes: its metadata :filter
   (see `filter-params`) and the :patterns beside it (see
   `pattern-params`), the unit of text it is kept :within (see
@@ -711,6 +712,7 @@
         [known unknown] (split-known corpora selected)]
     {:params   params
      :corpora  corpora
+     :named    (url/corpora-param (:corpus params))
      :selected selected
      :known    known
      :unknown  unknown
@@ -838,13 +840,16 @@
 
   Links are built from `:cited`, the params as the URL cites them (see
   dk.cst.corpus-probe.url/canonical); `:params`, which fills the form,
-  names every corpus searched.
+  names every corpus searched, or only what the URL named when nothing
+  was searched: a reader arriving at the form starts with no corpus
+  selected, while a URL naming no corpus still searches every readable
+  one and shows them all.
 
   The same map is embedded as transit for the client to take over from,
   so it holds corpus overviews only: the full registry maps carry
   absolute server paths and stay here."
   [ctx request]
-  (let [{:keys [params corpora selected known unknown cqp opts]}
+  (let [{:keys [params corpora named selected known unknown cqp opts]}
         (search-request ctx request)
         lang    (request-language request)
         view    (view-param (:view params))
@@ -875,7 +880,10 @@
                                           :sample  (sample-param
                                                     (:sample params)))))
         pages   (some-> outcome :result :pages)
-        params* (assoc params :corpus selected :attr attr :at at)
+        params* (assoc params
+                       :corpus (if outcome selected named)
+                       :attr   attr
+                       :at     at)
         cited   (url/canonical params* (set (readable-corpora ctx corpora)))
         attrs   (attr-options! ctx known)
         ;; what a simple search may match, and a concordance sort by: the
@@ -985,9 +993,8 @@
          :as   data} (search-view-data ctx request)
         data (cond-> (assoc (dissoc data :cited) :route :search)
                (not (or result error))
-               (assoc :guide (docs/demote
-                              (docs/hiccup "guide"
-                                           (request-languages request)))))]
+               (assoc :guide (docs/hiccup "guide"
+                                          (request-languages request))))]
     (page-response request
                    (result-title (i18n/->ui lang) view params result)
                    data

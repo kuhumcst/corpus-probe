@@ -47,9 +47,11 @@
     (testing "it returns the reader to the page they were reading"
       (is (some #{{:type "hidden" :name "return" :value "/?q=hund"}}
                 (deep html))))
-    (testing "the group says what it is about, in the page's own language"
-      (is (some #{"Sprog"} (deep html)))
-      (is (some #{"Language"} (deep (layout/language-switch en "/")))))))
+    (testing "the group says what it is about, in the page's own language,
+              to a screen reader alone: the row itself needs no caption"
+      (is (= "Sprog" (:aria-label (second html))))
+      (is (= "Language" (:aria-label (second (layout/language-switch en "/")))))
+      (is (not (some #{"Sprog" "Language"} (deep (last html))))))))
 
 (deftest skip-link-test
   (testing "the bypass link points at the page's own content"
@@ -81,7 +83,22 @@
     (is (some #{"https://cwb.sourceforge.io/"}
               (deep (layout/site-footer en))))
     (is (some #{"Powered by"} (deep (layout/site-footer en))))
-    (is (some #{"Drevet af"} (deep (layout/site-footer da))))))
+    (is (some #{"Drevet af"} (deep (layout/site-footer da)))))
+  (let [hrefs (fn [ui] (->> (deep (layout/site-footer ui))
+                            (filter #(and (map? %) (:href %)))
+                            (map :href)))]
+    (testing "and says where the manual, the source and the institution are"
+      (is (some #{"https://cwb.sourceforge.io/files/CQP_Manual/"} (hrefs en)))
+      (is (some #{"https://github.com/kuhumcst/corpus-probe"} (hrefs en)))
+      (is (some #{"CQP manual"} (deep (layout/site-footer en))))
+      (is (some #{"Kildekode"} (deep (layout/site-footer da))))
+      (testing "the institution in the reader's language, where it has one"
+        (is (some #{"https://cst.ku.dk/english/"} (hrefs en)))
+        (is (some #{"https://cst.ku.dk/"} (hrefs da)))))
+    (testing "and whose it is, this year"
+      (is (some #{(layout/year)} (deep (layout/site-footer en))))
+      (is (some #{"University of Copenhagen"} (deep (layout/site-footer en))))
+      (is (some #{"Københavns Universitet"} (deep (layout/site-footer da)))))))
 
 (deftest site-header-test
   (let [links (fn [path nav]

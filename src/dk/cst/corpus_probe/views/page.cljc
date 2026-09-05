@@ -351,23 +351,32 @@
   or to any value of an attribute with too many to list.
 
   Text fields, so they apply on Enter, which submits the form: a pattern
-  is typed rather than chosen."
+  is typed rather than chosen.
+
+  A bound takes a whole number and says so, so a bound that is not one
+  is reported by the browser, in its own words, rather than dropped by
+  the server, which reads no number out of it."
   [ui attr rows pattern [from to :as bounds]]
   (let [field (fn [prefix value attrs]
                 [:input (merge {:name         (str prefix (name attr))
                                 :value        (or value "")
                                 :autocomplete "off"
                                 :spellcheck   "false"}
-                               attrs)])]
+                               attrs)])
+        bound (fn [prefix value]
+                (field prefix value
+                       {:type      "text"
+                        :inputmode "numeric"
+                        :size      6
+                        :pattern   "-?[0-9]*"
+                        :title     (i18n/tr ui "a whole number")}))]
     [:p.pattern
      [:label (i18n/tr ui "pattern") " " (field "fp." pattern {:type "search"})]
      (when (numeric-values? rows)
        (list " "
-             [:label (i18n/tr ui "from") " "
-              (field "ff." from {:type "text" :inputmode "numeric" :size 6})]
+             [:label (i18n/tr ui "from") " " (bound "ff." from)]
              " "
-             [:label (i18n/tr ui "to") " "
-              (field "ft." to {:type "text" :inputmode "numeric" :size 6})]))]))
+             [:label (i18n/tr ui "to") " " (bound "ft." to)]))]))
 
 (defn filter-details
   "The disclosure of one prepared metadata attribute (its `:name`, its
@@ -549,14 +558,20 @@
   are named q, so either submits the query, and both carry the one id
   the client finds the field by. Neither has a visible label: a field
   with a search button beside it needs none to say what it is, so the
-  name it keeps is the one only a screen reader reads."
-  [ui mode q]
+  name it keeps is the one only a screen reader reads.
+
+  Required when `required?`: a search of nothing is then reported by the
+  browser before it is sent, rather than answered with the guide again.
+  The caller says when a blank query means something (see
+  `search-form`)."
+  [ui mode q required?]
   (let [attrs {:id           "q"
                :name         "q"
                :aria-label   (i18n/tr ui "Query")
                :placeholder  (query-example ui mode)
                :autocomplete "off"
-               :spellcheck   "false"}]
+               :spellcheck   "false"
+               :required     required?}]
     (if (= mode "list")
       ;; the text is the element's content: a text area has no value
       ;; attribute for a document to carry it in
@@ -653,6 +668,13 @@
   round trip; without the client all three are as the search was
   submitted.
 
+  The query is required, except when the form is submitted from the
+  frequency view (its `:view`), which counts every token of a blank one;
+  the corpus chooser requires a corpus where the client runs. Both are
+  the browser's own checks, so missing input is reported before it is
+  sent, in the browser's words, and the server's own answers stand for a
+  request that never passed through the form.
+
   Wrapped in a <search> landmark; GET, so every search has a shareable URL
   and works without JavaScript. The form carries an id, so a control
   rendered outside it (the sort of the concordance, the grouping of the
@@ -668,8 +690,8 @@
   the button they asked it with, and `:served-corpus`, the corpora this
   page was served for, decides which folders of the chooser start open
   while `:params` follows what the reader is choosing now."
-  [{:keys [ui folders filter-controls search-attrs params client? pending?
-           served-corpus served-filter corpus-filter value-filter
+  [{:keys [ui view folders filter-controls search-attrs params client?
+           pending? served-corpus served-filter corpus-filter value-filter
            chooser-open? filters-open? filters-pending?]
     :as state}
    action extra]
@@ -680,7 +702,7 @@
       ;; the button belongs against the field it submits, not at the foot
       ;; of every control that qualifies it
       [:p
-       (query-field ui mode q)
+       (query-field ui mode q (not= :frequencies view))
        " "
        [:button {:type "submit"} (i18n/trx ui "button" "Search")]]
       ;; one group: everything here qualifies the query above it, and two
@@ -925,10 +947,11 @@
   costs the section its own semantics and flattens its heading. The reader
   reaches the error because the search lands on it (see `result-section`).
 
-  An h3, since it sits inside a results region already headed by an h2."
+  An h2, since it sits inside a results region headed by the page's own
+  h1."
   [ui error corpora]
   [:section.error
-   [:h3 (error-name ui error)]
+   [:h2 (error-name ui error)]
    (error-body ui error corpora)])
 
 (defn download-links
@@ -1001,6 +1024,9 @@
   only in what they say about the same hits, so they differ only in what
   they pass here.
 
+  The heading is the page's h1: the search page has no other, so what a
+  search found, or why it found nothing, is what the page is about.
+
   Marked busy while a navigation is `pending?`, since until that one
   lands what this holds is the answer to the question before it."
   [{:keys [ui view view-hrefs result error pending?] :as state} heading body]
@@ -1011,7 +1037,7 @@
                      ;; are still the previous one's answer, and nothing
                      ;; about them says so
                      pending? (assoc :aria-busy "true"))
-   [:h2 {:id "results-heading"} heading]
+   [:h1 {:id "results-heading"} heading]
    (view-switch ui view view-hrefs)
    (when error (error-body ui error nil))
    (for [[e corpora] (error-groups (:counts result))]

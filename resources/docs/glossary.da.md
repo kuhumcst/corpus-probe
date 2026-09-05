@@ -7,6 +7,8 @@ Alignment-attributter {#alignment-attributes}:
   Forbindelser mellem [regionerne](/glossary#region) i to korpusser. De
   to korpusser er oversættelser af hinanden. En korpusside viser et
   korpus' alignment-attributter, hvis korpusset har nogen.
+  [Afsnit 5 i CQP-manualen](https://cwb.sourceforge.io/files/CQP_Manual/5.html)
+  beskriver forespørgsler i korpusser med alignment.
 
 cpos {#cpos}:
   Korpusposition: nummeret på et [token](/glossary#token), talt fra
@@ -14,6 +16,8 @@ cpos {#cpos}:
   token. Første kolonne i [KWIC'en](/glossary#kwic) viser positionen for
   hvert match. En resultat-URL indeholder positioner, når forekomster er
   foldet ud.
+  [Afsnit 1.2 i CQP-manualen](https://cwb.sourceforge.io/files/CQP_Manual/1_2.html)
+  beskriver korpuspositioner.
 
 CQP {#cqp}:
   Corpus Query Processor: forespørgselssproget i [CWB](/glossary#cwb)
@@ -45,6 +49,8 @@ Frekvens {#frequency}:
   på en position i [matchet](/glossary#match). Den tæller i hvert korpus
   og i alle korpusser under ét. Den angiver også hver frekvens
   [pr. million](/glossary#per-million).
+  [Afsnit 3.4 i CQP-manualen](https://cwb.sourceforge.io/files/CQP_Manual/3_4.html)
+  beskriver frekvensfordelinger.
 
 Konkordans {#concordance}:
   En liste over alle forekomster af det søgte. Hver forekomst vises i
@@ -57,17 +63,23 @@ Kontekst {#context}:
   ord eller den sætning eller det afsnit, som indeholder matchet.
   [Positionen](/glossary#cpos) for en forekomst åbner mere kontekst til
   den forekomst.
+  [Afsnit 2.3 i CQP-manualen](https://cwb.sourceforge.io/files/CQP_Manual/2_3.html)
+  beskriver visningsindstillingerne i CQP, blandt andet konteksten.
 
 Korpus {#corpus}:
   En samling tekster, der er kodet til Corpus Workbench. Hvert ord er et
   [token](/glossary#token). Hvert token har annotationer. Hver tekst har
   [metadata](/glossary#metadata). Siden [Korpusser](/corpora) viser
   korpusserne med deres størrelse og deres attributter.
+  [Afsnit 1.2 i CQP-manualen](https://cwb.sourceforge.io/files/CQP_Manual/1_2.html)
+  beskriver et korpus' datamodel.
 
 Korpusrækkefølge {#corpus-order}:
   Den rækkefølge, [forekomsterne](/glossary#hit) har i korpusset. CWB
   leverer forekomsterne i denne rækkefølge. Det er standardrækkefølgen i
   en [KWIC](/glossary#kwic).
+  [Afsnit 2.9 i CQP-manualen](https://cwb.sourceforge.io/files/CQP_Manual/2_9.html)
+  beskriver de andre rækkefølger.
 
 KWIC {#kwic}:
   Key word in context, søgeord i kontekst: en
@@ -78,6 +90,8 @@ KWIC {#kwic}:
   kalder denne visning KWIC, og det gør denne grænseflade også.
   KWIC-visningen viser forekomsterne i et resultat, og
   [frekvensvisningen](/glossary#frequency) tæller dem.
+  [Afsnit 2.3 i CQP-manualen](https://cwb.sourceforge.io/files/CQP_Manual/2_3.html)
+  beskriver visningsindstillingerne for en KWIC.
 
 Match {#match}:
   De [tokens](/glossary#token), som forespørgslen matchede i én
@@ -88,6 +102,8 @@ Match {#match}:
   understreger det. En [frekvenstabel](/glossary#frequency) tæller på én
   position i matchet: før det, ved dets start, ved dets slutning, over
   hele matchet eller efter det.
+  [Afsnit 3.3 i CQP-manualen](https://cwb.sourceforge.io/files/CQP_Manual/3_3.html)
+  beskriver ankrene match, matchend, target og keyword.
 
 Metadata {#metadata}:
   Værdierne af de annoterede [strukturelle
@@ -96,6 +112,8 @@ Metadata {#metadata}:
   nogle af teksterne. Det viser de værdier, som de valgte korpusser
   har. Det tager også et mønster for hver attribut og et interval for
   en attribut, hvis værdier er tal.
+  [Afsnit 4.2 i CQP-manualen](https://cwb.sourceforge.io/files/CQP_Manual/4_2.html)
+  beskriver strukturelle attributter med annotationer.
 
 Positionelle attributter {#positional-attributes}:
   Annotationerne på hvert [token](/glossary#token). Hver attribut har
@@ -105,6 +123,8 @@ Positionelle attributter {#positional-attributes}:
   [CQP](/glossary#cqp)-forespørgsel nævner attributterne i sine
   klammer. Attributvælgeren viser de attributter, som de valgte
   korpusser har fælles.
+  [Afsnit 2.5 i CQP-manualen](https://cwb.sourceforge.io/files/CQP_Manual/2_5.html)
+  beskriver, hvordan en forespørgsel bruger dem.
 
 Pr. million {#per-million}:
   En [frekvens](/glossary#frequency) skaleret til en million
@@ -118,6 +138,8 @@ Region {#region}:
   [Metadatafiltret](/glossary#metadata) viser antallet af regioner med
   hver værdi. `1591 · 3 regioner` betyder fx, at tre tekster har året
   1591.
+  [Afsnit 4.2 i CQP-manualen](https://cwb.sourceforge.io/files/CQP_Manual/4_2.html)
+  beskriver regioner og deres attributter.
 
 Registret {#registry}:
   Listen over de korpusser, CWB har. Registret har én fil for hvert
@@ -132,6 +154,8 @@ Regulært udtryk {#regex}:
   streng i anførselstegn et regulært udtryk. Den simple søgning escaper
   de tegn, du skriver. Et punktum i en simpel søgning er derfor et
   punktum.
+  [Appendiks A.1 i CQP-manualen](https://cwb.sourceforge.io/files/CQP_Manual/A_1.html)
+  opsummerer syntaksen.
 
 Stikprøve {#sample}:
   Et tilfældigt udvalg af et givet antal [forekomster](/glossary#hit).
@@ -140,6 +164,8 @@ Stikprøve {#sample}:
   stort til at læse i sin helhed. Udvalget ligger fast: den samme URL
   giver altid den samme stikprøve. Grænsefladen tager en stikprøve i
   hvert korpus for sig.
+  [Afsnit 3.6 i CQP-manualen](https://cwb.sourceforge.io/files/CQP_Manual/3_6.html)
+  beskriver tilfældige udvalg.
 
 Strukturelle attributter {#structural-attributes}:
   Opmærkningen af strækninger af [tokens](/glossary#token): sætninger
@@ -148,9 +174,13 @@ Strukturelle attributter {#structural-attributes}:
   sidste token. En annoteret strukturel attribut har en værdi for hver
   region, fx `text_year`. [Metadatafiltret](/glossary#metadata) tilbyder
   disse værdier.
+  [Afsnit 4.2 i CQP-manualen](https://cwb.sourceforge.io/files/CQP_Manual/4_2.html)
+  beskriver dem.
 
 Token {#token}:
   Én enhed tekst, sådan som korpusset er kodet: et ord, et tal eller et
   tegnsætningstegn. Størrelsen af et [korpus](/glossary#corpus) er dets
   antal tokens. En *type* er én bestemt værdi. Et korpus har lige så
   mange typer af `word`, som det har forskellige ordformer.
+  [Afsnit 1.2 i CQP-manualen](https://cwb.sourceforge.io/files/CQP_Manual/1_2.html)
+  beskriver tokens og deres attributter.
