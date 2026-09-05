@@ -193,8 +193,8 @@
          [:th {:scope "colgroup" :colspan span} (i18n/tr ui "total")])]
       [:tr
        (for [_ groups]
-         (list [:th {:scope "col"} (layout/term ui :frequency)]
-               [:th {:scope "col"} (layout/term ui :per-million)]
+         (list [:th {:scope "col"} (layout/term ui :frequency false)]
+               [:th {:scope "col"} (layout/term ui :per-million false)]
                (when sized [:th {:scope "col"} (i18n/tr ui "tokens")])
                (when docs [:th {:scope "col"} (i18n/tr ui "texts")])))]]
      [:tbody

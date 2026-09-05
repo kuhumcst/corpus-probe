@@ -76,10 +76,7 @@
     (is (= "Metadata" (layout/term en :metadata false)))))
 
 (deftest site-footer-test
-  (testing "the app says what it is, once, where a reader needs it once"
-    (is (some #{"CWB corpus search"} (deep (layout/site-footer en))))
-    (is (some #{"CWB-korpussøgning"} (deep (layout/site-footer da)))))
-  (testing "and credits what it is a front end for"
+  (testing "the footer credits what the app is a front end for"
     (is (some #{"https://cwb.sourceforge.io/"}
               (deep (layout/site-footer en))))
     (is (some #{"Powered by"} (deep (layout/site-footer en))))
@@ -92,6 +89,8 @@
       (is (some #{"https://github.com/kuhumcst/corpus-probe"} (hrefs en)))
       (is (some #{"CQP manual"} (deep (layout/site-footer en))))
       (is (some #{"Kildekode"} (deep (layout/site-footer da))))
+      (testing "the links close the row"
+        (is (= :ul.row (first (last (layout/site-footer en))))))
       (testing "the institution in the reader's language, where it has one"
         (is (some #{"https://cst.ku.dk/english/"} (hrefs en)))
         (is (some #{"https://cst.ku.dk/"} (hrefs da)))))
@@ -124,8 +123,6 @@
         (is (some #{"Søgning"} da))
         (is (some #{"Korpusser"} da))
         (is (some #{"Ordliste"} da))
-        (testing "what the app is belongs in the footer, not over every page"
-          (is (not (some #{"CWB-korpussøgning"} da))))
         (testing "the frequency table is a view of a result, not a place"
           (is (not (some #{"Frekvenser"} da))))))
     (testing "the masthead claims no heading: each page names itself"

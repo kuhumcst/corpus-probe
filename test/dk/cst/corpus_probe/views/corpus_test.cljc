@@ -395,8 +395,8 @@
               a level deeper per folder inside, and a list per folder's
               corpora, with nothing folded away"
       (is (= layout/main-attrs (second html)))
-      (is (= [:main :h1 :h2 :h3 :ul :li :a :code :data.size :h2 :ul :li :a
-              :data.size]
+      (is (= [:main :h1 :h2 :h3 :ul.index :li :a :code :data.size
+              :h2 :ul.index :li :a :data.size]
              (tags html)))
       (is (= [[:h1 "Corpora"] [:h2 "Litteratur"] [:h3 "Folkeviser"]
               [:h2 "Other"]]
@@ -407,7 +407,7 @@
       (is (some #{[:a {:href "/corpora/viser"} "Folkeviser"]} (deep html)))
       (is (some #{[:a {:href "/corpora/probe"} "PROBE"]} (deep html))))
     (testing "a registry without folders is one list under the heading"
-      (is (= [:main :h1 :ul :li :a :data.size]
+      (is (= [:main :h1 :ul.index :li :a :data.size]
              (tags (corpus/index-view en {:folders [(second folders)]})))))
     (testing "a folder nested too deep for HTML's headings keeps the last"
       (is (= :h6 (corpus/heading 7)))

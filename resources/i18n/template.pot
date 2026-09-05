@@ -224,19 +224,7 @@ msgid "Site"
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/layout.cljc
-msgid "CWB corpus search"
-msgstr ""
-
-#: src/dk/cst/corpus_probe/views/layout.cljc
 msgid "Powered by"
-msgstr ""
-
-#: src/dk/cst/corpus_probe/views/layout.cljc
-msgid "CQP manual"
-msgstr ""
-
-#: src/dk/cst/corpus_probe/views/layout.cljc
-msgid "Source code"
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/layout.cljc
@@ -245,6 +233,14 @@ msgstr ""
 
 #: src/dk/cst/corpus_probe/views/layout.cljc
 msgid "University of Copenhagen"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/layout.cljc
+msgid "CQP manual"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/layout.cljc
+msgid "Source code"
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/page.cljc
@@ -532,7 +528,7 @@ msgid "Add token"
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/page.cljc
-msgid "Query options"
+msgid "legend|Query"
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/page.cljc

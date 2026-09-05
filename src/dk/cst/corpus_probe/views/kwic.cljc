@@ -335,9 +335,9 @@
   [ui]
   [:thead
    [:tr
-    [:th.cpos {:scope "col"} (layout/term ui :cpos)]
+    [:th.cpos {:scope "col"} (layout/term ui :cpos false)]
     [:th.left {:scope "col"} (i18n/tr ui "left context")]
-    [:th.match {:scope "col"} (layout/term ui :match)]
+    [:th.match {:scope "col"} (layout/term ui :match false)]
     [:th.right {:scope "col"} (i18n/tr ui "right context")]
     [:th.structs {:scope "col"} (i18n/tr ui "source")]]])
 

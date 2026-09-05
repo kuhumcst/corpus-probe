@@ -98,10 +98,11 @@
 (defn term
   "The jargon `k` as the interface shows it, in `ui`: CWB's own word, as
   an <abbr> with its expansion where it is one, linked to its glossary
-  entry (the key is the entry's id) unless `linked?` is false, for a
-  place a link cannot go: inside another link, or in a label whose click
-  belongs to its control. Not only abbreviations: match and frequency
-  are terms too."
+  entry (the key is the entry's id) unless `linked?` is false: inside
+  another link, in a label whose click belongs to its control, or in
+  the machinery of a form or a result (a legend, a table's head, a
+  caption), which the glossary is linked from the prose instead of. Not
+  only abbreviations: match and frequency are terms too."
   ([ui k]
    (term ui k true))
   ([ui k linked?]
@@ -130,8 +131,8 @@
   marked as the current one), and how they want it (the language switch,
   which returns to `path`).
 
-  What the app is stays in the footer rather than being restated over
-  every page: a reader of a tool needs it once.
+  What the app is, the masthead does not say: the frontpage does, and a
+  reader of a tool needs it once.
 
   The nav's hrefs are given rather than built here, because the search
   keeps its query across the masthead and only the handler knows what that
@@ -165,27 +166,22 @@
      :cljs (.getFullYear (js/Date.))))
 
 (defn site-footer
-  "The site's contentinfo in `ui`: what this app is, what it is a front
-  end for, where its manual and its source are, and whose it is.
+  "The site's contentinfo in `ui`: what this is a front end for, whose it
+  is, and where its manual and its source are, in the order the row
+  shows them.
 
-  All of it belongs here rather than in the masthead, where a tagline and
+  All of it belongs here rather than in the masthead, where a credit and
   a row of links would compete with the site's name and its navigation on
   every page: a reader of a tool needs these once, and looks for them at
-  the foot.
+  the foot. What the app is, it does not say: the frontpage does.
 
   Rendered as a direct child of <body>, so it is the document's
   contentinfo rather than a section footer inside the main content."
   [ui]
   [:footer
-   [:p (i18n/tr ui "CWB corpus search") ". "
-    (i18n/tr ui "Powered by") " "
+   [:p (i18n/tr ui "Powered by") " "
     [:a {:href "https://cwb.sourceforge.io/"} "IMS Open Corpus Workbench"]
     "."]
-   [:ul.row
-    [:li [:a {:href "https://cwb.sourceforge.io/files/CQP_Manual/"}
-          (i18n/tr ui "CQP manual")]]
-    [:li [:a {:href "https://github.com/kuhumcst/corpus-probe"}
-          (i18n/tr ui "Source code")]]]
    ;; TODO: no licence is named anywhere yet, and the holder is a guess:
    ;; the university whose organisation publishes the source
    [:p [:small "© " (year) " "
@@ -194,4 +190,9 @@
                      "https://cst.ku.dk/"
                      "https://cst.ku.dk/english/")}
          (i18n/tr ui "Centre for Language Technology")]
-        ", " (i18n/tr ui "University of Copenhagen")]]])
+        ", " (i18n/tr ui "University of Copenhagen")]]
+   [:ul.row
+    [:li [:a {:href "https://cwb.sourceforge.io/files/CQP_Manual/"}
+          (i18n/tr ui "CQP manual")]]
+    [:li [:a {:href "https://github.com/kuhumcst/corpus-probe"}
+          (i18n/tr ui "Source code")]]]])

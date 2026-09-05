@@ -257,7 +257,9 @@
   [ui level {:keys [label corpora folders]}]
   (list
    (when label [(heading level) label])
-   (when (seq corpora) [:ul (map (partial corpus-item ui) corpora)])
+   ;; classed for the stylesheet, which lines the entries' names, ids
+   ;; and sizes up in columns across the list
+   (when (seq corpora) [:ul.index (map (partial corpus-item ui) corpora)])
    (map (partial index-folder ui (cond-> level label inc)) folders)))
 
 (defn index-view

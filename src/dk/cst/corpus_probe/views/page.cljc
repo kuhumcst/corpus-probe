@@ -495,7 +495,7 @@
                       filtering (narrow-attrs (str/lower-case q)))
           nothing-found? (and filtering (every? :hidden? shown))]
       [:fieldset.filters
-       [:legend (layout/term ui :metadata)]
+       [:legend (layout/term ui :metadata false)]
        (when client?
          (controls/filter-box "value-filter" (i18n/tr ui "Filter") q
                               [:filter-values]))
@@ -755,18 +755,19 @@
       " "
       [:label [:input {:type    "checkbox" :name (param :end) :value "on"
                        :checked (some? end)}]
-       (i18n/tr ui "sentence end")]
-      (when client?
-        (list " "
-              [:button {:type     "button"
-                        :disabled any?
-                        :on       {:click [:add-condition i]}}
-               (i18n/tr ui "Add condition")]
-              " "
-              [:button {:type       "button"
-                        :aria-label (str (i18n/tr ui "Remove token") " " i)
-                        :on         {:click [:remove-token id]}}
-               "×"]))]]))
+       (i18n/tr ui "sentence end")]]
+     ;; the token's own actions on a row of their own, so they stay together
+     (when client?
+       [:p
+        [:button {:type     "button"
+                  :disabled any?
+                  :on       {:click [:add-condition i]}}
+         (i18n/tr ui "Add condition")]
+        " "
+        [:button {:type       "button"
+                  :aria-label (str (i18n/tr ui "Remove token") " " i)
+                  :on         {:click [:remove-token id]}}
+         "×"]])]))
 
 (defn token-fieldset
   "The tokens of the extended search in `ui`: one group per token of
@@ -994,9 +995,11 @@
       ;; them, and a disabled control is not submitted, so nothing about a
       ;; simple search rides along with a CQP one.
       ;;
-      ;; Named for a screen reader alone: the box under the field is its
-      ;; options, and a legend saying so said what the box says
-      [:fieldset.query-options {:aria-label (i18n/tr ui "Query options")}
+      ;; Named by a legend like the boxes beside it, so that the three
+      ;; line up when they share a row; the word is the query's, since
+      ;; everything in the box qualifies it
+      [:fieldset.query-options
+       [:legend (i18n/trx ui "legend" "Query")]
        ;; the radios are still a group of their own, and still named:
        ;; a fieldset is not the only thing that can say so
        [:p {:role "radiogroup" :aria-label (i18n/tr ui "Query mode")}
@@ -1431,7 +1434,7 @@
                          (near-control ui (:near result))
                          (:near result))
           (pagination ui prev-href next-href position)
-          (kwic/concordance hits {:caption  (layout/term ui :kwic)
+          (kwic/concordance hits {:caption  (layout/term ui :kwic false)
                                   :ui       ui
                                   :langs    langs
                                   :expanded expanded
@@ -1481,17 +1484,23 @@
   the hits it describes without narrowing them; below it, it is a sheet at
   the foot of the viewport.
 
-  It does not take focus: the cursor stays on the token so the arrow keys
-  keep moving, and the panel describes whatever the cursor is on. That is
-  why it is not a popover, which would put itself in the top layer, out of
-  the grid, and want focus of its own. Escape closes it from the
-  concordance.
+  It is not given focus when it opens: the cursor stays on the token so
+  the arrow keys keep moving, and the panel describes whatever the
+  cursor is on. That is why it is not a popover, which would put itself
+  in the top layer, out of the grid, and want focus of its own. Escape
+  closes it from the concordance. It can take focus, so that a click
+  anywhere in it lands focus in the panel rather than on the page, and
+  it reports focus leaving it, since the client closes it once focus
+  has left both it and the concordance (see
+  dk.cst.corpus-probe.ui/leave-concordance!).
 
   The group titles are in `ui`; the attribute names inside them are the
   corpus's own."
   [ui {:keys [token structs corpus cpos matchend] :as selected}]
   (when selected
-    [:aside.sidebar {:aria-label (i18n/tr ui "Token details")}
+    [:aside.sidebar {:aria-label (i18n/tr ui "Token details")
+                     :tabindex   "-1"
+                     :on         {:focusout [:leave-concordance]}}
      [:h2 (i18n/tr ui "Token details")]
      [:button {:type "button" :on {:click [:close]}} (i18n/tr ui "Close")]
      (detail-group (i18n/tr ui "Token") (dissoc token :open :close))

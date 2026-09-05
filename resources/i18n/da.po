@@ -243,8 +243,8 @@ msgstr "ét eller flere ord i rækkefølge"
 msgid "Query mode"
 msgstr "Søgetype"
 
-msgid "Query options"
-msgstr "Søgeindstillinger"
+msgid "legend|Query"
+msgstr "Forespørgsel"
 
 msgid "Remove condition"
 msgstr "Fjern betingelse"
@@ -338,9 +338,6 @@ msgstr "kilde"
 
 msgid "button|Search"
 msgstr "Søg"
-
-msgid "CWB corpus search"
-msgstr "CWB-korpussøgning"
 
 msgid "text"
 msgstr "tekst"

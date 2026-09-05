@@ -333,6 +333,10 @@
       (is (str/includes? plain "<div id=\"app\">"))
       (is (str/includes? plain "/js/main.js"))
       (is (str/includes? client "<div id=\"app\">")))
+    (testing "the masthead and the footer mount too: a routed language
+              switch re-words both without a reload"
+      (is (str/includes? plain "<div id=\"masthead\"><header"))
+      (is (str/includes? plain "<div id=\"footer\"><footer")))
     (testing "only a page given one carries a bootstrap payload"
       (is (not (str/includes? plain "id=\"bootstrap\"")))
       (is (str/includes? client "id=\"bootstrap\"")))

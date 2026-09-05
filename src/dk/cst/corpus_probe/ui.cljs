@@ -423,25 +423,23 @@
   (some-> (.getElementById js/document kwic/region-id) (.focus)))
 
 (defn leave-concordance!
-  "Close the inspection panel once focus has settled outside both `region`
-  and the panel itself.
-
-  The panel counts as part of inspecting, not as somewhere else: it sits
-  before the concordance in the document, so shift-tabbing off a token
-  lands on its close button, and a panel that closed on the way in would
-  pull the ground from under the focus arriving.
+  "Close the inspection panel once focus has settled outside both the
+  concordance and the panel, which are one pool: focus moving between
+  them keeps the panel and focus leaving either for the page closes it,
+  so both report focus leaving, and which of them did does not matter.
 
   Deferred by a tick because focusout fires before the next element has
   focus, and read from `activeElement` rather than the event's
   relatedTarget so that clicking the page background closes the panel
   while merely switching windows does not: a blurred window keeps its
   active element, an abandoned concordance does not."
-  [region]
+  []
   (js/setTimeout
    (fn []
-     (let [el    (.-activeElement js/document)
-           panel (.querySelector js/document "aside.sidebar")]
-       (when-not (or (.contains region el)
+     (let [el     (.-activeElement js/document)
+           region (.getElementById js/document kwic/region-id)
+           panel  (.querySelector js/document "aside.sidebar")]
+       (when-not (or (and region (.contains region el))
                      (and panel (.contains panel el)))
          (swap! state dissoc :selected))))
    0))
@@ -635,8 +633,7 @@
     :inspect (swap! state assoc :selected arg)
     :close   (close-panel!)
     :move-cursor (move-cursor! (:replicant/dom-event data) arg)
-    :leave-concordance
-    (leave-concordance! (.-currentTarget (:replicant/dom-event data)))
+    :leave-concordance (leave-concordance!)
     :toggle-context
     (let [{:keys [corpus cpos matchend]} arg
           k (kwic/hit-key arg)]
@@ -692,8 +689,8 @@
   (reset! shown (page-key)))
 
 (defn render!
-  "Render the current state into the masthead and #app, then sync the URL
-  to it."
+  "Render the current state into the masthead, #app and the footer, then
+  sync the URL to it."
   []
   ;; The first render clears #app and rebuilds the server-rendered markup
   ;; rather than adopting it, so a query typed, a disclosure opened or
@@ -713,7 +710,12 @@
     ;; the page rather than keeping whatever the first server render said
     (r/render (.getElementById js/document "masthead")
               (layout/site-header (i18n/->ui lang) path nav))
-    (r/render (.getElementById js/document "app") (app-views/page state)))
+    (r/render (.getElementById js/document "app") (app-views/page state))
+    ;; the footer's words are in the UI language, so a language switch
+    ;; that does not reload the document has to re-render it too, or it
+    ;; keeps the language the page was served in
+    (r/render (.getElementById js/document "footer")
+              (layout/site-footer (i18n/->ui lang))))
   (sync-expand-url!))
 
 (defn at-hand?

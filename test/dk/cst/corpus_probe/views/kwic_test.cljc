@@ -225,14 +225,15 @@
       (is (= [:leave-concordance] (get-in html [1 :on :focusout]))))
     (testing "the caption names the region as well as the table"
       (is (= kwic/caption-id (:id (second (nth table 1))))))
-    (testing "every column is headed, so a data cell resolves both headers"
+    (testing "every column is headed, so a data cell resolves both headers,
+              and no heading is a link: the glossary is linked from the
+              prose, not from the machinery"
       (is (= [:thead
               [:tr
                [:th.cpos {:scope "col"}
-                [:a {:href "/glossary#cpos"}
-                 [:abbr {:title "corpus position"} "cpos"]]]
+                [:abbr {:title "corpus position"} "cpos"]]
                [:th.left {:scope "col"} "left context"]
-               [:th.match {:scope "col"} [:a {:href "/glossary#match"} "match"]]
+               [:th.match {:scope "col"} "match"]
                [:th.right {:scope "col"} "right context"]
                [:th.structs {:scope "col"} "source"]]]
              (nth table 2))))

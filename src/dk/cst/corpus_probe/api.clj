@@ -152,12 +152,14 @@
   script the client takes over from.
 
   The masthead and the footer sit outside #app, so they are the document's
-  banner and contentinfo rather than part of the main content. The
-  masthead has a mount point of its own because its links carry the
-  current search, so a routed navigation must re-render it or it goes
-  stale; the plain <div> around it scopes no landmark, so the <header>
-  inside is still the document's banner. Every page mounts the client, so
-  every page routes: the client swaps those two regions rather than
+  banner and contentinfo rather than part of the main content. Each has
+  a mount point of its own, because a routed navigation must re-render
+  it or it goes stale: the masthead's links carry the current search,
+  and the footer's words are in the UI language, which the language
+  switch changes without reloading. The plain <div> around each scopes
+  no landmark, so the <header> and <footer> inside are still the
+  document's banner and contentinfo. Every page mounts the client, so
+  every page routes: the client swaps those three regions rather than
   reloading, and the server keeps serving the same complete page for
   anything that does not run it. The document shell and the bootstrap
   script are emitted as strings rather than through Replicant, so the
@@ -176,6 +178,8 @@
                    :content (i18n/tr ui (str "Search CWB corpora and read "
                                              "KWIC concordances."))}]))
          (correct-quote-escaping (replicant/render [:title title]))
+         "<link rel=\"stylesheet\" href=\"/css/reset.css\">"
+         "<link rel=\"stylesheet\" href=\"/css/tokens.css\">"
          "<link rel=\"stylesheet\" href=\"/css/style.css\">"
          "</head><body>"
          (correct-quote-escaping (replicant/render (layout/skip-link ui)))
@@ -186,7 +190,9 @@
          "<div id=\"app\">"
          (correct-quote-escaping (replicant/render body))
          "</div>"
+         "<div id=\"footer\">"
          (correct-quote-escaping (replicant/render (layout/site-footer ui)))
+         "</div>"
          (when payload
            (str "<script type=\"" transit-type "\" id=\"bootstrap\">"
                 (script-safe payload)
@@ -1551,22 +1557,17 @@
                 {:title (search-title (i18n/->ui (request-language request))
                                       params* result)}))))))
 
-(defn stylesheet
-  "Serve the bundled stylesheet."
-  [_request]
-  (resource-response "text/css; charset=utf-8"
-                     (io/resource "public/css/style.css")))
-
-(defn js-file
-  "Serve a compiled client asset from public/js by its splat `:path`.
+(defn public-file
+  "Serve the file under public/`dir` named by the splat `:path` of
+  `request` as `content-type`: a stylesheet, or a compiled client asset.
 
   Rejects `..` segments directly: `io/resource` follows them out of the
   directory, so a normalising router is not relied on as the only guard."
-  [request]
+  [content-type dir request]
   (let [path (get-in request [:path-params :path])]
     (if-let [resource (and (not (str/includes? path ".."))
-                           (io/resource (str "public/js/" path)))]
-      (resource-response "text/javascript; charset=utf-8" resource)
+                           (io/resource (str "public/" dir "/" path)))]
+      (resource-response content-type resource)
       {:status 404 :body "not found"})))
 
 (defn routes
@@ -1594,5 +1595,11 @@
      :route-name ::filters]
     ["/api/counts"                :get (partial counts-page ctx)
      :route-name ::counts]
-    ["/css/style.css"             :get stylesheet :route-name ::stylesheet]
-    ["/js/*path"                  :get js-file    :route-name ::js]})
+    ["/css/*path"                 :get (partial public-file
+                                                "text/css; charset=utf-8"
+                                                "css")
+     :route-name ::css]
+    ["/js/*path"                  :get (partial public-file
+                                                "text/javascript; charset=utf-8"
+                                                "js")
+     :route-name ::js]})

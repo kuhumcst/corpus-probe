@@ -1,0 +1,22 @@
+/* What the user agent gets wrong for every page, put right before
+   style.css. A small reset: the block margins and the list and
+   disclosure markers stay, since they are the page's own rhythm. */
+
+/* a box is the size it is declared, padding and border included */
+*, *::before, *::after { box-sizing: border-box; }
+
+/* the page margin is the layout's to set, and the root's height chain
+   wants the body flush */
+body { margin: 0; }
+
+/* iOS inflates text in landscape unless told not to */
+html { -webkit-text-size-adjust: 100%; }
+
+/* controls inherit the page's font: Mobile Safari zooms the viewport when
+   a focused field is under 16px and never zooms back, and the UA default
+   left the query field at 13.3px Arial */
+:where(input, button, select, textarea) { font: inherit; }
+
+/* a fieldset refuses to shrink below its content, and one long value
+   would push the query rail out of its column */
+fieldset { min-inline-size: 0; }
