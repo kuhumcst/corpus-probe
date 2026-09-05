@@ -104,10 +104,15 @@ metadata display and filtering are first-class requirements, not extras.
 
 CWB version policy, verified in both directions with from-source builds
 ([gap-version-skew.md](docs/research/gap-version-skew.md)): the on-disk format
-is identical between 3.4.x and 3.5.0, so the server can upgrade to 3.5.0
-against the existing registry/data with binary-swap rollback — but the app
-**generates only the 3.4.27-safe CQP subset** anyway (Appendix B), which costs
-nothing. The wire protocol needs no version branching at all.
+is identical between 3.4.x and 3.5.0. The app therefore ships with **its own
+CWB 3.5.0, built from source in a container**, reading the KU data through a
+read-only bind mount at the same absolute paths the registry names, while the
+host's KORP keeps its 3.4.27 untouched. The container also carries gawk,
+coreutils sort and the generated da_DK.UTF-8 locale for ExternalSort, a
+writable volume for the result cache and a sized /tmp for sort files. The app
+generates CQP for 3.5.0; Appendix B records the 3.4.27-safe subset for the
+day it has to run on the host's binary instead. The wire protocol needs no
+version branching at all.
 
 ## 3. Feature cutline
 
@@ -410,7 +415,7 @@ verified current as of 2026-09:
 | HTTP server | Pedestal 0.8.1, http-kit connector (http-kit 2.8.1) | Existing Pedestal experience; 0.8 (Sep 2025) is freshly modernized — connector API drops the servlet stack, http-kit supported, SSE first-class (core.async channel per stream) for streamed/progress results; interceptors fit per-request process lifecycle (attach in `:enter`, kill in `:leave`/`:error`) |
 | Child process | babashka.process 0.6.25 | Idiomatic ProcessBuilder wrapper; long-lived pipes, `:shutdown :destroy-tree`; keep stderr separate |
 | Parsing | Hand-rolled line parsers | The wire format is a stable line protocol; instaparse would be overkill (reserved for a possible CQP-syntax highlighter later). ANSI handling unnecessary — child mode cannot emit colour (verified) |
-| Frontend | Replicant 2026.07.1 + Nexus 2026.08.1 | Data-driven hiccup, no React/npm treadmill; the app is "render server data, re-render on new page" — exactly Replicant's model; declared stable/production-quality |
+| Frontend | Replicant 2026.07.1 | Data-driven hiccup, no React/npm treadmill; the app is "render server data, re-render on new page" — exactly Replicant's model; declared stable/production-quality. Event handlers are data vectors that `replicant.dom/set-dispatch!` routes to one hand-written dispatcher; Nexus, the companion action-dispatch library, was considered and left out, since a client with a dozen actions that each swap the state or start a fetch has no action chains for it to organise |
 | SSR | `replicant.string/render` from shared `.cljc` views | One set of view functions for server first-paint and client updates |
 | Wire | transit-clj/-cljs (charred where plain JSON is wanted) | Lossless EDN-shaped payloads between two Clojure ends; charred aligns with Pedestal's own JSON choice |
 | Build | deps.edn + shadow-cljs 3.5.0 | Standard; shadow reads deps.edn |
@@ -478,7 +483,8 @@ plan). Production points `config.edn` at the existing server registry.
    corpus info pages, export.
 5. **Cutover**: metadata filtering with `cwb-scan-corpus` value lists, da/en
    i18n, deploy next to the existing KORP (`/korp` untouched), fix or filter
-   the three phantom registry corpora, decide on the 3.5.0 server upgrade.
+   the three phantom registry corpora, run CWB 3.5.0 in the app's own
+   container (§2).
 
 ## 13. Risks and mitigations
 
@@ -489,7 +495,7 @@ plan). Production points `config.edn` at the existing server registry.
 | Runaway queries | Wall-clock watchdog, destroy process tree, kill on client disconnect; optional ProgressBar events to the UI |
 | Stale NQR cache vs re-indexed corpus ⇒ SIGBUS | Build-stamp in cache key; abnormal exit ⇒ poison + retry (verified behaviour) |
 | gawk missing ⇒ silently wrong sort order | Startup self-check for gawk + system sort; treat ExternalSort stderr as an error, not a warning |
-| 3.4.27 vs 3.5.0 drift | Generate only the verified-safe subset (Appendix B); the protocol itself is identical |
+| 3.4.27 vs 3.5.0 drift | The app runs its own 3.5.0 in a container over the same data (§2); Appendix B lists what to avoid should it ever run on the host's 3.4.27; the protocol itself is identical |
 | Phantom corpora break batch metadata calls | Vet the corpus list at startup (`cwb-describe-corpus` per corpus, drop failures loudly) |
 | Replicant is young | API declared stable; worst case the `.cljc` hiccup views are portable to any hiccup renderer — the investment is in driver/parsers/views, not the renderer |
 
@@ -529,6 +535,12 @@ stderr:  CQP Error:
 [docs/research/cwb-core.md](docs/research/cwb-core.md) — all byte-exact.
 
 ## Appendix B — the 3.4.27-safe CQP subset
+
+For reference: the deployment runs 3.5.0 (§2), so nothing here constrains
+what the app generates today. Several commands it does generate are verified
+on 3.5.0 only (`sort ... reverse`, the pairwise `group ... by`, `delete ...
+without keyword`, assigning a saved result to `Last`) and would need checking
+first if it ever had to run on the host's 3.4.27.
 
 Safe (all verified present): `.EOL.;` protocol; activation; standard queries
 incl. `(?longest)`-style strategy modifiers; `size`, `cat` (ranges), `dump`,

@@ -2,9 +2,9 @@
   "CQP command generation: the hardened display profile, safe embedding of
   user input, the simple-search compiler and KWIC page batches.
 
-  Only the verified 3.4.27-safe CQP subset is generated here (PLAN.md
-  appendix B), so the commands run unchanged against both the production
-  server and a current 3.5.0 installation."
+  The commands are generated for CWB 3.5.0, the version the app ships
+  with in its own container (PLAN.md section 2); appendix B there records
+  the 3.4.27-safe subset for reference."
   (:require [clojure.string :as str]))
 
 (def hardened-profile
@@ -319,9 +319,6 @@
   (near-command {:word \"kat\" :distance 5})
   ;; => set Last keyword nearest [word = \"kat\" %c] within 5 words from
   ;;    match; delete Last without keyword;"
-  ;; TODO: `delete ... without keyword` is in CQP's grammar and not in
-  ;; its manual, and is verified on 3.5.0 only; check it on the
-  ;; production 3.4.27 before relying on it there (PLAN.md appendix B).
   [{:keys [word distance]}]
   (when-not (str/blank? word)
     (str "set Last keyword nearest [word = \"" (escape-value word) "\" %c]"
@@ -366,9 +363,6 @@
 
   (count-command \"match\" :lemma {:by :text_year})
   ;; => group Last match lemma by match text_year;"
-  ;; TODO: `group ... by ...` is verified on 3.5.0 only; check it on the
-  ;; production 3.4.27 (PLAN.md appendix B lists group as safe, not the
-  ;; pairwise form).
   ([position attr]
    (count-command position attr {}))
   ([position attr {:keys [within by]}]
@@ -435,9 +429,6 @@
   (see `sort-attr`). What each mode is called is the interface's
   business rather than this namespace's (see
   dk.cst.corpus-probe.views.page/sort-label)."
-  ;; TODO: `sort ... reverse` is verified on 3.5.0 only; check it on the
-  ;; production 3.4.27 (PLAN.md appendix B lists sort as safe, not this
-  ;; option of it).
   (let [external "set ExternalSort on; sort Last by word"]
     [["corpus"  "sort Last;"]
      ["word"    (str external ";")]
@@ -668,8 +659,6 @@
 
   (load-command \"PROBE\" \"q_1\" \"/cache/PROBE\")
   ;; => set DataDirectory \"/cache/PROBE\"; PROBE; Last = q_1;"
-  ;; TODO: assigning a saved result to Last is verified on 3.5.0 only;
-  ;; check it on the production 3.4.27 before relying on it there.
   [corpus nqr cache-dir]
   (str "set DataDirectory \"" (valid-data-directory cache-dir) "\"; "
        corpus "; Last = " (valid-result-name nqr) ";"))
