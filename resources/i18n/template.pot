@@ -36,10 +36,6 @@ msgid "All corpora in"
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/corpus.cljc
-msgid "Filter corpora"
-msgstr ""
-
-#: src/dk/cst/corpus_probe/views/corpus.cljc
 msgid "No corpora found."
 msgstr ""
 
@@ -52,15 +48,7 @@ msgid "charset"
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/corpus.cljc
-msgid "Positional attributes"
-msgstr ""
-
-#: src/dk/cst/corpus_probe/views/corpus.cljc
 msgid "types"
-msgstr ""
-
-#: src/dk/cst/corpus_probe/views/corpus.cljc
-msgid "Structural attributes"
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/corpus.cljc
@@ -72,10 +60,6 @@ msgid "with annotations"
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/corpus.cljc
-msgid "Alignment attributes"
-msgstr ""
-
-#: src/dk/cst/corpus_probe/views/corpus.cljc
 msgid "blocks"
 msgstr ""
 
@@ -84,7 +68,7 @@ msgid "Info"
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/corpus.cljc
-msgid "Could not read corpus"
+msgid "Unreadable corpus"
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/corpus.cljc
@@ -92,7 +76,7 @@ msgid "The registry lists this corpus, but CWB has no data for it."
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/corpus.cljc
-msgid "CWB could not read this corpus's data files."
+msgid "CWB cannot read the data files of this corpus."
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/corpus.cljc
@@ -154,14 +138,6 @@ msgid "total"
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/frequencies.cljc
-msgid "frequency"
-msgstr ""
-
-#: src/dk/cst/corpus_probe/views/frequencies.cljc
-msgid "per million"
-msgstr ""
-
-#: src/dk/cst/corpus_probe/views/frequencies.cljc
 msgid "texts"
 msgstr ""
 
@@ -170,15 +146,11 @@ msgid "all values"
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/kwic.cljc
-msgid "Toggle wider context"
+msgid "Show or hide more context"
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/kwic.cljc
-msgid "Could not load the context."
-msgstr ""
-
-#: src/dk/cst/corpus_probe/views/kwic.cljc
-msgid "position"
+msgid "The context did not load."
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/kwic.cljc
@@ -193,12 +165,48 @@ msgstr ""
 msgid "Language"
 msgstr ""
 
-#: src/dk/cst/corpus_probe/views/app.cljc src/dk/cst/corpus_probe/views/layout.cljc
+#: src/dk/cst/corpus_probe/api.clj src/dk/cst/corpus_probe/views/app.cljc src/dk/cst/corpus_probe/views/layout.cljc
 msgid "Search"
 msgstr ""
 
 #: src/dk/cst/corpus_probe/api.clj src/dk/cst/corpus_probe/views/corpus.cljc src/dk/cst/corpus_probe/views/layout.cljc
 msgid "Corpora"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/layout.cljc
+msgid "Glossary"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/layout.cljc
+msgid "key word in context"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/layout.cljc
+msgid "corpus position"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/layout.cljc
+msgid "frequency"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/layout.cljc
+msgid "Metadata"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/layout.cljc
+msgid "Positional attributes"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/layout.cljc
+msgid "Structural attributes"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/layout.cljc
+msgid "Alignment attributes"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/layout.cljc
+msgid "per million"
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/layout.cljc
@@ -217,7 +225,7 @@ msgstr ""
 msgid "corpus order"
 msgstr ""
 
-#: src/dk/cst/corpus_probe/views/kwic.cljc src/dk/cst/corpus_probe/views/page.cljc
+#: src/dk/cst/corpus_probe/views/layout.cljc src/dk/cst/corpus_probe/views/page.cljc
 msgid "match"
 msgstr ""
 
@@ -333,12 +341,8 @@ msgstr ""
 msgid "Clear filter"
 msgstr ""
 
-#: src/dk/cst/corpus_probe/views/page.cljc
-msgid "Metadata"
-msgstr ""
-
-#: src/dk/cst/corpus_probe/views/page.cljc
-msgid "Filter values"
+#: src/dk/cst/corpus_probe/views/corpus.cljc src/dk/cst/corpus_probe/views/page.cljc
+msgid "Filter"
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/page.cljc
@@ -350,75 +354,15 @@ msgid "Too many values to list: "
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/page.cljc
-msgid "[lemma = \"hund\"] or [pos = \"N.*\"]"
+msgid "\"x\" or [lemma = \"x\"]"
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/page.cljc
-msgid "hund, or several words in order"
+msgid "one word, or several words in order"
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/corpus.cljc src/dk/cst/corpus_probe/views/page.cljc
 msgid "attribute"
-msgstr ""
-
-#: src/dk/cst/corpus_probe/views/page.cljc
-msgid "Query help"
-msgstr ""
-
-#: src/dk/cst/corpus_probe/views/page.cljc
-msgid "a word form; the quoted string is a regular expression"
-msgstr ""
-
-#: src/dk/cst/corpus_probe/views/page.cljc
-msgid "forms starting with hund, in any case"
-msgstr ""
-
-#: src/dk/cst/corpus_probe/views/page.cljc
-msgid "either word"
-msgstr ""
-
-#: src/dk/cst/corpus_probe/views/page.cljc
-msgid "every form of a lemma; any attribute of the corpus goes in the brackets"
-msgstr ""
-
-#: src/dk/cst/corpus_probe/views/page.cljc
-msgid "anything but; the value is a regular expression too"
-msgstr ""
-
-#: src/dk/cst/corpus_probe/views/page.cljc
-msgid "both at once; | for either, ! for not"
-msgstr ""
-
-#: src/dk/cst/corpus_probe/views/page.cljc
-msgid "a sequence, one pattern per token"
-msgstr ""
-
-#: src/dk/cst/corpus_probe/views/page.cljc
-msgid "with up to two tokens between"
-msgstr ""
-
-#: src/dk/cst/corpus_probe/views/page.cljc
-msgid "both in one sentence, in that order"
-msgstr ""
-
-#: src/dk/cst/corpus_probe/views/page.cljc
-msgid "@ marks a token as the target, shown in bold and counted at its own position"
-msgstr ""
-
-#: src/dk/cst/corpus_probe/views/page.cljc
-msgid "labels name tokens, and the constraint after :: relates them: the same word on both sides of og"
-msgstr ""
-
-#: src/dk/cst/corpus_probe/views/page.cljc
-msgid "tokens of twelve characters or more"
-msgstr ""
-
-#: src/dk/cst/corpus_probe/views/page.cljc
-msgid "The CQP manual"
-msgstr ""
-
-#: src/dk/cst/corpus_probe/views/page.cljc
-msgid "has the rest."
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/kwic.cljc src/dk/cst/corpus_probe/views/page.cljc
@@ -516,7 +460,7 @@ msgid "Pagination"
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/page.cljc
-msgid "The query timed out"
+msgid "The search did not finish in time"
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/page.cljc
@@ -532,7 +476,7 @@ msgid "Request rejected"
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/page.cljc
-msgid "CQP output could not be read"
+msgid "Unreadable CQP output"
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/page.cljc
@@ -548,23 +492,19 @@ msgid "Select at least one corpus to search."
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/page.cljc
-msgid "The registry has no corpus by that name."
+msgid "The registry has no corpus with that name."
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/page.cljc
-msgid "CQP printed something other than the requested rows."
+msgid "CQP did not print the requested rows."
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/page.cljc
-msgid "The search failed on the server; its log has the details."
+msgid "The search failed on the server. The server log has the details."
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/page.cljc
 msgid "Download"
-msgstr ""
-
-#: src/dk/cst/corpus_probe/views/page.cljc
-msgid "Concordance"
 msgstr ""
 
 #: src/dk/cst/corpus_probe/api.clj src/dk/cst/corpus_probe/views/frequencies.cljc src/dk/cst/corpus_probe/views/page.cljc

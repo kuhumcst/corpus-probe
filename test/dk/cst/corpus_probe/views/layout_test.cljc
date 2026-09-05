@@ -6,8 +6,9 @@
 
 (def nav
   "The site navigation of a search page, as api/nav-hrefs builds it."
-  {:search          "/?q=hund#results"
-   :corpora-heading "/corpora"})
+  {:search          "/search?q=hund#results"
+   :corpora-heading "/corpora"
+   :glossary        "/glossary"})
 
 (deftest language-names-test
   (testing "every language the app serves can name itself in the switch"
@@ -56,6 +57,22 @@
            (layout/skip-link en)))
     (is (= "Gå til indhold" (last (layout/skip-link da))))))
 
+(deftest term-test
+  (testing "an abbreviation carries its expansion and links to its entry"
+    (is (= [:a {:href "/glossary#kwic"}
+            [:abbr {:title "key word in context"} "KWIC"]]
+           (layout/term en :kwic)))
+    (is (= [:a {:href "/glossary#cpos"} [:abbr {:title "korpusposition"} "cpos"]]
+           (layout/term da :cpos))))
+  (testing "a word that is no abbreviation is the word, linked"
+    (is (= [:a {:href "/glossary#metadata"} "Metadata"] (layout/term en :metadata)))
+    (is (= [:a {:href "/glossary#per-million"} "pr. million"]
+           (layout/term da :per-million))))
+  (testing "where a link cannot go, the term stands unlinked"
+    (is (= [:abbr {:title "Corpus Query Processor"} "CQP"]
+           (layout/term en :cqp false)))
+    (is (= "Metadata" (layout/term en :metadata false)))))
+
 (deftest site-footer-test
   (testing "the app says what it is, once, where a reader needs it once"
     (is (some #{"CWB corpus search"} (deep (layout/site-footer en))))
@@ -71,21 +88,25 @@
                 (filter #(and (map? %) (:href %))
                         (deep (layout/site-header en path nav))))]
     (testing "the navigation carries the search, the site name does not"
-      (is (= ["/" "/?q=hund#results" "/corpora"]
+      (is (= ["/" "/search?q=hund#results" "/corpora" "/glossary"]
              (map :href (links "/" nav))))
-      (testing "so the name is the way back to a clean search"
-        (is (= "/" (:href (first (links "/" nav)))))))
+      (testing "so the name is the way back to the frontpage"
+        (is (= "/" (:href (first (links "/search" nav)))))))
     (testing "no link names a language"
       (is (not (some #(.contains ^String (:href %) "lang=") (links "/" nav)))))
     (testing "the nav marks the page being served, and only it"
-      (is (= [nil "page" nil] (map :aria-current (links "/" nav))))
-      (is (= [nil nil "page"] (map :aria-current (links "/corpora" nav))))
+      (is (= [nil "page" nil nil] (map :aria-current (links "/search" nav))))
+      (is (= [nil nil "page" nil] (map :aria-current (links "/corpora" nav))))
+      (is (= [nil nil nil "page"] (map :aria-current (links "/glossary" nav))))
       (testing "a page no nav item names marks nothing"
-        (is (= [nil nil nil] (map :aria-current (links "/corpus/viser" nav))))))
+        (is (= [nil nil nil nil] (map :aria-current (links "/" nav))))
+        (is (= [nil nil nil nil]
+               (map :aria-current (links "/corpora/viser" nav))))))
     (testing "the masthead is in the page's own language"
       (let [da (deep (layout/site-header da "/" nav))]
         (is (some #{"Søgning"} da))
         (is (some #{"Korpusser"} da))
+        (is (some #{"Ordliste"} da))
         (testing "what the app is belongs in the footer, not over every page"
           (is (not (some #{"CWB-korpussøgning"} da))))
         (testing "the frequency table is a view of a result, not a place"

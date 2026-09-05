@@ -131,9 +131,9 @@
       (testing "and names nothing while there is no such row"
         (is (not (contains? (second (nth (nth row 2) 2)) :aria-controls)))))
     (testing "the control opens its name with the position a reader can see"
-      (is (= "9 · Toggle wider context"
+      (is (= "9 · Show or hide more context"
              (get-in (nth (nth row 2) 2) [1 :aria-label])))
-      (is (= "9 · Vis eller skjul bredere kontekst"
+      (is (= "9 · Vis eller skjul mere kontekst"
              (get-in (nth (nth (kwic/hit-row {:ui da :client? true}
                                              sample-hit false)
                                2) 2)
@@ -157,7 +157,7 @@
     (let [rows (kwic/hit-rows {:ui en :expanded {["PROBE" 9] kwic/failed}}
                               sample-hit)]
       (is (= 2 (count rows)))
-      (is (= [:span {:role "alert"} "Could not load the context."]
+      (is (= [:span {:role "alert"} "The context did not load."]
              (get-in (second rows) [1 2])))))
   (testing "an expanded hit adds a full-width context row after it"
     (let [ex   {:left  [{:word "en"}]
@@ -228,9 +228,11 @@
     (testing "every column is headed, so a data cell resolves both headers"
       (is (= [:thead
               [:tr
-               [:th.cpos {:scope "col"} "position"]
+               [:th.cpos {:scope "col"}
+                [:a {:href "/glossary#cpos"}
+                 [:abbr {:title "corpus position"} "cpos"]]]
                [:th.left {:scope "col"} "left context"]
-               [:th.match {:scope "col"} "match"]
+               [:th.match {:scope "col"} [:a {:href "/glossary#match"} "match"]]
                [:th.right {:scope "col"} "right context"]
                [:th.structs {:scope "col"} "source"]]]
              (nth table 2))))
@@ -241,7 +243,7 @@
     (testing "hits are grouped by corpus, each group headed by its name"
       (is (= 2 (count groups)))
       (is (= [:th {:scope "rowgroup" :colspan 5}
-              [:a {:href "/corpus/probe"} [:code "PROBE"]]]
+              [:a {:href "/corpora/probe"} [:code "PROBE"]]]
              (get-in (first groups) [2 1]))))
     (testing "a group carries its corpus's language when known"
       (is (nil? (:lang (second (first groups)))))

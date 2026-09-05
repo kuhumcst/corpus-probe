@@ -1,102 +1,183 @@
 # corpus-probe
 
-A minimal, faithful web frontend for the [IMS Open Corpus
-Workbench](https://cwb.sourceforge.io/) (CWB) in Clojure(Script): it drives
-CWB's query processor `cqp` as a child process and translates its terminal
-output into semantic HTML.
+corpus-probe is a small web front end for the [IMS Open Corpus
+Workbench](https://cwb.sourceforge.io/) (CWB), written in Clojure and
+ClojureScript. It runs the CWB query processor `cqp` as a child process.
+It translates the terminal output of `cqp` into semantic HTML.
 
-See [PLAN.md](PLAN.md) for the full implementation plan and
-[docs/research/](docs/research/) for the verified research it rests on.
+See [PLAN.md](PLAN.md) for the implementation plan. See
+[docs/research/](docs/research/) for the research that the plan rests
+on.
 
 ## Status
 
-Milestones 1 to 4 of 5 are built: the `cqp` child-process driver and
-output parsers, the KWIC concordance with paging, sorting and context
-expansion, the ClojureScript client, and the breadth features (the corpus
-chooser and multi-corpus search, simple search, frequency tables, corpus
-info pages, TSV/CSV export). Milestone 5, the cutover, is in progress:
-metadata filtering, the Danish and English UI and the startup vetting are
-done; the deployment next to KORP remains (see PLAN.md section 12).
+Milestones 1 to 4 of 5 are complete:
 
-A result too large to read through can be sampled: the concordance keeps a
-given number of its hits, drawn at random with CQP's own `reduce` before
-the result is counted or ordered. The seed is fixed, so one URL always
-names the same hits and a colleague opening the link reads the ones the
-sender read. The draw is per corpus, which keeps a large corpus from
-crowding a small one out of the sample and keeps each corpus's saved
-result independent of which others were searched beside it. The frequency
-view is never sampled: counting a random hundred hits answers worse than
-counting them all and costs the same query.
+- the `cqp` child-process driver and the output parsers
+- the KWIC concordance, with paging, sorting and context expansion
+- the ClojureScript client
+- the corpus chooser, search in several corpora, simple search,
+  frequency tables, corpus pages, and TSV and CSV export
 
-On a narrow screen the concordance keeps its columns and lets them wrap,
-so the aligned match column that makes it scannable survives the phone.
-Unwrapped the table is 807px at 375px wide, with the match off screen.
-The source column is dropped so the contexts have room.
+Milestone 5, the cutover, is in progress. The metadata filter, the
+Danish and English interface, and the startup checks are complete. The
+deployment next to KORP remains (see PLAN.md section 12).
 
-A simple search matches the surface form unless the reader chooses
-another positional attribute of the corpora searched, lemma in most of
-them, and a simple search of several words is kept within one sentence,
-as the CQP manual advises, under whatever name the corpus gives its
-sentences. Until a search has been made, a dozen CQP recipes drawn from
-the manual stand where the results will, since everything in them
-already worked in the CQP box and nothing said so.
+## Features
 
-A result carries its own controls, in two rows. The first decides how
-the hits are read: the sort, the context, which can be a number of words
-or a whole sentence or paragraph under each corpus's own attribute for
-it, and the sample. The second, behind a disclosure that opens by itself
-while it is in force, narrows the hits to those with a nearby word: a
-word within a few tokens on either side, the way the manual finds a word
-near a hit (its `set target` command), marked as the keyword anchor,
-which the concordance underlines. A target a reader marks with `@` in a
-CQP query is shown in bold, as cqp itself shows both. The narrowing and
-the sample travel with the search into its frequency view and its
-exports. Without a script the controls apply through a button a browser
-with one never shows.
+### Samples
 
-The frequency view counts at any of CQP's positions: the token before
-the match, its first or last token, the token after it, or the whole
-match as the string it is, which CQP's `count` gives where `group` sees
-only the first token. Every row links to the hits it counted, so a table
-is a way into a concordance rather than the end of one, and a checkbox
-adds the number of texts each value occurs in beside its frequency.
+A reader can take a sample of a result that is too large to read. The
+concordance keeps a given number of hits. It draws them at random with
+the CQP command `reduce`, before it counts or sorts the result. The seed
+is fixed. Thus one URL always names the same hits, and a colleague who
+opens the link reads the same hits as the sender. The draw is made in
+each corpus. Thus a large corpus cannot push a small corpus out of the
+sample. The saved result of a corpus does not depend on the other
+corpora in the search. The frequency view never uses a sample. A count
+of a random hundred hits is a worse answer than a count of all hits,
+and it costs the same query.
 
-The metadata filter accepts a pattern per attribute beside the values
-ticked, matched as the regular expression it is, and a range from one
-number to another over attributes whose values are numbers, which is how
-a decade of years or a year of dates is asked for, and the only way to an
-attribute with too many values to list.
+### Narrow screens
 
-Startup vets the installation and logs what it finds. It checks that the
-CWB programs can be launched, and runs CQP's own sort pipeline (`sort ... |
-gawk`) under the configured locale to see whether it collates the way the
-app's own collator does, since when it does not CQP quietly serves corpus
-order instead. It then reads every registry corpus once, in the
-background, and names the ones CWB cannot open. A corpus that cannot be
-read is kept, because the registry says it exists: the chooser shows it
-disabled and its info page says CWB has no data for it. Logging goes
-through [Telemere](https://github.com/taoensso/telemere), which also backs
-SLF4J, so Pedestal's own output lands in the same place.
+On a narrow screen, the concordance keeps its columns and lets the text
+wrap. Thus the aligned match column, which makes the concordance easy
+to scan, survives on a phone. Without wrapping, the table is 807px wide
+on a 375px screen, and the match is off the screen. The source column
+is hidden, so that the contexts have room.
 
-The interface is served in Danish or English, chosen by the reader's
-stored preference, then by the request's `Accept-Language`, then Danish.
-No URL names a language, so a shared link does not impose the sharer's on
-whoever opens it. What CWB itself says (query errors, attribute names,
-corpus titles and corpus text) is always shown verbatim.
+### Simple search
 
-The translations are [gettext](https://www.gnu.org/software/gettext/) PO
-files under [resources/i18n/](resources/i18n/), read with
-[pottery](https://github.com/brightin/pottery). Every UI string is written
-in the source in English and that English is its own key, so a view reads
-as the sentence it renders and an untranslated string falls back to
-readable English rather than to an identifier. Adding a language is
-dropping a `.po` file in and naming it in
-`dk.cst.corpus-probe.translations/po-files`; nothing else changes.
-Translators work in Poedit or Weblate against
-[the template](resources/i18n/template.pot), which is extracted from the
-source and guarded against drift by the test suite.
+A simple search matches the surface form. The reader can select another
+positional attribute of the searched corpora, for example lemma. A
+simple search of several words is kept within one sentence, as the CQP
+manual advises. The search uses the name that each corpus gives its
+sentences. Until the reader makes a search, a guide of CQP examples
+stands where the results will be.
 
-At the REPL, one function call in, plain data out:
+### Documents
+
+The frontpage, the guide and the glossary are Markdown. There is one
+file per language under [resources/docs/](resources/docs/). The files
+are named like the PO files, `guide.da.md` next to `guide.en.md`. The
+server parses them into the hiccup that the views render, so the client
+needs no parser. If a language has no file, the server tries the
+languages that the request accepts, and then English. Thus a reader who
+accepts Danish gets Danish before English. Raw HTML in a file renders
+as nothing.
+
+The Markdown is CommonMark plus a definition list of this app's own
+(`dk.cst.corpus-probe.markdown`). A term is a line that ends in a
+colon. Its definition is indented under it. The glossary and the
+examples of the guide are written in this form:
+
+```markdown
+KWIC {#kwic}:
+  Key word in context: a concordance with one hit on each line.
+```
+
+### URLs
+
+Each page has a plain address:
+
+| Page | URL |
+|---|---|
+| frontpage | `/` |
+| search page | `/search` |
+| corpus index | `/corpora` |
+| one corpus | `/corpora/viser` |
+| glossary | `/glossary` |
+| an export | `/search/kwic.tsv` |
+
+The terms of the glossary name their own ids, `KWIC {#kwic}:`. Thus a
+term in the interface links to its entry in each language.
+
+A result URL is a citation. One rule builds it on the server and on the
+client (`dk.cst.corpus-probe.url`). The URL names only the settings
+that differ from the defaults. A simple search of the word attribute,
+in corpus order, with five words of context, is `/search?q=x`. The
+corpora are one comma-separated parameter. When each readable corpus is
+selected, the URL names no corpus, because that is the same search.
+Pages are numbered from one, as the page numbers itself.
+
+### Result controls
+
+A result has its own controls, in two rows. The first row sets how the
+hits are read: the sort, the context and the sample. The context can be
+a number of words, or a sentence or a paragraph, under the attribute
+that each corpus has for it. The second row is behind a disclosure. It
+narrows the hits to those with a given word nearby, within a few tokens
+on each side. This is how the manual finds a word near a hit, with its
+command `set target`. The word is marked as the keyword anchor, and the
+concordance underlines it. The disclosure opens by itself while a
+narrowing is in force. A target that the reader marks with `@` in a CQP
+query is shown in bold, as `cqp` itself shows both anchors. The
+narrowing and the sample travel with the search into the frequency view
+and the exports. Without a script, the controls apply through a button.
+A browser with a script never shows this button.
+
+### Frequencies
+
+The frequency view counts at each position that CQP has:
+
+- the token before the match
+- the first or the last token of the match
+- the token after the match
+- the whole match, as a string
+
+The command `count` gives the whole match. The command `group` sees
+only the first token.
+Each row links to the hits that it counted. Thus a table is a way into
+a concordance, not the end of one. A checkbox adds the number of texts
+in which each value occurs.
+
+### Metadata filter
+
+The metadata filter accepts the values that the reader ticks. It also
+accepts a pattern for each attribute, matched as a regular expression.
+For an attribute with numeric values, it accepts a range from one
+number to another. That is how a reader asks for a decade of years, or
+a year of dates. It is also the only way to an attribute with too many
+values to list.
+
+### Startup checks
+
+At startup, the server checks the installation and logs the result. It
+makes sure that the CWB programs start. It runs the sort pipeline of
+CQP (`sort ... | gawk`) with the configured locale, to make sure that
+it collates as the collator of the app does. When the two do not agree,
+CQP serves corpus order without a warning. Then the server reads each
+corpus of the registry once, in the background, and logs the corpora
+that CWB cannot open. The server keeps a corpus that it cannot read,
+because the registry says that the corpus exists. The chooser shows the
+corpus as disabled, and its page says that CWB has no data for it.
+Logging goes through [Telemere](https://github.com/taoensso/telemere),
+which also serves SLF4J. Thus the output of Pedestal lands in the same
+place.
+
+### Languages
+
+The interface is served in Danish or English. The server selects the
+language from the stored preference of the reader, then from the
+`Accept-Language` header, then Danish. No URL names a language. Thus a
+shared link does not set the language of the person who opens it. Text
+from CWB (query errors, attribute names, corpus titles and corpus text)
+is always shown as it is.
+
+The translations are [gettext](https://www.gnu.org/software/gettext/)
+PO files under [resources/i18n/](resources/i18n/). The server reads
+them with [pottery](https://github.com/brightin/pottery). Each interface
+string is written in the source in English, and that English is its
+key. Thus a view reads as the sentence that it renders, and a string
+without a translation falls back to English. To add a language, add a
+`.po` file and name it in `dk.cst.corpus-probe.translations/po-files`.
+Translators work in Poedit or Weblate with [the
+template](resources/i18n/template.pot). The template is extracted from
+the source, and the test suite makes sure that it does not drift.
+
+### At the REPL
+
+One function call in, plain data out:
 
 ```clojure
 (require '[dk.cst.corpus-probe.search :as search])
@@ -113,8 +194,8 @@ At the REPL, one function call in, plain data out:
 
 ## Development
 
-Requires [Clojure](https://clojure.org/guides/install_clojure) and CWB
-(`brew install cwb3` on macOS).
+corpus-probe requires [Clojure](https://clojure.org/guides/install_clojure)
+and CWB (`brew install cwb3` on macOS).
 
 ```sh
 dev/encode.sh          # encode the dev corpus (PROBE) once
@@ -127,8 +208,8 @@ clojure -M -m dk.cst.corpus-probe.server                  # serve (config.edn)
 
 The server listens on <http://localhost:7373>.
 
-Working on the client wants two processes side by side: a watch that
-recompiles on save, and a server told to let it through.
+To work on the client, run two processes: a watch that recompiles on
+save, and a server that lets the watch through.
 
 ```sh
 clojure -M:cljs -m shadow.cljs.devtools.cli watch app     # recompile on save
@@ -136,35 +217,36 @@ CORPUS_PROBE_CONFIG=dev/watch.edn \
   clojure -M -m dk.cst.corpus-probe.server                # serve, watch allowed
 ```
 
-A watch pushes recompiled code over a socket to its own port, which the
-Content-Security-Policy blocks unless a configuration names it. That is
-what [dev/watch.edn](dev/watch.edn) is for, and why it is a file outside
-the jar rather than a default: the strict policy is the one that ships.
-`dk.cst.corpus-probe.ui/reload!` re-renders after each swap, so a saved
-file shows up without losing the search on screen.
+The watch pushes recompiled code over a socket on its own port. The
+Content-Security-Policy blocks this socket unless a configuration names
+it. That is the purpose of [dev/watch.edn](dev/watch.edn). It is a file
+outside the jar, not a default, so that the strict policy is the one
+that ships. `dk.cst.corpus-probe.ui/reload!` renders again after each
+swap. Thus a saved file shows up, and the search on screen stays.
 
-After editing a PO file, force a recompile of the client: the
-ClojureScript build inlines the tables through a macro and cannot see
-through it to the file.
+After you edit a PO file, force a recompile of the client. The
+ClojureScript build inlines the tables through a macro and does not see
+the file change.
 
-Settings come from [resources/config.edn](resources/config.edn), which is
-read from the classpath and so lives inside a packaged jar. An installation
-puts its own paths and limits in a file of its own and names it, either way
-round:
+Settings come from [resources/config.edn](resources/config.edn). The
+server reads it from the classpath, so it is inside a packaged jar. An
+installation puts its own paths and limits in a file of its own and
+names that file, in one of two ways:
 
 ```sh
 CORPUS_PROBE_CONFIG=/etc/corpus-probe/config.edn clojure -M -m dk.cst.corpus-probe.server
 clojure -J-Dcorpus-probe.config=/etc/corpus-probe/config.edn -M -m dk.cst.corpus-probe.server
 ```
 
-That file is merged over the built-in one, so it need only carry what it
-changes: the registry it serves, where the query result cache goes and how
-large it may grow, the timeouts. The `:folders` tree describes the corpora
-rather than the machine, so it stays in the jar. A file that is named but
-cannot be read stops the server, and the effective settings are logged at
-startup.
+The server merges that file over the built-in one. Thus the file only
+has to contain the settings that it changes. Those are the registry,
+the location and size limit of the query result cache, and the
+timeouts. The `:folders` tree
+describes the corpora, not the machine, so it stays in the jar. If the
+named file cannot be read, the server stops. The server logs the
+effective settings at startup.
 
 The parsers are developed against byte-exact golden files in
-[test/resources/golden/](test/resources/golden/), regenerated deliberately
-with `dev/capture-golden.sh`. Integration tests skip themselves when `cqp`
-or the encoded dev corpus is missing.
+[test/resources/golden/](test/resources/golden/). Regenerate them
+deliberately with `dev/capture-golden.sh`. The integration tests skip
+themselves when `cqp` or the encoded dev corpus is missing.

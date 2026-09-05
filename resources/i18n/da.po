@@ -46,11 +46,8 @@ msgstr "Ryd filter"
 msgid "Close"
 msgstr "Luk"
 
-msgid "Concordance"
-msgstr "Konkordans"
-
-msgid "Could not load the context."
-msgstr "Konteksten kunne ikke hentes."
+msgid "The context did not load."
+msgstr "Konteksten blev ikke hentet."
 
 msgid "corpora"
 msgstr "korpusser"
@@ -71,19 +68,13 @@ msgid "Search CWB corpora and read KWIC concordances."
 msgstr "Søg i CWB-korpusser og læs KWIC-konkordanser."
 
 msgid "Download"
-msgstr "Download"
+msgstr "Hent"
 
 msgid "ends with"
 msgstr "slutter med"
 
 msgid "error"
 msgstr "fejl"
-
-msgid "Filter corpora"
-msgstr "Filtrér korpusser"
-
-msgid "Filter values"
-msgstr "Filtrér værdier"
 
 msgid "Frequencies"
 msgstr "Frekvenser"
@@ -95,10 +86,10 @@ msgid "Group by"
 msgstr "Gruppér efter"
 
 msgid "Hits per corpus"
-msgstr "Træf pr. korpus"
+msgstr "Forekomster pr. korpus"
 
 msgid "ignore case"
-msgstr "ignorer store og små bogstaver"
+msgstr "ignorer store/små bogstaver"
 
 msgid "in"
 msgstr "i"
@@ -109,8 +100,8 @@ msgstr "Info"
 msgid "Unexpected error"
 msgstr "Uventet fejl"
 
-msgid "The search failed on the server; its log has the details."
-msgstr "Søgningen mislykkedes på serveren; detaljerne står i serverens log."
+msgid "The search failed on the server. The server log has the details."
+msgstr "Søgningen mislykkedes på serveren. Serverens log har detaljerne."
 
 msgid "Language"
 msgstr "Sprog"
@@ -121,11 +112,11 @@ msgstr "Henter …"
 msgid "Metadata"
 msgstr "Metadata"
 
-msgid "CQP output could not be read"
-msgstr "CQP's output kunne ikke læses"
+msgid "Unreadable CQP output"
+msgstr "Ulæseligt CQP-output"
 
-msgid "CQP printed something other than the requested rows."
-msgstr "CQP udskrev noget andet end de ønskede rækker."
+msgid "CQP did not print the requested rows."
+msgstr "CQP udskrev ikke de ønskede rækker."
 
 msgid "most frequent shown"
 msgstr "hyppigste vises"
@@ -146,7 +137,7 @@ msgid "no data"
 msgstr "ingen data"
 
 msgid "No hits."
-msgstr "Ingen træf."
+msgstr "Ingen forekomster."
 
 msgid "No values found."
 msgstr "Ingen værdier fundet."
@@ -175,9 +166,6 @@ msgstr "pr. million"
 msgid "Select at least one corpus"
 msgstr "Vælg mindst ét korpus"
 
-msgid "position"
-msgstr "position"
-
 msgid "Powered by"
 msgstr "Drevet af"
 
@@ -185,22 +173,22 @@ msgid "previous"
 msgstr "forrige"
 
 msgid "Query"
-msgstr "Forespørgsel"
+msgstr "Søgeudtryk"
 
-msgid "[lemma = \"hund\"] or [pos = \"N.*\"]"
-msgstr "[lemma = \"hund\"] eller [pos = \"N.*\"]"
+msgid "\"x\" or [lemma = \"x\"]"
+msgstr "\"x\" eller [lemma = \"x\"]"
 
-msgid "hund, or several words in order"
-msgstr "hund, eller flere ord i rækkefølge"
+msgid "one word, or several words in order"
+msgstr "ét ord eller flere ord i rækkefølge"
 
 msgid "Query mode"
-msgstr "Forespørgselstype"
+msgstr "Søgetype"
 
 msgid "Query options"
-msgstr "Forespørgselsindstillinger"
+msgstr "Søgeindstillinger"
 
 msgid "Request rejected"
-msgstr "Forespørgslen blev afvist"
+msgstr "Anmodningen blev afvist"
 
 msgid "Result view"
 msgstr "Resultatvisning"
@@ -242,7 +230,7 @@ msgid "Sample"
 msgstr "Stikprøve"
 
 msgid "all hits"
-msgstr "alle træf"
+msgstr "alle forekomster"
 
 msgid "corpus order"
 msgstr "korpusrækkefølge"
@@ -263,7 +251,7 @@ msgid "source"
 msgstr "kilde"
 
 msgid "starts with"
-msgstr "starter med"
+msgstr "begynder med"
 
 msgid "button|Search"
 msgstr "Søg"
@@ -283,8 +271,8 @@ msgstr "de første"
 msgid "This corpus"
 msgstr "Dette korpus"
 
-msgid "The query timed out"
-msgstr "Forespørgslen tog for lang tid"
+msgid "The search did not finish in time"
+msgstr "Søgningen blev ikke færdig i tide"
 
 msgid "Token"
 msgstr "Token"
@@ -313,17 +301,17 @@ msgstr "Registret har dette korpus, men CWB har ingen data til det."
 msgid "Unknown corpus"
 msgstr "Ukendt korpus"
 
-msgid "The registry has no corpus by that name."
+msgid "The registry has no corpus with that name."
 msgstr "Registret har intet korpus med det navn."
 
-msgid "Could not read corpus"
-msgstr "Korpusset kunne ikke læses"
+msgid "Unreadable corpus"
+msgstr "Ulæseligt korpus"
 
-msgid "CWB could not read this corpus's data files."
-msgstr "CWB kunne ikke læse dette korpus' datafiler."
+msgid "CWB cannot read the data files of this corpus."
+msgstr "CWB kan ikke læse datafilerne for dette korpus."
 
-msgid "Toggle wider context"
-msgstr "Vis eller skjul bredere kontekst"
+msgid "Show or hide more context"
+msgstr "Vis eller skjul mere kontekst"
 
 msgid "with annotations"
 msgstr "med annotationer"
@@ -342,8 +330,8 @@ msgstr "Ordfrekvenser i"
 
 msgid "hit"
 msgid_plural "hits"
-msgstr[0] "træf"
-msgstr[1] "træf"
+msgstr[0] "forekomst"
+msgstr[1] "forekomster"
 
 msgid "region"
 msgid_plural "regions"
@@ -356,10 +344,10 @@ msgstr[0] "værdi"
 msgstr[1] "værdier"
 
 msgid "Near"
-msgstr "Nær"
+msgstr "Sammen med"
 
 msgid "near"
-msgstr "nær"
+msgstr "sammen med"
 
 msgid "word"
 msgid_plural "words"
@@ -408,50 +396,18 @@ msgstr "fra"
 msgid "to"
 msgstr "til"
 
-msgid "Query help"
-msgstr "Hjælp til forespørgsler"
-
-msgid "a word form; the quoted string is a regular expression"
-msgstr "en ordform; strengen i anførselstegn er et regulært udtryk"
-
-msgid "forms starting with hund, in any case"
-msgstr "former der begynder med hund, uanset store og små bogstaver"
-
-msgid "either word"
-msgstr "det ene eller det andet ord"
-
-msgid "every form of a lemma; any attribute of the corpus goes in the brackets"
-msgstr "alle former af et lemma; enhver af korpussets attributter kan stå i klammerne"
-
-msgid "anything but; the value is a regular expression too"
-msgstr "alt andet end; værdien er også et regulært udtryk"
-
-msgid "both at once; | for either, ! for not"
-msgstr "begge dele på én gang; | for enten-eller, ! for ikke"
-
-msgid "a sequence, one pattern per token"
-msgstr "en sekvens, ét mønster per token"
-
-msgid "with up to two tokens between"
-msgstr "med op til to tokens imellem"
-
-msgid "both in one sentence, in that order"
-msgstr "begge i samme sætning, i den rækkefølge"
-
-msgid "@ marks a token as the target, shown in bold and counted at its own position"
-msgstr "@ udpeger et token som target, vist med fed og talt på sin egen position"
-
-msgid "labels name tokens, and the constraint after :: relates them: the same word on both sides of og"
-msgstr "etiketter navngiver tokens, og betingelsen efter :: knytter dem sammen: samme ord på begge sider af og"
-
-msgid "tokens of twelve characters or more"
-msgstr "tokens på tolv tegn eller flere"
-
-msgid "The CQP manual"
-msgstr "CQP-manualen"
-
-msgid "has the rest."
-msgstr "har resten."
-
 msgid "Narrow the result"
-msgstr "Indsnævr resultatet"
+msgstr "Afgræns resultatet"
+
+msgid "Glossary"
+msgstr "Ordliste"
+
+msgid "key word in context"
+msgstr "søgeord i kontekst"
+
+msgid "corpus position"
+msgstr "korpusposition"
+
+msgid "Filter"
+msgstr "Filtrér"
+

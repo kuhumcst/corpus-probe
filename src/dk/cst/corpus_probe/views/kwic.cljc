@@ -15,7 +15,8 @@
   become interactive once the client mounts."
   (:require [clojure.string :as str]
             [dk.cst.corpus-probe.i18n :as i18n]
-            [dk.cst.corpus-probe.views.corpus :as corpus-views]))
+            [dk.cst.corpus-probe.url :as url]
+            [dk.cst.corpus-probe.views.layout :as layout]))
 
 (def column-count
   "How many columns a concordance row has, which a full-width row spans."
@@ -211,7 +212,7 @@
       cpos
       [:button (cond-> {:type          "button"
                         :aria-label    (str cpos " · "
-                                            (i18n/tr ui "Toggle wider context"))
+                                            (i18n/tr ui "Show or hide more context"))
                         :aria-expanded (str (boolean expanded?))
                         :on            {:click [:toggle-context
                                                 {:corpus   (:corpus hit)
@@ -289,7 +290,7 @@
            (map? ex)     (expanded-row opts hit ex)
            (= failed ex) (status-row
                           "alert"
-                          (i18n/tr ui "Could not load the context."))
+                          (i18n/tr ui "The context did not load."))
            :else         (status-row "status" (i18n/tr ui "Loading …")))]))
 
 (defn corpus-group
@@ -307,7 +308,7 @@
      (when corpus
        [:tr.corpus
         [:th {:scope "rowgroup" :colspan column-count}
-         [:a {:href (corpus-views/corpus-href ui corpus)}
+         [:a {:href (url/corpus corpus)}
           [:code corpus]]]])
      (mapcat #(hit-rows opts %) hits)]))
 
@@ -320,9 +321,9 @@
   [ui]
   [:thead
    [:tr
-    [:th.cpos {:scope "col"} (i18n/tr ui "position")]
+    [:th.cpos {:scope "col"} (layout/term ui :cpos)]
     [:th.left {:scope "col"} (i18n/tr ui "left context")]
-    [:th.match {:scope "col"} (i18n/tr ui "match")]
+    [:th.match {:scope "col"} (layout/term ui :match)]
     [:th.right {:scope "col"} (i18n/tr ui "right context")]
     [:th.structs {:scope "col"} (i18n/tr ui "source")]]])
 

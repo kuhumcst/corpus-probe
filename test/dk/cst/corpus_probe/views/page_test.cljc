@@ -26,7 +26,7 @@
       (is (some #{:legend} (deep html))))
     (testing "the example is the one for the mode being searched in"
       (is (some #(and (map? %) (= "q" (:id %))
-                      (= "hund, or several words in order" (:placeholder %)))
+                      (= "one word, or several words in order" (:placeholder %)))
                 (deep html))))
     (testing "the selection the reader made is marked as one they made"
       (is (some #{{:type "hidden" :name "scope" :value "chosen"}}
@@ -107,25 +107,21 @@
     (testing "the same form in Danish"
       (let [da (deep (page/search-form (assoc state :ui da) "/" nil))]
         (is (some #{"Søg"} da))
-        (is (some #{"Forespørgsel"} da))
+        (is (some #{"Søgeudtryk"} da))
         (is (not (some #(and (map? %) (= "lang" (:name %))) da)))))))
 
-(deftest query-help-test
-  (let [html (page/query-help en)]
-    (testing "a headed section of recipes, each a query and what it finds"
-      (is (= :section.help (first html)))
-      (is (= [:h2 {:id "help-heading"} "Query help"] (nth html 2)))
-      (is (= "help-heading" (:aria-labelledby (second html))))
-      (is (some #{[:dt [:code "[lemma = \"hund\"]"]]} (deep html)))
-      (is (some #{"a sequence, one pattern per token"} (deep html))))
-    (testing "and the manual for the rest"
-      (is (some #(and (map? %) (= "https://cwb.sourceforge.io/files/CQP_Manual/"
-                                  (:href %)))
-                (deep html))))
-    (testing "in Danish, the queries themselves untranslated"
-      (let [da (deep (page/query-help da))]
-        (is (some #{"Hjælp til forespørgsler"} da))
-        (is (some #{[:dt [:code "[lemma = \"hund\"]"]]} da))))
+(deftest guide-test
+  (let [blocks [[:h2 {:id "query-help"} "Query help"]
+                [:ul [:li [:code "\"hund\""] " finds a word form."]]]
+        html   (page/guide blocks)]
+    (testing "a region named by the guide's own heading, holding it"
+      (is (= [:section.help {:aria-labelledby "query-help"} blocks] html)))
+    (testing "a guide without a heading is a section without a name"
+      (is (= [:section.help {:aria-labelledby nil} [[:p "x"]]]
+             (page/guide [[:p "x"]]))))
+    (testing "no guide, no section"
+      (is (nil? (page/guide nil)))
+      (is (nil? (page/guide []))))
     (testing "it is not in the form: it stands where the results will"
       (is (not (some #{:section.help}
                      (deep (page/search-form {:lang "en" :folders []
@@ -176,7 +172,7 @@
         (is (false? (:open (second (details closed)))))
         (is (true? (:open (second (details open)))))
         (is (some #{"Narrow the result"} (deep closed)))
-        (is (some #{"Indsnævr resultatet"}
+        (is (some #{"Afgræns resultatet"}
                   (deep (page/view-controls da true (sort* "da")
                                             narrowing false))))
         (testing "each row gets its own button without a client"
@@ -261,7 +257,7 @@
            (keep #(when (number? (:value %)) (:value %))
                  (deep (page/near-control en {:word "kat" :distance 4}))))))
   (testing "in Danish"
-    (is (some #{"Nær"} (deep (page/near-control da nil))))
+    (is (some #{"Sammen med"} (deep (page/near-control da nil))))
     (is (some #{"1 ord"} (deep (page/near-control da nil))))))
 
 (deftest subset-phrase-test
@@ -278,7 +274,7 @@
 
 (deftest near-phrase-test
   (is (= " near kat" (page/near-phrase en {:word "kat" :distance 5})))
-  (is (= " nær kat" (page/near-phrase da {:word "kat" :distance 5})))
+  (is (= " sammen med kat" (page/near-phrase da {:word "kat" :distance 5})))
   (is (nil? (page/near-phrase en nil))))
 
 (deftest sample-phrase-test
@@ -308,7 +304,10 @@
     (is (= "nonesuch" (page/sort-label en "nonesuch")))))
 
 (deftest view-label-test
-  (is (= "Concordance" (page/view-label en :kwic)))
+  (is (= [:abbr {:title "key word in context"} "KWIC"]
+         (page/view-label en :kwic)))
+  (is (= [:abbr {:title "søgeord i kontekst"} "KWIC"]
+         (page/view-label da :kwic)))
   (is (= "Frekvenser" (page/view-label da :frequencies))))
 
 (deftest query-mode-test
@@ -332,12 +331,12 @@
 
 (deftest query-example-test
   (testing "each mode gets the example for the input it takes"
-    (is (= "hund, or several words in order" (page/query-example en nil)))
-    (is (= "hund, or several words in order" (page/query-example en "simple")))
-    (is (= "[lemma = \"hund\"] or [pos = \"N.*\"]"
+    (is (= "one word, or several words in order" (page/query-example en nil)))
+    (is (= "one word, or several words in order" (page/query-example en "simple")))
+    (is (= "\"x\" or [lemma = \"x\"]"
            (page/query-example en "cqp")))
     (testing "and is translated like any other string"
-      (is (= "hund, eller flere ord i rækkefølge"
+      (is (= "ét ord eller flere ord i rækkefølge"
              (page/query-example da nil)))))
   (testing "the placeholder follows the mode"
     (let [ph (fn [mode]
@@ -346,9 +345,9 @@
                            "/" nil))
                     (some #(when (and (map? %) (= "q" (:id %)))
                              (:placeholder %)))))]
-      (is (= "hund, or several words in order" (ph nil)))
-      (is (= "[lemma = \"hund\"] or [pos = \"N.*\"]" (ph "cqp")))
-      (is (= "[lemma = \"hund\"] eller [pos = \"N.*\"]"
+      (is (= "one word, or several words in order" (ph nil)))
+      (is (= "\"x\" or [lemma = \"x\"]" (ph "cqp")))
+      (is (= "\"x\" eller [lemma = \"x\"]"
              (->> (deep (page/search-form
                          {:ui da :folders [] :params {:mode "cqp"}}
                          "/" nil))
@@ -528,7 +527,7 @@
         (is (nil? (box {})))
         (is (= "search" (:type (box {:client? true}))))
         ;; and its own label, not the corpus filter's
-        (is (some #{[:label {:for "value-filter"} "Filter values"]}
+        (is (some #{[:label {:for "value-filter"} "Filter"]}
                   (deep (page/filter-fieldset
                          "en" {:attrs [{:name :a :rows []}]
                                :unlisted [] :selected {}}
@@ -588,10 +587,6 @@
   (is (= "page 3 of 6" (page/page-phrase en {:page 2 :pages 6})))
   (is (= "side 3 af 6" (page/page-phrase da {:page 2 :pages 6}))))
 
-(deftest results-fragment-test
-  (testing "the fragment names the region the search lands on"
-    (is (= (str "#" page/results-id) page/results-fragment))))
-
 (deftest pager-links-test
   (testing "no links renders nothing"
     (is (nil? (page/pager-links en nil nil "page 1 of 1"))))
@@ -638,8 +633,8 @@
 
 (deftest error-name-test
   (is (= "CQP error" (page/error-name en {:type :cqp})))
-  (is (= "The query timed out" (page/error-name en {:type :timeout})))
-  (is (= "Forespørgslen tog for lang tid"
+  (is (= "The search did not finish in time" (page/error-name en {:type :timeout})))
+  (is (= "Søgningen blev ikke færdig i tide"
          (page/error-name da {:type :timeout}))))
 
 (deftest error-section-test
@@ -693,9 +688,9 @@
 (deftest hits-phrase-test
   (is (= "1 hit" (page/hits-phrase en 1)))
   (is (= "0 hits" (page/hits-phrase en 0)))
-  (testing "Danish has one form for both, with its own digit grouping"
-    (is (= "1 træf" (page/hits-phrase da 1)))
-    (is (= "1.000 træf" (page/hits-phrase da 1000)))))
+  (testing "Danish, with its own digit grouping"
+    (is (= "1 forekomst" (page/hits-phrase da 1)))
+    (is (= "1.000 forekomster" (page/hits-phrase da 1000)))))
 
 (deftest result-summary-test
   (testing "only the corpora that could be searched are counted"
@@ -711,7 +706,7 @@
                                       :counts [{:corpus "PROBE"
                                                 :size   5}]}))))
   (testing "the same summary in Danish, the attribute name untranslated"
-    (is (= "5 træf i PROBE inden for text_year 1591 · side 1 af 1"
+    (is (= "5 forekomster i PROBE inden for text_year 1591 · side 1 af 1"
            (page/result-summary da {:size   5 :page 0 :pages 1
                                       :filter {:text_year #{"1591"}}
                                       :counts [{:corpus "PROBE"
@@ -822,7 +817,7 @@
                  :result {:page   0 :pages 1 :hits []
                           :counts [{:corpus "X" :error {:type :timeout}}]}})]
       (is (not (some #{:table.kwic} (deep html))))
-      (is (some #{[:h2 {:id "results-heading"} "The query timed out"]}
+      (is (some #{[:h2 {:id "results-heading"} "The search did not finish in time"]}
                 (deep html)))))
   (testing "a search that failed outright is a results region too"
     (let [html (page/result-section {:lang  "en"

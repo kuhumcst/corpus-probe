@@ -15,21 +15,11 @@
   without the stylesheet."
   (:require [clojure.string :as str]
             [dk.cst.corpus-probe.i18n :as i18n]
+            [dk.cst.corpus-probe.url :as url]
             [dk.cst.corpus-probe.views.controls :as controls]
             [dk.cst.corpus-probe.views.corpus :as corpus-views]
             [dk.cst.corpus-probe.views.kwic :as kwic]
             [dk.cst.corpus-probe.views.layout :as layout]))
-
-(def results-id
-  "The id of the results region a search lands on."
-  "results")
-
-(def results-fragment
-  "The fragment every form action and every link to a result ends in, so a
-  submit or a page turn lands the reader on the answer rather than at the
-  top of the form that asked for it. Named once, so the URLs and the
-  region they name cannot drift apart."
-  (str "#" results-id))
 
 (def form-id
   "The id of the search form, so a control that acts on a result can sit
@@ -490,9 +480,9 @@
                       filtering (narrow-attrs (str/lower-case q)))
           nothing-found? (and filtering (every? :hidden? shown))]
       [:fieldset.filters
-       [:legend (i18n/tr ui "Metadata")]
+       [:legend (layout/term ui :metadata)]
        (when client?
-         (controls/filter-box "value-filter" (i18n/tr ui "Filter values") q
+         (controls/filter-box "value-filter" (i18n/tr ui "Filter") q
                               [:filter-values]))
        (when client?
          (controls/filter-status (when nothing-found?
@@ -530,8 +520,8 @@
   different input, so one example cannot serve both."
   [ui mode]
   (if (= mode "cqp")
-    (i18n/tr ui "[lemma = \"hund\"] or [pos = \"N.*\"]")
-    (i18n/tr ui "hund, or several words in order")))
+    (i18n/tr ui "\"x\" or [lemma = \"x\"]")
+    (i18n/tr ui "one word, or several words in order")))
 
 (defn attribute-control
   "The control choosing which positional attribute a simple search
@@ -551,55 +541,27 @@
       (for [n offered]
         [:option {:value n :selected (= n selected)} n])]]))
 
-(defn query-help
-  "What CQP can be asked, in `ui`, standing where the results will once
-  there are any: a dozen recipes drawn from the CQP manual, each the
-  query itself and what it finds, and a link to the manual for the rest.
+(defn heading-id
+  "The id of the first heading among the hiccup `blocks` of a document,
+  which is the name the document gives itself; nil when none carries
+  one."
+  [blocks]
+  (some (fn [[tag attrs]]
+          (when (and (re-matches #"h[1-6]" (name tag)) (map? attrs))
+            (:id attrs)))
+        (filter vector? blocks)))
 
-  Everything here already works in the CQP box; nothing there says so,
-  and a reader who has not searched yet is the one with room to read it.
-  The queries are CQP's own and stay as written; the words beside them
-  are the interface's. The attributes named are the common ones, word,
-  lemma and pos, since what a corpus actually carries is under the
-  attribute control in the form."
-  [ui]
-  (let [recipe (fn [q what] (list [:dt [:code q]] [:dd what]))]
-    [:section.help {:aria-labelledby "help-heading"}
-     [:h2 {:id "help-heading"} (i18n/tr ui "Query help")]
-     [:dl
-      (recipe "\"hund\""
-              (i18n/tr ui (str "a word form; the quoted string is a regular "
-                               "expression")))
-      (recipe "\"hund.*\" %c"
-              (i18n/tr ui "forms starting with hund, in any case"))
-      (recipe "\"hund|kat\""
-              (i18n/tr ui "either word"))
-      (recipe "[lemma = \"hund\"]"
-              (i18n/tr ui (str "every form of a lemma; any attribute of the "
-                               "corpus goes in the brackets")))
-      (recipe "[pos != \"N.*\"]"
-              (i18n/tr ui (str "anything but; the value is a regular "
-                               "expression too")))
-      (recipe "[lemma = \"lille\" & pos = \"A.*\"]"
-              (i18n/tr ui "both at once; | for either, ! for not"))
-      (recipe "[lemma = \"lille\"] [pos = \"N.*\"]"
-              (i18n/tr ui "a sequence, one pattern per token"))
-      (recipe "\"i\" []{0,2} \"med\""
-              (i18n/tr ui "with up to two tokens between"))
-      (recipe "\"hund\" []* \"kat\" within s"
-              (i18n/tr ui "both in one sentence, in that order"))
-      (recipe "\"en\" @[pos = \"A.*\"] [pos = \"N.*\"]"
-              (i18n/tr ui (str "@ marks a token as the target, shown in bold "
-                               "and counted at its own position")))
-      (recipe "a:[] \"og\" b:[] :: a.word = b.word"
-              (i18n/tr ui (str "labels name tokens, and the constraint after "
-                               ":: relates them: the same word on both sides "
-                               "of og")))
-      (recipe "[word = \".*\" & strlen(word) >= 12]"
-              (i18n/tr ui "tokens of twelve characters or more"))]
-     [:p [:a {:href "https://cwb.sourceforge.io/files/CQP_Manual/"}
-          (i18n/tr ui "The CQP manual")]
-      " " (i18n/tr ui "has the rest.")]]))
+(defn guide
+  "The search guide, the hiccup `blocks` of its document (see
+  dk.cst.corpus-probe.docs), standing where the results will once there
+  are any, as a region named by the guide's own heading; nil without a
+  guide.
+
+  It stands where the results will: help belongs in the empty answer
+  space, not in the form."
+  [blocks]
+  (when (seq blocks)
+    [:section.help {:aria-labelledby (heading-id blocks)} blocks]))
 
 (defn navigation-status
   "The live region reporting a routed navigation in flight in `ui`,
@@ -707,10 +669,12 @@
                          :on      {:change [:set-mode "simple"]}}]
          (i18n/tr ui "Simple")]
         " "
+        ;; an abbreviation and no link: the click on a label belongs to
+        ;; its radio, and the glossary is in the masthead
         [:label [:input {:type    "radio" :name "mode" :value "cqp"
                          :checked (= mode "cqp")
                          :on      {:change [:set-mode "cqp"]}}]
-         "CQP"]]
+         (layout/term ui :cqp false)]]
        ;; two rows: what a simple search matches, then how loosely. One
        ;; row of four ran the attribute into the options it governs
        [:div {:role "group" :aria-label (i18n/tr ui "Simple-search options")}
@@ -817,7 +781,7 @@
     (for [{:keys [corpus size error]} counts]
       [:tr
        [:th {:scope "row"}
-        [:a {:href (corpus-views/corpus-href ui corpus)} [:code corpus]]]
+        [:a {:href (url/corpus corpus)} [:code corpus]]]
        [:td.n (if error
                 [:em (i18n/tr ui "error")]
                 (i18n/group-digits ui size))]])]])
@@ -868,11 +832,11 @@
   as such and carries its message."
   [ui type]
   (case type
-    :timeout        (i18n/tr ui "The query timed out")
+    :timeout        (i18n/tr ui "The search did not finish in time")
     :no-corpus      (i18n/tr ui "No corpus selected")
     :unknown-corpus (i18n/tr ui "Unknown corpus")
     :rejected       (i18n/tr ui "Request rejected")
-    :misaligned     (i18n/tr ui "CQP output could not be read")
+    :misaligned     (i18n/tr ui "Unreadable CQP output")
     :internal       (i18n/tr ui "Unexpected error")
     (i18n/tr ui "CQP error")))
 
@@ -882,11 +846,10 @@
   [ui type]
   (case type
     :no-corpus      (i18n/tr ui "Select at least one corpus to search.")
-    :unknown-corpus (i18n/tr ui "The registry has no corpus by that name.")
-    :misaligned     (i18n/tr ui (str "CQP printed something other than the "
-                                     "requested rows."))
-    :internal       (i18n/tr ui (str "The search failed on the server; its "
-                                     "log has the details."))
+    :unknown-corpus (i18n/tr ui "The registry has no corpus with that name.")
+    :misaligned     (i18n/tr ui "CQP did not print the requested rows.")
+    :internal       (i18n/tr ui (str "The search failed on the server. The "
+                                     "server log has the details."))
     nil))
 
 (defn error-body
@@ -950,10 +913,12 @@
 
 (defn view-label
   "What the result view `k` is called, in `ui` (see
-  dk.cst.corpus-probe.api/result-views)."
+  dk.cst.corpus-probe.api/result-views): the concordance is KWIC, as
+  CWB and KORP call it, expanded but not linked, since the label is
+  itself a link."
   [ui k]
   (case k
-    :kwic        (i18n/tr ui "Concordance")
+    :kwic        (layout/term ui :kwic false)
     :frequencies (i18n/tr ui "Frequencies")
     (name k)))
 
@@ -998,7 +963,7 @@
   Marked busy while a navigation is `pending?`, since until that one
   lands what this holds is the answer to the question before it."
   [{:keys [ui view view-hrefs result error pending?] :as state} heading body]
-  [:section.result (cond-> {:id              results-id
+  [:section.result (cond-> {:id              url/results-id
                             :tabindex        "-1"
                             :aria-labelledby "results-heading"}
                      ;; while the next question is in flight these hits
@@ -1051,7 +1016,7 @@
                          (near-control ui (:near result))
                          (:near result))
           (pagination ui prev-href next-href position)
-          (kwic/concordance hits {:caption  (i18n/tr ui "Concordance")
+          (kwic/concordance hits {:caption  (layout/term ui :kwic)
                                   :ui       ui
                                   :langs    langs
                                   :expanded expanded
@@ -1118,5 +1083,4 @@
      (when corpus
        [:section
         [:h3 (i18n/tr ui "Corpus")]
-        [:p [:a {:href (corpus-views/corpus-href ui corpus)}
-             [:code corpus]]]])]))
+        [:p [:a {:href (url/corpus corpus)} [:code corpus]]]])]))

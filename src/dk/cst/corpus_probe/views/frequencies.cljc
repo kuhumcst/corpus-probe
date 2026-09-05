@@ -10,7 +10,8 @@
   (:require [clojure.string :as str]
             [dk.cst.corpus-probe.i18n :as i18n]
             [dk.cst.corpus-probe.stats :as stats]
-            [dk.cst.corpus-probe.views.corpus :as corpus-views]
+            [dk.cst.corpus-probe.url :as url]
+            [dk.cst.corpus-probe.views.layout :as layout]
             [dk.cst.corpus-probe.views.page :as page]))
 
 (def row-limit
@@ -133,14 +134,14 @@
        [:th {:scope "col" :rowspan 2} [:code (name attr)]]
        (for [{:keys [corpus]} readable]
          [:th {:scope "colgroup" :colspan span}
-          [:a {:href (corpus-views/corpus-href ui corpus)}
+          [:a {:href (url/corpus corpus)}
            [:code corpus]]])
        (when total?
          [:th {:scope "colgroup" :colspan span} (i18n/tr ui "total")])]
       [:tr
        (for [_ groups]
-         (list [:th {:scope "col"} (i18n/tr ui "frequency")]
-               [:th {:scope "col"} (i18n/tr ui "per million")]
+         (list [:th {:scope "col"} (layout/term ui :frequency)]
+               [:th {:scope "col"} (layout/term ui :per-million)]
                (when docs [:th {:scope "col"} (i18n/tr ui "texts")])))]]
      [:tbody
       (for [{:keys [value freqs total href] doc-freqs :docs} shown]

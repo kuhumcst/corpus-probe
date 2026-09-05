@@ -12,16 +12,9 @@
   §7."
   (:require [clojure.string :as str]
             [dk.cst.corpus-probe.i18n :as i18n]
+            [dk.cst.corpus-probe.url :as url]
             [dk.cst.corpus-probe.views.controls :as controls]
             [dk.cst.corpus-probe.views.layout :as layout]))
-
-(defn corpus-href
-  "The URL of the info page of the corpus named `id`.
-
-  It names no language: which language the page is read in is the
-  reader's own preference, not part of the address of a corpus."
-  [_ui id]
-  (str "/corpus/" (str/lower-case id)))
 
 (defn count-cell
   "A statistics table cell for count `n` in `ui`, or for the
@@ -52,7 +45,7 @@
   named by its title (falling back to its ID), then its details in
   `ui`."
   [ui {:keys [id title] :as m}]
-  [:li [:a {:href (corpus-href ui id)} (or title id)] " "
+  [:li [:a {:href (url/corpus id)} (or title id)] " "
    (corpus-details ui m)])
 
 (defn chooser-item
@@ -244,7 +237,7 @@
   it, in `ui`, holding `q`. See
   dk.cst.corpus-probe.views.controls/filter-box."
   [ui q]
-  (controls/filter-box "corpus-filter" (i18n/tr ui "Filter corpora") q
+  (controls/filter-box "corpus-filter" (i18n/tr ui "Filter") q
                        [:filter-corpora]))
 
 (defn index-view
@@ -354,7 +347,7 @@
   [ui {:keys [p-attrs] :as stats}]
   (when (seq p-attrs)
     [:table.attributes
-     [:caption (i18n/tr ui "Positional attributes")]
+     [:caption (layout/term ui :positional-attributes)]
      [:thead
       [:tr [:th {:scope "col"} (i18n/tr ui "attribute")]
        [:th.n {:scope "col"} (i18n/tr ui "tokens")]
@@ -371,7 +364,7 @@
   [ui {:keys [s-attrs] :as stats}]
   (when (seq s-attrs)
     [:table.attributes
-     [:caption (i18n/tr ui "Structural attributes")]
+     [:caption (layout/term ui :structural-attributes)]
      [:thead
       [:tr [:th {:scope "col"} (i18n/tr ui "attribute")]
        ;; a column heading takes the plural form of what it counts
@@ -390,7 +383,7 @@
   [ui {:keys [a-attrs] :as stats}]
   (when (seq a-attrs)
     [:table.attributes
-     [:caption (i18n/tr ui "Alignment attributes")]
+     [:caption (layout/term ui :alignment-attributes)]
      [:thead
       [:tr [:th {:scope "col"} (i18n/tr ui "attribute")]
        [:th.n {:scope "col"} (i18n/tr ui "blocks")]]]
@@ -427,11 +420,11 @@
   region announces nothing anyway."
   [ui phantom?]
   [:section.error
-   [:h2 (i18n/tr ui "Could not read corpus")]
+   [:h2 (i18n/tr ui "Unreadable corpus")]
    [:p (if phantom?
          (i18n/tr ui (str "The registry lists this corpus, but CWB has "
                           "no data for it."))
-         (i18n/tr ui "CWB could not read this corpus's data files."))]])
+         (i18n/tr ui "CWB cannot read the data files of this corpus."))]])
 
 (defn info-view
   "The corpus info page body for `data` in `ui`: the corpus
@@ -471,8 +464,8 @@
    (when-not phantom?
      [:nav {:aria-label (i18n/tr ui "This corpus")}
       [:ul.row
-       [:li [:a {:href (str "/?corpus=" corpus)}
+       [:li [:a {:href (url/search-href {:corpus corpus})}
              (str (i18n/tr ui "Search in") " " corpus)]]
-       [:li [:a {:href (str "/?corpus=" corpus
-                            "&view=frequencies&attr=word")}
+       [:li [:a {:href (url/results-href {:corpus corpus
+                                          :view   "frequencies"})}
              (str (i18n/tr ui "Word frequencies of") " " corpus)]]]])])

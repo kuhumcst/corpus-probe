@@ -165,6 +165,23 @@ body:has(.sidebar) { padding-block-end: var(--sheet-block-size); }
   body:has(.sidebar) { padding-block-end: 0; }
 }
 
+/* prose, which the frontpage and the guide are, wants a measure: at a
+   1280px viewport a paragraph of either ran 1264px, about 190 characters
+   a line, against the 80 WCAG 1.4.8 asks for. Only these two: a table or
+   a form is not prose and keeps the width it needs */
+main.document, .help { max-inline-size: 40rem; }
+
+/* a term is the label of the definition under it, and the user agent
+   gives it nothing to be told apart from a paragraph by. Only in the
+   documents: the token panel and the corpus facts are short lists whose
+   terms need no marking */
+main.document dt, .help dt { font-weight: bold; }
+
+/* the element a link named, for the reader without a script (the client
+   wraps it in <mark>): a deep link near the foot of the page cannot
+   scroll it to the top, so this says which it was */
+main.document :target { background: Mark; color: MarkText; }
+
 /* the current view of a result is marked, like the site nav above it */
 nav.views [aria-current] { font-weight: bold; }
 

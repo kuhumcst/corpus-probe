@@ -6,7 +6,8 @@
   preference, remembered for them, so the same URL serves either one and
   a link can be shared without imposing the sharer's language on whoever
   opens it."
-  (:require [dk.cst.corpus-probe.i18n :as i18n]))
+  (:require [dk.cst.corpus-probe.i18n :as i18n]
+            [dk.cst.corpus-probe.url :as url]))
 
 (def main-id
   "The id of every page's <main>. Named once, so `skip-link` and the
@@ -75,8 +76,9 @@
 (def nav-items
   "The top-level navigation, in display order: the key naming each page
   (which is also the key its URL arrives under) and its path."
-  [[:search "/"]
-   [:corpora-heading "/corpora"]])
+  [[:search url/search]
+   [:corpora-heading url/corpora]
+   [:glossary url/glossary]])
 
 (defn nav-label
   "What the `nav-items` entry `k` is called, in `ui`."
@@ -84,12 +86,40 @@
   (case k
     :search          (i18n/tr ui "Search")
     :corpora-heading (i18n/tr ui "Corpora")
+    :glossary        (i18n/tr ui "Glossary")
     (name k)))
+
+(defn term
+  "The jargon `k` as the interface shows it, in `ui`: CWB's own word, as
+  an <abbr> with its expansion where it is one, linked to its glossary
+  entry (the key is the entry's id) unless `linked?` is false, for a
+  place a link cannot go: inside another link, or in a label whose click
+  belongs to its control. Not only abbreviations: match and frequency
+  are terms too."
+  ([ui k]
+   (term ui k true))
+  ([ui k linked?]
+   (let [[label expansion]
+         (case k
+           :kwic                  ["KWIC" (i18n/tr ui "key word in context")]
+           :cqp                   ["CQP" "Corpus Query Processor"]
+           :cpos                  ["cpos" (i18n/tr ui "corpus position")]
+           :match                 [(i18n/tr ui "match")]
+           :frequency             [(i18n/tr ui "frequency")]
+           :metadata              [(i18n/tr ui "Metadata")]
+           :positional-attributes [(i18n/tr ui "Positional attributes")]
+           :structural-attributes [(i18n/tr ui "Structural attributes")]
+           :alignment-attributes  [(i18n/tr ui "Alignment attributes")]
+           :per-million           [(i18n/tr ui "per million")])
+         shown (if expansion [:abbr {:title expansion} label] label)]
+     (if linked?
+       [:a {:href (url/glossary-entry (name k))} shown]
+       shown))))
 
 (defn site-header
   "The site masthead shared by every page, in `ui`: three
-  things with one role each. Who this is (the name, linking to a fresh
-  search), where a reader can go (the top-level navigation over `nav`,
+  things with one role each. Who this is (the name, linking to the
+  frontpage), where a reader can go (the top-level navigation over `nav`,
   each `nav-items` key to its URL, with `path`, the page being served,
   marked as the current one), and how they want it (the language switch,
   which returns to `path`).
@@ -110,9 +140,9 @@
   [:header
    ;; the site's name is a link home and nothing else: HTML has no element
    ;; for the name of a site, and what this actually is, is the way back to
-   ;; a clean search. It keeps no query, so it is also the app's start
-   ;; again: the navigation beside it is what carries a search onward
-   [:a.sitename {:href "/"} "corpus-probe"]
+   ;; the frontpage. It keeps no query: the navigation beside it is what
+   ;; carries a search onward
+   [:a.sitename {:href url/home} "corpus-probe"]
    [:nav {:aria-label (i18n/tr ui "Site")}
     [:ul.row
      (for [[k p] nav-items]

@@ -32,9 +32,8 @@
   (testing "which form a count takes is the translation's to say"
     (is (= "region" (i18n/trn da "region" "regions" 1)))
     (is (= "regioner" (i18n/trn da "region" "regions" 2)))
-    (testing "and Danish uses one form where English uses two"
-      (is (= "træf" (i18n/trn da "hit" "hits" 1)))
-      (is (= "træf" (i18n/trn da "hit" "hits" 9)))))
+    (is (= "forekomst" (i18n/trn da "hit" "hits" 1)))
+    (is (= "forekomster" (i18n/trn da "hit" "hits" 9))))
   (testing "an untranslated pair falls back to its own English"
     (is (= "ox" (i18n/trn da "ox" "oxen" 1)))
     (is (= "oxen" (i18n/trn da "ox" "oxen" 3))))
@@ -62,9 +61,8 @@
             s (if (vector? msgstr) msgstr [msgstr])]
       (is (not= "" s) (str lang " leaves " (pr-str msgid) " empty"))))
   (testing "a msgid holding a quote survives the PO round trip"
-    (is (= "[lemma = \"hund\"] eller [pos = \"N.*\"]"
-           (i18n/tr da
-                    "[lemma = \"hund\"] or [pos = \"N.*\"]")))))
+    (is (= "\"x\" eller [lemma = \"x\"]"
+           (i18n/tr da "\"x\" or [lemma = \"x\"]")))))
 
 (deftest group-digits-test
   (testing "English groups with a comma and points its decimals"

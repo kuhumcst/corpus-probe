@@ -1,8 +1,10 @@
 (ns dk.cst.corpus-probe.api
-  "HTTP routes and handlers: the server-rendered search page (a concordance
-  over the selected corpora), the frequency page, their TSV/CSV exports,
-  the corpus index and info pages, the bootstrap payload the client takes
-  over from, and the compiled client assets.
+  "HTTP routes and handlers: the frontpage, the server-rendered search
+  page (a concordance or a frequency table over the selected corpora),
+  its TSV/CSV exports, the corpus index and info pages, the bootstrap
+  payload the client takes over from, and the compiled client assets.
+  Where each of these is, and how a search is spelt as a URL, is
+  dk.cst.corpus-probe.url's.
 
   Responses are rendered from the shared .cljc views with Replicant's string
   renderer, so the client renders identical markup. On the search page the
@@ -17,20 +19,21 @@
             [clojure.string :as str]
             [cognitect.transit :as transit]
             [dk.cst.corpus-probe.corpus :as corpus]
+            [dk.cst.corpus-probe.docs :as docs]
             [dk.cst.corpus-probe.export :as export]
             [dk.cst.corpus-probe.frequency :as frequency]
             [dk.cst.corpus-probe.i18n :as i18n]
             [dk.cst.corpus-probe.query :as query]
             [dk.cst.corpus-probe.search :as search]
             [dk.cst.corpus-probe.tools :as tools]
+            [dk.cst.corpus-probe.url :as url]
             [dk.cst.corpus-probe.views.corpus :as corpus-views]
             [dk.cst.corpus-probe.views.frequencies :as freq-views]
             [dk.cst.corpus-probe.views.layout :as layout]
             [dk.cst.corpus-probe.views.page :as page]
             [dk.cst.corpus-probe.views.app :as app-views]
             [replicant.string :as replicant])
-  (:import [java.io ByteArrayOutputStream]
-           [java.net URLEncoder]))
+  (:import [java.io ByteArrayOutputStream]))
 
 (defn ->transit
   "Encode `x` as a transit-JSON string."
@@ -67,23 +70,25 @@
   [& parts]
   (str/join " · " (concat (remove str/blank? parts) ["corpus-probe"])))
 
-(defn accept-language
-  "The first language among the `Accept-Language` header value `s` that
-  this app has (see dk.cst.corpus-probe.i18n/languages), by descending
-  quality; nil when it names none.
+(defn accepted-languages
+  "The languages the `Accept-Language` header value `s` offers, most
+  preferred first: each once, by descending quality.
 
   Only the primary subtag counts, so `da-DK` counts as Danish. A tag
-  offered at quality 0 is refused rather than preferred (RFC 9110)."
+  offered at quality 0 is refused rather than preferred (RFC 9110), so
+  it is left out."
   [s]
   (->> (str/split (str s) #",")
        (keep (fn [item]
-               (let [[tag q] (str/split item #"(?i)\s*;\s*q\s*=")]
-                 (when-let [lang (first (str/split (str/trim tag) #"-"))]
+               (let [[tag q] (str/split item #"(?i)\s*;\s*q\s*=")
+                     lang    (first (str/split (str/trim tag) #"-"))]
+                 (when-not (str/blank? lang)
                    [(str/lower-case lang)
                     (or (some-> q str/trim parse-double) 1.0)]))))
        (filter (comp pos? second))
        (sort-by (comp - second))
-       (some (fn [[lang _]] (when (i18n/supported? lang) lang)))))
+       (map first)
+       (distinct)))
 
 (def preferences
   "The settings a reader may store, by the name each is stored under, with
@@ -108,18 +113,29 @@
                  (when (= (clojure.core/name k) name) v))))
        (some (fn [v] (when ((preferences k) v) v)))))
 
-(defn request-language
-  "The UI language `request` is served in: the language it remembers
-  choosing, else the best match for its `Accept-Language` header, else
-  Danish (see dk.cst.corpus-probe.i18n/default-language).
-
-  Not the URL: which language a reader reads in is their preference, not a
-  property of the page, so the same URL serves either and a shared link
-  does not impose the sharer's language on whoever opens it."
+(defn request-languages
+  "The languages `request` reads, most preferred first: the one it
+  stored, then its `Accept-Language` by quality (see
+  `accepted-languages`), then Danish and English. The one negotiation:
+  the interface takes the first it has a translation for (see
+  `request-language`), a document the first it has a file in (see
+  dk.cst.corpus-probe.docs/hiccup). Not the URL: a reader's language is
+  their preference, so a shared link does not impose the sharer's."
   [request]
-  (or (cookie-value (get-in request [:headers "cookie"]) :lang)
-      (accept-language (get-in request [:headers "accept-language"]))
-      i18n/default-language))
+  (distinct (concat (some-> (cookie-value (get-in request [:headers "cookie"])
+                                          :lang)
+                            vector)
+                    (accepted-languages
+                     (get-in request [:headers "accept-language"]))
+                    [i18n/default-language i18n/source-language])))
+
+(defn request-language
+  "The UI language `request` is served in: the first of its
+  `request-languages` the interface has (see
+  dk.cst.corpus-probe.i18n/languages), and Danish is among them, so
+  there always is one."
+  [request]
+  (some #(when (i18n/supported? %) %) (request-languages request)))
 
 (def transit-type
   "The content type the client router asks for and is answered with."
@@ -209,22 +225,6 @@
              "Vary"         "Accept, Accept-Language, Cookie"}
    :body    html})
 
-(defn query-string
-  "Encode map `m` as a URL query string, skipping nil and blank values and
-  repeating the key of a vector value once per element.
-
-  A query param written without a `=` arrives under a nil key, which names
-  nothing and is skipped too. A blank value is a field left empty, which
-  says nothing either, and a URL that is a citation should not carry one
-  per metadata attribute of the corpus."
-  [m]
-  (->> (remove (fn [[k v]] (or (nil? k) (nil? v))) m)
-       (mapcat (fn [[k v]]
-                 (for [v (if (vector? v) v [v])
-                       :when (not (str/blank? (str v)))]
-                   (str (name k) "=" (URLEncoder/encode (str v) "UTF-8")))))
-       (str/join "&")))
-
 (defn filter-key?
   "True when query param key `k` names a metadata filter: the filter
   prefix followed by the attribute name, as in `f.text_year` (see
@@ -271,13 +271,6 @@
                  :when (seq values)]
              [attr values])))
 
-(defn pattern-key?
-  "True when query param key `k` names a pattern or a range over a
-  metadata attribute: `fp.`, `ff.` or `ft.` followed by the attribute
-  name (see `pattern-params`)."
-  [k]
-  (boolean (and k (re-matches #"f[pft]\..+" (name k)))))
-
 (def range-limit
   "The most values a range of integers is spelt out as: enough for the
   years any corpus spans, and a bound on the query it becomes."
@@ -311,10 +304,11 @@
                           (prefixed-params params "ff."))))))
 
 (defn page-param
-  "The page number named by the `page` query param value `v`: the first
-  page for anything that is not a non-negative integer."
+  "The page the `page` query param value `v` names, counted from nought
+  as the result does; the URL counts from one, and anything else names
+  the first page."
   [v]
-  (max 0 (or (some-> v parse-long) 0)))
+  (max 0 (dec (or (some-> v parse-long) 1))))
 
 (defn sample-param
   "How many hits the `sample` query param value `v` asks to be shown at
@@ -376,20 +370,6 @@
      :distance (let [n (some-> distance parse-long)]
                  (if (and n (pos? n)) n page/near-distance))}))
 
-(defn corpora-param
-  "The corpus names selected by the `corpus` query param value `v`: a string
-  (one name, or several joined by commas as in Korp URLs) or a vector of
-  such strings when the param repeats. Names are uppercased and
-  deduplicated; nothing is validated here, an unknown or hostile name is
-  reported by the search as that corpus's error."
-  [v]
-  (->> (if (vector? v) v [v])
-       (mapcat #(str/split (str %) #","))
-       (remove str/blank?)
-       (map str/upper-case)
-       (distinct)
-       (vec)))
-
 (defn search-title
   "The document title of the search page for `params` in `ui`:
   the query, how many hits it found (from `result`, when given), the
@@ -405,7 +385,7 @@
    (search-title ui params nil))
   ([ui {:keys [q corpus] :as params} result]
    (if (str/blank? q)
-     (page-title)
+     (page-title (i18n/tr ui "Search"))
      (let [page-n (:page result 0)
            ;; a search every corpus refused still has a result, of size
            ;; 0; titling that "0 hits" reports an answer the search never
@@ -448,15 +428,15 @@
     (search-title ui params result)))
 
 (defn page-href
-  "The URL of page `page` of the search described by `params`.
+  "The URL of page `page` of the search `params` cite, counted from
+  nought here and from one in the URL.
 
   Ends in the results fragment, so a page turn lands on the hits rather
   than at the top of the query form. Drops `expand`, which names corpus
   positions on the current page and does not carry to another page's
   hits."
   [params page]
-  (str "/?" (query-string (assoc (dissoc params :expand) :page page))
-       page/results-fragment))
+  (url/results-href (assoc (dissoc params :expand) :page (inc page))))
 
 (defn search-params
   "The `params` that identify a search (its corpora, query, metadata
@@ -473,16 +453,15 @@
   (into (select-keys params [:corpus :q :mode :in :ci :prefix :suffix
                              :subset :subset-at :subset-attr
                              :near :distance :sample])
-        (filter (comp #(or (filter-key? %) (pattern-key? %)) key))
+        (filter (comp url/metadata-key? key))
         params))
 
 (defn export-hrefs
-  "The URLs of the TSV and CSV exports at `path` of the search described
-  by `params`."
-  [path params]
+  "The URLs of the TSV and CSV exports of `view` (`:kwic` or
+  `:frequencies`) of the search described by `params`, by format."
+  [view params]
   (into {} (for [format (keys export/formats)]
-             [(keyword format)
-              (str path "?" (query-string (assoc params :format format)))])))
+             [(keyword format) (url/export-href view format params)])))
 
 (defn ->cqp
   "The CQP query for `params`, compiling simple-mode input; nil when there
@@ -691,7 +670,7 @@
   empty selection a reader ticked their way to is answered with the no
   corpus error rather than silently widened to the whole registry."
   [ctx corpora params]
-  (let [named (corpora-param (:corpus params))]
+  (let [named (url/corpora-param (:corpus params))]
     (if (or (seq named) (contains? params :scope))
       named
       (readable-corpora ctx corpora))))
@@ -750,12 +729,11 @@
   the hits whose token at `anchor` has `value` as its `attr`: what one
   row of the frequency table grouped by `attr` at `anchor` counted."
   [params attr anchor value]
-  (str "/?" (query-string (assoc (search-params params)
-                                 :view        "kwic"
-                                 :subset      value
-                                 :subset-at   anchor
-                                 :subset-attr (name attr)))
-       page/results-fragment))
+  (url/results-href (assoc (search-params params)
+                           :view        "kwic"
+                           :subset      value
+                           :subset-at   anchor
+                           :subset-attr (name attr))))
 
 (defn linked-rows
   "The frequency `result` with a `subset-href` on each of the rows the
@@ -811,14 +789,13 @@
   construction rather than by carrying them across."
   [params]
   (for [[k value] result-views]
-    [k (str "/?" (query-string (assoc (search-params params)
-                                      :view    value
-                                      :attr    (:attr params)
-                                      :at      (:at params)
-                                      :docs    (:docs params)
-                                      :sort    (:sort params)
-                                      :context (:context params)))
-            page/results-fragment)]))
+    [k (url/results-href (assoc (search-params params)
+                                :view    value
+                                :attr    (:attr params)
+                                :at      (:at params)
+                                :docs    (:docs params)
+                                :sort    (:sort params)
+                                :context (:context params)))]))
 
 (defn search-view-data
   "The data dk.cst.corpus-probe.views.app/search-view renders one
@@ -830,6 +807,10 @@
   listed as a concordance or counted as a frequency table, and each view
   contributes only the controls and links it has (a sort and pagination
   for the concordance, a grouping for the table).
+
+  Links are built from `:cited`, the params as the URL cites them (see
+  dk.cst.corpus-probe.url/canonical); `:params`, which fills the form,
+  names every corpus searched.
 
   The same map is embedded as transit for the client to take over from,
   so it holds corpus overviews only: the full registry maps carry
@@ -860,7 +841,8 @@
                                           :sample  (sample-param
                                                     (:sample params)))))
         pages   (some-> outcome :result :pages)
-        params* (assoc params :corpus selected :lang lang :attr attr :at at)
+        params* (assoc params :corpus selected :attr attr :at at)
+        cited   (url/canonical params* (set (readable-corpora ctx corpora)))
         attrs   (attr-options! ctx known)]
     (cond->
      {:lang            lang
@@ -871,9 +853,10 @@
       ;; the corpora it is over
       :search-attrs    (search/attr-names #(= :positional (:type %)) attrs)
       :params          params*
+      :cited           cited
       :result          (:result outcome)
       :error           (:error outcome)
-      :view-hrefs      (view-hrefs params*)
+      :view-hrefs      (view-hrefs cited)
       :langs           (into {}
                              (map (juxt identity
                                         #(content-lang corpora %)))
@@ -882,8 +865,8 @@
       (assoc :attrs        attrs
              :positions    query/positions
              :export-hrefs (when (:result outcome)
-                             (export-hrefs "/export/frequencies"
-                                           (assoc (search-params params*)
+                             (export-hrefs :frequencies
+                                           (assoc (search-params cited)
                                                   :attr attr
                                                   :at   at
                                                   :docs (:docs params)))))
@@ -892,14 +875,14 @@
       (assoc :sort-modes   (mapv first query/sort-modes)
              :export-limit export/hit-limit
              :export-hrefs (when (:result outcome)
-                             (export-hrefs "/export/kwic"
-                                           (assoc (search-params params*)
+                             (export-hrefs :kwic
+                                           (assoc (search-params cited)
                                                   :sort    (:sort params)
                                                   :context (:context params))))
              :prev-href    (when (pos? page-n)
-                             (page-href params* (dec page-n)))
+                             (page-href cited (dec page-n)))
              :next-href    (when (and pages (< (inc page-n) pages))
-                             (page-href params* (inc page-n)))))))
+                             (page-href cited (inc page-n)))))))
 
 (defn nav-hrefs
   "The URL of each top-level page for `params`.
@@ -911,8 +894,11 @@
   the switch at the top of the results region (see `view-hrefs`)."
   [params]
   (let [search (search-params params)]
-    {:search          (str "/?" (query-string search) page/results-fragment)
-     :corpora-heading "/corpora"}))
+    {:search          (if (seq search)
+                        (url/results-href search)
+                        url/search)
+     :corpora-heading url/corpora
+     :glossary        url/glossary}))
 
 (defn shell-data
   "The parts of a page the masthead is built from, for `request` with
@@ -953,31 +939,38 @@
 (defn search-page
   "Handle a search-page `request` against `ctx`: render the form, and when
   the query params describe a search, its concordance or the reason there
-  is none."
+  is none, else the search guide (see dk.cst.corpus-probe.docs) where
+  the results will be.
+
+  `:cited` goes to the masthead's navigation and not to the client, which
+  does not read it."
   [ctx request]
-  (let [data (assoc (search-view-data ctx request) :route :search)]
+  (let [{:keys [lang view params result error cited]
+         :as   data} (search-view-data ctx request)
+        data (cond-> (assoc (dissoc data :cited) :route :search)
+               (not (or result error))
+               (assoc :guide (docs/demote
+                              (docs/hiccup "guide"
+                                           (request-languages request)))))]
     (page-response request
-                   (result-title (i18n/->ui (:lang data)) (:view data)
-                                 (:params data) (:result data))
+                   (result-title (i18n/->ui lang) view params result)
                    data
-                   (:params data))))
+                   cited)))
 
-(defn frequencies-page
-  "Redirect a frequency-page `request` to the same search shown in its
-  frequency view.
-
-  The frequency table used to be a page of its own; it is now a view of a
-  search result, so the old URL names the same thing and says so with a
-  permanent redirect rather than growing a second way to reach it."
-  [_ctx request]
-  (let [params (scalar-params (:query-params request))]
-    {:status  301
-     :headers {"Location" (str "/?" (query-string
-                                     (assoc (search-params params)
-                                            :view "frequencies"
-                                            :attr (attr-param (:attr params))))
-                              page/results-fragment)}
-     :body    ""}))
+(defn document-page
+  "Handle a `request` for the document called `name` (see
+  dk.cst.corpus-probe.docs): the frontpage, where the app says what it
+  is and where a reader goes from here, or the glossary. Served in the
+  first language the request reads that the document has, and titled as
+  the document titles itself."
+  [_ctx name request]
+  (let [langs  (request-languages request)
+        blocks (docs/hiccup name langs)]
+    (page-response request
+                   (page-title (docs/title blocks))
+                   {:route :document
+                    :lang  (first (filter i18n/supported? langs))
+                    :data  {:body blocks}})))
 
 (defn text-response
   "A 200 response serving `text` in export `format` (a key of
@@ -1012,14 +1005,14 @@
     (export-failure counts)))
 
 (defn export-kwic
-  "Handle a concordance export `request` against `ctx`: the hits of the
-  query in the selected corpora (the first
-  dk.cst.corpus-probe.export/hit-limit of them, in the requested sort) as
-  a TSV or CSV download; 400 without a query, known corpora or a known
-  format, or when no corpus could be searched."
-  [ctx request]
-  (let [{:keys [params known cqp opts]} (search-request ctx request)
-        format (:format params)]
+  "Handle a concordance export `request` against `ctx` in `format` (a
+  key of dk.cst.corpus-probe.export/formats): the hits of the query in
+  the selected corpora (the first dk.cst.corpus-probe.export/hit-limit
+  of them, in the requested sort) as a TSV or CSV download; 400 without
+  a query, known corpora or a known format, or when no corpus could be
+  searched."
+  [ctx request format]
+  (let [{:keys [params known cqp opts]} (search-request ctx request)]
     (if-not (and cqp (seq known) (export/formats format))
       {:status 400 :body "bad request"}
       (let [result (search/concordance!
@@ -1034,13 +1027,13 @@
                          (export/kwic-table result))))))
 
 (defn export-frequencies
-  "Handle a frequency table export `request` against `ctx`: every row of
-  the breakdown of the query (or of the whole corpora) by the `attr`
-  param as a TSV or CSV download; 400 without known corpora or a known
-  format, or when no corpus could be counted."
-  [ctx request]
-  (let [{:keys [params known cqp opts]} (search-request ctx request)
-        format (:format params)]
+  "Handle a frequency table export `request` against `ctx` in `format`
+  (a key of dk.cst.corpus-probe.export/formats): every row of the
+  breakdown of the query (or of the whole corpora) by the `attr` param
+  as a TSV or CSV download; 400 without known corpora or a known format,
+  or when no corpus could be counted."
+  [ctx request format]
+  (let [{:keys [params known cqp opts]} (search-request ctx request)]
     (if-not (and (seq known) (export/formats format))
       {:status 400 :body "bad request"}
       (let [table (frequency/frequency-table!
@@ -1050,6 +1043,24 @@
                           :docs (some? (:docs params))))]
         (export-response format "frequencies" :tokens table
                          (export/frequency-table table))))))
+
+(def export-file
+  "What an export is named as under the search path: the view of the
+  result as its name and the format as its extension, `kwic.tsv` (see
+  dk.cst.corpus-probe.url/export)."
+  #"(kwic|frequencies)\.(tsv|csv)")
+
+(defn export-page
+  "Handle an export `request` against `ctx`: its `:file` path parameter
+  names the view exported and the format it takes (see `export-file`);
+  404 for a file that names neither."
+  [ctx request]
+  (let [[_ view format] (re-matches export-file
+                                    (str (get-in request [:path-params :file])))]
+    (case view
+      "kwic"        (export-kwic ctx request format)
+      "frequencies" (export-frequencies ctx request format)
+      {:status 404 :body "not found"})))
 
 (defn corpora-page
   "Handle the corpus index `request` against `ctx`: every registry corpus,
@@ -1174,7 +1185,7 @@
   costs the merge and the collated sort rather than a CQP round trip."
   [ctx request]
   (let [corpora   (corpus/corpora ctx)
-        named     (corpora-param (:corpus (:query-params request)))
+        named     (url/corpora-param (:corpus (:query-params request)))
         [known _] (split-known corpora named)]
     {:status  200
      :headers {"Content-Type"  "application/transit+json; charset=utf-8"
@@ -1233,17 +1244,23 @@
 (defn routes
   "The route table, with handlers closed over `ctx`."
   [ctx]
-  #{["/"              :get (partial search-page ctx)  :route-name ::search]
-    ["/frequencies"   :get (partial frequencies-page ctx)
-     :route-name ::frequencies]
-    ["/export/kwic"   :get (partial export-kwic ctx) :route-name ::export-kwic]
-    ["/export/frequencies" :get (partial export-frequencies ctx)
-     :route-name ::export-frequencies]
-    ["/preferences"   :post (partial preferences-page ctx)
+  #{[url/home                     :get (partial document-page ctx "frontpage")
+     :route-name ::home]
+    [url/glossary                 :get (partial document-page ctx "glossary")
+     :route-name ::glossary]
+    [url/search                   :get (partial search-page ctx)
+     :route-name ::search]
+    [(str url/search "/:file")    :get (partial export-page ctx)
+     :route-name ::export]
+    [layout/preferences-path      :post (partial preferences-page ctx)
      :route-name ::preferences]
-    ["/corpora"       :get (partial corpora-page ctx) :route-name ::corpora]
-    ["/corpus/:id"    :get (partial corpus-page ctx)  :route-name ::corpus]
-    ["/api/context"   :get (partial context-page ctx) :route-name ::context]
-    ["/api/filters"   :get (partial filters-page ctx) :route-name ::filters]
-    ["/css/style.css" :get stylesheet                 :route-name ::stylesheet]
-    ["/js/*path"      :get js-file                    :route-name ::js]})
+    [url/corpora                  :get (partial corpora-page ctx)
+     :route-name ::corpora]
+    [(str url/corpora "/:id")     :get (partial corpus-page ctx)
+     :route-name ::corpus]
+    ["/api/context"               :get (partial context-page ctx)
+     :route-name ::context]
+    ["/api/filters"               :get (partial filters-page ctx)
+     :route-name ::filters]
+    ["/css/style.css"             :get stylesheet :route-name ::stylesheet]
+    ["/js/*path"                  :get js-file    :route-name ::js]})

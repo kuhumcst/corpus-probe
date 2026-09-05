@@ -17,7 +17,17 @@
         com.taoensso/telemere-slf4j    {:mvn/version "1.4.0"}
         ;; gettext: the UI translations live in i18n/*.po rather than in a
         ;; map in the source, so adding a language is dropping in a file
-        brightin/pottery               {:mvn/version "1.0.2"}}
+        brightin/pottery               {:mvn/version "1.0.2"}
+        ;; Markdown for resources/docs: nextjournal's parser is
+        ;; commonmark-java, which dk.cst.corpus-probe.markdown builds on
+        ;; directly for its definition list, so both are named
+        io.github.nextjournal/markdown {:mvn/version "0.7.225"}
+        org.commonmark/commonmark                       {:mvn/version "0.24.0"}
+        org.commonmark/commonmark-ext-autolink          {:mvn/version "0.24.0"}
+        org.commonmark/commonmark-ext-footnotes         {:mvn/version "0.24.0"}
+        org.commonmark/commonmark-ext-gfm-strikethrough {:mvn/version "0.24.0"}
+        org.commonmark/commonmark-ext-gfm-tables        {:mvn/version "0.24.0"}
+        org.commonmark/commonmark-ext-task-list-items   {:mvn/version "0.24.0"}}
 
  :aliases
  {:dev  {:extra-paths ["dev" "test"]}

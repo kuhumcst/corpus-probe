@@ -8,13 +8,13 @@
     (let [item (corpus/corpus-item en {:id    "VISER"
                                          :title "Folkeviser"
                                          :size  48})]
-      (is (= [:a {:href "/corpus/viser"} "Folkeviser"] (second item)))
+      (is (= [:a {:href "/corpora/viser"} "Folkeviser"] (second item)))
       (is (some #{[:code "VISER"]} (deep item)))))
   (testing "an untitled corpus links its ID"
-    (is (= [:a {:href "/corpus/probe"} "PROBE"]
+    (is (= [:a {:href "/corpora/probe"} "PROBE"]
            (second (corpus/corpus-item en {:id "PROBE" :size 47})))))
-  (testing "the info link keeps the language"
-    (is (= [:a {:href "/corpus/probe"} "PROBE"]
+  (testing "the info link names no language"
+    (is (= [:a {:href "/corpora/probe"} "PROBE"]
            (second (corpus/corpus-item da {:id "PROBE" :size 47})))))
   (testing "an unreadable corpus is marked unavailable in either language"
     (is (some #{[:em "unavailable"]}
@@ -176,8 +176,8 @@
       (is (= "vis" (:value (attrs "vis"))))
       (is (= "" (:value (attrs nil))))
       (is (= [:filter-corpora] (get-in (attrs nil) [:on :input]))))
-    (testing "it says which of the two filters it is"
-      (is (= [:label {:for "corpus-filter"} "Filter corpora"]
+    (testing "it is labelled by the one word: the legend says what it filters"
+      (is (= [:label {:for "corpus-filter"} "Filter"]
              (get-in (corpus/corpus-filter en nil) [1]))))
     (testing "and watches for the Enter that would submit the form"
       (is (= [:swallow-enter] (get-in (attrs nil) [:on :keydown]))))))
@@ -338,7 +338,9 @@
     (testing "where the page leads is a named navigation, not a paragraph"
       (is (some #{{:aria-label "This corpus"}} html))
       (is (some #{:ul.row} html))
-      (is (= 2 (count (filter #(and (map? %) (:href %)) html)))))
+      (is (= ["/search?corpus=VISER"
+              "/search?corpus=VISER&view=frequencies#results"]
+             (map :href (filter #(and (map? %) (:href %)) html)))))
     (testing "a phantom entry cannot be searched, so it is offered nothing"
       (is (not (some #{{:aria-label "This corpus"}}
                      (deep (corpus/info-view en {:corpus   "GONE"
@@ -393,12 +395,12 @@
         (is (re-find #"Positionelle attributter" da))
         (is (re-find #"Søg i" da))
         (testing "and its own links keep it"
-          (is (re-find #"/\?corpus=VISER\"" da)))))
+          (is (re-find #"/search\?corpus=VISER\"" da)))))
     (testing "an error becomes a fixed alert leaking nothing of its message"
       (let [html (pr-str (corpus/info-view en {:corpus "GONE"
                                                  :error  {:message
                                                           "/srv/secret"}}))]
-        (is (re-find #"Could not read corpus" html))
+        (is (re-find #"Unreadable corpus" html))
         (is (not (re-find #"/srv/secret" html)))
         (is (not (re-find #":table" html)))))
     (testing "an entry CWB has no data for says so, not that reading failed"
@@ -419,12 +421,12 @@
   (testing "a phantom entry and a failed read are told apart"
     (is (some #{"The registry lists this corpus, but CWB has no data for it."}
               (deep (corpus/unreadable-section en true))))
-    (is (some #{"CWB could not read this corpus's data files."}
+    (is (some #{"CWB cannot read the data files of this corpus."}
               (deep (corpus/unreadable-section en false))))
     (is (some #{"Registret har dette korpus, men CWB har ingen data til det."}
               (deep (corpus/unreadable-section da true)))))
   (testing "both are one section under the same heading"
-    (is (some #{[:h2 "Could not read corpus"]}
+    (is (some #{[:h2 "Unreadable corpus"]}
               (deep (corpus/unreadable-section en true)))))
   (testing "no live region: it is in the document before the page is parsed"
     (is (not (some #{"alert"} (deep (corpus/unreadable-section en false)))))))

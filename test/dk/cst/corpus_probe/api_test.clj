@@ -6,6 +6,7 @@
             [dk.cst.corpus-probe.corpus :as corpus]
             [dk.cst.corpus-probe.cqp-test :refer [ctx when-cwb]]
             [dk.cst.corpus-probe.frequency :as frequency]
+            [dk.cst.corpus-probe.url :as url]
             [dk.cst.corpus-probe.views.hiccup :refer [da en]]
             [dk.cst.corpus-probe.views.page :as page]
             [taoensso.telemere :as t])
@@ -71,12 +72,13 @@
                                :at "match[-1]" :sort "word"}
                               :lemma "match[-1]" "en kat")]
     (testing "the concordance of the same search, kept to the row's hits"
-      (is (str/starts-with? href "/?"))
-      (is (str/includes? href "view=kwic"))
+      (is (str/starts-with? href "/search?"))
       (is (str/includes? href "subset=en+kat"))
       (is (str/includes? href "subset-at=match%5B-1%5D"))
       (is (str/includes? href "subset-attr=lemma"))
       (is (str/ends-with? href "#results")))
+    (testing "the concordance is the default view, so it goes unnamed"
+      (is (not (str/includes? href "view="))))
     (testing "the grouping and the order are the table's, not the hits'"
       (is (not (str/includes? href "attr=lemma&")))
       (is (not (str/includes? href "sort="))))))
@@ -127,35 +129,17 @@
                               {:query-params {:q "hund"}}))))))
 
 (deftest page-href-test
-  (let [href (api/page-href {:corpus "PROBE" :q "hund" :page "0"} 2)]
-    (is (str/starts-with? href "/?"))
+  (let [href (api/page-href {:corpus "PROBE" :q "hund" :page "1"} 2)]
+    (is (str/starts-with? href "/search?"))
     (is (str/includes? href "corpus=PROBE"))
-    (is (str/includes? href "page=2"))
+    (testing "the URL counts pages from one, as the page does"
+      (is (str/includes? href "page=3"))
+      (is (not (str/includes? (api/page-href {:q "hund"} 0) "page="))))
     (testing "the query is URL-encoded"
       (is (str/includes? (api/page-href {:q "[lemma=\"a\"]"} 1) "%5B")))
     (testing "the per-page expand parameter is dropped"
       (is (not (str/includes? (api/page-href {:corpus "PROBE" :expand "9"} 1)
                               "expand"))))))
-
-(deftest query-string-test
-  (is (= "a=1&b=2" (api/query-string {:a 1 :b 2})))
-  (testing "nil and blank values are dropped: a field left empty says
-            nothing, and a citation should not carry forty of them"
-    (is (= "a=1" (api/query-string {:a 1 :b nil})))
-    (is (= "a=1" (api/query-string {:a 1 :fp.text_year "" :sample " "}))))
-  (testing "a vector value repeats its key"
-    (is (= "corpus=A&corpus=B&q=x"
-           (api/query-string {:corpus ["A" "B"] :q "x"})))))
-
-(deftest corpora-param-test
-  (testing "one, repeated and comma-joined values all select corpora"
-    (is (= ["PROBE"] (api/corpora-param "PROBE")))
-    (is (= ["PROBE" "VISER"] (api/corpora-param ["PROBE" "VISER"])))
-    (is (= ["PROBE" "VISER" "TALER"]
-           (api/corpora-param ["PROBE,VISER" "TALER"]))))
-  (testing "names are uppercased and deduplicated, blanks dropped"
-    (is (= ["PROBE"] (api/corpora-param ["probe" "PROBE" ""]))))
-  (is (= [] (api/corpora-param nil))))
 
 (deftest context-page-validation-test
   (let [context (fn [params] (api/context-page {} {:query-params params}))]
@@ -262,6 +246,20 @@
                                    {:label "Nothing" :corpora []}]
                                   overviews))))))
 
+(deftest document-page-test
+  (let [page (fn [name lang]
+               (api/document-page {} name {:headers {"cookie" (str "lang=" lang)}}))]
+    (testing "a document names its page by its own heading, in the language read"
+      (is (= "Corpus search · corpus-probe"
+             (second (re-find #"<title>([^<]*)" (:body (page "frontpage" "en"))))))
+      (is (= "Ordliste · corpus-probe"
+             (second (re-find #"<title>([^<]*)" (:body (page "glossary" "da")))))))
+    (testing "and is a document page, headed by the document"
+      (let [body (:body (page "glossary" "en"))]
+        (is (str/includes? body "<main id=\"main\" tabindex=\"-1\" class=\"document\">"))
+        (is (str/includes? body "<h1 id=\"glossary\">Glossary</h1>"))
+        (is (str/includes? body "<dt id=\"kwic\">KWIC</dt>"))))))
+
 (deftest corpus-page-test
   (let [ctx  {:registry "test/resources"}
         page (fn [id] (api/corpus-page ctx {:path-params {:id id}
@@ -277,7 +275,7 @@
       ;; the fixture's data files do not exist, so the page is the alert
       (let [{:keys [status body]} (page "Registry-Probe")]
         (is (= 200 status))
-        (is (str/includes? body "Could not read corpus"))
+        (is (str/includes? body "Unreadable corpus"))
         (is (not (str/includes? body "/corpora/data/probe")))))))
 
 (deftest page-title-test
@@ -313,16 +311,19 @@
       (is (str/includes? plain "<main")))))
 
 (deftest shell-data-test
-  (let [request {:uri "/" :query-params {:q "hund" :corpus "PROBE"}}
+  (let [request {:uri "/search" :query-params {:q "hund" :corpus "PROBE"}}
         data    (api/shell-data request {:q "hund" :corpus ["PROBE"]})]
     (testing "the masthead travels in the view data, so a routed navigation
               re-renders it rather than leaving last render's links"
-      (is (= "/" (:path data)))
+      (is (= "/search" (:path data)))
       (is (contains? data :nav)))
     (testing "returning to the search keeps the query"
-      (is (str/includes? (:search (:nav data)) "q=hund")))
+      (is (= "/search?q=hund&corpus=PROBE#results" (:search (:nav data)))))
+    (testing "and without one is the bare search page"
+      (is (= "/search" (:search (:nav (api/shell-data request {}))))))
     (testing "no URL names a language: that is the reader's own preference"
       (is (= "/corpora" (:corpora-heading (:nav data))))
+      (is (= "/glossary" (:glossary (:nav data))))
       (is (not (str/includes? (:search (:nav data)) "lang="))))
     (testing "the frequency table is not a place: it is a view of a result"
       (is (not (contains? (:nav data) :frequencies))))))
@@ -347,11 +348,13 @@
       (is (= [:kwic :frequencies] (map first hrefs))))
     (testing "every view of one search shares its URL but for the view param"
       (doseq [[_ href] hrefs]
-        (is (str/includes? href "q=hund"))
-        (is (str/includes? href "corpus=PROBE"))
+        (is (str/starts-with? href "/search?q=hund&corpus=PROBE"))
         (is (str/ends-with? href "#results")))
-      (is (str/includes? (last (first hrefs)) "view=kwic"))
-      (is (str/includes? (last (second hrefs)) "view=frequencies")))))
+      (testing "and the concordance, being the default, goes unnamed"
+        (is (not (str/includes? (last (first hrefs)) "view=")))
+        (is (str/includes? (last (second hrefs)) "view=frequencies"))))
+    (testing "no URL names a language: that is the reader's own preference"
+      (is (not (some #(str/includes? (last %) "lang") hrefs))))))
 
 (deftest view-param-test
   (is (= :kwic (api/view-param nil)))
@@ -360,8 +363,9 @@
   (is (= :frequencies (api/view-param "frequencies"))))
 
 (deftest search-title-test
-  (testing "no query is just the app name"
-    (is (= "corpus-probe" (api/search-title en {}))))
+  (testing "no query names the page, which the frontpage's title does not"
+    (is (= "Search · corpus-probe" (api/search-title en {})))
+    (is (= "Søgning · corpus-probe" (api/search-title da {}))))
   (testing "a search names the query and corpus"
     (is (= "hund · PROBE · corpus-probe"
            (api/search-title en {:q "hund" :corpus ["PROBE"]}))))
@@ -404,32 +408,49 @@
       (testing "and a search that found nothing drew nothing, so it does not"
         (is (= "hund · 0 hits · PROBE · corpus-probe" (title 0)))))))
 
-(deftest accept-language-test
-  (testing "the first language we have wins, by quality"
-    (is (= "da" (api/accept-language "da-DK,da;q=0.9,en;q=0.8")))
-    (is (= "en" (api/accept-language "en-GB,en;q=0.9")))
-    (is (= "en" (api/accept-language "de,en;q=0.7,fr;q=0.9"))))
-  (testing "the quality parameter is case-insensitive and may carry spaces"
-    (is (= "da" (api/accept-language "da;Q=1")))
-    (is (= "en" (api/accept-language "de , en ; q=0.9"))))
-  (testing "a language offered at quality 0 is refused, not preferred"
-    (is (nil? (api/accept-language "en;q=0")))
-    (is (= "da" (api/accept-language "en;q=0,da;q=0.1"))))
-  (testing "a language we do not have yields nothing"
-    (is (nil? (api/accept-language "de-DE,fr;q=0.8")))
-    (is (nil? (api/accept-language "")))
-    (is (nil? (api/accept-language nil)))))
+(deftest accepted-languages-test
+  (testing "every language offered, most preferred first, primary subtags"
+    (is (= ["da" "en" "de"]
+           (api/accepted-languages "de;q=0.5,da-DK,en;q=0.8"))))
+  (testing "a language refused at quality 0 is left out, a blank offers none"
+    (is (= ["da"] (api/accepted-languages "en;q=0,da")))
+    (is (= [] (api/accepted-languages nil)))
+    (is (= [] (api/accepted-languages "")))))
+
+(deftest request-languages-test
+  (let [languages (fn [headers] (api/request-languages {:headers headers}))]
+    (testing "what the reader chose, then what they accept by quality, then
+              the app's own Danish and English"
+      (is (= ["en" "de" "da"] (languages {"cookie"          "lang=en"
+                                          "accept-language" "de,da;q=0.8"})))
+      (is (= ["de" "da" "en"] (languages {"accept-language" "de,da;q=0.8"})))
+      (is (= ["de" "fr" "en" "da"]
+             (languages {"accept-language" "de,en;q=0.7,fr;q=0.9"}))))
+    (testing "a stored language we do not have is no choice at all"
+      (is (= ["en" "da"] (languages {"cookie"          "lang=de"
+                                     "accept-language" "en"}))))
+    (testing "without either, the app's own"
+      (is (= ["da" "en"] (languages {})))
+      (is (= ["xx" "da" "en"] (languages {"accept-language" "xx"}))))
+    (testing "the quality parameter is case-insensitive and may carry spaces"
+      (is (= ["da" "en"] (languages {"accept-language" "da;Q=1"})))
+      (is (= ["de" "en" "da"] (languages {"accept-language" "de , en ; q=0.9"}))))
+    (testing "the URL has no say: a shared link imposes no language"
+      (is (= ["da" "en"] (api/request-languages {:query-params {:lang "en"}}))))))
 
 (deftest request-language-test
-  (testing "the language the reader chose wins over what their browser asks"
+  (testing "the interface takes the first language it has"
     (is (= "en" (api/request-language
-                 {:headers {"cookie" "lang=en" "accept-language" "da"}}))))
-  (testing "a stored language we do not have falls back to the header"
+                 {:headers {"cookie" "lang=en" "accept-language" "da"}})))
     (is (= "en" (api/request-language
-                 {:headers {"cookie" "lang=de" "accept-language" "en"}}))))
-  (testing "without either, Danish"
+                 {:headers {"cookie" "lang=de" "accept-language" "en"}})))
+    (is (= "en" (api/request-language
+                 {:headers {"accept-language" "de,en;q=0.7,fr;q=0.9"}}))))
+  (testing "without one it has, Danish"
     (is (= "da" (api/request-language {})))
-    (is (= "da" (api/request-language {:headers {"accept-language" "de"}}))))
+    (is (= "da" (api/request-language {:headers {"accept-language" "de"}})))
+    (is (= "da" (api/request-language
+                 {:headers {"accept-language" "en;q=0,da;q=0.1"}}))))
   (testing "the URL has no say: a shared link imposes no language"
     (is (= "da" (api/request-language {:query-params {:lang "en"}})))
     (is (= "en" (api/request-language
@@ -441,13 +462,13 @@
     ;; Pedestal parses `?foo` into {nil "foo"}, and a nil key names no
     ;; param and no metadata filter
     (is (not (api/filter-key? nil)))
-    (is (= "a=1" (api/query-string {nil "foo" :a 1})))
+    (is (= "q=x" (url/query-string {nil "foo" :q "x"})))
     (is (= {} (api/filter-params {nil "foo"}))))
   (testing "so it does not fail the page it was appended to"
     (let [ctx {:registry "test/resources"}]
       (is (= 200 (:status (api/corpora-page ctx {:uri "/corpora"
                                                  :query-params {nil "foo"}}))))
-      (is (= 200 (:status (api/search-page ctx {:uri "/"
+      (is (= 200 (:status (api/search-page ctx {:uri "/search"
                                                 :query-params
                                                 {nil "foo"}})))))))
 
@@ -575,9 +596,12 @@
     (is (nil? (api/sample-param "many")))))
 
 (deftest page-param-test
-  (is (= 0 (api/page-param nil)))
-  (is (= 3 (api/page-param "3")))
-  (testing "negative, non-numeric and absurd values are the first page"
+  (testing "the URL counts from one, the result from nought"
+    (is (= 0 (api/page-param "1")))
+    (is (= 2 (api/page-param "3"))))
+  (testing "anything that is not a positive integer is the first page"
+    (is (= 0 (api/page-param nil)))
+    (is (= 0 (api/page-param "0")))
     (is (= 0 (api/page-param "-3")))
     (is (= 0 (api/page-param "x")))
     (is (= 0 (api/page-param "99999999999999999999")))))
@@ -639,45 +663,31 @@
   (is (= "word" (api/attr-param "")))
   (is (= "lemma" (api/attr-param "lemma"))))
 
-(deftest frequencies-page-test
-  (let [ctx  {:registry "test/resources"}
-        page (fn [params]
-               (api/frequencies-page ctx
-                                     {:query-params (assoc params
-                                                           :lang "en")}))]
-    (testing "the old frequency page is now a view of a search, and says so"
-      (let [{:keys [status headers]} (page {:q "hund" :corpus "PROBE"})]
-        (is (= 301 status))
-        (let [location (get headers "Location")]
-          (is (str/starts-with? location "/?"))
-          (is (str/includes? location "view=frequencies"))
-          (is (str/includes? location "q=hund"))
-          (is (str/includes? location "corpus=PROBE"))
-          (is (str/ends-with? location "#results")))))
-    (testing "a grouping is named, so the redirect lands on a table"
-      (is (str/includes? (get-in (page {:q "hund"}) [:headers "Location"])
-                         "attr=word"))
-      (is (str/includes? (get-in (page {:q "hund" :attr "lemma"})
-                                 [:headers "Location"])
-                         "attr=lemma")))))
-
 (deftest export-validation-test
   (let [ctx    {:registry "test/resources"}
-        export (fn [params] (api/export-kwic ctx {:query-params params}))]
-    (testing "an export needs a query, known corpora and a known format"
-      (is (= 400 (:status (export {:corpus "REGISTRY-PROBE" :format "tsv"}))))
-      (is (= 400 (:status (export {:q "hund" :format "tsv"}))))
-      (is (= 400 (:status (export {:corpus "NOPE" :q "hund" :format "tsv"}))))
-      (is (= 400 (:status (export {:corpus "REGISTRY-PROBE" :q "hund"
-                                   :format "xls"})))))
-    (testing "a frequency export needs corpora and a known format"
-      (is (= 400 (:status (api/export-frequencies
-                           ctx {:query-params {:format "csv"}})))))))
+        export (fn [file params]
+                 (api/export-page ctx {:path-params  {:file file}
+                                       :query-params params}))]
+    (testing "an export needs a query and known corpora"
+      (is (= 400 (:status (export "kwic.tsv" {:corpus "REGISTRY-PROBE"}))))
+      (is (= 400 (:status (export "kwic.tsv" {:q "hund"}))))
+      (is (= 400 (:status (export "kwic.tsv" {:corpus "NOPE" :q "hund"})))))
+    (testing "a frequency export needs corpora"
+      (is (= 400 (:status (export "frequencies.csv" {})))))
+    (testing "a file that is not a view of a result in a format is not found"
+      (is (= 404 (:status (export "kwic.xls" {:corpus "REGISTRY-PROBE"
+                                               :q "hund"}))))
+      (is (= 404 (:status (export "nonesuch.tsv" {:corpus "REGISTRY-PROBE"
+                                                   :q "hund"}))))
+      (is (= 404 (:status (export nil {:corpus "REGISTRY-PROBE" :q "hund"})))))))
 
 (deftest export-hrefs-test
-  (is (= {:csv "/export/kwic?corpus=PROBE&q=hund&format=csv"
-          :tsv "/export/kwic?corpus=PROBE&q=hund&format=tsv"}
-         (api/export-hrefs "/export/kwic" {:corpus ["PROBE"] :q "hund"}))))
+  (testing "the view of the search as a file, one URL per format"
+    (is (= {:csv "/search/kwic.csv?q=hund&corpus=PROBE"
+            :tsv "/search/kwic.tsv?q=hund&corpus=PROBE"}
+           (api/export-hrefs :kwic {:corpus ["PROBE"] :q "hund"})))
+    (is (= "/search/frequencies.tsv?q=hund&attr=lemma"
+           (:tsv (api/export-hrefs :frequencies {:q "hund" :attr "lemma"}))))))
 
 (deftest attr-options-test
   (testing "an unreadable corpus contributes nothing, word remains"
@@ -698,10 +708,10 @@
   (testing "a search that fails everywhere is a 400 with the reasons"
     (let [{:keys [status headers body]}
           (t/with-min-level :fatal
-            (api/export-kwic {:registry "test/resources" :cqp "no-such-cqp"}
-                             {:query-params {:corpus "REGISTRY-PROBE"
-                                             :q      "hund"
-                                             :format "tsv"}}))]
+            (api/export-page {:registry "test/resources" :cqp "no-such-cqp"}
+                             {:path-params  {:file "kwic.tsv"}
+                              :query-params {:corpus "REGISTRY-PROBE"
+                                             :q      "hund"}}))]
       (is (= 400 status))
       (is (str/starts-with? (get headers "Content-Type") "text/plain"))
       (is (str/starts-with? body "REGISTRY-PROBE: internal")))))

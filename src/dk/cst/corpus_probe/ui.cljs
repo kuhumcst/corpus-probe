@@ -16,10 +16,15 @@
   form action. With it, the same views become live and `land!` does by
   hand what the browser did for free. The set of expanded hits is mirrored
   in the URL's `expand` parameter, so an expanded view survives a reload
-  and can be shared."
+  and can be shared.
+
+  Every URL this client writes, a submitted form's and the one carrying
+  the expansions, goes through dk.cst.corpus-probe.url, so it is the URL
+  the server would have written for the same search."
   (:require [clojure.string :as str]
             [cognitect.transit :as transit]
             [dk.cst.corpus-probe.i18n :as i18n]
+            [dk.cst.corpus-probe.url :as url]
             [dk.cst.corpus-probe.views.kwic :as kwic]
             [dk.cst.corpus-probe.views.layout :as layout]
             [dk.cst.corpus-probe.views.page :as page]
@@ -43,6 +48,12 @@
 (defonce in-flight
   ;; the AbortController of the routed navigation being fetched, if there
   ;; is one, so that starting another can call off the one it replaces
+  (atom nil))
+
+(defonce shown
+  ;; the path and query of the page on screen, so that a popstate leaving
+  ;; them as they are, which is a jump to a fragment, is not taken for a
+  ;; page to fetch again
   (atom nil))
 
 (def arrow-keys
@@ -74,6 +85,41 @@
   "The current location as a mutable URL object."
   []
   (js/URL. js/location.href))
+
+(defn params-of
+  "The URLSearchParams `search-params` as the map the server reads a
+  request's query params into: a param that repeats is a vector, the
+  rest strings."
+  [search-params]
+  (let [m (atom {})]
+    (.forEach search-params
+              (fn [v k]
+                (swap! m update (keyword k)
+                       (fn [had]
+                         (cond
+                           (nil? had)    v
+                           (vector? had) (conj had v)
+                           :else         [had v])))))
+    @m))
+
+(defn location-params
+  "The query params of the current location (see `params-of`)."
+  []
+  (params-of (.-searchParams (current-url))))
+
+(defn page-key
+  "What names the page the location is on: its path and query, which a
+  fragment is a place within."
+  []
+  (str js/location.pathname js/location.search))
+
+(defn fragment
+  "The place in the page the location names, its fragment without the
+  mark; nil when it names none."
+  []
+  (let [hash js/location.hash]
+    (when (seq hash)
+      (js/decodeURIComponent (subs hash 1)))))
 
 (defn collapse!
   "Remove the hit keyed `k` from the expanded set if it is still there."
@@ -497,21 +543,27 @@
 (defn sync-expand-url!
   "Mirror the expanded hits in the URL's `expand` parameter as
   `CORPUS:cpos` items, replacing history so the URL stays shareable without
-  new entries; a no-op when the URL already says that."
+  new entries; a no-op when the URL already says that.
+
+  The whole query string is rewritten rather than one param set on it,
+  so the URL in the bar is the canonical one whatever was typed:
+  `mode=simple` goes and the corpora become one param."
   []
-  (let [url (current-url)
-        ks  (sort (keys (:expanded @state)))]
-    (if (seq ks)
-      (.set (.-searchParams url) "expand"
-            (str/join "," (map (fn [[corpus cpos]] (str corpus ":" cpos))
-                               ks)))
-      (.delete (.-searchParams url) "expand"))
+  (let [url    (current-url)
+        ks     (sort (keys (:expanded @state)))
+        params (cond-> (dissoc (location-params) :expand)
+                 (seq ks)
+                 (assoc :expand (str/join "," (map (fn [[corpus cpos]]
+                                                     (str corpus ":" cpos))
+                                                   ks))))]
+    (set! (.-search url) (url/query-string params))
     ;; only when it would say something new: this runs on every render, and
     ;; a render happens on every arrow key. Safari throws past roughly a
     ;; hundred history writes in thirty seconds, and that throw comes back
     ;; out through the watcher into the swap! that moved the cursor
     (when (not= (.-href url) js/location.href)
-      (.replaceState js/history nil "" (.-href url)))))
+      (.replaceState js/history nil "" (.-href url)))
+    (reset! shown (page-key))))
 
 (defn render!
   "Render the current state into the masthead and #app, then sync the URL
@@ -550,25 +602,49 @@
     (and (>= top 0) (< top (/ (.-innerHeight js/window) 2)))))
 
 (defn land!
-  "Put the reader where a routed navigation should leave them: focused on
-  the results the URL names, and moved to them only if they are not
-  already on screen.
+  "Put the reader where a routed navigation should leave them: at the
+  place in the page the URL's fragment names, when it names one; else
+  focused on the results, when the page has any, and moved to them only
+  if they are not already on screen; else at the top of the page.
 
-  Focus always moves, because that is what tells a reader the outcome
-  arrived. Scrolling only happens when the results are not already at
-  hand: switching the view of a result, or searching again beside one,
-  leaves the page where it is, while a turn of the page from the foot of a
-  long one, or a first search on a narrow screen, brings them up. The
-  browser scrolls on a real navigation, from the fragment on the form
-  action; pushState does not, so the client decides."
-  [url]
-  (let [target (when (= (str "#" page/results-id) (.-hash url))
-                 (.getElementById js/document page/results-id))]
-    (if (nil? target)
-      (.scrollTo js/window 0 0)
+  A fragment other than the results is handed to the browser, since
+  replacing the location with itself is a fragment navigation, which
+  scrolls, marks the `:target` and sets where Tab starts, none of which
+  scrollIntoView does; the popstate it fires names the page on screen,
+  so the router ignores it.
+
+  Focus moves to the results because that is what tells a reader the
+  outcome arrived. Scrolling to them only happens when they are not
+  already at hand: switching the view of a result, or searching again
+  beside one, leaves the page where it is, while a turn of the page from
+  the foot of a long one, or a first search on a narrow screen, brings
+  them up. The browser scrolls on a real navigation, from the fragment
+  on the form action; pushState does not, so the client decides."
+  []
+  (let [hash   (.-hash js/location)
+        target (.getElementById js/document url/results-id)]
+    (cond
+      (and (seq hash) (not= hash url/results-fragment))
+      (.replace js/location js/location.href)
+
+      target
       (do (when-not (at-hand? target)
             (.scrollIntoView target))
-          (.focus target #js {:preventScroll true})))))
+          (.focus target #js {:preventScroll true}))
+
+      :else
+      (.scrollTo js/window 0 0))))
+
+(defn cited-href
+  "`href` as the history should hold it: without the results fragment,
+  which tells a browser where to land and a reader nothing, and which
+  the client lands without. Any other fragment is a place in the page
+  and stays."
+  [href]
+  (let [url (js/URL. href js/location.href)]
+    (when (= url/results-fragment (.-hash url))
+      (set! (.-hash url) ""))
+    (.-href url)))
 
 (defn wanted-hits
   "The hits of `data` whose key is in `wanted` (nil when nothing is
@@ -606,6 +682,9 @@
   [data]
   (-> data
       (assoc :client?       true
+             ;; the place in the page the location names, which a
+             ;; document marks (see dk.cst.corpus-probe.views.app/mark-target)
+             :fragment      (fragment)
              :served-corpus (get-in data [:params :corpus])
              :served-filter (get-in data [:filter-controls :selected])
              ;; what the filters on screen describe, so that a selection
@@ -642,7 +721,9 @@
   load the page the reader has already left.
 
   Any expansion the URL names is restored, so going back to a page whose
-  hits were expanded shows them expanded again."
+  hits were expanded shows them expanded again. What is pushed is the
+  `cited-href`: the address of the result, not the instruction to land
+  on it."
   [href push?]
   (let [controller (js/AbortController.)]
     (some-> @in-flight (.abort))
@@ -656,16 +737,16 @@
                    (.text response)
                    (throw (js/Error. "route request failed")))))
         (.then (fn [body]
-                 (let [data (read-transit body)
-                       url  (js/URL. href js/location.href)]
+                 (let [data (read-transit body)]
                    ;; before the state is replaced, or a report scheduled
                    ;; for a wait that is over lands on the answer to it
                    (cancel! pending-timer)
-                   (when push? (.pushState js/history nil "" href))
+                   (when push? (.pushState js/history nil "" (cited-href href)))
+                   (reset! shown (page-key))
                    (set! (.-title js/document) (:title data))
                    (reset! state (client-state data))
                    (fetch-expansions!)
-                   (land! url))))
+                   (land!))))
         (.catch (fn [_]
                   ;; an abort leaves the timer alone: it belongs to the
                   ;; navigation that did the aborting, which is still in
@@ -692,39 +773,60 @@
   business: an export is a download rather than a page, and fetching one
   as data would run the search a second time and then hand the reader
   nothing."
-  #{"/" "/corpora"})
+  #{url/home url/search url/corpora url/glossary})
 
 (defn routable?
   "True when `url` names a page this client knows how to render."
   [url]
   (let [path (.-pathname url)]
     (or (contains? routable-paths path)
-        (str/starts-with? path "/corpus/"))))
+        (str/starts-with? path (str url/corpora "/")))))
+
+(defn in-page?
+  "True when `url` names a place in the page the reader is on: an anchor
+  the browser should follow itself, as it does the bypass link, rather
+  than the page being fetched again to arrive where it already is."
+  [url]
+  (and (seq (.-hash url))
+       (= (.-pathname url) js/location.pathname)
+       (= (.-search url) js/location.search)))
 
 (defn routed?
   "True when `el` is a link this app renders itself: a page it knows, same
-  origin, no target and no modifier, so the browser's own meaning of the
-  click is kept."
+  origin, not a place in this one, no target and no modifier, so the
+  browser's own meaning of the click is kept."
   [el event]
   (and el
        (= (.-origin (js/URL. (.-href el))) js/location.origin)
        (routable? (js/URL. (.-href el)))
+       (not (in-page? (js/URL. (.-href el))))
        (str/blank? (.-target el))
        (not (or (.-metaKey event) (.-ctrlKey event)
                 (.-shiftKey event) (.-altKey event)))
        (not= 1 (.-button event))))
 
-(defn filled-fields
-  "The query string of `form`'s fields as a submit would send them, less
-  the ones left empty: a field left empty says nothing, and the metadata
-  filter has a pattern field per attribute, so a URL that kept them would
-  carry one empty parameter per attribute of the corpus, which is no URL
-  to cite."
+(defn form-params
+  "The fields of `form` as a submit would send them, as the params map
+  the server reads them into (see `params-of`)."
   [form]
-  (let [fields (js/URLSearchParams. (js/FormData. form))
-        kept   (js/URLSearchParams.)]
-    (.forEach fields (fn [v k] (when-not (str/blank? v) (.append kept k v))))
-    (.toString kept)))
+  (params-of (js/URLSearchParams. (js/FormData. form))))
+
+(defn selectable-corpora
+  "The IDs of every corpus `form` lets the reader choose: its corpus
+  boxes that are not disabled, which is what the chooser offers and what
+  a URL naming no corpus searches."
+  [form]
+  (into #{}
+        (map #(.-value %))
+        (.querySelectorAll form "input[name=corpus]:not(:disabled)")))
+
+(defn form-query
+  "The query string of a submit of `form`, as the URL cites it (see
+  dk.cst.corpus-probe.url/canonical): the browser's own rules for what a
+  form submits, less empty fields and defaults, which say nothing."
+  [form]
+  (url/query-string (url/canonical (form-params form)
+                                   (selectable-corpora form))))
 
 (defn route-clicks!
   "Take over link clicks and form submits that stay inside the app, so
@@ -758,13 +860,21 @@
                     (= (.-origin (js/URL. (.-action form)))
                        js/location.origin))
            (.preventDefault e)
-           ;; the browser's own rules for what a form submits, so a routed
-           ;; submit sends what a real one would, less the empty fields
            (let [url (js/URL. (.-action form))]
-             (set! (.-search url) (filled-fields form))
+             (set! (.-search url) (form-query form))
              (navigate! (.-href url) true)))))))
+  ;; a fragment navigation fires this too, and the page it is within is
+  ;; already on screen: the browser has moved to the place itself, as it
+  ;; does for the bypass link, and fetching the page again would only
+  ;; take the reader somewhere else
   (.addEventListener js/window "popstate"
-                     (fn [_] (navigate! js/location.href false))))
+                     (fn [_]
+                       (when (not= (page-key) @shown)
+                         (navigate! js/location.href false))))
+  ;; a link within the page, or back and forth between two places in
+  ;; it, changes only what the page marks
+  (.addEventListener js/window "hashchange"
+                     (fn [_] (swap! state assoc :fragment (fragment)))))
 
 (defn ^:dev/after-load reload!
   "Render again once shadow-cljs has swapped in recompiled code.

@@ -1,5 +1,6 @@
 (ns dk.cst.corpus-probe.views.frequencies-test
   (:require [clojure.test :refer [deftest is testing]]
+            [dk.cst.corpus-probe.url :as url]
             [dk.cst.corpus-probe.views.hiccup :refer [da deep en]]
             [dk.cst.corpus-probe.views.frequencies :as freq]
             [dk.cst.corpus-probe.views.page :as page]))
@@ -21,7 +22,7 @@
     (is (= "5 hits in PROBE by word · 1 value"
            (freq/frequency-heading en counted nil 1))))
   (testing "a request no corpus answered is headed by its error instead"
-    (is (= "The query timed out"
+    (is (= "The search did not finish in time"
            (freq/frequency-heading
             "en" {:counts [{:corpus "X" :error {:type :timeout}}]} nil 0)))
     (is (= "No corpus selected"
@@ -35,7 +36,7 @@
                :view-hrefs [[:kwic "/?view=kwic"]
                             [:frequencies "/?view=frequencies"]]})]
     (testing "it is the shared results region, so a search lands on it"
-      (is (= {:id              page/results-id
+      (is (= {:id              url/results-id
               :tabindex        "-1"
               :aria-labelledby "results-heading"}
              (second html))))
@@ -155,7 +156,7 @@
                                     :rows   []}
                                    0))))
   (testing "the same caption in Danish, the attribute name untranslated"
-    (is (= "31 træf i 2 korpusser efter lemma · 2 værdier"
+    (is (= "31 forekomster i 2 korpusser efter lemma · 2 værdier"
            (freq/frequency-summary da sample-result 2)))
     (is (re-find #", de 1 hyppigste vises"
                  (freq/frequency-summary da sample-result 1)))))
