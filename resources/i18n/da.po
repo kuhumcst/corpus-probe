@@ -20,7 +20,7 @@ msgid "all values"
 msgstr "alle værdier"
 
 msgid "All values of"
-msgstr "Alle værdier af"
+msgstr "Alle værdier for"
 
 msgid "and"
 msgstr "og"
@@ -50,7 +50,7 @@ msgid "Close"
 msgstr "Luk"
 
 msgid "The context did not load."
-msgstr "Konteksten blev ikke hentet."
+msgstr "Kunne ikke hente konteksten."
 
 msgid "columns"
 msgstr "kolonner"
@@ -109,7 +109,7 @@ msgid "Unexpected error"
 msgstr "Uventet fejl"
 
 msgid "The search failed on the server. The server log has the details."
-msgstr "Søgningen mislykkedes på serveren. Serverens log har detaljerne."
+msgstr "Søgningen fejlede på serveren. Se serverloggen."
 
 msgid "Language"
 msgstr "Sprog"
@@ -175,7 +175,7 @@ msgid "Select at least one corpus"
 msgstr "Vælg mindst ét korpus"
 
 msgid "Powered by"
-msgstr "Drevet af"
+msgstr "Bygget på"
 
 msgid "previous"
 msgstr "forrige"
@@ -190,7 +190,7 @@ msgid "one word per line"
 msgstr "ét ord pr. linje"
 
 msgid "one word, or several words in order"
-msgstr "ét ord eller flere ord i rækkefølge"
+msgstr "ét eller flere ord i rækkefølge"
 
 msgid "Query mode"
 msgstr "Søgetype"
@@ -199,7 +199,7 @@ msgid "Query options"
 msgstr "Søgeindstillinger"
 
 msgid "Request rejected"
-msgstr "Anmodningen blev afvist"
+msgstr "Afvist anmodning"
 
 msgid "Result view"
 msgstr "Resultatvisning"
@@ -262,7 +262,7 @@ msgid "Read the whole text"
 msgstr "Læs hele teksten"
 
 msgid "The corpus marks no texts"
-msgstr "Korpusset markerer ingen tekster"
+msgstr "Korpusset opmærker ingen tekster"
 
 msgid "Without a text attribute there is nothing to read as one text."
 msgstr "Uden en tekstattribut er der intet at læse som én tekst."
@@ -286,7 +286,7 @@ msgid "Text"
 msgstr "Tekst"
 
 msgid "the rate per million tokens of the column in parentheses"
-msgstr "raten pr. million tokens i kolonnen i parentes"
+msgstr "i parentes: pr. million tokens i kolonnen"
 
 msgid "the"
 msgstr "de"
@@ -298,7 +298,7 @@ msgid "This corpus"
 msgstr "Dette korpus"
 
 msgid "The search did not finish in time"
-msgstr "Søgningen blev ikke færdig i tide"
+msgstr "Søgningen tog for lang tid"
 
 msgid "Token"
 msgstr "Token"
@@ -322,7 +322,7 @@ msgid "unavailable"
 msgstr "utilgængelig"
 
 msgid "The registry lists this corpus, but CWB has no data for it."
-msgstr "Registret har dette korpus, men CWB har ingen data til det."
+msgstr "Korpusset står i registret, men CWB har ingen data til det."
 
 msgid "Unknown corpus"
 msgstr "Ukendt korpus"
@@ -334,7 +334,7 @@ msgid "Unreadable corpus"
 msgstr "Ulæseligt korpus"
 
 msgid "CWB cannot read the data files of this corpus."
-msgstr "CWB kan ikke læse datafilerne for dette korpus."
+msgstr "CWB kan ikke læse korpussets datafiler."
 
 msgid "Show or hide more context"
 msgstr "Vis eller skjul mere kontekst"

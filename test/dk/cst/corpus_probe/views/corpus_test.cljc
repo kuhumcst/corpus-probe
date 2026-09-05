@@ -506,7 +506,7 @@
               (deep (corpus/unreadable-section en true))))
     (is (some #{"CWB cannot read the data files of this corpus."}
               (deep (corpus/unreadable-section en false))))
-    (is (some #{"Registret har dette korpus, men CWB har ingen data til det."}
+    (is (some #{"Korpusset står i registret, men CWB har ingen data til det."}
               (deep (corpus/unreadable-section da true)))))
   (testing "both are one section under the same heading"
     (is (some #{[:h2 "Unreadable corpus"]}

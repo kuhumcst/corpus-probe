@@ -83,7 +83,7 @@
     (is (some #{"https://cwb.sourceforge.io/"}
               (deep (layout/site-footer en))))
     (is (some #{"Powered by"} (deep (layout/site-footer en))))
-    (is (some #{"Drevet af"} (deep (layout/site-footer da)))))
+    (is (some #{"Bygget på"} (deep (layout/site-footer da)))))
   (let [hrefs (fn [ui] (->> (deep (layout/site-footer ui))
                             (filter #(and (map? %) (:href %)))
                             (map :href)))]

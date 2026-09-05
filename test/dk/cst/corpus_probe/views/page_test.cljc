@@ -349,7 +349,7 @@
     (is (= "\"x\" or [lemma = \"x\"]"
            (page/query-example en "cqp")))
     (testing "and is translated like any other string"
-      (is (= "ét ord eller flere ord i rækkefølge"
+      (is (= "ét eller flere ord i rækkefølge"
              (page/query-example da nil)))))
   (testing "the placeholder follows the mode"
     (let [ph (fn [mode]
@@ -657,7 +657,7 @@
 (deftest error-name-test
   (is (= "CQP error" (page/error-name en {:type :cqp})))
   (is (= "The search did not finish in time" (page/error-name en {:type :timeout})))
-  (is (= "Søgningen blev ikke færdig i tide"
+  (is (= "Søgningen tog for lang tid"
          (page/error-name da {:type :timeout}))))
 
 (deftest error-section-test
