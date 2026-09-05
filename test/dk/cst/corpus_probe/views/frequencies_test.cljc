@@ -17,20 +17,39 @@
   (is (not (freq/tabled? {:counts [{:corpus "X" :error {:type :timeout}}]})))
   (is (not (freq/tabled? nil))))
 
+(defn text
+  "The strings of hiccup `x`, joined: what it reads as."
+  [x]
+  (apply str (filter string? (tree-seq coll? seq x))))
+
 (deftest frequency-heading-test
-  (testing "a table that could be counted is headed by its summary"
-    (is (= "5 hits in PROBE by word · 1 value"
-           (freq/frequency-heading en counted nil 1))))
+  (testing "a table that could be counted is headed by what was found,
+            the hits it counted, for the query"
+    (is (= (list "5 hits" " " "for" " " [:q "hund"])
+           (freq/frequency-heading en {:q "hund"} counted nil)))
+    (is (= "All tokens"
+           (freq/frequency-heading en {:q ""} counted nil))))
   (testing "a request no corpus answered is headed by its error instead"
     (is (= "The search did not finish in time"
            (freq/frequency-heading
-            "en" {:counts [{:corpus "X" :error {:type :timeout}}]} nil 0)))
+            "en" {:q "hund"} {:counts [{:corpus "X" :error {:type :timeout}}]}
+            nil)))
     (is (= "No corpus selected"
-           (freq/frequency-heading en nil {:type :no-corpus} 0)))))
+           (freq/frequency-heading en {:q "hund"} nil {:type :no-corpus})))))
+
+(deftest grouping-phrase-test
+  (testing "by what, where in the match, and against what"
+    (is (= "by word before the match"
+           (text (freq/grouping-phrase en (assoc counted :at "match[-1]")))))
+    (is (= "efter lemma og text_year"
+           (text (freq/grouping-phrase da {:attr :lemma :by :text_year}))))
+    (testing "the attribute names as the code they are"
+      (is (some #{[:code "word"]} (deep (freq/grouping-phrase en counted)))))))
 
 (deftest frequency-section-test
   (let [html (freq/frequency-section
               {:lang       "en"
+               :params     {:q "hund"}
                :result     counted
                :view       :frequencies
                :view-hrefs [[:kwic "/?view=kwic"]
@@ -40,9 +59,15 @@
               :tabindex        "-1"
               :aria-labelledby "results-heading"}
              (second html))))
-    (testing "its heading is the summary the caption used to carry"
-      (is (some #{[:h1 {:id "results-heading"}
-                   "5 hits in PROBE by word · 1 value"]}
+    (testing "its heading is the answer, and under it how the table counted
+              comes before the rest of the question"
+      (let [[tag h1 sub] (nth html 2)]
+        (is (= :hgroup tag))
+        (is (= "5 hits for hund" (text (drop 2 h1))))
+        (is (= "by word · in PROBE" (text sub)))))
+    (testing "the table's size is its caption's to say"
+      (is (some #(and (vector? %) (= :caption (first %))
+                      (= "Frequencies · 1 value" (text %)))
                 (deep html))))
     (testing "the view switch marks the frequency view as the current one"
       (is (some #(and (map? %) (= "/?view=frequencies" (:href %))
@@ -128,38 +153,22 @@
               (deep (freq/docs-control en true))))
     (is (some #{"tæl tekster"} (deep (freq/docs-control da false))))))
 
-(deftest frequency-summary-test
-  (testing "where in the match the table counts is said after the attribute"
-    (is (= "5 hits in PROBE by word before the match · 1 value"
-           (freq/frequency-summary en (assoc counted :at "match[-1]") 1)))))
-
-(deftest frequency-summary-original-test
-  (testing "only the corpora that could be counted are counted"
-    (is (= "31 hits in 2 corpora by lemma · 2 values"
-           (freq/frequency-summary en sample-result 2))))
-  (testing "a metadata filter qualifies the corpora"
-    (is (= "31 hits in 2 corpora within text_year 1591 by lemma · 2 values"
-           (freq/frequency-summary en
-                                   (assoc sample-result
-                                          :filter {:text_year #{"1591"}})
-                                   2))))
+(deftest table-caption-test
+  (testing "the table is named and sized"
+    (is (= "Frequencies · 2 values"
+           (text (freq/table-caption en sample-result))))
+    (is (= "Frekvenser · 2 værdier"
+           (text (freq/table-caption da sample-result)))))
   (testing "a cut table says so"
-    (is (re-find #"the 1 most frequent shown"
-                 (freq/frequency-summary en sample-result 1))))
-  (testing "a whole-corpus table counts all tokens"
-    (is (= "All tokens in PROBE by word · 0 values"
-           (freq/frequency-summary en
-                                   {:query  ""
-                                    :attr   :word
-                                    :counts [{:corpus "PROBE" :tokens 47
-                                              :size 47}]
-                                    :rows   []}
-                                   0))))
-  (testing "the same caption in Danish, the attribute name untranslated"
-    (is (= "31 forekomster i 2 korpusser efter lemma · 2 værdier"
-           (freq/frequency-summary da sample-result 2)))
-    (is (re-find #", de 1 hyppigste vises"
-                 (freq/frequency-summary da sample-result 1)))))
+    (let [cut (assoc sample-result :rows (repeat (inc freq/row-limit) {}))]
+      (is (re-find #"values, the \d+ most frequent shown"
+                   (text (freq/table-caption en cut))))
+      (is (re-find #", de \d+ hyppigste vises"
+                   (text (freq/table-caption da cut))))))
+  (testing "only the corpora that could be counted are counted, in the
+            heading"
+    (is (= "31 hits for hund"
+           (text (freq/frequency-heading en {:q "hund"} sample-result nil))))))
 
 (deftest frequency-table-test
   (let [table (freq/frequency-table en sample-result)
@@ -246,14 +255,15 @@
         (is (some #{[:td.n "3" nil]} html))
         (is (not (some #{[:th {:scope "row"} "tokens"]} html)))))))
 
-(deftest crosstab-summary-test
-  (is (= (str "15 hits in PROBE by lemma at the start of the match and "
-              "text_year · 1 value · 2 columns")
-         (freq/frequency-summary en crosstab 1)))
+(deftest crosstab-caption-test
+  (is (= "by lemma at the start of the match and text_year"
+         (text (freq/grouping-phrase en crosstab))))
+  (is (re-find #"^Frequencies · 1 value · 2 columns"
+               (text (freq/table-caption en crosstab))))
   (testing "cut columns say so"
     (is (re-find #"3 columns, the 2 most frequent shown"
-                 (freq/frequency-summary en (assoc crosstab :column-count 3)
-                                         1))))
+                 (text (freq/table-caption en (assoc crosstab
+                                                     :column-count 3))))))
   (testing "the section shows the cross-tabulation, without a text count"
     (let [html (deep (freq/frequency-section
                       {:lang      "en"

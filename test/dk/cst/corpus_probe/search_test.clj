@@ -183,6 +183,43 @@
        (is (= near (:near (search/concordance! ctx ["PROBE"] q
                                                {:near near}))))))))
 
+(deftest narrowing-nothing-test
+  (when-cwb
+   (let [q      "[pos = \"N.*\"]"
+         none   "[word = \"nonesuch\"]"
+         filter {:text_year #{"1591"}}
+         near   {:word "katten" :distance 5}
+         subset {:anchor "match" :attr :lemma :value "hund"}]
+     (testing "a narrowing of nothing is nothing, not CQP's refusal to
+               narrow an empty result"
+       (is (= 0 (search/size! ctx "PROBE" none {:near near})))
+       (is (= 0 (search/size! ctx "PROBE" none {:subset subset})))
+       (is (= {:size 0 :hits []}
+              (select-keys (search/kwic! ctx "PROBE" none {:near near})
+                           [:size :hits])))
+       (is (= 0 (:size (search/kwic! ctx "PROBE" none {:subset subset}))))
+       (is (= [] (frequency/frequencies! ctx "PROBE" none :word {:near near})))
+       (is (= [] (:rows (search/export! ctx "PROBE" none
+                                       {:near near :limit 10})))))
+     (testing "which a metadata filter that leaves a corpus no region makes
+               of any query"
+       (is (= 0 (search/size! ctx "PROBE" q {:filter filter})))
+       (is (= 0 (search/size! ctx "PROBE" q {:filter filter :near near})))
+       (is (= 0 (:size (search/kwic! ctx "PROBE" q {:filter filter
+                                                    :subset subset}))))
+       (is (= [] (frequency/frequencies! ctx "PROBE" q :lemma
+                                         {:filter filter :near near}))))
+     (testing "and of a chain of narrowings, the first of which empties
+               the result for the second"
+       (let [none {:anchor "match" :attr :lemma :value "nonesuch"}]
+         (is (= 0 (search/size! ctx "PROBE" q {:subset none :near near})))
+         (is (= 0 (:size (search/kwic! ctx "PROBE" q {:subset none
+                                                      :near   near}))))))
+     (testing "while a narrowing of something still narrows"
+       (is (= 5 (search/size! ctx "PROBE" q {:subset subset})))
+       ;; two of the five nouns with the lemma hund have katten nearby
+       (is (= 2 (search/size! ctx "PROBE" q {:subset subset :near near})))))))
+
 (deftest sort-test
   (when-cwb
    (let [order   (fn [opts]

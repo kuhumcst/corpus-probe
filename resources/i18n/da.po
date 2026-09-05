@@ -467,3 +467,6 @@ msgstr "del af ordet"
 
 msgid "None selected"
 msgstr "Ingen valgt"
+
+msgid "for"
+msgstr "af"

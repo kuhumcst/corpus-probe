@@ -6,6 +6,11 @@
             [dk.cst.corpus-probe.views.layout :as layout]
             [dk.cst.corpus-probe.views.page :as page]))
 
+(defn text
+  "The strings of hiccup `x`, joined: what it reads as."
+  [x]
+  (apply str (filter string? (tree-seq coll? seq x))))
+
 (deftest search-form-test
   (let [state {:lang         "en"
                :folders      [{:label nil :folders []
@@ -271,20 +276,22 @@
     (is (some #{"1 ord"} (deep (page/near-control da nil))))))
 
 (deftest subset-phrase-test
-  (is (= " · lemma before the match = kat"
+  (is (= (list [:code "lemma"] " " "before the match" " = " [:code "kat"])
          (page/subset-phrase en {:anchor "match[-1]" :attr :lemma
                                  :value  "kat"})))
-  (is (= " · lemma før matchet = kat"
-         (page/subset-phrase da {:anchor "match[-1]" :attr :lemma
-                                 :value  "kat"})))
+  (is (= "lemma før matchet = kat"
+         (text (page/subset-phrase da {:anchor "match[-1]" :attr :lemma
+                                       :value  "kat"}))))
   (is (nil? (page/subset-phrase en nil)))
   (testing "a position nothing names is shown as CQP names it"
     (is (= "target" (page/position-label en "target"))))
   (is (= "over hele matchet" (page/position-label da "match..matchend"))))
 
 (deftest near-phrase-test
-  (is (= " near kat" (page/near-phrase en {:word "kat" :distance 5})))
-  (is (= " sammen med kat" (page/near-phrase da {:word "kat" :distance 5})))
+  (is (= (list "near" " " [:code "kat"])
+         (page/near-phrase en {:word "kat" :distance 5})))
+  (is (= "sammen med kat"
+         (text (page/near-phrase da {:word "kat" :distance 5}))))
   (is (nil? (page/near-phrase en nil))))
 
 (deftest sample-phrase-test
@@ -374,15 +381,15 @@
                               :text_author #{"ukendt"}}
                              nil)))
   (is (nil? (page/within-phrase en nil nil)))
-  (is (= " within text_year 1591"
+  (is (= "within text_year 1591"
          (page/within-phrase en {:text_year #{"1591"}} nil)))
-  (is (= " inden for text_year 1591"
+  (is (= "inden for text_year 1591"
          (page/within-phrase da {:text_year #{"1591"}} nil)))
   (testing "patterns follow the values, between slashes"
     (is (= "text_title /Hav.*/; text_year 1583, 1591, /16../"
            (page/filter-phrase {:text_year #{"1591" "1583"}}
                                {:text_title ["Hav.*"] :text_year ["16.."]})))
-    (is (= " within text_title /Hav.*/"
+    (is (= "within text_title /Hav.*/"
            (page/within-phrase en nil {:text_title ["Hav.*"]})))))
 
 (deftest pattern-row-test
@@ -715,42 +722,49 @@
     (is (= "1 forekomst" (page/hits-phrase da 1)))
     (is (= "1.000 forekomster" (page/hits-phrase da 1000)))))
 
-(deftest result-summary-test
-  (testing "only the corpora that could be searched are counted"
-    (is (= "6 hits in 2 corpora"
-           (page/result-summary en example-result))))
-  (is (= "5 hits in PROBE"
-         (page/result-summary en {:size 5 :page 0 :pages 1
-                                    :counts [{:corpus "PROBE" :size 5}]})))
-  (testing "where in the pages the reader is, once there are several: a
-            result that fits one page has no place in it worth naming"
-    (is (= "5 hits in PROBE · page 2 of 3"
-           (page/result-summary en {:size 5 :page 1 :pages 3
-                                    :counts [{:corpus "PROBE" :size 5}]}))))
-  (testing "a metadata filter qualifies the corpora"
-    (is (= "5 hits in PROBE within text_year 1591"
-           (page/result-summary en {:size   5 :page 0 :pages 1
-                                      :filter {:text_year #{"1591"}}
-                                      :counts [{:corpus "PROBE"
-                                                :size   5}]}))))
-  (testing "the same summary in Danish, the attribute name untranslated"
-    (is (= "5 forekomster i PROBE inden for text_year 1591"
-           (page/result-summary da {:size   5 :page 0 :pages 1
-                                      :filter {:text_year #{"1591"}}
-                                      :counts [{:corpus "PROBE"
-                                                :size   5}]}))))
-  (testing "a sample qualifies the count, since a page of one is not a
-            page of the whole result and nothing else says so"
-    (is (= "5 hits in PROBE, a random sample of at most 100"
-           (page/result-summary en {:size   5 :page 0 :pages 1
-                                    :sample 100
-                                    :counts [{:corpus "PROBE" :size 5}]}))))
-  (testing "a search that found nothing sampled nothing, and saying it
-            drew a sample reads as the reason the result is empty"
-    (is (= "0 hits in PROBE"
-           (page/result-summary en {:size   0 :page 0 :pages 1
-                                    :sample 100
-                                    :counts [{:corpus "PROBE" :size 0}]})))))
+(deftest hits-heading-test
+  (testing "the heading is the answer, with the query as its subject"
+    (is (= (list "6 hits" " " "for" " " [:q "hund"])
+           (page/hits-heading en {:q "hund"} 6)))
+    (is (= "6 forekomster af hund"
+           (text (page/hits-heading da {:q "hund"} 6)))))
+  (testing "a CQP query is code, a list is its length, a word is quoted"
+    (is (= [:code "[lemma = \"hund\"]"]
+           (page/query-mark en {:q "[lemma = \"hund\"]" :mode "cqp"})))
+    (is (= "2 words" (page/query-mark en {:q "hund\nkat" :mode "list"})))
+    (is (= [:q "hund"] (page/query-mark en {:q "hund" :mode "simple"}))))
+  (testing "a blank query counts every token, which only a table asks for"
+    (is (= "All tokens" (page/hits-heading en {:q ""} 47)))))
+
+(deftest qualifiers-test
+  (let [phrases (fn [ui params result]
+                  (map text (page/qualifiers ui params result)))]
+    (testing "only the corpora that could be searched are counted"
+      (is (= ["in 2 corpora"] (phrases en {} example-result))))
+    (testing "the attribute and the part of the form, when not the usual"
+      (is (= ["attribute lemma" "part of word" "in 2 corpora"]
+             (phrases en {:in "lemma" :match "infix"} example-result)))
+      (is (= ["in 2 corpora"]
+             (phrases en {:in "word" :match ""} example-result))))
+    (testing "the filter, the narrowings and the sample, in that order"
+      (is (= ["in 2 corpora" "within text_year 1591"
+              "lemma at the start of the match = hund" "near og"
+              "a random sample of at most 100 per corpus"]
+             (phrases en {} (assoc example-result
+                                   :filter {:text_year #{"1591"}}
+                                   :subset {:anchor "match" :attr :lemma
+                                            :value  "hund"}
+                                   :near   {:word "og"}
+                                   :sample 100)))))
+    (testing "a search that found nothing sampled nothing, and saying it
+              drew a sample reads as the reason the result is empty"
+      (is (= ["in PROBE"]
+             (phrases en {} {:size   0 :sample 100
+                             :counts [{:corpus "PROBE" :size 0}]}))))
+    (testing "in Danish, the attribute name untranslated"
+      (is (= ["i 2 korpusser" "inden for text_year 1591"]
+             (phrases da {} (assoc example-result
+                                   :filter {:text_year #{"1591"}})))))))
 
 (deftest download-links-test
   (is (nil? (page/download-links en nil nil)))
@@ -770,6 +784,7 @@
                :view-hrefs   [[:kwic "/?v=k"]
                               [:frequencies "/?v=f"]]
                :sort-modes   ["corpus" "word"]
+               :params       {:q "hund"}
                :result       example-result
                :next-href    "/?page=1"
                :export-hrefs {:tsv "/e?format=tsv"}
@@ -792,11 +807,14 @@
     (testing "and is busy while the answer to the next question is coming"
       (is (= "true" (:aria-busy (second (page/result-section
                                          (assoc state :pending? true)))))))
-    (testing "its heading is the summary the caption used to carry, and it
-              is the page's own: the search page has no other"
-      (is (some #{[:h1 {:id "results-heading"}
-                   "6 hits in 2 corpora"]}
-                (deep html))))
+    (testing "its heading is the answer, the page's own h1, and the question
+              stands under it as a subheading"
+      (let [[tag h1 sub] (nth html 2)]
+        (is (= :hgroup tag))
+        (is (= [:h1 {:id "results-heading"}] (subvec h1 0 2)))
+        (is (= "6 hits for hund" (text (drop 2 h1))))
+        (is (= :p (first sub)))
+        (is (= "in 2 corpora" (text sub)))))
     (testing "errors are headed sections before the counts and concordance"
       (is (some #{[:h2 "CQP error"]} (deep html)))
       (is (some #{[:caption "Hits per corpus"]} (deep html)))

@@ -397,6 +397,30 @@
       (cache/share! (query/stored-kwic-batch corpus nqr opts) fetch)
       (fetch))))
 
+(declare size!)
+
+(defn narrowing-nothing?
+  "True when `opts` narrow a result of `query` in `corpus` via `ctx` (see
+  dk.cst.corpus-probe.query/narrowing) that is empty before one of the
+  narrowings runs: nothing to narrow.
+
+  CQP cannot be asked to narrow nothing. `set keyword` on an empty
+  result is an error and `subset` on one fails an assertion, so a query
+  finding nothing, or a corpus the metadata filter leaves no region in,
+  failed as soon as it was narrowed, and so did a result the first
+  narrowing emptied for the second. So the result each narrowing starts
+  from is counted first, with the narrowings before it and nothing
+  else. The count before any narrowing is the one the search being
+  narrowed already made, and `size!` remembers every count, so asking
+  is usually free."
+  [ctx corpus query opts]
+  (let [steps (mapv first (query/narrowing opts))]
+    (boolean
+     (some (fn [k]
+             (zero? (size! ctx corpus query
+                           (apply dissoc opts :sample (drop k steps)))))
+           (range (count steps))))))
+
 (defn kwic!
   "Run CQP `query` against `corpus` (an uppercase CQP corpus name) through
   the installation described by `ctx` (see dk.cst.corpus-probe.cqp) and
@@ -422,46 +446,53 @@
   saved there and a later page of the same query, filter and sort mode is
   read back from it rather than queried and sorted again; a false :cache?
   in `opts` leaves it out of the cache, for a query nothing will ask for
-  twice.
+  twice. A narrowing of nothing is answered without CQP (see
+  `narrowing-nothing?`).
 
   Throws ex-info when CQP reports an error, times out or dies."
   ([ctx corpus query]
    (kwic! ctx corpus query {}))
   ([ctx corpus query opts]
-   (let [ctx      (corpus-ctx ctx corpus)
-         query    (query/within-query query
-                                      (within-attr! ctx corpus (:within opts)))
-         opts     (kwic-opts! ctx corpus query opts)
-         {:keys [p-attrs struct-attrs rows]} opts
-         sections (kwic-sections! ctx corpus query opts)
-         {[cat-lines]  :cat
-          [dump-lines] :dump
-          tab-sections :tabulate} sections
-         hits     (parse/kwic->hits p-attrs cat-lines)
-         anchors  (parse/dump->anchors dump-lines)
-         structs  (when (seq struct-attrs)
-                    ;; one tabulate section per attribute: a whole line is
-                    ;; one annotation value, so embedded TABs survive
-                    (apply mapv
-                           (fn [& values]
-                             (zipmap struct-attrs values))
-                           tab-sections))]
-     (when (not= (count hits) (count anchors))
-       ;; cat and dump disagree only when CQP printed something other
-       ;; than the requested rows, so the page cannot be trusted
-       (throw (ex-info "KWIC output misaligned"
-                       {:corpus corpus
-                        :error  {:type     :misaligned
-                                 :expected (count hits)
-                                 :received (count anchors)}})))
-     {:corpus corpus
-      :query  query
-      :size   (batch-matches sections)
-      :rows   rows
-      :hits   (mapv (fn [hit anchor struct]
-                      (cond-> (assoc hit :anchors anchor)
-                        struct (assoc :structs struct)))
-                    hits anchors (or structs (repeat nil)))})))
+   (let [ctx   (corpus-ctx ctx corpus)
+         query (query/within-query query
+                                   (within-attr! ctx corpus (:within opts)))]
+     (if (narrowing-nothing? ctx corpus query (dissoc opts :within))
+       {:corpus corpus
+        :query  query
+        :size   0
+        :rows   (:rows opts (:rows query/kwic-defaults))
+        :hits   []}
+       (let [opts     (kwic-opts! ctx corpus query opts)
+             {:keys [p-attrs struct-attrs rows]} opts
+             sections (kwic-sections! ctx corpus query opts)
+             {[cat-lines]  :cat
+              [dump-lines] :dump
+              tab-sections :tabulate} sections
+             hits     (parse/kwic->hits p-attrs cat-lines)
+             anchors  (parse/dump->anchors dump-lines)
+             structs  (when (seq struct-attrs)
+                        ;; one tabulate section per attribute: a whole line
+                        ;; is one annotation value, so embedded TABs survive
+                        (apply mapv
+                               (fn [& values]
+                                 (zipmap struct-attrs values))
+                               tab-sections))]
+         (when (not= (count hits) (count anchors))
+           ;; cat and dump disagree only when CQP printed something other
+           ;; than the requested rows, so the page cannot be trusted
+           (throw (ex-info "KWIC output misaligned"
+                           {:corpus corpus
+                            :error  {:type     :misaligned
+                                     :expected (count hits)
+                                     :received (count anchors)}})))
+         {:corpus corpus
+          :query  query
+          :size   (batch-matches sections)
+          :rows   rows
+          :hits   (mapv (fn [hit anchor struct]
+                          (cond-> (assoc hit :anchors anchor)
+                            struct (assoc :structs struct)))
+                        hits anchors (or structs (repeat nil)))})))))
 
 (defn blocks
   "The `tokens` of a text in the blocks it is read in: a new block
@@ -537,32 +568,40 @@
   saved otherwise (see `stored-sections!` and `fresh-sections!`), so an
   export costs no query after a concordance and warms the cache before
   one. The context is a number of words either side: an export has no
-  room for a unit of text (see `export-unit-width`). Throws ex-info when
-  CQP reports an error, times out or dies."
+  room for a unit of text (see `export-unit-width`). A narrowing of
+  nothing is answered without CQP (see `narrowing-nothing?`). Throws
+  ex-info when CQP reports an error, times out or dies."
   [ctx corpus query opts]
-  (let [ctx      (corpus-ctx ctx corpus)
-        query    (query/within-query query
-                                     (within-attr! ctx corpus (:within opts)))
-        opts     (update (kwic-opts! ctx corpus query opts) :context
-                         #(if (keyword? %) export-unit-width %))
+  (let [ctx         (corpus-ctx ctx corpus)
+        query       (query/within-query query
+                                        (within-attr! ctx corpus
+                                                      (:within opts)))
+        nothing?    (narrowing-nothing? ctx corpus query
+                                        (dissoc opts :within))
+        opts        (update (kwic-opts! ctx corpus query opts) :context
+                            #(if (keyword? %) export-unit-width %))
         {:keys [nqr p-attrs struct-attrs]} opts
-        sections (or (stored-sections! ctx corpus query opts
-                                       query/stored-export-batch
-                                       #(cache/holds? ctx corpus nqr
-                                                      (batch-matches %)))
-                     (fresh-sections! ctx corpus query opts
-                                      query/export-batch))
-        [fixed & structs] (:tabulate sections)]
-    {:corpus      corpus
-     :size        (batch-matches sections)
-     :annotations (into (vec (remove #{:word} p-attrs)) struct-attrs)
-     ;; the contexts are trimmed: a position outside the corpus prints
-     ;; as an empty word, and the words are joined by spaces
-     :rows        (apply mapv
-                         (fn [line & values]
-                           (into (mapv str/trim (str/split line #"\t" -1))
-                                 values))
-                         fixed structs)}))
+        annotations (into (vec (remove #{:word} p-attrs)) struct-attrs)]
+    (if nothing?
+      {:corpus corpus :size 0 :annotations annotations :rows []}
+      (let [sections (or (stored-sections! ctx corpus query opts
+                                           query/stored-export-batch
+                                           #(cache/holds? ctx corpus nqr
+                                                          (batch-matches %)))
+                         (fresh-sections! ctx corpus query opts
+                                          query/export-batch))
+            [fixed & structs] (:tabulate sections)]
+        {:corpus      corpus
+         :size        (batch-matches sections)
+         :annotations annotations
+         ;; the contexts are trimmed: a position outside the corpus prints
+         ;; as an empty word, and the words are joined by spaces
+         :rows        (apply mapv
+                             (fn [line & values]
+                               (into (mapv str/trim
+                                           (str/split line #"\t" -1))
+                                     values))
+                             fixed structs)}))))
 
 (defn export-corpora!
   "The exports (see `export!`) of CQP `query` in `corpora` (uppercase
@@ -613,19 +652,23 @@
   Counted once and then remembered (see
   dk.cst.corpus-probe.cache/count!), because paging a search over several
   corpora counts the ones contributing no rows to the page again on every
-  page, and that is a whole query each time. Throws ex-info when CQP
-  reports an error, times out or dies."
+  page, and that is a whole query each time. A narrowing of nothing is
+  nothing, and is answered without CQP (see `narrowing-nothing?`). Throws
+  ex-info when CQP reports an error, times out or dies."
   ([ctx corpus query]
    (size! ctx corpus query {}))
-  ([ctx corpus query {:keys [filter patterns sample within near subset]}]
-   (let [ctx   (corpus-ctx ctx corpus)
-         query (query/within-query query (within-attr! ctx corpus within))
-         opts  {:filter (corpus-filter! ctx corpus filter patterns)
-                :subset (corpus-subset! ctx corpus subset)
-                :near   near
-                :sample sample}]
-     (cache/count! ctx corpus query opts
-                   #(run-size! (running-ctx ctx) corpus query opts)))))
+  ([ctx corpus query {:keys [filter patterns sample within near subset]
+                      :as   opts}]
+   (if (narrowing-nothing? ctx corpus query opts)
+     0
+     (let [ctx   (corpus-ctx ctx corpus)
+           query (query/within-query query (within-attr! ctx corpus within))
+           opts  {:filter (corpus-filter! ctx corpus filter patterns)
+                  :subset (corpus-subset! ctx corpus subset)
+                  :near   near
+                  :sample sample}]
+       (cache/count! ctx corpus query opts
+                     #(run-size! (running-ctx ctx) corpus query opts))))))
 
 (defn corpus-size!
   "The size of `query`'s result in `corpus` via `ctx` (`opts` as for

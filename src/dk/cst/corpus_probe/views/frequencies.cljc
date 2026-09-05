@@ -98,34 +98,35 @@
          (str ", " (i18n/tr ui "the") " " (i18n/group-digits ui shown)
               " " (i18n/tr ui "most frequent shown")))))
 
-(defn frequency-summary
-  "The summary of frequency `result` showing `shown` of its rows, used as
-  the heading naming the results region: what was counted, in the corpora
-  that could be counted, within the metadata filter, narrowed and near a
-  word, by what and where in the match, against what when the table is
-  a cross-tabulation, and how many values and columns there are, in
-  `ui`."
-  [ui {:keys [query attr at by counts rows columns column-count]
-       :as   result}
-   shown]
-  (let [readable (filter :tokens counts)]
-    (str (if (str/blank? query)
-           (i18n/tr ui "All tokens")
-           (page/hits-phrase ui (reduce + (keep :size readable))))
-         " " (i18n/tr ui "in") " "
-         (page/corpora-phrase ui (map :corpus readable))
-         (page/within-phrase ui (:filter result) (:patterns result))
-         (page/subset-phrase ui (:subset result))
-         (page/near-phrase ui (:near result))
-         " " (i18n/tr ui "by") " " (name attr)
-         (when at (str " " (page/position-label ui at)))
-         (when by (str " " (i18n/tr ui "and") " " (name by)))
-         " · " (shown-phrase ui (i18n/trn ui "value" "values" (count rows))
-                             (count rows) shown)
-         (when by
-           (str " · " (shown-phrase ui (i18n/trn ui "column" "columns"
-                                                 column-count)
-                                    column-count (count columns)))))))
+(defn grouping-phrase
+  "How the frequency `result` counted, as a phrase in `ui`: by which
+  attribute, where in the match, and against which second attribute when
+  it is a cross-tabulation. The first of the phrases under the heading
+  (see dk.cst.corpus-probe.views.page/qualifiers), being what this view
+  asks that the concordance does not."
+  [ui {:keys [attr at by]}]
+  (list (i18n/tr ui "by") " " [:code (name attr)]
+        (when at (str " " (page/position-label ui at)))
+        (when by (list " " (i18n/tr ui "and") " " [:code (name by)]))))
+
+(defn table-caption
+  "The caption of the table of frequency `result`, in `ui`: its name,
+  how many values it holds and shows (see `shown-phrase`, `row-limit`),
+  the columns likewise when it is counted `:by` a second attribute, and
+  what the parentheses hold when those columns are `:sized`. The counts
+  are here rather than in the heading: they are the table's size, which
+  is what a caption says of a table."
+  [ui {:keys [rows by columns column-count sized]}]
+  (let [n (count rows)]
+    [:caption (i18n/tr ui "Frequencies") " · "
+     (shown-phrase ui (i18n/trn ui "value" "values" n) n (min row-limit n))
+     (when by
+       (str " · " (shown-phrase ui (i18n/trn ui "column" "columns"
+                                             column-count)
+                                column-count (count columns))))
+     (when (and by sized)
+       (str " · " (i18n/tr ui (str "the rate per million tokens of the "
+                                   "column in parentheses"))))]))
 
 (defn docs-control
   "The control asking for the texts each value occurs in to be counted
@@ -178,7 +179,7 @@
         groups   (cond-> readable total? (concat [:total]))
         span     (cond-> 2 sized inc docs inc)]
     [:table.frequencies
-     [:caption (i18n/tr ui "Frequencies")]
+     (table-caption ui result)
      [:colgroup]
      (for [_ groups] [:colgroup {:span span}])
      [:thead
@@ -236,10 +237,7 @@
                       (str " (" (i18n/group-digits ui rate 1) ")"))]))]
     [:div.scroll
      [:table.frequencies.crosstab
-      [:caption (i18n/tr ui "Frequencies")
-       (when sized
-         (str " · " (i18n/tr ui (str "the rate per million tokens of the "
-                                     "column in parentheses"))))]
+      (table-caption ui result)
       [:thead
        [:tr
         [:th {:scope "col"} [:code (name attr)]]
@@ -267,12 +265,14 @@
   (boolean (some :tokens counts)))
 
 (defn frequency-heading
-  "The heading naming the results region in `ui`: the summary
-  of the frequency `result` showing `shown` of its rows when any corpus
-  could be counted, else the name of the `error` that came instead."
-  [ui {:keys [counts] :as result} error shown]
+  "The heading naming the results region in `ui`: what the search
+  `params` describe found (see dk.cst.corpus-probe.views.page/hits-heading),
+  counted over the corpora of the frequency `result` that could be
+  counted, else the name of the `error` that came instead."
+  [ui params {:keys [counts] :as result} error]
   (if (tabled? result)
-    (frequency-summary ui result shown)
+    (page/hits-heading ui params
+                       (reduce + (keep :size (filter :tokens counts))))
     (page/error-name ui (or error (some :error counts)))))
 
 (defn frequency-section
@@ -288,11 +288,15 @@
   dk.cst.corpus-probe.views.page/results-region."
   [{:keys [ui attrs positions params result error export-hrefs client?]
     :as   state}]
-  (let [shown (min row-limit (count (:rows result)))]
+  (let [tabled (tabled? result)]
     (page/results-region
      state
-     (frequency-heading ui result error shown)
-     (when (tabled? result)
+     (frequency-heading ui params result error)
+     ;; how the table counted comes first: it is what this view asks
+     ;; that the concordance of the same hits does not
+     (cond->> (page/qualifiers ui params result)
+       tabled (cons (grouping-phrase ui result)))
+     (when tabled
        (list
         (page/view-controls ui client?
                             (list (attr-control ui attrs (:attr params))

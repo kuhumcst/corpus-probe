@@ -117,6 +117,44 @@
         (cache/discard! ctx corpus nqr)
         nil))))
 
+(defn breakdown!
+  "The frequencies of `query`, kept within its unit already, in `corpus`
+  by `attr` via `ctx` under `opts`, counted from the saved result or
+  afresh: what `frequencies!` answers with once it knows there is
+  something to count. See it for the arguments."
+  [ctx corpus query attr {:keys [filter patterns subset at docs by]
+                          :or   {at "match"}
+                          :as   opts}]
+  (let [[attr by] (groupable! ctx corpus (cond-> [attr] by (conj by)))
+        ;; the options that decide which matches there are, as the
+        ;; concordance that may have saved them had them (see
+        ;; dk.cst.corpus-probe.search/kwic-opts!), so the two name one
+        ;; saved result
+        opts      (search/cache-opts
+                   ctx corpus query
+                   (assoc opts
+                          :filter (search/corpus-filter! ctx corpus filter
+                                                         patterns)
+                          :subset (search/corpus-subset! ctx corpus subset)
+                          :sample nil))
+        whole?    (query/whole-match? at)
+        text      (when (and docs (not whole?) (not by))
+                    (search/within-attr! ctx corpus :text))
+        counting  (cond-> [(query/count-command at attr {:by by})]
+                    text (conj (query/count-command at attr {:within text})))
+        parse     (cond
+                    whole? parse/count->freqs
+                    by     parse/group-pairs->freqs
+                    :else  parse/group->freqs)
+        [counts doc-counts] (map parse
+                                 (or (stored-breakdown! ctx corpus query opts
+                                                        counting)
+                                     (fresh-breakdown! ctx corpus query opts
+                                                       counting)))]
+    (if text
+      (with-docs counts doc-counts)
+      counts)))
+
 (defn frequencies!
   "Count the matches of CQP `query` in `corpus` by `attr` at the :at
   position of `opts` (a dk.cst.corpus-probe.query/positions entry; the
@@ -141,45 +179,18 @@
 
   A thin wrapper over CQP's `group`, or its `count` over the whole match
   (see dk.cst.corpus-probe.query/count-command); `attr` and :by must name
-  the corpus's `groupable-attrs!` (see `groupable!`)."
+  the corpus's `groupable-attrs!` (see `groupable!`). A narrowing of
+  nothing is answered without CQP (see
+  dk.cst.corpus-probe.search/narrowing-nothing?)."
   ([ctx corpus query attr]
    (frequencies! ctx corpus query attr {}))
-  ([ctx corpus query attr {:keys [filter patterns within subset at docs by]
-                           :or   {at "match"}
-                           :as   opts}]
-   (let [ctx       (search/corpus-ctx ctx corpus)
-         query     (query/within-query query
-                                       (search/within-attr! ctx corpus within))
-         [attr by] (groupable! ctx corpus (cond-> [attr] by (conj by)))
-         ;; the options that decide which matches there are, as the
-         ;; concordance that may have saved them had them (see
-         ;; dk.cst.corpus-probe.search/kwic-opts!), so the two name one
-         ;; saved result
-         opts      (search/cache-opts
-                    ctx corpus query
-                    (assoc opts
-                           :filter (search/corpus-filter! ctx corpus filter
-                                                          patterns)
-                           :subset (search/corpus-subset! ctx corpus subset)
-                           :sample nil))
-         whole?    (query/whole-match? at)
-         text      (when (and docs (not whole?) (not by))
-                     (search/within-attr! ctx corpus :text))
-         counting  (cond-> [(query/count-command at attr {:by by})]
-                     text (conj (query/count-command at attr {:within text})))
-         parse     (cond
-                     whole? parse/count->freqs
-                     by     parse/group-pairs->freqs
-                     :else  parse/group->freqs)
-         [counts doc-counts] (map parse
-                                  (or (stored-breakdown! ctx corpus query opts
-                                                         counting)
-                                      (fresh-breakdown! ctx corpus query opts
-                                                        counting)))]
-     (if text
-       (with-docs counts doc-counts)
-       counts))))
-
+  ([ctx corpus query attr {:keys [within] :as opts}]
+   (let [ctx   (search/corpus-ctx ctx corpus)
+         query (query/within-query query
+                                   (search/within-attr! ctx corpus within))]
+     (if (search/narrowing-nothing? ctx corpus query (dissoc opts :within))
+       []
+       (breakdown! ctx corpus query attr opts)))))
 (defn sized-attr?
   "True when `attr` is an annotated s-attribute among the attribute
   descriptions `attributes`: one whose values each mark regions with a

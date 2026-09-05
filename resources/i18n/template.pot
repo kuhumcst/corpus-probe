@@ -116,10 +116,6 @@ msgid "most frequent shown"
 msgstr ""
 
 #: src/dk/cst/corpus_probe/api.clj src/dk/cst/corpus_probe/views/frequencies.cljc
-msgid "All tokens"
-msgstr ""
-
-#: src/dk/cst/corpus_probe/api.clj src/dk/cst/corpus_probe/views/frequencies.cljc
 msgid "by"
 msgstr ""
 
@@ -140,6 +136,10 @@ msgstr[0] ""
 msgstr[1] ""
 
 #: src/dk/cst/corpus_probe/views/frequencies.cljc
+msgid "the rate per million tokens of the column in parentheses"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/frequencies.cljc
 msgid "count texts"
 msgstr ""
 
@@ -153,10 +153,6 @@ msgstr ""
 
 #: src/dk/cst/corpus_probe/views/frequencies.cljc
 msgid "texts"
-msgstr ""
-
-#: src/dk/cst/corpus_probe/views/frequencies.cljc
-msgid "the rate per million tokens of the column in parentheses"
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/frequencies.cljc
@@ -467,7 +463,7 @@ msgstr ""
 msgid "ignore case"
 msgstr ""
 
-#: src/dk/cst/corpus_probe/views/corpus.cljc src/dk/cst/corpus_probe/views/frequencies.cljc src/dk/cst/corpus_probe/views/page.cljc
+#: src/dk/cst/corpus_probe/views/frequencies.cljc src/dk/cst/corpus_probe/views/page.cljc
 msgid "corpora"
 msgstr ""
 
@@ -493,11 +489,19 @@ msgstr ""
 msgid "per corpus"
 msgstr ""
 
+#: src/dk/cst/corpus_probe/api.clj src/dk/cst/corpus_probe/views/page.cljc
+msgid "All tokens"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/page.cljc
+msgid "for"
+msgstr ""
+
 #: src/dk/cst/corpus_probe/views/page.cljc
 msgid "Hits per corpus"
 msgstr ""
 
-#: src/dk/cst/corpus_probe/views/corpus.cljc src/dk/cst/corpus_probe/views/page.cljc
+#: src/dk/cst/corpus_probe/views/page.cljc
 msgid "corpus"
 msgstr ""
 
@@ -613,7 +617,7 @@ msgstr ""
 msgid "Text"
 msgstr ""
 
-#: src/dk/cst/corpus_probe/views/frequencies.cljc src/dk/cst/corpus_probe/views/page.cljc src/dk/cst/corpus_probe/views/text.cljc
+#: src/dk/cst/corpus_probe/views/page.cljc src/dk/cst/corpus_probe/views/text.cljc
 msgid "in"
 msgstr ""
 

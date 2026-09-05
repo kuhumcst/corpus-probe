@@ -241,11 +241,11 @@
                                                     (get patterns attr))))))))
 
 (defn within-phrase
-  "The metadata `filter` and its `patterns` as the qualifier of a result
-  summary in `ui`, or nil without either: \" within text_year 1591\"."
+  "The metadata `filter` and its `patterns` as a qualifier of a result
+  in `ui`, or nil without either: \"within text_year 1591\"."
   [ui filter patterns]
   (when (or (seq filter) (seq patterns))
-    (str " " (i18n/tr ui "within") " " (filter-phrase filter patterns))))
+    (str (i18n/tr ui "within") " " (filter-phrase filter patterns))))
 
 (defn position-label
   "What the `position` of a match (see
@@ -262,17 +262,19 @@
 
 (defn subset-phrase
   "That a result holds only the hits whose token at the :anchor of
-  `subset` has its :value as its :attr, in `ui`; nil without one."
+  `subset` has its :value as its :attr, in `ui`, the attribute and the
+  value as the code they are; nil without one."
   [ui {:keys [anchor attr value] :as subset}]
   (when subset
-    (str " · " (name attr) " " (position-label ui anchor) " = " value)))
+    (list [:code (name attr)] " " (position-label ui anchor) " = "
+          [:code value])))
 
 (defn near-phrase
   "That a result holds only the hits with the :word of `near` nearby,
   in `ui`; nil without one."
   [ui {:keys [word] :as near}]
   (when near
-    (str " " (i18n/tr ui "near") " " word)))
+    (list (i18n/tr ui "near") " " [:code word])))
 
 (defn attribute-value
   "Render attribute value `v` semantically by its key `k`: a text title as
@@ -837,27 +839,52 @@
          (i18n/group-digits ui sample)
          (when (next corpora) (str " " (i18n/tr ui "per corpus"))))))
 
-(defn result-summary
-  "The summary text of a concordance `result` page (`:size` hits in the
-  corpora that could be searched, within its metadata `:filter`,
-  narrowed to its `:subset` and `:near` a word, holding its random
-  `:sample` of the matches, and which of its `:pages` this is when
-  there are several), used as the heading naming the results region,
-  in `ui`."
-  [ui {:keys [size counts] :as result}]
+(defn query-mark
+  "The query of `params` as a heading names it, in `ui`: a CQP query as
+  the code it is, a list as how many words it holds (see
+  `query-phrase`), and a simple search quoted, being a word spoken of
+  rather than used."
+  [ui {:keys [q mode] :as params}]
+  (case mode
+    "cqp"  [:code q]
+    "list" (query-phrase ui params)
+    [:q q]))
+
+(defn hits-heading
+  "What a search found, as the heading of its result in `ui`: how many
+  hits, `size`, for the query of `params` (see `query-mark`); every
+  token when the query is blank, which only a frequency table asks for."
+  [ui {:keys [q] :as params} size]
+  (if (str/blank? q)
+    (i18n/tr ui "All tokens")
+    (list (hits-phrase ui size) " " (i18n/tr ui "for") " "
+          (query-mark ui params))))
+
+(defn qualifiers
+  "The question a `result` answered, less the query itself, as short
+  phrases in `ui`, each naming what one control holds: the attribute a
+  simple search of `params` matched and the part of the form, when not
+  the usual ones; the corpora searched; the metadata filter; the
+  narrowings; the sample. For the line under the heading (see
+  `results-region`), where the heading says what was found and this
+  what was asked."
+  [ui {:keys [in match]} {:keys [counts size sample] :as result}]
   (let [searched (map :corpus (filter :size counts))]
-    (str (hits-phrase ui size) " " (i18n/tr ui "in") " "
-         (corpora-phrase ui searched)
-         (within-phrase ui (:filter result) (:patterns result))
-         (subset-phrase ui (:subset result))
-         (near-phrase ui (:near result))
-         ;; a search that found nothing sampled nothing, and saying it
-         ;; drew a sample of what it found reads as the reason it is empty
-         (when (pos? size)
-           (some->> (sample-phrase ui (:sample result) searched) (str ", ")))
-         ;; a result that fits one page has no place in it worth naming
-         (when (< 1 (:pages result 0))
-           (str " · " (page-phrase ui result))))))
+    (remove nil?
+            [(when-not (contains? #{nil "" "word"} in)
+               (list (i18n/tr ui "attribute") " " [:code in]))
+             (when-not (str/blank? match)
+               (match-label ui match))
+             (when (seq searched)
+               (str (i18n/tr ui "in") " " (corpora-phrase ui searched)))
+             (within-phrase ui (:filter result) (:patterns result))
+             (subset-phrase ui (:subset result))
+             (near-phrase ui (:near result))
+             ;; a search that found nothing sampled nothing, and saying it
+             ;; drew a sample of what it found reads as the reason it is
+             ;; empty
+             (when (pos? (or size 0))
+               (sample-phrase ui sample searched))])))
 
 (defn counts-table
   "The per-corpus hit `counts` of a search over several corpora as a table,
@@ -1038,31 +1065,38 @@
               (view-label ui k)]])]]))
 
 (defn result-heading
-  "The heading naming the results region in `ui`: the summary
-  of the concordance `result` when any corpus could be searched, else the
-  name of the error that came instead, so a search that failed everywhere
-  is not announced as a count of nothing."
-  [ui {:keys [counts] :as result} error]
+  "The heading naming the results region in `ui`: what the concordance
+  `result` of the search `params` describe found (see `hits-heading`)
+  when any corpus could be searched, else the name of the error that
+  came instead, so a search that failed everywhere is not announced as a
+  count of nothing."
+  [ui params {:keys [counts size] :as result} error]
   (if (searched? result)
-    (result-summary ui result)
+    (hits-heading ui params size)
     (error-name ui (or error (some :error counts)))))
 
 (defn results-region
   "The outcome of a search in `state` under `heading`, as a region named by
   that heading and focusable, so a GET search can land on it.
 
-  Every view of a result shares this: the heading, the switch between the
-  views, the error that replaced the result or the errors of individual
-  corpora, and then `body`, the view's own content. The two views differ
-  only in what they say about the same hits, so they differ only in what
-  they pass here.
+  Every view of a result shares this: the heading, with the `subheading`
+  phrases (see `qualifiers`) under it, the switch between the views, the
+  error that replaced the result or the errors of individual corpora,
+  and then `body`, the view's own content. The two views differ only in
+  what they say about the same hits, so they differ only in what they
+  pass here.
 
   The heading is the page's h1: the search page has no other, so what a
-  search found, or why it found nothing, is what the page is about.
+  search found, or why it found nothing, is what the page is about. It
+  is the answer alone. The question is the line under it, grouped with
+  it as heading and subheading, and the region is named by the heading
+  alone, so a screen reader landing here hears the count and not the
+  whole question, which the controls below restate anyway.
 
   Marked busy while a navigation is `pending?`, since until that one
   lands what this holds is the answer to the question before it."
-  [{:keys [ui view view-hrefs result error pending?] :as state} heading body]
+  [{:keys [ui view view-hrefs result error pending?] :as state}
+   heading subheading body]
   [:section.result (cond-> {:id              url/results-id
                             :tabindex        "-1"
                             :aria-labelledby "results-heading"}
@@ -1070,7 +1104,10 @@
                      ;; are still the previous one's answer, and nothing
                      ;; about them says so
                      pending? (assoc :aria-busy "true"))
-   [:h1 {:id "results-heading"} heading]
+   [:hgroup
+    [:h1 {:id "results-heading"} heading]
+    (when (seq subheading)
+      [:p (interpose " · " subheading)])]
    (view-switch ui view view-hrefs)
    (when error (error-body ui error nil))
    (for [[e corpora] (error-groups (:counts result))]
@@ -1093,7 +1130,8 @@
         position (when result (page-phrase ui result))]
     (results-region
      state
-     (result-heading ui result error)
+     (result-heading ui params result error)
+     (qualifiers ui params result)
      (when (searched? result)
        ;; a search that found nothing has nothing to page, download or
        ;; count: the table would be a header over no rows and the exports
