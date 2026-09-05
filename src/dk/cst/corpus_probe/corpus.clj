@@ -96,6 +96,36 @@
   ^java.io.File [{:keys [registry] :as ctx} corpus]
   (io/file registry (str/lower-case (str corpus))))
 
+(defn data-file
+  "The file holding the token stream of `corpus` under `ctx`: the data of
+  its first positional attribute, which cwb-encode rewrites every time the
+  corpus is encoded. nil when the registry entry does not say where the
+  data are."
+  ^java.io.File [ctx corpus]
+  (let [entry (registry-file ctx corpus)]
+    (when (registry-file? entry)
+      (let [{:keys [home p-attrs]} (read-registry entry)]
+        (when home
+          (io/file home (str (name (or (first p-attrs) :word)) ".corpus")))))))
+
+(defn build-stamp
+  "What `corpus` reads as under `ctx`: the modification time and length of
+  its registry entry, and the same of its token stream (see `data-file`)
+  when that is there to read.
+
+  Part of every saved result's name (see dk.cst.corpus-probe.cache) and
+  of every cached fact's key (see `with-facts-cache!`), and it has to
+  cover both. cwb-encode rewrites the entry only when passed -R, so
+  rebuilding a corpus in place leaves the entry byte-identical while
+  every word changes underneath it. The entry counts too, declaring the
+  charset everything is read in, so correcting a mis-declared one changes
+  which matches exist without touching the data."
+  [ctx corpus]
+  (let [^java.io.File entry (registry-file ctx corpus)
+        ^java.io.File data  (data-file ctx corpus)]
+    [(.lastModified entry) (.length entry)
+     (when (and data (.isFile data)) [(.lastModified data) (.length data)])]))
+
 (defn charset
   "Return the Java charset name for `corpus` in `ctx`, read from the
   `##:: charset` property of its registry entry; defaults to UTF-8.
@@ -109,14 +139,14 @@
         "UTF-8")))
 
 (defonce ^{:doc "Cache of per-corpus facts: a delay per key
-  [registry corpus label registry-file-mtime]. The mtime keys stale
-  entries out when a corpus is re-encoded under a running JVM."}
+  [registry corpus label build-stamp]. The stamp keys stale entries out
+  when a corpus is re-encoded under a running JVM (see `build-stamp`)."}
   facts-cache
   (atom {}))
 
 (defn- without-superseded
   "Remove from `cache` the entries of the same registry, corpus and label
-  as key `k` (older mtimes of the same facts)."
+  as key `k` (older stamps of the same facts)."
   [cache [registry corpus label :as k]]
   (into {} (remove (fn [[[r c l] _]]
                      (and (= r registry) (= c corpus) (= l label))))
@@ -129,10 +159,10 @@
   Concurrent misses share one computation: the cache holds a delay per key,
   so the first caller runs `f` while the others wait for its value. A
   computation that throws is forgotten again, so the next caller retries.
-  Entries live until the corpus's registry file changes; the entry they
-  supersede is dropped then."
+  Entries live until the corpus is re-encoded or its registry entry
+  changes (see `build-stamp`); the entry they supersede is dropped then."
   [{:keys [registry] :as ctx} corpus label f]
-  (let [k [registry corpus label (.lastModified (registry-file ctx corpus))]
+  (let [k [registry corpus label (build-stamp ctx corpus)]
         d (get (swap! facts-cache
                       (fn [cache]
                         (if (contains? cache k)

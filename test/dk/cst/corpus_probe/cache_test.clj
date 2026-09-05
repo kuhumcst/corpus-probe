@@ -78,37 +78,6 @@
         (.setLastModified (fs/file (:registry ctx) "probe") 1000000)
         (is (not= before (nqr "[]" {})))))))
 
-(deftest build-stamp-test
-  (let [ctx  (temp-ctx)
-        home (fs/create-temp-dir)]
-    (spit (fs/file (:registry ctx) "probe")
-          (str "NAME \"\"\nID probe\nHOME " home "\nATTRIBUTE word\n"))
-    (spit (fs/file home "word.corpus") "aaa")
-    (let [before (cache/build-stamp ctx "PROBE")]
-      (testing "the stamp follows the corpus data, not the registry entry"
-        ;; cwb-encode rewrites the entry only when passed -R, so encoding
-        ;; a corpus in place leaves it byte-identical while the data change
-        (spit (fs/file home "word.corpus") "bbbb")
-        (is (not= before (cache/build-stamp ctx "PROBE")))))
-    (testing "an entry whose data cannot be found still stamps"
-      (is (some? (cache/build-stamp (temp-ctx) "PROBE"))))))
-
-(deftest build-stamp-charset-test
-  (let [ctx  (temp-ctx)
-        home (fs/create-temp-dir)
-        write (fn [charset]
-                (spit (fs/file (:registry ctx) "probe")
-                      (str "NAME \"\"\nID probe\nHOME " home "\n"
-                           "ATTRIBUTE word\n"
-                           "##:: charset = \"" charset "\"\n")))]
-    (spit (fs/file home "word.corpus") "aaa")
-    (write "utf8")
-    (let [before (cache/build-stamp ctx "PROBE")]
-      (testing "a charset correction changes which matches exist, so it
-                must change the stamp, though it touches no data"
-        (write "latin1")
-        (is (not= before (cache/build-stamp ctx "PROBE")))))))
-
 (deftest corpus-directory-test
   (let [ctx (temp-ctx)]
     (testing "each corpus gets a directory of its own, created on demand"

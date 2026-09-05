@@ -67,6 +67,52 @@
    (testing "an unreadable corpus keeps its entry with a nil size"
      (is (nil? (:size (corpus/overview! ctx {:id "nosuch"})))))))
 
+(defn encoded
+  "A ctx over a fresh registry whose entry `probe` points at a fresh home
+  holding the token stream `data` of its one attribute; the home rides
+  along as :home so a test can re-encode it, and `charset`, when given,
+  is declared in the entry."
+  ([data]
+   (encoded data nil))
+  ([data charset]
+   (let [registry (fs/create-temp-dir)
+         home     (fs/create-temp-dir)]
+     (spit (fs/file registry "probe")
+           (str "NAME \"\"\nID probe\nHOME " home "\nATTRIBUTE word\n"
+                (when charset (str "##:: charset = \"" charset "\"\n"))))
+     (spit (fs/file home "word.corpus") data)
+     {:registry (str registry) :home home})))
+
+(deftest build-stamp-test
+  (let [ctx    (encoded "aaa" "utf8")
+        before (corpus/build-stamp ctx "PROBE")]
+    (testing "the stamp follows the corpus data, not the registry entry"
+      ;; cwb-encode rewrites the entry only when passed -R, so encoding
+      ;; a corpus in place leaves it byte-identical while the data change
+      (spit (fs/file (:home ctx) "word.corpus") "bbbb")
+      (is (not= before (corpus/build-stamp ctx "PROBE"))))
+    (testing "a charset correction changes which matches exist, so it
+              must change the stamp, though it touches no data"
+      (let [before (corpus/build-stamp ctx "PROBE")]
+        (spit (fs/file (:registry ctx) "probe")
+              (str "NAME \"\"\nID probe\nHOME " (:home ctx)
+                   "\nATTRIBUTE word\n##:: charset = \"latin1\"\n"))
+        (is (not= before (corpus/build-stamp ctx "PROBE")))))
+    (testing "an entry whose data cannot be found still stamps"
+      (is (some? (corpus/build-stamp {:registry "test/resources"}
+                                     "REGISTRY-PROBE"))))))
+
+(deftest facts-cache-data-test
+  (testing "re-encoding the data in place supersedes the cached entry,
+            though the registry entry is byte-identical"
+    (let [ctx   (encoded "aaa")
+          label (str "encode " (System/nanoTime))]
+      (is (= :old (corpus/with-facts-cache! ctx "PROBE" label
+                                            (constantly :old))))
+      (spit (fs/file (:home ctx) "word.corpus") "bbbb")
+      (is (= :new (corpus/with-facts-cache! ctx "PROBE" label
+                                            (constantly :new)))))))
+
 (deftest facts-cache-test
   (let [ctx   {:registry "test/resources"}
         calls (atom 0)

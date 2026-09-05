@@ -70,37 +70,10 @@
        (map #(format "%02x" (bit-and % 0xff)))
        (apply str)))
 
-(defn data-file
-  "The file holding the token stream of `corpus` under `ctx`: the data of
-  its first positional attribute, which cwb-encode rewrites every time the
-  corpus is encoded. nil when the registry entry does not say where the
-  data are."
-  ^File [ctx corpus]
-  (let [entry (corpus/registry-file ctx corpus)]
-    (when (corpus/registry-file? entry)
-      (let [{:keys [home p-attrs]} (corpus/read-registry entry)]
-        (when home
-          (io/file home (str (name (or (first p-attrs) :word)) ".corpus")))))))
-
-(defn build-stamp
-  "What `corpus` reads as under `ctx`: the modification time and length of
-  its registry entry, and the same of its token stream (see `data-file`)
-  when that is there to read.
-
-  Part of every result name, and it has to cover both. cwb-encode rewrites
-  the entry only when passed -R, so rebuilding a corpus in place leaves the
-  entry byte-identical while every word changes underneath it. The entry
-  counts too, declaring the charset everything is read in, so correcting a
-  mis-declared one changes which matches exist without touching the data."
-  [ctx corpus]
-  (let [^File entry (corpus/registry-file ctx corpus)
-        ^File data  (data-file ctx corpus)]
-    [(.lastModified entry) (.length entry)
-     (when (and data (.isFile data)) [(.lastModified data) (.length data)])]))
-
 (defn match-key
   "What decides which matches `query` has in `corpus` under `ctx`, and so
-  how many of them: the registry, the corpus and its `build-stamp`, the
+  how many of them: the registry, the corpus and its build stamp (see
+  dk.cst.corpus-probe.corpus/build-stamp), the
   query itself, and the metadata filter, the narrowings and the sample
   of `opts`.
 
@@ -117,7 +90,7 @@
                      subset :subset}]
   [(:registry ctx)
    corpus
-   (build-stamp ctx corpus)
+   (corpus/build-stamp ctx corpus)
    query
    (mapv (fn [[attr values patterns]] [attr (vec (sort values)) patterns])
          filter-by)
