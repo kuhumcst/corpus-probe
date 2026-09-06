@@ -104,12 +104,13 @@ a abbr[title] { text-decoration: none; }
 /* the site's, the result's and the pages' navigation rows are chrome,
    not text: the page's own colour, and no underline until the pointer
    says which. Longhands, so the current item below keeps its thickness
-   and colour under the pointer. A nav inside a document (a corpus
+   and colour under the pointer, and `:where`, so that the class in the
+   list does not outweigh that rule. A nav inside a document (a corpus
    page's) keeps its links as links */
-:is(header nav, nav.views, nav.pagination) a, .sitename {
+:where(header nav, nav.views, nav.pagination) a, .sitename {
   color: inherit; text-decoration-line: none;
 }
-:is(header nav, nav.views, nav.pagination) a:hover, .sitename:hover {
+:where(header nav, nav.views, nav.pagination) a:hover, .sitename:hover {
   text-decoration-line: underline;
 }
 
