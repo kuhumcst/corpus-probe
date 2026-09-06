@@ -581,29 +581,41 @@
         (when (next tokens)
           (line (i18n/tr ui "{n} words in order" {:n (n tokens)})))))))
 
+(defn attribute-label
+  "What the positional attribute named `attr` is called in `ui`: the
+  usual ones in the reader's words, since they stand in a sentence (see
+  `search-form`), any other as its corpus names it."
+  [ui attr]
+  (case attr
+    "word"  (i18n/trx ui "attribute" "word")
+    "lemma" (i18n/trx ui "attribute" "lemma")
+    "pos"   (i18n/trx ui "attribute" "POS")
+    "msd"   (i18n/trx ui "attribute" "morphology")
+    attr))
+
 (defn attribute-options
   "The options of a select over the positional `attrs` (attribute
   keywords, word first) with `selected` (a string, word when blank)
-  chosen.
+  chosen, each called as `ui` calls it (see `attribute-label`).
 
   An attribute the list lacks is offered after them, so a hand-written
   URL shows what it searches rather than something else."
-  [attrs selected]
+  [ui attrs selected]
   (let [selected (if (str/blank? selected) "word" selected)
         names    (map name attrs)
         offered  (cond-> names
                    (not (some #{selected} names)) (concat [selected]))]
     (for [n offered]
-      [:option {:value n :selected (= n selected)} n])))
+      [:option {:value n :selected (= n selected)} (attribute-label ui n)])))
 
 (defn attribute-control
   "The control choosing which positional attribute a simple search
   matches, in `ui`: a select over `attrs` with `selected` chosen (see
-  `attribute-options`)."
+  `attribute-options`), named for a screen reader only, since it stands
+  in a sentence (see `search-form`)."
   [ui attrs selected]
-  [:label (i18n/tr ui "attribute") " "
-   [:select {:name "in"}
-    (attribute-options attrs selected)]])
+  [:select {:name "in" :aria-label (i18n/tr ui "attribute")}
+   (attribute-options ui attrs selected)])
 
 (defn operator-label
   "What the operator `op` of an extended-search token is called, in `ui`
@@ -669,7 +681,7 @@
                :aria-label (i18n/tr ui "attribute")
                :disabled   any?
                :on         {:change [:set-condition [i id :attr]]}}
-      (attribute-options attrs attr)]
+      (attribute-options ui attrs attr)]
      " "
      [:select {:name       (param :op)
                :aria-label (i18n/tr ui "operator")
@@ -824,11 +836,21 @@
   with `within` chosen, the sentence when it names none (see
   dk.cst.corpus-probe.query/within)."
   [ui within]
-  [:label (i18n/tr ui "within") " "
-   [:select {:name "within"}
-    (for [unit url/units]
-      [:option {:value unit :selected (= unit (or within "sentence"))}
-       (unit-label ui unit)])]])
+  [:select {:name "within" :id "within"}
+   (for [unit url/units]
+     [:option {:value unit :selected (= unit (or within "sentence"))}
+      (unit-label ui unit)])])
+
+(defn match-option-label
+  "What the `match` param value is called as the option of
+  `match-control`, in `ui`, where it is read before the attribute in a
+  sentence, `find whole word`: how much of the form is found."
+  [ui match]
+  (case match
+    "prefix" (i18n/tr ui "start of")
+    "suffix" (i18n/tr ui "end of")
+    "infix"  (i18n/tr ui "part of")
+    (i18n/tr ui "whole")))
 
 (defn match-label
   "What the `match` param value is called, in `ui`: how much of the
@@ -850,17 +872,17 @@
 (defn match-control
   "The control choosing how much of the form a simple search must
   cover, in `ui`: a select over the `match-values`, each named by
-  `match-label`, with `match` chosen and the whole form when it names
-  none.
+  `match-option-label`, with `match` chosen and the whole form when it
+  names none; named for a screen reader only, since it stands in a
+  sentence (see `search-form`).
 
   One control rather than a box for each end: two boxes both ticked
   meant any part of the form, and nothing said so."
   [ui match]
-  [:label (i18n/tr ui "match") " "
-   [:select {:name "match"}
-    (for [value match-values]
-      [:option {:value value :selected (= value (or match ""))}
-       (match-label ui value)])]])
+  [:select {:name "match" :aria-label (i18n/tr ui "match")}
+   (for [value match-values]
+     [:option {:value value :selected (= value (or match ""))}
+      (match-option-label ui value)])])
 
 (defn help
   "The search help, the hiccup `blocks` of its document (see
@@ -1113,28 +1135,27 @@
         ;; and before everything a switch changes
         [:div.status {:role "status"}
          (switch-notice ui mode (:loss switch) (:unread switch))]]
-       ;; the matching, a row each on the line: what a simple search
-       ;; matches, how loosely, the unit of text a search of several
-       ;; tokens is kept within, which the words of a simple search read
-       ;; as the tokens of an extended one do, and the case, from the edge
-       ;; like the modes. Only the rows the mode reads, and no box at all
-       ;; for a mode that reads none of them: a CQP query writes all four
-       ;; itself. One row of four ran the attribute into the options it
-       ;; governs, and the case box last keeps the three selects in one
-       ;; column
-       ;; TODO: what the box is called once only `within` is left in it,
-       ;; as under Extended, where the unit is the scope of a search
-       ;; rather than how a word is matched
+       ;; the matching, read as a sentence: find how much of which
+       ;; attribute, within which unit of text, which the words of a
+       ;; simple search read as the tokens of an extended one do, and
+       ;; the case under it. Only the parts the mode reads, and no box at
+       ;; all for a mode that reads none of them: a CQP query writes all
+       ;; four itself
        (when (some live? [:in :match :within :ci])
          [:fieldset.matching
-          [:legend (i18n/trx ui "legend" "Matching")]
-          (when (live? :in) [:p (attribute-control ui search-attrs in)])
-          (when (live? :match) [:p (match-control ui match)])
-          (when (live? :within) [:p (within-control ui within)])
+          [:legend (i18n/trx ui "legend" "Scope")]
+          (when (or (live? :match) (live? :in))
+            [:p.find [:span (i18n/tr ui "find")]
+             (when (live? :match) (match-control ui match))
+             (when (live? :in) (attribute-control ui search-attrs in))])
+          (when (live? :within)
+            [:p.within [:label {:for "within"} (i18n/tr ui "in")]
+             (within-control ui within)])
           (when (live? :ci)
-            [:p [:label [:input {:type    "checkbox" :name "ci" :value "on"
-                                 :checked (some? ci)}]
-                 (i18n/tr ui "ignore case")]])])
+            [:p.case
+             [:label [:input {:type    "checkbox" :name "ci" :value "on"
+                              :checked (some? ci)}]
+              (i18n/tr ui "ignore case")]])])
        ;; marks a selection the reader actually made: without it, unticking
        ;; every corpus and submitting is indistinguishable from arriving
        ;; with no corpus named, which searches them all

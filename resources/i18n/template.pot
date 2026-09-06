@@ -407,6 +407,22 @@ msgstr ""
 msgid "{n} words in order"
 msgstr ""
 
+#: src/dk/cst/corpus_probe/views/page.cljc
+msgid "attribute|word"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/page.cljc
+msgid "attribute|lemma"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/page.cljc
+msgid "attribute|POS"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/page.cljc
+msgid "attribute|morphology"
+msgstr ""
+
 #: src/dk/cst/corpus_probe/views/corpus.cljc src/dk/cst/corpus_probe/views/page.cljc
 msgid "attribute"
 msgstr ""
@@ -504,6 +520,22 @@ msgid "text"
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/page.cljc
+msgid "start of"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/page.cljc
+msgid "end of"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/page.cljc
+msgid "part of"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/page.cljc
+msgid "whole"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/page.cljc
 msgid "start of word"
 msgstr ""
 
@@ -576,7 +608,11 @@ msgid "Change mode"
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/page.cljc
-msgid "legend|Matching"
+msgid "legend|Scope"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/page.cljc
+msgid "find"
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/frequencies.cljc src/dk/cst/corpus_probe/views/page.cljc

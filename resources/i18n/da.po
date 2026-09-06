@@ -225,8 +225,8 @@ msgstr "Søgeudtryk"
 msgid "legend|Query type"
 msgstr "Søgetype"
 
-msgid "legend|Matching"
-msgstr "Matchning"
+msgid "legend|Scope"
+msgstr "Afgrænsning"
 
 msgid "Remove condition"
 msgstr "Fjern betingelse"
@@ -555,3 +555,30 @@ msgstr "CQP læser et ord uden anførselstegn som navnet på et søgeresultat. S
 
 msgid "Type a query"
 msgstr "Skriv en forespørgsel"
+
+msgid "find"
+msgstr "find"
+
+msgid "whole"
+msgstr "hele"
+
+msgid "start of"
+msgstr "starten af"
+
+msgid "end of"
+msgstr "enden af"
+
+msgid "part of"
+msgstr "del af"
+
+msgid "attribute|word"
+msgstr "ord"
+
+msgid "attribute|lemma"
+msgstr "lemma"
+
+msgid "attribute|POS"
+msgstr "ordklasse"
+
+msgid "attribute|morphology"
+msgstr "morfologi"

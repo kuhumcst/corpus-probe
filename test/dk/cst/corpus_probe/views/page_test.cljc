@@ -75,10 +75,10 @@
         ;; the two boxes said the same thing twice; the group they named
         ;; is still named, without a box
         (is (not (some #{:fieldset.mode :fieldset.options} (deep html))))
-        (is (some #{[:legend "Query type"] [:legend "Matching"]} (deep html)))
-        (testing "and the rows on the line each of their own: the three
-                  selects in one column, the case box under them"
-          (is (< (at "in") (at "match") (at "within") (at "ci"))))))
+        (is (some #{[:legend "Query type"] [:legend "Scope"]} (deep html)))
+        (testing "and the box reads as a sentence: how much of which
+                  attribute, within what, and the case box under them"
+          (is (< (at "match") (at "in") (at "within") (at "ci"))))))
     (testing "and the options are offered only for a query they can
               qualify, as the table of what each mode reads says, the mode
               being the shape of the text"
@@ -91,13 +91,13 @@
                                      (:name %))))))
             texts   {"simple" {:q "hund"} "list" {:q "hund\nkat"}
                      "extended" {:mode "extended"} "cqp" {:q "[]"}}]
-        (is (= ["in" "match" "within" "ci"] (offered (texts "simple"))))
-        (is (= ["in" "match" "ci"] (offered (texts "list"))))
+        (is (= ["match" "in" "within" "ci"] (offered (texts "simple"))))
+        (is (= ["match" "in" "ci"] (offered (texts "list"))))
         (is (= ["within"] (offered (texts "extended"))))
         (is (empty? (offered (texts "cqp"))))
         (doseq [mode url/modes]
           (is (= (filter #(url/reads? mode (keyword %))
-                         ["in" "match" "within" "ci"])
+                         ["match" "in" "within" "ci"])
                  (offered (texts mode)))
               mode))))
     (testing "a simple search matches one of the corpora's attributes,
@@ -1307,12 +1307,11 @@
              (options nil)))
       (is (= [["" false] ["prefix" false] ["suffix" false] ["infix" true]]
              (options "infix"))))
-    (testing "named"
-      (is (= [:label "match" " "] (subvec (page/match-control en nil) 0 3))))
-    (testing "in either language"
-      (is (some #{"whole word" "part of word"} (deep (page/match-control en nil))))
-      (is (some #{"hele ordet" "en del af ordet"}
-                (deep (page/match-control da "infix")))))))
+    (testing "named for a screen reader, standing in a sentence"
+      (is (= "match" (:aria-label (second (page/match-control en nil))))))
+    (testing "in either language, as read before the attribute"
+      (is (some #{"whole" "part of"} (deep (page/match-control en nil))))
+      (is (some #{"hele" "del af"} (deep (page/match-control da "infix")))))))
 
 (deftest query-field-test
   (testing "the field is a text area holding the query as its content, one

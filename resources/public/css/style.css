@@ -281,22 +281,22 @@ form.search :is(.status, .empty):empty {
    handle to drag */
 .query textarea { resize: none; }
 
-/* a labelled row is a grid on the line; a label holding its control is
-   a subgrid of the row, its words ending on the line and its control
-   filling the rest */
-.matching p:has(> label > select) {
-  display: grid; grid-template-columns: var(--label-col) 1fr;
-  column-gap: 0.5rem; align-items: center;
+/* the matching box reads as a sentence, and is one grid so that its
+   rows share their columns: the words before the controls take a column
+   as narrow as the widest of them, ending on the line, and the controls
+   fill the rest, one select each or one across; the case box is a row
+   from the edge. The rows are paragraphs in the markup and nothing in
+   the grid. Qualified by the form, to outweigh the flex column every
+   box of the form is */
+form.search fieldset.matching {
+  display: grid; grid-template-columns: max-content 1fr 1fr;
+  gap: var(--row-gap) 0.5rem; align-items: center;
 }
-.matching p:has(> label > select)
-  > label:has(> select, > input:not([type="checkbox"])) {
-  display: grid; grid-template-columns: subgrid; grid-column: 1 / -1;
-  align-items: center; text-align: end;
-}
-.matching p:has(> label > select)
-  > label > :is(select, input:not([type="checkbox"])) {
-  inline-size: 100%; min-inline-size: 0; text-align: start;
-}
+.matching p { display: contents; }
+.matching :is(p.find, p.within) > :first-child { text-align: end; }
+.matching p > select { inline-size: 100%; min-inline-size: 0; }
+.matching p.within > select { grid-column: 2 / -1; }
+.matching p.case > label { grid-column: 1 / -1; }
 .modes > p { display: flex; flex-wrap: wrap; gap: 0.25rem 1rem; }
 
 /* a metadata attribute's pattern takes a row and its two bounds the
