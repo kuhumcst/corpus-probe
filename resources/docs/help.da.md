@@ -1,15 +1,20 @@
-Simpel:
-  Finder ordene i den rækkefølge, du skriver dem, inden for én sætning.
+For at søge skal du vælge ét eller flere korpusser under **Korpusser**
+og skrive din søgning i søgefeltet ovenfor:
 
-Liste:
-  Finder et hvilket som helst af ordene. Skriv ét ord pr. linje.
+- Hvis du skriver flere ord, finder søgningen dem i samme rækkefølge.
+- Hvis du skriver ét ord på hver linje, finder søgningen et hvilket som
+  helst af dem. Tryk på [[Shift+Enter]] for at skifte linje.
+- Hvis teksten begynder med en klamme, et anførselstegn eller et
+  [tag](/glossary#structural-attributes), er den en
+  [CQP](/glossary#cqp)-forespørgsel. [CQP-vejledningen](/cqp) viser
+  syntaksen med eksempler.
 
-Udvidet:
-  Bygger søgeudtrykket af [tokens](/glossary#token), hver med sine egne
-  betingelser, sin gentagelse og sin plads i sætningen.
+Tryk på [[Enter]] eller klik {{Søg}} for at søge.
 
-CQP:
-  Kører søgeudtrykket, som du skrev det, i [CQP](/glossary#cqp), Corpus
-  Workbenchs forespørgselssprog. [CQP-vejledningen](/cqp) viser
-  syntaksen med eksempler. For at se søgeudtrykket fra en anden søgetype
-  som CQP skal du vælge CQP.
+## Udvidet søgning
+
+Udvidet er en anden måde at lave en kompleks søgning på. Vælg
+{{Udvidet}} under **Søgetype**, og byg søgningen op af
+[tokens](/glossary#token), ét ad gangen. For hvert token kan du angive
+betingelser, hvor mange gange det må gentages, og om det skal stå i
+begyndelsen eller slutningen af en sætning.

@@ -57,20 +57,30 @@ is hidden, so that the contexts have room.
 
 ### Simple search
 
+The search field reads its text by its shape (`url/shape`): text that
+begins as CQP does, with a bracket, a quotation mark, a tag or a group,
+runs as CQP; text with a line break is a list, one word per line, which
+finds any one of the words; anything else is words in order. The field
+is a text area, so that a list can be typed or pasted. On the client
+Enter submits the search and Shift+Enter starts a line; without the
+client, Enter starts a line and the Search button submits. A line under
+the field says how the text is read, with the CQP that words or a list
+run as, so that a reader sees the reading before a search is spent on
+it and can learn CQP from it.
+
 A simple search matches the surface form. The reader can select another
 positional attribute of the searched corpora, for example lemma. A
 simple search of several words is kept within one sentence, as the CQP
 manual advises, or within a paragraph or a text when the reader selects
 one. The search uses the name that each corpus gives its sentences.
-Until the reader makes a search, a key to the query modes stands where
-the results will be, one line for each mode, with a link to the CQP
-guide, a page of CQP examples.
+Until the reader makes a search, a key to the readings of the field and
+to the extended form stands where the results will be, with a link to
+the CQP guide, a page of CQP examples.
 
-A third query mode, List, takes one word per line and finds any of
-them. The compiler turns the list into one token pattern with an
-alternation, so the attribute, the case and affix options, the
-metadata filter and every view work as for a simple search. The list
-stays in the URL, so a search for a list can be shared like any other.
+A list is one token pattern with an alternation, so the attribute, the
+case and affix options, the metadata filter and every view work as for
+a simple search. The list stays in the URL, so a search for a list can
+be shared like any other.
 
 ### Extended search
 
@@ -93,31 +103,32 @@ removes one, and the form shows no empty row of its own. Every row a
 reader is asked to fill is required, and the browser reports an empty
 one before the search is sent, as it reports an empty query.
 
-### Changing the query mode
+### Changing the form of the query
 
-A form whose mode radio is changed submits the old mode's field under
-the new mode's radio, and the field is named for the mode it was typed
-in. The server reads the query as one value (`dk.cst.corpus-
-probe.query`), holds it in the new form as far as that form can, and
-runs it when the form holds it whole or reads it in another way. When a
-part of the query cannot be held, nothing runs: the form shows what it
-kept, and a status line under the modes says what it dropped, so the
-reader is told before the loss. The same line names the params of a
-hand-written URL that the mode does not read. With the client, the form
-changes at the click on the radio, without a round trip, and switching
-away and back loses nothing while nothing was edited in between: the
-query the last switch started from is remembered, and a form still
-holding what that switch handed it is read as the remembered query.
-Without the client, a Change mode button submits the form without its
-checks, so an empty form can change mode too, and a submit whose query
-string is not the search's citation is redirected to it, so the address
-bar shows the one URL the search has. Under the field, a line shows the
-CQP the words or the tokens run as. A bare word sent as CQP is answered
-with what it is not, above CQP's own error. A query kept within a unit
-of text carries the unit into CQP as `within s`, `within p` or `within
-text`, and each corpus renames the unit after its own attribute, or
-drops the clause where it marks no such unit, as it renames the sentence
-tags.
+The query has two forms, the field and the extended form, chosen by a
+radio. A form whose radio is changed submits the old form's query under
+the new radio. The server reads the query as one value (`dk.cst.corpus-
+probe.query`) and holds it in the new form as far as that form can: the
+field's text seeds the tokens, read by its shape, and the tokens are
+handed to the field as the CQP they compile to, which the field reads.
+The extended form cannot read CQP, nor a list of more than fifty words.
+Then nothing runs: the form shows what it kept, and a status line under
+the radios says what it dropped, so the reader is told before the loss.
+The same line names the params of a hand-written URL that the mode does
+not read. With the client, the form changes at the click on the radio,
+without a round trip, and switching away and back loses nothing while
+nothing was edited in between: what the form the last switch left held
+is remembered, and a form still holding what that switch handed it
+gets the remembered form back. Without the client, a Change mode button
+submits the form without its checks, so an empty form can change form
+too, and a submit whose query string is not the search's citation is
+redirected to it, so the address bar shows the one URL the search has.
+Under the tokens, a line shows the CQP they run as. A bare word in a
+CQP query is answered with what CQP takes it for, above CQP's own
+error. A query kept within a unit of text carries the unit into CQP as
+`within s`, `within p` or `within text`, and each corpus renames the
+unit after its own attribute, or drops the clause where it marks no
+such unit, as it renames the sentence tags.
 
 ### Documents
 
@@ -164,9 +175,9 @@ A result URL is a citation. One rule builds it on the server and on the
 client (`dk.cst.corpus-probe.url`). The URL names only the settings
 that differ from the defaults. A simple search of the word attribute,
 in corpus order, with five words of context, is `/search?q=x`. No URL
-names a query mode: the query field says it, `q` for words in order,
-`list` for a list, `cqp` for CQP and the token fields for an extended
-search, and a URL carries only what that mode reads. The
+names a query mode: the field's text, `q`, says it by its shape, words
+in order, a list or CQP, and the token fields say an extended search,
+and a URL carries only what that mode reads. The
 corpora are one comma-separated parameter. When each readable corpus is
 selected, the URL names no corpus, because that is the same search.
 The search page itself starts with no corpus selected. The reader
@@ -348,12 +359,13 @@ clojure -M -m dk.cst.corpus-probe.server                  # serve (config.edn)
 The server listens on <http://localhost:7373>.
 
 To work on the client, run two processes: a watch that recompiles on
-save, and a server that lets the watch through.
+save, and a server that lets the watch through, with an nREPL in the
+server's JVM. [.claude/launch.json](.claude/launch.json) names both,
+`watch` and `server`, for the Claude app to start.
 
 ```sh
 clojure -M:cljs -m shadow.cljs.devtools.cli watch app     # recompile on save
-CORPUS_PROBE_CONFIG=dev/watch.edn \
-  clojure -M -m dk.cst.corpus-probe.server                # serve, watch allowed
+clojure -M:serve       # serve, watch allowed, then an nREPL (.nrepl-port)
 ```
 
 The watch pushes recompiled code over a socket on its own port. The

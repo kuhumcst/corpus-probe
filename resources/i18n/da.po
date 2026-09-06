@@ -222,17 +222,8 @@ msgstr "forrige"
 msgid "Query"
 msgstr "Søgeudtryk"
 
-msgid "\"x\" or [lemma = \"x\"]"
-msgstr "\"x\" eller [lemma = \"x\"]"
-
-msgid "one word per line"
-msgstr "ét ord pr. linje"
-
-msgid "one word, or several words in order"
-msgstr "ét eller flere ord i rækkefølge"
-
-msgid "legend|Query"
-msgstr "Forespørgsel"
+msgid "legend|Query type"
+msgstr "Søgetype"
 
 msgid "legend|Matching"
 msgstr "Matchning"
@@ -267,8 +258,8 @@ msgstr "Søg i"
 msgid "selected"
 msgstr "valgt"
 
-msgid "Simple"
-msgstr "Simpel"
+msgid "Default"
+msgstr "Standard"
 
 msgid "Site"
 msgstr "Websted"
@@ -523,44 +514,11 @@ msgid "part of word"
 msgstr "del af ordet"
 
 
-msgid "condition {c} of token {n}"
-msgstr "betingelse {c} i token {n}"
-
-msgid "the repeat of token {n}"
-msgstr "gentagelsen af token {n}"
-
-msgid "the sentence edge of token {n}"
-msgstr "sætningsgrænsen for token {n}"
-
-msgid "token {n} (any word)"
-msgstr "token {n} (ethvert ord)"
-
-msgid "the options of token {n}"
-msgstr "indstillingerne for token {n}"
-
-msgid "the value of token {n}"
-msgstr "værdien for token {n}"
-
-msgid "List finds any one of the words, not the words in order."
-msgstr "Liste finder ét af ordene, ikke ordene i rækkefølge."
-
-msgid "Simple finds the words in order, not any one of them."
-msgstr "Simpel finder ordene i rækkefølge, ikke ét af dem."
-
-msgid "List reads the text as one word per line, not as CQP."
-msgstr "Liste læser teksten som ét ord pr. linje, ikke som CQP."
-
-msgid "Simple reads the text as words, not as CQP."
-msgstr "Simpel læser teksten som ord, ikke som CQP."
-
 msgid "Extended cannot read CQP. The query is not kept:"
 msgstr "Udvidet kan ikke læse CQP. Søgeudtrykket bevares ikke:"
 
 msgid "A list of {n} words is not kept in Extended."
 msgstr "En liste på {n} ord bevares ikke i Udvidet."
-
-msgid "Not kept in {form}: {parts}."
-msgstr "Ikke bevaret i {form}: {parts}."
 
 msgid "Not used in {form}: {params}."
 msgstr "Bruges ikke i {form}: {params}."
@@ -577,14 +535,23 @@ msgstr "Skift søgetype"
 msgid "As CQP"
 msgstr "Som CQP"
 
-msgid "This is not a CQP query. To search for a word, select Simple."
-msgstr "Dette er ikke en CQP-forespørgsel. For at søge efter et ord skal du vælge Simpel."
-
-msgid "the list"
-msgstr "listen"
-
-msgid "the CQP query"
-msgstr "CQP-forespørgslen"
-
 msgid "Help"
 msgstr "Hjælp"
+
+msgid "words, a list or CQP"
+msgstr "ord, en liste eller CQP"
+
+msgid "Read as CQP"
+msgstr "Læses som CQP"
+
+msgid "Any one of {n} words"
+msgstr "Et af {n} ord"
+
+msgid "{n} words in order"
+msgstr "{n} ord i rækkefølge"
+
+msgid "CQP reads a bare word as the name of a query result. To match a word, put it in quotation marks."
+msgstr "CQP læser et ord uden anførselstegn som navnet på et søgeresultat. Sæt ordet i anførselstegn for at søge efter det."
+
+msgid "Type a query"
+msgstr "Skriv en forespørgsel"

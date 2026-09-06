@@ -7,10 +7,12 @@ query is a sequence of patterns. Each pattern matches one
 page of each [corpus](/corpora) lists its attributes. Replace x and y
 with your own words.
 
-To run a query, select CQP on the [search page](/search) and type the
-query in the field. The controls under Matching are then off: the query
-says what to match. To see how the form writes CQP, make a search in
-another mode. Then select CQP: the field holds that search as CQP.
+To run a query, type it in the field on the [search page](/search).
+Text that begins with a bracket, a quotation mark or a tag runs as CQP,
+and the line under the field says so. The controls under Matching are
+then gone: the query says what to match. To see how the form writes
+CQP, type words in order or one word per line: the line under the field
+holds that search as CQP.
 
 ## Word forms
 

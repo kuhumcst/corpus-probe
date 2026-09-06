@@ -25,11 +25,12 @@ CQP {#cqp}:
   række tokenmønstre. Et mønster er en ordform i anførselstegn, fx
   `"x"`, eller en betingelse i klammer, fx `[lemma = "x"]`. Hver værdi
   er et [regulært udtryk](/glossary#regex) over en
-  [attribut](/glossary#positional-attributes). I søgetypen CQP sendes
-  forespørgslen til CQP, som du skrev den, bortset fra to navne: et
-  sætningsmærke, `<s>`, og enheden i en `within`-klausul, `within s`,
-  som hvert korpus omdøber efter sin egen attribut. I den simple søgning
-  skriver grænsefladen forespørgslen for dig. [CQP-vejledningen](/cqp)
+  [attribut](/glossary#positional-attributes). Tekst i søgefeltet, der
+  begynder som CQP, sendes til CQP, som du skrev den, bortset fra to
+  navne: et sætningsmærke, `<s>`, og enheden i en `within`-klausul,
+  `within s`, som hvert korpus omdøber efter sin egen attribut. For ord
+  skriver grænsefladen forespørgslen for dig, og linjen under søgefeltet
+  viser den. [CQP-vejledningen](/cqp)
   viser syntaksen med eksempler.
   [CQP-manualen](https://cwb.sourceforge.io/files/CQP_Manual/) har den
   fulde syntaks.

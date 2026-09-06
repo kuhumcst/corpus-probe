@@ -346,17 +346,18 @@ structure:
 
 ## 8. Search input
 
-Four query modes, one query engine and one query value. Simple (words in
-order), List (any one of the words) and Extended (KORP's builder of
-tokens with conditions, repeats and sentence edges) all read the form
-into one value, the tokens of a search kept within a unit of text, which
-`dk.cst.corpus-probe.query` compiles to CQP; the CQP mode passes text
-through. Each mode reads the params its row of `url/fields` names and no
-other, so a URL carries only what its mode reads, and a change of mode
+Four query modes, two forms, one query engine and one query value. The
+field reads its text by its shape: words in order, a list (one word per
+line, any one of them) or CQP, which passes through; the extended form
+is KORP's builder of tokens with conditions, repeats and sentence edges.
+Words, lists and tokens all read into one value, the tokens of a search
+kept within a unit of text, which `dk.cst.corpus-probe.query` compiles
+to CQP. Each mode reads the params its row of `url/fields` names and no
+other, so a URL carries only what its mode reads, and a change of form
 holds the query in the new form as far as that form can, saying the
 rest in a status line, on both sides and without a round trip where the
-client runs (built 2026-09-05, milestone 6). The two modes the plan
-started from:
+client runs (built 2026-09-05, milestone 6; the three text modes merged
+into one field 2026-09-06). The two modes the plan started from:
 
 **Raw CQP** — passed through verbatim, wrapped in CQP's own sandbox designed
 for exactly this (verified: it blocks every non-query command including the

@@ -1,7 +1,9 @@
 (ns dk.cst.corpus-probe.markdown
   "Markdown for the documents under resources/docs: nextjournal's
   markdown library (commonmark-java underneath) plus a definition list,
-  which CommonMark lacks.
+  which CommonMark lacks, and notations for keys and for the labels on
+  the screen a reader presses (see `keys-tokenizer` and
+  `labels-tokenizer`).
 
       term:
         the definition, over as many
@@ -188,23 +190,63 @@
           []
           content))
 
+(def keys-tokenizer
+  "A key or a chord of keys in double brackets, `[[Enter]]` or
+  `[[Shift+Enter]]`, read out of the text for the element HTML has for
+  keyboard input (see `keys->hiccup`), which raw HTML cannot give, being
+  dropped (see `renderers`). The library's own use of the brackets, for
+  a link within a site, is not in play here."
+  {:regex   #"\[\[([^\]]+)\]\]"
+   :handler (fn [match] {:type :kbd :text (second match)})})
+
+(def labels-tokenizer
+  "A label the screen shows and the reader presses, a button's or a
+  menu's, in double braces, `{{Search}}`, read out of the text for the
+  element HTML has for such input, a sample of the screen's output
+  inside keyboard input (see `label->hiccup`)."
+  {:regex   #"\{\{([^}]+)\}\}"
+   :handler (fn [match] {:type :label :text (second match)})})
+
 (defn parse
-  "Markdown text `s` as the library's document data, definition lists
-  included."
+  "Markdown text `s` as the library's document data, definition lists,
+  keys and labels included."
   [s]
-  (-> (impl/node->data (update-in u/empty-doc [:opts :text-tokenizers]
-                                  (partial mapv u/normalize-tokenizer))
+  (-> (impl/node->data (assoc-in u/empty-doc [:opts :text-tokenizers]
+                                 (mapv u/normalize-tokenizer
+                                       [keys-tokenizer labels-tokenizer]))
                        (.parse parser s))
       (update :content merge-lists)))
 
+(defn keys->hiccup
+  "The hiccup of a `node` of keys (see `keys-tokenizer`): a kbd element
+  for the key, or, for a chord, one for each key inside one for the
+  whole, the plus signs between them as text, which is how HTML marks
+  keys pressed together."
+  [_ctx {:keys [text]}]
+  ;; a plus between two characters divides keys; a key of its own does not
+  (let [keys (map (fn [k] [:kbd k]) (str/split text #"(?<=.)\+(?=.)"))]
+    (if (next keys)
+      (into [:kbd] (interpose "+" keys))
+      (first keys))))
+
+(defn label->hiccup
+  "The hiccup of a label `node` (see `labels-tokenizer`): a samp element
+  for the words the screen shows, inside a kbd element for pressing
+  them, which is how HTML marks input given through what is on the
+  screen."
+  [_ctx {:keys [text]}]
+  [:kbd [:samp text]])
+
 (def renderers
   "The hiccup renderers: the library's own, the definition list as the
-  elements HTML has for it, and raw HTML as nothing rather than the
-  library's error message."
+  elements HTML has for it, the keys and the labels as theirs, and raw
+  HTML as nothing rather than the library's error message."
   (assoc transform/default-hiccup-renderers
          :definition-list   (partial transform/into-markup [:dl])
          :definition-term   (partial transform/into-markup [:dt])
          :definition-detail (partial transform/into-markup [:dd])
+         :kbd               keys->hiccup
+         :label             label->hiccup
          :html-block        (constantly nil)
          :html-inline       (constantly nil)))
 
@@ -220,4 +262,8 @@
 
   (->hiccup "For example:\n\n```\nx\n```")
   ;; => [:div [:p "For example:"] [:pre [:code "x\n"]]]
+
+  (->hiccup "press [[Shift+Enter]] or {{Search}}")
+  ;; => [:div [:p "press " [:kbd [:kbd "Shift"] "+" [:kbd "Enter"]]
+  ;;           " or " [:kbd [:samp "Search"]]]]
   #_.)

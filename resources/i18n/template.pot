@@ -24,10 +24,6 @@ msgid "Other"
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/corpus.cljc
-msgid "All corpora in"
-msgstr ""
-
-#: src/dk/cst/corpus_probe/views/corpus.cljc
 msgid "All corpora"
 msgstr ""
 
@@ -37,6 +33,10 @@ msgstr ""
 
 #: src/dk/cst/corpus_probe/views/corpus.cljc
 msgid "No corpora found."
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/corpus.cljc
+msgid "All corpora in"
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/corpus.cljc
@@ -364,15 +364,7 @@ msgid "to"
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/page.cljc
-msgid "All values of"
-msgstr ""
-
-#: src/dk/cst/corpus_probe/views/page.cljc
 msgid "Clear filter"
-msgstr ""
-
-#: src/dk/cst/corpus_probe/views/corpus.cljc src/dk/cst/corpus_probe/views/page.cljc
-msgid "Filter"
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/page.cljc
@@ -380,23 +372,39 @@ msgid "No values found."
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/page.cljc
+msgid "All values of"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/page.cljc
 msgid "Too many values to list: "
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/page.cljc
-msgid "\"x\" or [lemma = \"x\"]"
+msgid "words, a list or CQP"
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/page.cljc
-msgid "one word per line"
-msgstr ""
-
-#: src/dk/cst/corpus_probe/views/page.cljc
-msgid "one word, or several words in order"
+msgid "Type a query"
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/page.cljc
 msgid "Query"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/page.cljc
+msgid "As CQP"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/page.cljc
+msgid "Read as CQP"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/page.cljc
+msgid "Any one of {n} words"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/page.cljc
+msgid "{n} words in order"
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/corpus.cljc src/dk/cst/corpus_probe/views/page.cljc
@@ -520,10 +528,6 @@ msgid "Loading …"
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/page.cljc
-msgid "As CQP"
-msgstr ""
-
-#: src/dk/cst/corpus_probe/views/page.cljc
 msgid "List"
 msgstr ""
 
@@ -532,47 +536,7 @@ msgid "Extended"
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/page.cljc
-msgid "Simple"
-msgstr ""
-
-#: src/dk/cst/corpus_probe/views/page.cljc
-msgid "condition {c} of token {n}"
-msgstr ""
-
-#: src/dk/cst/corpus_probe/views/page.cljc
-msgid "the repeat of token {n}"
-msgstr ""
-
-#: src/dk/cst/corpus_probe/views/page.cljc
-msgid "the sentence edge of token {n}"
-msgstr ""
-
-#: src/dk/cst/corpus_probe/views/page.cljc
-msgid "token {n} (any word)"
-msgstr ""
-
-#: src/dk/cst/corpus_probe/views/page.cljc
-msgid "the options of token {n}"
-msgstr ""
-
-#: src/dk/cst/corpus_probe/views/page.cljc
-msgid "the value of token {n}"
-msgstr ""
-
-#: src/dk/cst/corpus_probe/views/page.cljc
-msgid "List finds any one of the words, not the words in order."
-msgstr ""
-
-#: src/dk/cst/corpus_probe/views/page.cljc
-msgid "Simple finds the words in order, not any one of them."
-msgstr ""
-
-#: src/dk/cst/corpus_probe/views/page.cljc
-msgid "List reads the text as one word per line, not as CQP."
-msgstr ""
-
-#: src/dk/cst/corpus_probe/views/page.cljc
-msgid "Simple reads the text as words, not as CQP."
+msgid "Default"
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/page.cljc
@@ -592,18 +556,6 @@ msgid "the query"
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/page.cljc
-msgid "the list"
-msgstr ""
-
-#: src/dk/cst/corpus_probe/views/page.cljc
-msgid "the CQP query"
-msgstr ""
-
-#: src/dk/cst/corpus_probe/views/page.cljc
-msgid "Not kept in {form}: {parts}."
-msgstr ""
-
-#: src/dk/cst/corpus_probe/views/page.cljc
 msgid "Not used in {form}: {params}."
 msgstr ""
 
@@ -616,7 +568,7 @@ msgid "Add token"
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/page.cljc
-msgid "legend|Query"
+msgid "legend|Query type"
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/page.cljc
@@ -726,7 +678,7 @@ msgid "The search failed on the server. The server log has the details."
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/page.cljc
-msgid "This is not a CQP query. To search for a word, select Simple."
+msgid "CQP reads a bare word as the name of a query result. To match a word, put it in quotation marks."
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/page.cljc
@@ -775,5 +727,9 @@ msgstr ""
 
 #: src/dk/cst/corpus_probe/views/page.cljc src/dk/cst/corpus_probe/views/text.cljc
 msgid "in"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/tree.cljc
+msgid "Filter"
 msgstr ""
 

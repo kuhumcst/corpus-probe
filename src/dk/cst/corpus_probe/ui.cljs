@@ -685,36 +685,43 @@
   (if (some? value) (assoc m field value) (dissoc m field)))
 
 (defn switch-mode!
-  "Change the query mode of `form` (the form element) to `mode`, holding
-  in the new mode's form as much of the query the old one holds as it
-  can, as the server does for a submitted form (see
-  dk.cst.corpus-probe.query/project and /loss), and saying the rest in
-  the form's status line.
+  "Change the form of the query in `form` (the form element) to `mode`
+  (see dk.cst.corpus-probe.url/forms), holding in the new form as much
+  of the query the old one holds as it can, as the server does for a
+  submitted form (see dk.cst.corpus-probe.query/project and /loss), and
+  saying the rest in the form's status line.
 
   The old form is read as it stands, not as it was served, so a word
-  typed or an option changed since the last search comes along. What
-  its mode reads is replaced by the new mode's spelling of what it
-  holds (see dk.cst.corpus-probe.query/params); what neither mode reads
-  stays in the params as memory, for the disabled control that shows it.
+  typed or an option changed since the last search comes along. The
+  field's text seeds the tokens, read by its shape, and the tokens are
+  handed to the field as CQP. What the old form reads is replaced by
+  the new form's spelling of what it holds (see
+  dk.cst.corpus-probe.query/params); what neither reads stays in the
+  params as memory.
 
-  Switching away and back loses nothing while nothing was edited: the
-  query the last switch started from is `:remembered`, and the form it
-  handed the reader `:projected`; a form still holding that projection
-  is read as the remembered query, so that Simple, CQP and back is the
-  words again and not the CQP read as words, and Extended, Simple and
-  back is every token again.
+  Switching away and back loses nothing while nothing was edited: what
+  the form the last switch left held is `:remembered`, its params and
+  its token rows, and the query the switch handed the reader
+  `:projected`; a form still holding that projection gets the
+  remembered form back as it was, so that the words a reader typed come
+  back as those words and not as the CQP the tokens are, and every
+  token comes back from the field.
 
   The result on screen is left as it is: it answers what was asked (see
   dk.cst.corpus-probe.views.page/result-section), and the form has
   moved on."
   [form mode]
   (swap! state
-         (fn [{:keys [params remembered projected] :as s}]
-           (let [from    (url/mode params)
+         (fn [{:keys [params tokens remembered projected] :as s}]
+           (let [from    (url/form params)
                  live    (form-params form)
                  typed   (query/of (assoc live :mode from))
-                 source  (if (= typed projected) remembered typed)
-                 held    (query/project mode source)
+                 back?   (and (= typed projected) (= mode (:form remembered)))
+                 target  (if (= "extended" mode) mode "cqp")
+                 held    (when-not back? (query/project target typed))
+                 spelt   (if back?
+                           (:params remembered)
+                           (query/params target held))
                  memory  (-> (apply dissoc params (url/read-keys from params))
                              (merge (select-keys live
                                                  (filter url/query-key?
@@ -722,13 +729,20 @@
              (assoc s
                     :params     (-> (apply dissoc memory
                                            (url/read-keys mode memory))
-                                    (merge (query/params mode held))
+                                    (merge spelt)
                                     (assoc :mode mode))
-                    :tokens     (own-rows (query/form-rows
-                                           (when (= "extended" mode) held)))
-                    :switch     {:loss (query/loss mode source) :unread #{}}
-                    :remembered source
-                    :projected  held)))))
+                    :tokens     (cond
+                                  (not= "extended" mode)
+                                  (own-rows (query/form-rows nil))
+                                  back? (:tokens remembered)
+                                  :else (own-rows (query/form-rows held)))
+                    :switch     {:loss   (if back? [] (query/loss target typed))
+                                 :unread #{}}
+                    :remembered {:form   from
+                                 :params (select-keys live
+                                                      (url/read-keys from live))
+                                 :tokens tokens}
+                    :projected  (query/of (assoc spelt :mode mode)))))))
 
 (defn handle!
   "Apply an `action` to the state, using `data` (the Replicant dispatch
@@ -739,9 +753,10 @@
   `:move-cursor` answers a key pressed on a token, `:leave-concordance`
   closes the panel once focus has gone elsewhere, and `:close` dismisses
   it from its own button. `:toggle-context` expands a hit (fetching its
-  wider context) or collapses it. `:set-mode` changes the query mode
-  the reader picked the form to, carrying the query across as far as
-  the new mode holds it and saying the rest (see `switch-mode!`).
+  wider context) or collapses it. `:set-mode` changes the form of the
+  query to the one the reader picked, carrying the query across as far
+  as the new form holds it and saying the rest (see `switch-mode!`);
+  `:submit-on-enter` makes Enter in the field a submit.
   `:apply-view` submits the search again with a result control as it now
   stands, so choosing an order is asking for it. `:add-token` and
   `:remove-token` add a token to the extended search and take one away,
@@ -759,6 +774,8 @@
   dropped, one or a whole attribute at a time, and `:clear-filter` the
   whole filter being emptied, so that each list counts what its boxes
   say rather than what the last search asked (see `tick`).
+  `:set-validity`, a render hook, writes a control's own constraint,
+  which the query field uses to refuse a blank of any length;
   `:set-checkbox-state`, a render hook rather than an event, writes the
   states of a checkbox that no attribute carries: partly checked, for a
   folder holding only part of the selection, and invalid, for the corpus
@@ -783,10 +800,21 @@
     :add-condition    (add-condition! arg)
     :remove-condition (let [[i id] arg] (remove-condition! i id))
     :set-query
-    (let [value (.-value (.-target (:replicant/dom-event data)))]
-      (swap! state (fn [{:keys [params] :as s}]
-                     (assoc-in s [:params (url/field (url/mode params))]
-                               value))))
+    (swap! state assoc-in [:params :q]
+           (.-value (.-target (:replicant/dom-event data))))
+    ;; the field is a text area, so that a list can be typed one word per
+    ;; line, and a text area takes Enter as a line; a search box takes it
+    ;; as a submit, which is what a reader pressing it after a word
+    ;; expects. So Enter submits and a line is Shift+Enter, as the chat
+    ;; boxes have it; not while an input method is composing, when Enter
+    ;; commits the composition
+    :submit-on-enter
+    (let [event (:replicant/dom-event data)]
+      (when (and (= "Enter" (.-key event))
+                 (not (.-shiftKey event))
+                 (not (.-isComposing event)))
+        (.preventDefault event)
+        (.requestSubmit (.-form (.-target event)))))
     :set-condition
     (let [[i id field] arg
           value (control-value (:replicant/dom-event data))]
@@ -854,6 +882,10 @@
     (let [node (:replicant/node data)]
       (set! (.-indeterminate node) (:indeterminate arg))
       (.setCustomValidity node (or (:invalid arg) "")))
+    ;; a constraint the markup cannot state, written to the control on
+    ;; every render: the message it reports, or nothing
+    :set-validity
+    (.setCustomValidity (:replicant/node data) (or arg ""))
     :inspect (swap! state assoc :selected arg)
     :close   (close-panel!)
     :move-cursor (move-cursor! (:replicant/dom-event data) arg)

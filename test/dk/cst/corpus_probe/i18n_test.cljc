@@ -1,6 +1,7 @@
 (ns dk.cst.corpus-probe.i18n-test
   (:require [clojure.test :refer [deftest is testing]]
-            [dk.cst.corpus-probe.i18n :as i18n]))
+            [dk.cst.corpus-probe.i18n :as i18n]
+            #?(:clj [dk.cst.corpus-probe.translations :as translations])))
 
 (def en
   "The lookup context of the source language, in which every string is
@@ -74,9 +75,13 @@
             [msgid msgstr] table
             s (if (vector? msgstr) msgstr [msgstr])]
       (is (not= "" s) (str lang " leaves " (pr-str msgid) " empty"))))
-  (testing "a msgid holding a quote survives the PO round trip"
-    (is (= "\"x\" eller [lemma = \"x\"]"
-           (i18n/tr da "\"x\" or [lemma = \"x\"]")))))
+  #?(:clj
+     (testing "a msgid holding a quote survives the PO round trip, which
+               the reader unescapes (see
+               dk.cst.corpus-probe.translations/unescape)"
+       (is (= "\"x\" eller [lemma = \"x\"]"
+              (get (translations/read-po "dk/cst/corpus_probe/quoted.po")
+                   "\"x\" or [lemma = \"x\"]"))))))
 
 (deftest group-digits-test
   (testing "English groups with a comma and points its decimals"

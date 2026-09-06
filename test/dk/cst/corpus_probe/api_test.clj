@@ -665,7 +665,7 @@
   (when-cwb
    (cache/forget-counts!)
    (let [request {:headers      {"accept" "application/transit+json"}
-                  :query-params {:cqp "[]"}}
+                  :query-params {:q "[]"}}
          view    #(api/search-view-data ctx request)]
      (testing "a page the client renders arrives before the corpora past it
                are counted, linking onward on the hits it has"
@@ -824,35 +824,36 @@
          (is (= {:t1.attr "lemma" :t1.v "hund" :corpus "PROBE"} cited))
          (testing "with the field it came from kept as memory, uncited"
            (is (= "hund" (:q params))))))
-     (testing "a form submitted out of the extended mode with a part of the
-               query the field cannot hold runs nothing, holds the rest and
-               says what it dropped"
-       (let [{:keys [result error params switch tokens]}
+     (testing "a form submitted out of the extended mode hands the field
+               the tokens' CQP, kept within their unit, and runs it"
+       (let [{:keys [result error params switch tokens cited]}
              (page {:t1.attr "lemma" :t1.v "hund" :t2.op "any" :t2.max "3"
                     :mode "simple"})]
-         (is (nil? result))
+         (is (some? result))
          (is (nil? error))
-         (is (= "hund" (:q params)))
-         (is (= "lemma" (:in params)))
-         (is (= [[:any-word 2] [:repeat 2]] (:loss switch)))
+         (is (= "[lemma = \"hund\"] []{1,3} within s" (:q params)))
+         (is (= {:loss [] :unread #{}} switch))
          (is (= [{:id 1 :conditions [{:id 1}]}] tokens))
+         (is (= {:q "[lemma = \"hund\"] []{1,3} within s" :corpus "PROBE"}
+                cited))
          (testing "in the frequency view too"
-           (is (nil? (:result (page {:t1.attr "lemma" :t1.v "hund"
-                                     :t2.op "any" :mode "simple"
-                                     :view "frequencies"})))))))
-     (testing "a form submitted out of the extended mode into CQP runs the
-               tokens' CQP, kept within their unit"
+           (is (some? (:result (page {:t1.attr "lemma" :t1.v "hund"
+                                      :t2.op "any" :mode "simple"
+                                      :view "frequencies"}))))))
        (let [{:keys [result params]}
-             (page {:t1.v "lille" :t2.v "hund" :mode "cqp"})]
+             (page {:t1.v "lille" :t2.v "hund" :mode "simple"})]
          (is (= "[word = \"lille\"] [word = \"hund\"] within s"
-                (:cqp params)))
+                (:q params)))
          (is (= 1 (:size result)))))
-     (testing "CQP read as words runs the words and says so"
-       (let [{:keys [result params switch]}
-             (page {:cqp "[lemma = \"hund\"]" :mode "simple"})]
-         (is (= 0 (:size result)))
-         (is (= "[lemma = \"hund\"]" (:q params)))
-         (is (= [[:reading]] (:loss switch))))))))
+     (testing "CQP submitted into the extended mode runs nothing, and the
+               line says why"
+       (let [{:keys [result params switch tokens]}
+             (page {:q "[lemma = \"hund\"]" :mode "extended"})]
+         (is (nil? result))
+         (is (= [[:cqp "[lemma = \"hund\"]"]] (:loss switch)))
+         (is (= [{:id 1 :conditions [{:id 1}]}] tokens))
+         (testing "with the text kept as memory, uncited"
+           (is (= "[lemma = \"hund\"]" (:q params)))))))))
 
 (deftest citation-redirect-test
   (when-cwb
@@ -944,11 +945,11 @@
 (deftest list-mode-test
   (testing "a list compiles to one token pattern"
     (is (= "[lemma = \"(hund|kat)\"]"
-           (query/->cqp (query/of {:list "hund\nkat" :in "lemma"})))))
+           (query/->cqp (query/of {:q "hund\nkat" :in "lemma"})))))
   (testing "a list is one token, so it is kept within nothing"
-    (is (nil? (query/within (query/of {:list "hund\nkat"})))))
+    (is (nil? (query/within (query/of {:q "hund\nkat"})))))
   (testing "a list is titled by its length, a title being one line"
-    (is (str/starts-with? (api/search-title en {:list "hund\nkat\n"})
+    (is (str/starts-with? (api/search-title en {:q "hund\nkat\n"})
                           "2 words"))))
 
 (deftest text-page-test

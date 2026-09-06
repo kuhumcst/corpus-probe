@@ -62,3 +62,18 @@
     (is (= [:div [:p "b " "c"]] (markdown/->hiccup "<!-- x -->\n\nb <b>c</b>"))))
   (testing "a dollar sign is a dollar sign, not a formula"
     (is (= [:div [:p "$5 and $6"]] (markdown/->hiccup "$5 and $6")))))
+
+(deftest keys-test
+  (testing "a key in double brackets is the element for keyboard input,
+            and a chord one for each key inside one for the whole"
+    (is (= [:div [:p "press " [:kbd "Enter"] "."]]
+           (markdown/->hiccup "press [[Enter]].")))
+    (is (= [:div [:p [:kbd [:kbd "Shift"] "+" [:kbd "Enter"]]]]
+           (markdown/->hiccup "[[Shift+Enter]]")))
+    (is (= [:div [:p [:kbd "+"]]] (markdown/->hiccup "[[+]]"))))
+  (testing "not inside code"
+    (is (= [:div [:p [:code "[[x]]"]]] (markdown/->hiccup "`[[x]]`"))))
+  (testing "a label on the screen in double braces is a sample of the
+            screen inside keyboard input"
+    (is (= [:div [:p "click " [:kbd [:samp "Search"]]]]
+           (markdown/->hiccup "click {{Search}}")))))

@@ -490,15 +490,6 @@
                                            (map (fn [attr] [:code (name attr)])
                                                 unlisted))]]))))))
 
-(defn query-example
-  "The example query shown for `mode`, in `ui`: the modes take different
-  input, so one example cannot serve them all."
-  [ui mode]
-  (case mode
-    "cqp"  (i18n/tr ui "\"x\" or [lemma = \"x\"]")
-    "list" (i18n/tr ui "one word per line")
-    (i18n/tr ui "one word, or several words in order")))
-
 (defn query-phrase
   "The query of `params` in words for a title, in `ui`: the text as
   typed, or, for a list, how many words it holds (see
@@ -506,65 +497,89 @@
   not, or, for an extended search, the CQP its tokens compile to (see
   dk.cst.corpus-probe.query/->cqp), which is what the CQP mode shows
   too."
-  [ui params]
-  (let [mode (url/mode params)
-        text (get params (url/field mode))]
-    (case mode
-      "list"     (let [n (count (query/words text))]
-                   (str n " " (i18n/trn ui "word" "words" n)))
-      "extended" (query/->cqp (query/of params))
-      text)))
+  [ui {:keys [q] :as params}]
+  (case (url/mode params)
+    "list"     (let [n (count (query/words q))]
+                 (str n " " (i18n/trn ui "word" "words" n)))
+    "extended" (query/->cqp (query/of params))
+    q))
 
-(defn one-line
-  "The query `q` on one line: each line break, with the space around it,
-  as one space, and none at either end. What a search box holds, since
-  it cannot hold a line break and drops one rather than keep it: a list
-  typed one word per line and submitted under the CQP radio is read as
-  CQP as typed, line breaks and all (see
-  dk.cst.corpus-probe.query/arrived), where the words of a simple search
-  are spelt again by their printer."
-  [q]
-  ;; TODO: the citation of such a search still carries the line breaks,
-  ;; url/canonical keeping the CQP as it arrived, while the box resubmits
-  ;; it with spaces
-  (str/trim (str/replace (str q) #"\s*[\r\n]+\s*" " ")))
+(def reading-id
+  "The id of the line under the query field saying how its text is read
+  (see `reading-line`), by which the field is described (see
+  `query-field`)."
+  "reading")
 
 (defn query-field
-  "The query field of the search form in `ui`, holding the `text` of
-  `mode`: a search box, on one line (see `one-line`), or, in list mode,
-  a text area taking one word per line. Named for its mode (see
-  dk.cst.corpus-probe.url/field), so a submit says which mode the text
-  was typed in, and carrying the one id the client finds the field by.
-  No visible label: a field with a search button beside it needs none
-  to say what it is, so the name it keeps is the one only a screen
-  reader reads. Every key dispatches `:set-query`, so the state holds
-  the text as typed and the answer can tell when the form has moved on
-  from what ran (see `question`); the text is rendered as it is, a line
-  break aside, so that the render never moves what the reader is typing.
+  "The query field of the search form in `ui`, holding `text`: a text
+  area, so that a list can be typed one word per line: one row, and one
+  more for every line break in the text, the empty line a Shift+Enter
+  has just opened included, up to eight, and by nothing else (the
+  stylesheet takes the handle away); the text is read by its shape
+  (see dk.cst.corpus-probe.url/shape and `reading-line`). On the client
+  Enter submits the form and Shift+Enter starts a line (see
+  dk.cst.corpus-probe.ui/handle!). No visible label: a field with a
+  search button beside it needs
+  none to say what it is, so the name it keeps is the one only a screen
+  reader reads, and the line under it describes the field to the same
+  reader when its id is given as `described-by`. Every key dispatches
+  `:set-query`, so the state holds the text as typed and the answer can
+  tell when the form has moved on from what ran (see `question`).
 
   Required when `required?`: a search of nothing is then reported by the
   browser before it is sent, rather than answered with the help again.
-  The caller says when a blank query means something (see
-  `search-form`)."
-  [ui mode text required?]
-  (let [attrs {:id           "q"
-               :name         (name (get url/field mode :q))
-               :aria-label   (i18n/tr ui "Query")
-               :placeholder  (query-example ui mode)
-               :autocomplete "off"
-               :spellcheck   "false"
-               :required     required?
-               :on           {:input [:set-query]}}
-        text  (str text)]
-    (if (= mode "list")
-      ;; the text is the element's content: a text area has no value
-      ;; attribute for a document to carry it in
-      [:textarea (assoc attrs :rows 4) text]
-      [:input (assoc attrs
-                     :type  "search"
-                     :value (if (re-find #"[\r\n]" text)
-                              (one-line text)
-                              text))])))
+  The browser's own check passes whitespace, so the field reports a
+  blank of any length itself, through the render hook `:set-validity`
+  (see dk.cst.corpus-probe.ui/handle!), in the interface's words. The
+  caller says when a blank query means something (see `search-form`)."
+  [ui text required? described-by]
+  (let [text  (str text)
+        attrs (cond-> {:id           "q"
+                       :name         "q"
+                       :rows         (min 8 (inc (count (re-seq #"\r\n|[\r\n]"
+                                                                text))))
+                       :aria-label   (i18n/tr ui "Query")
+                       :placeholder  (i18n/tr ui "words, a list or CQP")
+                       :autocomplete "off"
+                       :spellcheck   "false"
+                       :enterkeyhint "search"
+                       :required     required?
+                       :on           {:input   [:set-query]
+                                      :keydown [:submit-on-enter]}
+                       :replicant/on-render
+                       [:set-validity (when (and required?
+                                                 (str/blank? text))
+                                        (i18n/tr ui "Type a query"))]}
+                described-by (assoc :aria-describedby described-by))]
+    ;; the text is the element's content, which is how a document
+    ;; carries it, a text area having no value attribute; the client
+    ;; sets the value property too, since the content is only what the
+    ;; area starts with
+    [:textarea #?(:clj attrs :cljs (assoc attrs :value text)) text]))
+
+(defn reading-line
+  "How the field's text in `params` is read, under it in `ui`, where
+  that wants saying: as CQP; or as words in order, or as any one of
+  them, with the CQP they run as (see dk.cst.corpus-probe.query/->cqp),
+  so that a reader sees what a phrase or a list becomes before a search
+  is spent on it, and where CQP is learnt by example. Nothing for a
+  blank field or one word, which read as they look. A paragraph rather
+  than an output, for the reason `cqp-line` is, carrying `reading-id`
+  so that the field can name it as its description."
+  [ui params]
+  (let [query (query/of params)
+        line  (fn [reading]
+                [:p.cqp {:id reading-id} reading " · " (i18n/tr ui "As CQP")
+                 ": " [:code (query/->cqp query)]])
+        n     (fn [xs] (i18n/group-digits ui (count xs)))]
+    (case (url/mode params)
+      "cqp"  [:p.cqp {:id reading-id} (i18n/tr ui "Read as CQP")]
+      "list" (let [words (:conditions (first (:tokens query)))]
+               (when (next words)
+                 (line (i18n/tr ui "Any one of {n} words" {:n (n words)}))))
+      (let [tokens (:tokens query)]
+        (when (next tokens)
+          (line (i18n/tr ui "{n} words in order" {:n (n tokens)})))))))
 
 (defn attribute-options
   "The options of a select over the positional `attrs` (attribute
@@ -853,8 +868,8 @@
   are any, as a region named in `ui`; nil without a help document.
 
   It stands where the results will: help belongs in the empty answer
-  space, not in the form. The document has no heading, so the interface
-  names the region.
+  space, not in the form. The document has a heading per form and no
+  title, so the interface names the region.
 
   TODO: the help's heading used to be the h1 of the search page until
   an answer headed it, and now the page has no h1 until then. Does the
@@ -911,10 +926,9 @@
   implicit status role would have a screen reader read the string after
   every keystroke.
 
-  TODO: is the line worth its place even here? The CQP radio hands the
-  same text to the field, with the unit, and switching back restores
-  the tokens; the words of a simple search and a list lost their line
-  for that reason. Drop it if nobody reads it."
+  TODO: is the line worth its place? The field's radio hands the same
+  text to the field, with the unit, and switching back restores the
+  tokens. Drop it if nobody reads it."
   [ui params tokens]
   (when-let [cqp (query/->cqp (form-query params tokens))]
     [:p.cqp (i18n/tr ui "As CQP") ": " [:code cqp]]))
@@ -927,54 +941,30 @@
     "list"     (i18n/tr ui "List")
     "extended" (i18n/tr ui "Extended")
     "cqp"      "CQP"
-    (i18n/tr ui "Simple")))
-
-(defn loss-phrase
-  "The part of a token a change of mode could not keep, `item` (see
-  dk.cst.corpus-probe.query/token-loss), as a phrase in `ui` for the
-  sentence that lists them (see `switch-notice`)."
-  [ui [kind n c]]
-  (case kind
-    :condition (i18n/tr ui "condition {c} of token {n}" {:c c :n n})
-    :repeat    (i18n/tr ui "the repeat of token {n}" {:n n})
-    :edge      (i18n/tr ui "the sentence edge of token {n}" {:n n})
-    :any-word  (i18n/tr ui "token {n} (any word)" {:n n})
-    :options   (i18n/tr ui "the options of token {n}" {:n n})
-    :value     (i18n/tr ui "the value of token {n}" {:n n})))
+    (i18n/tr ui "Default")))
 
 (defn loss-sentence
-  "What a change of mode to `form` did to the query as a whole, `item`
-  (see dk.cst.corpus-probe.query/loss), as a sentence in `ui`: how the
-  form reads it instead, or that it does not."
-  [ui form [kind x]]
+  "What a change of form did to the query, `item` (see
+  dk.cst.corpus-probe.query/loss), as a sentence in `ui`: that the
+  extended form does not hold it."
+  [ui [kind x]]
   (case kind
-    :order   (i18n/tr ui (str "List finds any one of the words, "
-                              "not the words in order."))
-    :any     (i18n/tr ui (str "Simple finds the words in order, "
-                              "not any one of them."))
-    :reading (if (= "list" form)
-               (i18n/tr ui (str "List reads the text as one word per line, "
-                                "not as CQP."))
-               (i18n/tr ui "Simple reads the text as words, not as CQP."))
-    :cqp     (list (i18n/tr ui (str "Extended cannot read CQP. "
-                                    "The query is not kept:"))
-                   " " [:code x])
-    :list    (let [n (i18n/group-digits ui x)]
-               (i18n/tr ui "A list of {n} words is not kept in Extended."
-                        {:n n}))))
+    :cqp  (list (i18n/tr ui (str "Extended cannot read CQP. "
+                                 "The query is not kept:"))
+                " " [:code x])
+    :list (i18n/tr ui "A list of {n} words is not kept in Extended."
+                   {:n (i18n/group-digits ui x)})))
 
 (defn param-label
   "What the query param `k` a URL carried is called in `ui`, for the
   sentence naming the ones the mode did not read (see `switch-notice`):
-  the query, the list, the CQP, the tokens, or the option's own label;
-  nil for a key with no name."
+  the query, the tokens, or the option's own label; nil for a key with
+  no name."
   [ui k]
   (if (url/token-key? k)
     (i18n/tr ui "the tokens")
     (case k
       :q      (i18n/tr ui "the query")
-      :list   (i18n/tr ui "the list")
-      :cqp    (i18n/tr ui "the CQP query")
       :in     (i18n/tr ui "attribute")
       :match  (i18n/tr ui "match")
       :ci     (i18n/tr ui "ignore case")
@@ -982,24 +972,15 @@
       nil)))
 
 (defn switch-notice
-  "What a change of the query mode to `form` could not keep, in `ui`,
+  "What a change of the query's form to `form` could not keep, in `ui`,
   for the form's status line: the `loss` items (see
-  dk.cst.corpus-probe.query/loss) as sentences, those about the parts of
-  a token gathered into one naming the form, and the `unread` params a
-  hand-written URL carried as one naming the form too, in the URL's own
+  dk.cst.corpus-probe.query/loss) as sentences, and the `unread` params
+  a hand-written URL carried as one naming the mode, in the URL's own
   order. Nil when there is nothing to say, which is the line's empty
   state."
   [ui form loss unread]
-  (let [part?     (comp #{:condition :repeat :edge :any-word :options :value}
-                        first)
-        parts     (filter part? loss)
-        sentences (concat
-                   (map #(loss-sentence ui form %) (remove part? loss))
-                   (when (seq parts)
-                     [(i18n/tr ui "Not kept in {form}: {parts}."
-                               {:form  (mode-label ui form)
-                                :parts (str/join ", " (map #(loss-phrase ui %)
-                                                           parts))})])
+  (let [sentences (concat
+                   (map #(loss-sentence ui %) loss)
                    (when (seq unread)
                      [(i18n/tr ui "Not used in {form}: {params}."
                                {:form   (mode-label ui form)
@@ -1014,33 +995,31 @@
   "The search form of `state`: over its `:folders` tree of corpus
   overviews, its metadata `:filter-controls` and the `:search-attrs` a
   simple search may match (see `attribute-control`), prefilled from its
-  `:params` (:corpus, a vector of selected names, :mode, the field of
-  that mode, :in :ci :match :within), submitted as GET to `action`, with
-  the page's own `extra` hidden inputs.
+  `:params` (:corpus, a vector of selected names, :mode, the form, :q,
+  the field's text, :in :ci :match :within), submitted as GET to
+  `action`, with the page's own `extra` hidden inputs.
 
-  The query row comes first (see `query-field`), or the tokens of an
-  extended search (see `token-fieldset`, over the `:tokens` and
-  `:value-lists` of `state`), then everything that decides how it is
-  read, a box each: the mode, with a status line for what a change of
-  it could not keep (its `:switch`, see `switch-notice`), and the
-  matching, a row each for what a simple search matches, how loosely,
-  the unit of text a search of several tokens is kept within (see
-  `within-control`) and the case, of those the mode reads. Then the
-  scope of the search, the
-  corpus chooser
-  and the metadata filter, each behind one disclosure. So the field the
-  reader reaches for is the first control in the form, whatever the
-  registry holds, and what qualifies what they typed is under their hand
-  rather than past two disclosures. The boxes stand in a wrapper of
-  their own, which the wide layout makes a rail beside the answer while
-  the query row stands above the answer, with room to type in.
+  The query row comes first (see `query-field`, with how its text is
+  read under it, see `reading-line`), or the tokens of an extended
+  search (see `token-fieldset`, over the `:tokens` and `:value-lists` of
+  `state`), then the boxes, in a wrapper of their own, which the wide
+  layout makes a rail beside the answer while the query row stands
+  above it, with room to type in. First everything that decides how the
+  query is read, a box each: the form, with a status line for what a
+  change of it could not keep (its `:switch`, see `switch-notice`), and
+  the matching, a row each for what a simple search matches, how
+  loosely, the unit of text a search of several tokens is kept within
+  (see `within-control`) and the case, of those the mode reads. Then
+  the scope of the search, the corpus chooser and the metadata filter.
+  So the field the reader reaches for is the first control in the form,
+  whatever the registry holds, and what qualifies what they typed is
+  under their hand rather than past two disclosures.
 
-  The query example is the placeholder of the mode in `:params`, and the
-  mode radios dispatch `:set-mode`, so choosing a mode swaps the example
-  and the shape of the field without a round trip. Which options are
-  offered at all is the mode's row of dk.cst.corpus-probe.url/fields, on
-  both sides; without the client all of it is as the search was
-  submitted.
+  The form radios dispatch `:set-mode`, so choosing the extended form
+  swaps the field for the tokens without a round trip. Which options are
+  offered at all is the row of dk.cst.corpus-probe.url/fields for the
+  mode the text is read in (see dk.cst.corpus-probe.url/shape), on both
+  sides; without the client all of it is as the search was submitted.
 
   The query is required, except when the form is submitted from the
   frequency view (its `:view`), which counts every token of a blank one,
@@ -1069,10 +1048,10 @@
            value-lists switch client? pending? lists filters-pending?]
     :as state}
    action extra]
-  (let [{:keys [corpus in ci match within]} params
+  (let [{:keys [corpus q in ci match within]} params
         {:keys [corpora values]} lists
+        form    (url/form params)
         mode    (url/mode params)
-        text    (get params (url/field mode))
         ;; a control the mode does not read is taken away rather than
         ;; shown dead: a row of greyed controls is something to read past
         ;; before reaching one that can be used, and nothing is lost by
@@ -1093,7 +1072,7 @@
       ;; the tokens rebuilt the group, the radio the reader had pressed
       ;; included
       [:div.query
-       (if (= mode "extended")
+       (if (= form "extended")
          (list (token-fieldset ui search-attrs value-lists client?
                                (not= :frequencies view) tokens)
                [:p
@@ -1103,32 +1082,24 @@
                         " "))
                 button]
                (cqp-line ui params tokens))
-         [:p (query-field ui mode text (not= :frequencies view)) " " button])]
+         (let [line (reading-line ui params)]
+           (list [:p (query-field ui q (not= :frequencies view)
+                                  (when line reading-id))
+                  " " button]
+                 line)))]
       ;; one wrapper, which the wide layout makes a rail beside the answer
       [:div.rail
-       ;; one group: everything here qualifies the query above it, and two
-       ;; boxes said that twice. A row each, so the mode a reader is in
-       ;; does not run into the options it decides the meaning of.
-       ;;
-       ;; Named by a legend like the boxes beside it, so that the three
-       ;; line up when they share a row; the word is the query's, since
-       ;; everything in the box qualifies it
-       ;; the query's box: its mode, named by the legend like the boxes
+       ;; the query's box: its form, named by a legend like the boxes
        ;; beside it, so that they line up when they share a row
        [:fieldset.modes
-        [:legend (i18n/trx ui "legend" "Query")]
+        [:legend (i18n/trx ui "legend" "Query type")]
         [:p (interpose " "
-                       (for [m url/modes]
+                       (for [m url/forms]
                          [:label [:input {:type    "radio" :name "mode"
                                           :value   m
-                                          :checked (= m mode)
+                                          :checked (= m form)
                                           :on      {:change [:set-mode m]}}]
-                          ;; CQP as an abbreviation and no link: the click
-                          ;; on a label belongs to its radio, and the
-                          ;; glossary is in the masthead
-                          (if (= "cqp" m)
-                            (layout/term ui :cqp false)
-                            (mode-label ui m))]))]
+                          (mode-label ui m)]))]
         ;; without the client a change of mode is a submit, which the field
         ;; a fresh form requires would refuse; this button submits without
         ;; that check, so a reader can leave an empty form for another mode.
@@ -1375,16 +1346,16 @@
     nil))
 
 (defn not-cqp?
-  "True when CQP's error `message` is the one a word gets under the CQP
-  mode: a bare word is read as the name of a corpus, and refused as one
-  the registry lacks."
+  "True when CQP's error `message` is the one a bare word in a CQP query
+  gets: it is read as the name of a corpus or a query result, and
+  refused as one there is none of."
   [message]
   (boolean (re-find #"Corpus ``.*'' is undefined" (str message))))
 
 (defn error-body
   "The parts of an `error` under its heading in `ui`: the
   `corpora` it concerns, the explanation of a type that carries no message,
-  what a word under the CQP mode gets told (see `not-cqp?`), and cqp's own
+  what a bare word in CQP gets told (see `not-cqp?`), and cqp's own
   message verbatim, its `<--` position pointer included, as the sample
   output of another program."
   [ui {:keys [type message]} corpora]
@@ -1395,8 +1366,9 @@
    (when-let [explanation (error-explanation ui type)]
      [:p explanation])
    (when (not-cqp? message)
-     [:p (i18n/tr ui (str "This is not a CQP query. To search for a word, "
-                          "select Simple."))])
+     [:p (i18n/tr ui (str "CQP reads a bare word as the name of a query "
+                          "result. To match a word, put it in quotation "
+                          "marks."))])
    ;; the stylesheet scrolls this rather than letting cqp's column-aligned
    ;; pointer reflow, and a scroll container a keyboard cannot reach is
    ;; unreadable in the browsers that do not focus scrollers themselves

@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "watch",
+      "runtimeExecutable": "clojure",
+      "runtimeArgs": ["-M:cljs", "-m", "shadow.cljs.devtools.cli", "watch", "app"],
+      "port": 9630
+    },
+    {
+      "name": "server",
+      "runtimeExecutable": "clojure",
+      "runtimeArgs": ["-M:serve"],
+      "port": 7373
+    }
+  ]
+}

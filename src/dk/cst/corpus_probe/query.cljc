@@ -5,8 +5,8 @@
   reader wrote it, which the app compiles into and never out of. It is
   read from the search params by the mode that carries them (see `of`),
   printed back as the params of a mode (see `params`), compiled to CQP
-  (see `->cqp`), and held by each of the four forms as far as that form
-  can (see `project` and `loss`).
+  (see `->cqp`), and held by each of the two forms as far as it can (see
+  `project` and `loss`).
 
   Every word or value is escaped for a double-quoted CQP literal. Shared
   by the server and the client, so both can say what a form will run.
@@ -301,7 +301,7 @@
   {:conditions (vec conditions) :min 1 :max 1 :start? false :end? false})
 
 (defn list-token
-  "The one token a list is (see `list-token?`): `conditions` as
+  "The one token a list is: `conditions` as
   alternatives of one another, each once, every one after the first
   joined by or."
   [conditions]
@@ -324,20 +324,18 @@
   names where the mode reads it (see `within-param`). Nil when nothing is
   asked, which counts every token.
 
-  Each mode reads its own field (see dk.cst.corpus-probe.url/field) and
-  what a mode does not read is not read (see
-  dk.cst.corpus-probe.url/fields): the field of another mode, or tokens
-  under a mode that reads none, ask nothing here. Simple is the default,
-  so a URL naming no mode and carrying q is a plain word search."
-  [{:keys [within] :as params}]
+  The field's text, `q`, is read by its shape (see
+  dk.cst.corpus-probe.url/shape), and what a mode does not read is not
+  read (see dk.cst.corpus-probe.url/fields): text under the extended
+  form, or tokens under the field's, ask nothing here."
+  [{:keys [q within] :as params}]
   (let [mode   (url/mode params)
-        text   (get params (url/field mode))
         unit   (within-param (when (url/reads? mode :within) within))
         tokens (fn [tokens]
                  (when (seq tokens) {:tokens (vec tokens) :within unit}))
-        words  (words text)]
+        words  (words q)]
     (case mode
-      "cqp"      (when-not (str/blank? text) {:cqp text})
+      "cqp"      (when-not (str/blank? q) {:cqp q})
       "extended" (tokens (token-params params))
       "list"     (tokens (when (seq words)
                            [(list-token (map #(condition params %) words))]))
@@ -410,9 +408,9 @@
 (defn word-params
   "The params of the words of `query` as a simple search or a list
   spells them, by `mode`: the values of its tokens in order, or of its
-  one token's alternatives, in the mode's field, one line each for a
-  list, with the first condition's attribute, operator and case flag as
-  the options every word shares (see `condition`). For a query the form
+  one token's alternatives, in the field, one line each for a list,
+  with the first condition's attribute, operator and case flag as the
+  options every word shares (see `condition`). For a query the form
   holds (see `project`)."
   [mode {:keys [tokens within]}]
   (let [[attr op ci?] (literal-shape (first (:conditions (first tokens))))
@@ -420,7 +418,7 @@
         values        (if list?
                         (map :value (:conditions (first tokens)))
                         (map (comp :value first :conditions) tokens))]
-    (cond-> {(url/field mode) (str/join (if list? "\n" " ") values)}
+    (cond-> {:q (str/join (if list? "\n" " ") values)}
       (not= (url/default :in) (name attr)) (assoc :in (name attr))
       (not= "is" op)                       (assoc :match op)
       ci?                                  (assoc :ci "on")
@@ -430,16 +428,15 @@
 (defn params
   "The search params of `mode` that carry `query`, as the form of that
   mode submits them and its URL cites them: the words or the lines in
-  the mode's own field (see dk.cst.corpus-probe.url/field) with their
-  options (see `word-params`), the tokens as their fields (see
-  `token->params`) with the unit, or the CQP text; nothing at its
-  default, and no mode, which the field says. For a query the form holds
-  (see `project`), so that reading them back (see `of`) gives the query
-  again."
+  the field with their options (see `word-params`), the tokens as their
+  fields (see `token->params`) with the unit, or the CQP text; nothing
+  at its default, and no mode, which the shape of the text says. For a
+  query the form holds (see `project`), so that reading them back (see
+  `of`) gives the query again."
   [mode query]
   (cond
     (nil? query)         {}
-    (= "cqp" mode)       {:cqp (->cqp query)}
+    (= "cqp" mode)       {:q (->cqp query)}
     (= "extended" mode)  (let [{:keys [tokens within]} query
                                fields (map-indexed (fn [i t]
                                                      (token->params (inc i) t))
@@ -453,145 +450,41 @@
   "The most words a list is carried into the extended form as, one
   condition each: fifty, which is as many rows of five controls as one
   token can show before the form is a page of its own, and more than a
-  reader builds by hand. A longer list is the list mode's, whose field
-  holds any number (see `loss`)."
+  reader builds by hand. A longer list stays in the field, which holds
+  any number (see `loss`)."
   50)
-
-(defn list-token?
-  "True when `tokens` are what a list is: one token, once, at no edge,
-  whose conditions are alternatives of one literal value (see
-  `alternatives?`), or one such condition."
-  [tokens]
-  (let [{:keys [conditions start? end?] lo :min hi :max} (first tokens)]
-    (boolean (and (= 1 (count tokens))
-                  (not start?) (not end?) (= [1 1] [lo hi])
-                  (or (= 1 (count conditions))
-                      (alternatives? conditions))
-                  (contains? literal-ops (:op (first conditions)))))))
-
-(defn word?
-  "True when `condition` is one a search box can hold as a word: a
-  literal operator (see `literal-ops`) and a value with no space in it."
-  [{:keys [op value]}]
-  (boolean (and (contains? literal-ops op)
-                (not (str/blank? value))
-                (not (re-find #"\s" value)))))
-
-(defn token-loss
-  "What the simple form or the list form cannot hold of `token`, the
-  `i`th: its first condition when it is any word, `[:any-word i]`, when
-  its operator is none a word has (see `literal-ops`) or the word is
-  matched otherwise than `shape` (see `literal-shape`) says,
-  `[:options i]`, or when its value is no word (see `word?`),
-  `[:value i]`; every condition after the first, `[:condition i c]`; its
-  repeat, `[:repeat i]`; its sentence edge, `[:edge i]`."
-  [shape i {:keys [conditions start? end?] lo :min hi :max}]
-  (let [[{:keys [op] :as first-condition} & more] conditions
-        literal? (contains? literal-ops op)]
-    (cond-> []
-      (= "any" op)
-      (conj [:any-word i])
-
-      (or (and (not= "any" op) (not literal?))
-          (and (word? first-condition)
-               (not= shape (literal-shape first-condition))))
-      (conj [:options i])
-
-      (and literal? (not (word? first-condition)))
-      (conj [:value i])
-
-      (seq more)
-      (into (map-indexed (fn [j _] [:condition i (+ 2 j)]) more))
-
-      (not= [1 1] [lo hi])
-      (conj [:repeat i])
-
-      (or start? end?)
-      (conj [:edge i]))))
-
-(defn shape
-  "The shape (see `literal-shape`) every word carried into a simple
-  search or a list takes: that of the first token's first condition
-  that is a word (see `word?`); the plain word otherwise."
-  [tokens]
-  (or (some #(when (word? %) (literal-shape %))
-            (map (comp first :conditions) tokens))
-      (literal-shape nil)))
 
 (defn loss
   "What the form of `mode` cannot hold of `query` (see `of`), as items
-  the interface words: nothing for no query, or for a query the form
-  holds whole. The CQP form holds every query, since the tokens compile
-  (see `project`); the extended form holds every token query but a list
-  past `max-alternatives`, `[:list n]`, and no CQP, `[:cqp text]`, which
-  the app never reads. The simple form and the list form read CQP as
-  words, `[:reading]`; hold a list as its words in order, `[:any]`, and
-  words in order as a list, `[:order]`; and of any other token, what
-  `token-loss` says."
-  [mode query]
-  (let [{:keys [cqp tokens]} query]
-    (cond
-      (nil? query) []
-      (= "cqp" mode) []
-      (= "extended" mode)
-      (if cqp
-        [[:cqp cqp]]
-        (into [] (keep (fn [{:keys [conditions]}]
-                         (when (> (count conditions) max-alternatives)
-                           [:list (count conditions)])))
-              tokens))
-      cqp [[:reading]]
-      (list-token? tokens)
-      (if (and (= "simple" mode) (next (:conditions (first tokens))))
-        [[:any]]
-        [])
-      :else
-      (into (if (and (= "list" mode) (next tokens)) [[:order]] [])
-            (mapcat (fn [i token] (token-loss (shape tokens) i token))
-                    (range 1 (inc (count tokens)))
-                    tokens)))))
-
-(defn carried
-  "The words of `tokens` a simple search or a list carries (see `loss`):
-  a list's alternatives, or the first condition of each token that is a
-  word (see `word?`), in order."
-  [tokens]
-  (if (list-token? tokens)
-    (map :value (:conditions (first tokens)))
-    (keep (fn [{:keys [conditions]}]
-            (let [c (first conditions)] (when (word? c) (:value c))))
-          tokens)))
+  the interface words: nothing for no query, and nothing for the field,
+  which holds every query, as CQP if not as words (see `project`); the
+  extended form holds every query of tokens but a list past
+  `max-alternatives`, `[:list n]`, and no CQP, `[:cqp text]`, which the
+  app never reads."
+  [mode {:keys [cqp tokens] :as query}]
+  (cond
+    (or (nil? query) (not= "extended" mode)) []
+    cqp [[:cqp cqp]]
+    :else (into [] (keep (fn [{:keys [conditions]}]
+                           (when (> (count conditions) max-alternatives)
+                             [:list (count conditions)])))
+                tokens)))
 
 (defn project
   "`query` (see `of`) as the form of `mode` holds it, which is the query
-  itself where the form holds it whole (see `loss`): the CQP form holds
-  the tokens compiled, kept within their unit by name (see `unit-names`);
-  the extended form holds no CQP and no list past `max-alternatives`,
-  and starts blank, nil; the simple form and the list form hold CQP as
-  its words, and of tokens the words they carry (see `carried`), in
-  order or as alternatives, matched as the first of them is (see
-  `shape`). Nil when nothing is carried."
-  [mode {:keys [cqp tokens] :as query}]
+  itself where the form holds it whole (see `loss`): the field, under
+  the CQP mode, holds CQP as it is and the tokens compiled, kept within
+  their unit by name (see `unit-names`); the extended form holds no CQP
+  and no list past `max-alternatives`, and starts blank, nil. Nil for no
+  query."
+  [mode {:keys [cqp] :as query}]
   (cond
-    (nil? query) nil
-    (= "cqp" mode)
-    (if cqp
-      query
-      {:cqp (str (->cqp query)
-                 (some->> (within query) unit-names (str " within ")))})
-    (= "extended" mode)
-    (when (empty? (loss mode query)) query)
-    cqp
-    (of {(url/field mode) cqp})
-    :else
-    (let [[attr op ci?] (shape tokens)
-          conditions    (map #(hash-map :attr attr :op op :value % :ci? ci?)
-                             (carried tokens))]
-      (when (seq conditions)
-        (if (= "list" mode)
-          {:tokens [(list-token conditions)] :within :sentence}
-          {:tokens (mapv #(token [%]) conditions)
-           :within (:within query)})))))
+    (nil? query)        nil
+    (= "extended" mode) (when (empty? (loss mode query)) query)
+    cqp                 query
+    :else               {:cqp (str (->cqp query)
+                                   (some->> (within query) unit-names
+                                            (str " within ")))}))
 
 (defn form-rows
   "The rows of the extended form holding `query` (see `project`): its
@@ -603,59 +496,38 @@
   (url/form-tokens (concat (url/token-rows (params "extended" query))
                            [{:conditions [{}]}])))
 
-(def reading-items
-  "The kinds of loss item (see `loss`) that change how a query is read
-  rather than take a part of it away: a form holding one runs the query
-  as it reads it, and says so."
-  #{:order :any :reading})
-
 (defn arrived
   "What the search `params` of a submitted form ask, once a change of its
-  mode radio is allowed for: the `:form` shown, which is the ticked mode
-  (see dk.cst.corpus-probe.url/mode), the mode the query came `:from`
-  when that is another, which the name of the field it arrived in says
-  (see dk.cst.corpus-probe.url/typed), the query `:held` by that form
-  (see `project`), the `:query` that runs, what the form could not keep
-  as `:loss` items (see `loss`) and, for a hand-written URL, the
-  `:unread` keys it carried (see dk.cst.corpus-probe.url/unread).
+  mode radio is allowed for: the `:form` shown, as the mode it reads the
+  query in, the mode the query came `:from` when the radio changed the
+  form (see dk.cst.corpus-probe.url/form and /typed), the query `:held`
+  by the form (see `project`), the `:query` that runs, what the form
+  could not keep as `:loss` items (see `loss`) and, for a hand-written
+  URL, the `:unread` keys it carried (see dk.cst.corpus-probe.url/unread).
 
-  A form whose mode radio was changed submits the old mode's field, named
-  for the old mode, under the new mode's radio. Between the modes that
-  have a field the ticked mode reads the text, since text typed after
-  ticking is in that mode, and the reading the text had before is what
-  the reader is told of. Across a field and the tokens, the shape
-  decides: a field under the extended mode is read as the mode it is
-  named for and seeds the tokens; tokens under a mode with a field are
-  projected into it.
-
-  A form holds what it holds and runs it, unless part of the query was
-  lost: then nothing runs, the form shows what it kept and the line says
-  the rest, so that the reader is told before the loss. What arrived
-  with a switch is the switch's own business, so only a URL that names
-  no switch has unread params to report."
+  A form whose radio was changed submits the old form's query under the
+  new radio: the field's text under the extended radio seeds the tokens,
+  read by its shape, and the tokens under the field's radio are handed
+  to the field as CQP, which holds them whole. A form that has a query
+  of its own is no switch, whatever else the params carry. A form holds
+  what it holds and runs it, unless part of the query was lost: then
+  nothing runs, the form shows what it kept and the line says the rest,
+  so that the reader is told before the loss. What arrived with a
+  switch is the switch's own business, so only a URL that names no
+  switch has unread params to report."
   [params]
-  (let [form   (url/mode params)
+  (let [form   (url/form params)
         own    (of params)
         origin (url/typed params)
-        from   (when (not= origin form) origin)
-        switch (cond
-                 (or (nil? from) own)  nil
-                 (= "extended" form)   :in
-                 (= "extended" from)   :out
-                 :else                 :reading)
-        other  (when switch (of (assoc params :mode from)))
-        held   (case switch
-                 :reading   (of (assoc params
-                                       :mode form
-                                       (url/field form)
-                                       (get params (url/field from))))
-                 (:in :out) (project form other)
-                 own)
-        loss   (if other (loss form other) [])
-        lost?  (some (complement (comp reading-items first)) loss)]
-    {:form   form
-     :from   from
+        switch (when (and (nil? own) origin (not= form (url/form-of origin)))
+                 (if (= "extended" form) :in :out))
+        other  (when switch (of (dissoc params :mode)))
+        mode   (case switch :in "extended" :out "cqp" (url/mode params))
+        held   (if switch (project mode other) own)
+        loss   (if switch (loss mode other) [])]
+    {:form   mode
+     :from   (when switch origin)
      :held   held
-     :query  (when-not lost? held)
+     :query  (when (empty? loss) held)
      :loss   loss
      :unread (if switch #{} (url/unread params))}))

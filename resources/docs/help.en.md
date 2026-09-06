@@ -1,15 +1,20 @@
-Simple:
-  Finds the words in the order you type them, within one sentence.
+To search, select one or more corpora under **Corpora**, and type your
+search in the search field above:
 
-List:
-  Finds any one of the words. Type one word per line.
+- If you type several words, the search finds them in that order.
+- If you type one word on each line, the search finds any one of them.
+  To start a new line, press [[Shift+Enter]].
+- If the text starts with a bracket, a quotation mark or a
+  [tag](/glossary#structural-attributes), it is a
+  [CQP](/glossary#cqp) query. The [CQP guide](/cqp) shows the syntax by
+  example.
 
-Extended:
-  Builds the query from [tokens](/glossary#token), each with its own
-  conditions, its repeat and its place in the sentence.
+To search, press [[Enter]] or click {{Search}}.
 
-CQP:
-  Runs the query as you typed it, in [CQP](/glossary#cqp), the query
-  language of the Corpus Workbench. The [CQP guide](/cqp) shows the
-  syntax by example. To see the query of another mode as CQP, select
-  CQP.
+## Extended search
+
+Extended is another way to construct a complex query. Select
+{{Extended}} under **Query type**, and build the query from
+[tokens](/glossary#token), one at a time. For each token, you can set
+conditions, how many times it can repeat, and whether it must start or
+end a sentence.

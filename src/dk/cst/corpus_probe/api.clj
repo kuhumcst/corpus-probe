@@ -878,13 +878,14 @@
   control the mode does not read keeps what it carried, as memory; the
   corpora searched, or only those named when nothing runs (see `runs?`),
   since a reader arriving at the form starts with none selected; and the
-  grouping of the frequency view. The mode is the form's, which the
-  radios read and no URL carries."
+  grouping of the frequency view. The mode is the form's (see
+  dk.cst.corpus-probe.url/form-of), which the radios read and no URL
+  carries."
   [{:keys [params arrived selected named] :as req} view]
   (let [{:keys [form held]} arrived]
     (-> (apply dissoc params (url/read-keys form params))
         (merge (query/params form held))
-        (assoc :mode   form
+        (assoc :mode   (url/form-of form)
                :corpus (if (runs? req view) selected named)
                :attr   (attr-param (:attr params))
                :at     (position-param (:at params))))))

@@ -7,11 +7,13 @@ forespørgsel er en række mønstre. Hvert mønster matcher ét
 Siden for hvert [korpus](/corpora) viser dets attributter. Erstat x og
 y med dine egne ord.
 
-For at køre en forespørgsel skal du vælge CQP på [søgesiden](/search)
-og skrive forespørgslen i feltet. Valgene under Matchning er så slået
-fra: forespørgslen siger selv, hvad der skal matches. For at se,
-hvordan formularen skriver CQP, skal du søge i en anden søgetype. Vælg
-derefter CQP: feltet holder så den søgning som CQP.
+For at køre en forespørgsel skal du skrive den i søgefeltet på
+[søgesiden](/search). Tekst, der begynder med en klamme, et
+anførselstegn eller et tag, kører som CQP, og linjen under søgefeltet siger
+det. Valgene under Matchning er så væk: forespørgslen siger selv, hvad
+der skal matches. For at se, hvordan formularen skriver CQP, skal du
+skrive ord i rækkefølge eller ét ord pr. linje: linjen under søgefeltet
+viser den søgning som CQP.
 
 ## Ordformer
 

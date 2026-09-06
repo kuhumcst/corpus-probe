@@ -134,7 +134,7 @@
                                     :ci? false :join "or"}]
                       :min 1 :max 1 :start? false :end? false}]
             :within :sentence}
-           (query/of {:list "hund\nkat hund" :within "text"}))))
+           (query/of {:q "hund\nkat hund" :within "text"}))))
   (testing "the tokens of an extended search, as its params say"
     (is (= {:tokens [{:conditions [{:attr :lemma :op "is" :value "hund"
                                     :ci? true}]
@@ -148,11 +148,11 @@
                       :t2.end "on" :within "paragraph"}))))
   (testing "CQP as typed"
     (is (= {:cqp "[lemma = \"hund\"] within s"}
-           (query/of {:cqp "[lemma = \"hund\"] within s" :in "lemma"}))))
+           (query/of {:q "[lemma = \"hund\"] within s" :in "lemma"}))))
   (testing "nothing asked is no query: a blank, or the query of another
-            mode, which the mode does not read"
+            form, which the form does not read"
     (is (nil? (query/of {})))
-    (is (nil? (query/of {:cqp "  "})))
+    (is (nil? (query/of {:q "  "})))
     (is (nil? (query/of {:q "hund" :mode "extended"})))
     (is (nil? (query/of {:t1.v "hund" :mode "simple"}))))
   (testing "simple is the default: a bare word is a word search, not CQP,
@@ -174,26 +174,26 @@
            (cqp-of {:q "hund" :in "lemma" :match "prefix" :ci "on"}))))
   (testing "regex metacharacters in input are matched literally"
     (is (= "[word = \"hund\\.\"]" (cqp-of {:q "hund."}))))
-  (testing "CQP mode passes the query through verbatim"
-    (is (= "[lemma = \"hund\"]" (cqp-of {:cqp "[lemma = \"hund\"]"}))))
+  (testing "CQP passes through verbatim"
+    (is (= "[lemma = \"hund\"]" (cqp-of {:q "[lemma = \"hund\"]"}))))
   (testing "blank input yields nil, not a match-everything query"
     (is (nil? (cqp-of {:q "   "})))
     (is (nil? (cqp-of {:q "" :match "prefix"})))
-    (is (nil? (cqp-of {:cqp "   "})))
     (is (nil? (cqp-of {:mode "simple"}))))
-  (testing "a list of words is one token pattern matching any of them"
-    (is (= "[word = \"(hund|kat)\"]" (cqp-of {:list "hund\nkat"})))
+  (testing "a list of words, one per line, is one token pattern matching
+            any of them"
+    (is (= "[word = \"(hund|kat)\"]" (cqp-of {:q "hund\nkat"})))
     (is (= "[lemma = \"(hund|kat).*\" %c]"
-           (cqp-of {:list "hund\r\n\n kat \nhund" :match "prefix"
+           (cqp-of {:q "hund\r\n\n kat \nhund" :match "prefix"
                     :ci "on" :in "lemma"})))
     (testing "the words are matched literally"
-      (is (= "[word = \"(a\\.b|c\\|d)\"]" (cqp-of {:list "a.b\nc|d"}))))
-    (testing "several words to a line are several words: a token holds no
-              space, and a box without line breaks lays a list out so"
-      (is (= "[word = \"(hund|kat)\"]" (cqp-of {:list "hund kat"}))))
+      (is (= "[word = \"(a\\.b|c\\|d)\"]" (cqp-of {:q "a.b\nc|d"}))))
+    (testing "several words to a line are several words of the list: a
+              token holds no space"
+      (is (= "[word = \"(hund|kat|mus)\"]" (cqp-of {:q "hund kat\nmus"}))))
     (testing "a list of one word is that word"
-      (is (= "[word = \"hund\"]" (cqp-of {:list "hund"}))))
-    (is (nil? (cqp-of {:list "\n \n"})))))
+      (is (= "[word = \"hund\"]" (cqp-of {:q "hund\n"}))))
+    (is (nil? (cqp-of {:q "\n \n"})))))
 
 (deftest within-test
   (testing "a simple search of several words is kept within a sentence,
@@ -207,7 +207,7 @@
     (is (nil? (within-of {:q "hund"})))
     (is (nil? (within-of {:q "  "})))
     (is (nil? (within-of {})))
-    (is (nil? (within-of {:list "hund\nkat" :within "text"}))))
+    (is (nil? (within-of {:q "hund\nkat" :within "text"}))))
   (testing "several tokens are kept within the unit the params name, the
             sentence by default; one is not, unless it opens or closes a
             sentence"
@@ -218,7 +218,7 @@
     (is (= :sentence (within-of {:mode "extended" :t1.v "a"
                                  :t1.start "on"}))))
   (testing "CQP says so itself"
-    (is (nil? (within-of {:cqp "[] []"})))))
+    (is (nil? (within-of {:q "[] []"})))))
 
 (deftest token-params-test
   (testing "the tokens compile to CQP, defaults applied and bad values read
@@ -260,10 +260,10 @@
               "[lemma = \".*hund.*\" %c]" nil]
              [{:q "a.b \"c\""}
               "[word = \"a\\.b\"] [word = \"\"\"c\"\"\"]" :sentence]
-             [{:list "hund\nkat"} "[word = \"(hund|kat)\"]" nil]
-             [{:list "hund\nkat" :match "prefix" :ci "on" :in "lemma"}
+             [{:q "hund\nkat"} "[word = \"(hund|kat)\"]" nil]
+             [{:q "hund\nkat" :match "prefix" :ci "on" :in "lemma"}
               "[lemma = \"(hund|kat).*\" %c]" nil]
-             [{:list "hund"} "[word = \"hund\"]" nil]
+             [{:q "hund\n"} "[word = \"hund\"]" nil]
              [{:mode "extended" :t1.attr "lemma" :t1.v "hund"}
               "[lemma = \"hund\"]" nil]
              [{:mode "extended" :t1.v "lille" :t2.v "hund" :within "text"}
@@ -283,10 +283,9 @@
              [{:mode "extended" :t1.op "not" :t1.v "hund" :t2.op "any"
                :t2.start "on"}
               "[word != \"hund\"] <s> []" :sentence]
-             [{:cqp "[lemma = \"hund\"] within s"}
+             [{:q "[lemma = \"hund\"] within s" :in "lemma"}
               "[lemma = \"hund\"] within s" nil]
-             ;; a bare word under CQP is what CQP is given, and refuses
-             [{:cqp "hund" :in "lemma"} "hund" nil]]]
+             [{:q "\"hund\" \"kat\""} "\"hund\" \"kat\"" nil]]]
       (is (= cqp (cqp-of params)) (pr-str params))
       (is (= within (within-of params)) (pr-str params)))))
 
@@ -297,14 +296,14 @@
             [["simple" {:q "lille hund" :in "lemma" :ci "on" :match "prefix"
                         :within "text"}]
              ["simple" {:q "hund"}]
-             ["list" {:list "hund\nkat" :match "suffix"}]
+             ["list" {:q "hund\nkat" :match "suffix"}]
              ["extended" {:t1.v "hund" :t1.2.v "kat" :t1.2.join "or"
                           :t1.3.attr "pos" :t1.3.op "prefix" :t1.3.v "N"
                           :t2.op "any" :t2.min "0" :t2.max "2" :t2.end "on"
                           :within "paragraph"}]
              ["extended" {:t1.v "a" :t1.2.v "b" :t1.min "2" :t1.max "2"
                           :t1.ci "on"}]
-             ["cqp" {:cqp "[] []"}]]]
+             ["cqp" {:q "[] []"}]]]
       (let [query (query/of params)]
         (is (= params (query/params mode query)) mode)
         (is (= query (query/of (query/params mode query))) mode))))
@@ -318,61 +317,25 @@
                             :t2.op "any" :t2.max "3" :t3.v "kat" :t3.min "2"
                             :t3.max "2" :t3.end "on" :within "paragraph"})
         simple   (query/of {:q "lille hund" :in "lemma" :ci "on"})
-        list     (query/of {:list "hund\nkat" :in "lemma"})
-        cqp      (query/of {:cqp "[lemma = \"hund\"] within s"})
-        held-as  (fn [mode query]
-                   (query/params mode (query/project mode query)))]
+        list     (query/of {:q "hund\nkat" :in "lemma"})
+        cqp      (query/of {:q "[lemma = \"hund\"] within s"})]
     (testing "a form holds its own query whole, and the extended form every
               query of tokens"
-      (doseq [[mode query] [["simple" simple] ["list" list]
-                            ["extended" extended] ["cqp" cqp]
+      (doseq [[mode query] [["extended" extended] ["cqp" cqp]
                             ["extended" simple] ["extended" list]]]
         (is (empty? (query/loss mode query)) mode)
         (is (= query (query/project mode query)) mode)))
-    (testing "the CQP form holds every query of tokens as its CQP, kept
-              within its unit"
+    (testing "the field holds every query of tokens as its CQP, kept within
+              its unit, and loses nothing"
       (is (= {:cqp (str "[lemma = \"hund\" & pos = \"N\"] []{1,3} "
                         "[word = \"kat\"]{2,2} </s> within p")}
              (query/project "cqp" extended)))
       (is (= {:cqp "[lemma = \"lille\" %c] [lemma = \"hund\" %c] within s"}
              (query/project "cqp" simple)))
-      (is (= {:cqp "[lemma = \"(hund|kat)\"]"} (query/project "cqp" list))))
-    (testing "the simple form and the list form hold each other's words,
-              the one in order, the other as any of them"
-      (is (= [[:order]] (query/loss "list" simple)))
-      (is (= {:list "lille\nhund" :in "lemma" :ci "on"}
-             (held-as "list" simple)))
-      (is (= [[:any]] (query/loss "simple" list)))
-      (is (= {:q "hund kat" :in "lemma"} (held-as "simple" list)))
-      (testing "a word being a list of one, and a list of one a word"
-        (is (empty? (query/loss "list" (query/of {:q "hund"}))))
-        (is (empty? (query/loss "simple" (query/of {:list "hund"}))))))
-    (testing "of an extended search they hold the first word of each token,
-              matched as the first word is, and say what they dropped"
-      (is (= [[:condition 1 2] [:any-word 2] [:repeat 2]
-              [:options 3] [:repeat 3] [:edge 3]]
-             (query/loss "simple" extended)))
-      (is (= {:q "hund kat" :in "lemma" :within "paragraph"}
-             (held-as "simple" extended)))
-      (is (= [[:order] [:condition 1 2] [:any-word 2] [:repeat 2]
-              [:options 3] [:repeat 3] [:edge 3]]
-             (query/loss "list" extended)))
-      (is (= {:list "hund\nkat" :in "lemma"} (held-as "list" extended)))
-      (testing "an operator no word has is an option they lack, and a value
-                with a space in it no word"
-        (let [regex (query/of {:mode "extended" :t1.op "regex" :t1.v "h.nd"})
-              space (query/of {:mode "extended" :t1.v "lille hund"
-                               :t2.v "kat"})]
-          (is (= [[:options 1]] (query/loss "simple" regex)))
-          (is (nil? (query/project "simple" regex)))
-          (is (= [[:value 1]] (query/loss "simple" space)))
-          (is (= {:q "kat"} (held-as "simple" space))))))
-    (testing "they read CQP as words, which the reader is told"
-      (is (= [[:reading]] (query/loss "simple" cqp)))
-      (is (= {:q "[lemma = \"hund\"] within s"} (held-as "simple" cqp)))
-      (is (= [[:reading]] (query/loss "list" cqp)))
-      (is (= {:list "[lemma\n=\n\"hund\"]\nwithin\ns"}
-             (held-as "list" cqp))))
+      (is (= {:cqp "[lemma = \"(hund|kat)\"]"} (query/project "cqp" list)))
+      (doseq [query [extended simple list cqp]]
+        (is (empty? (query/loss "cqp" query)))
+        (is (empty? (query/loss "simple" query)))))
     (testing "the extended form reads no CQP, and starts blank; nor a list
               past the cap"
       (is (= [[:cqp "[lemma = \"hund\"] within s"]]
@@ -387,14 +350,15 @@
         (is (= [[:list n]] (query/loss "extended" long)))
         (is (nil? (query/project "extended" long)))))
     (testing "what a form holds reads back as itself"
-      (doseq [mode  ["simple" "list" "extended" "cqp"]
+      (doseq [mode  ["extended" "cqp"]
               query [extended simple list cqp]]
         (let [held (query/project mode query)]
           (is (= held (query/of (query/params mode held)))
               [mode (query/->cqp query)]))))
     (testing "no query is held by no form, and loses nothing"
-      (is (nil? (query/project "simple" nil)))
-      (is (empty? (query/loss "cqp" nil))))))
+      (is (nil? (query/project "cqp" nil)))
+      (is (nil? (query/project "extended" nil)))
+      (is (empty? (query/loss "extended" nil))))))
 
 (deftest form-rows-test
   (testing "the tokens as the form shows them, then one blank, numbered
@@ -417,70 +381,69 @@
 
 (deftest arrived-test
   (let [arrived (fn [params]
-                  (select-keys (query/arrived params) [:form :loss :unread]))
+                  (select-keys (query/arrived params) [:form :from :loss :unread]))
         runs?   (fn [params] (some? (:query (query/arrived params))))
         held-as (fn [params]
                   (let [{:keys [form held]} (query/arrived params)]
                     (query/params form held)))]
     (testing "no switch: the form holds what its mode reads and runs it,
               naming what a hand-written URL carried that it does not read"
-      (is (= {:form "simple" :loss [] :unread #{}} (arrived {:q "hund"})))
+      (is (= {:form "simple" :from nil :loss [] :unread #{}}
+             (arrived {:q "hund"})))
       (is (runs? {:q "hund"}))
-      (is (= {:form "cqp" :loss [] :unread #{:in :ci}}
-             (arrived {:cqp "[]" :in "lemma" :ci "on"})))
-      (is (= {:form "simple" :loss [] :unread #{:t1.v}}
+      (is (= {:form "cqp" :from nil :loss [] :unread #{:in :ci}}
+             (arrived {:q "[]" :in "lemma" :ci "on"})))
+      (is (= {:form "list" :from nil :loss [] :unread #{:within}}
+             (arrived {:q "a\nb" :within "text"})))
+      (is (= {:form "simple" :from nil :loss [] :unread #{:t1.v}}
              (arrived {:q "hund" :t1.v "kat" :mode "simple"})))
-      (testing "a URL carrying two fields is read by the first, and told of
-                the other"
-        (is (= {:form "extended" :loss [] :unread #{:q}}
+      (testing "a URL carrying text and tokens is read as tokens, and told
+                of the text"
+        (is (= {:form "extended" :from nil :loss [] :unread #{:q}}
                (arrived {:q "hund" :t1.v "kat"}))))
       (testing "and nothing when the field is blank"
-        (is (= {:form "simple" :loss [] :unread #{}} (arrived {:q ""})))
+        (is (= {:form "simple" :from nil :loss [] :unread #{}}
+               (arrived {:q ""})))
         (is (not (runs? {:q ""})))))
-    (testing "into the tokens: the field, named for the mode it was typed
-              in, seeds them and runs as them, unless it was CQP"
+    (testing "into the tokens: the text seeds them, read by its shape, and
+              runs as them, unless it was CQP"
       (is (= {:t1.attr "lemma" :t1.v "lille" :t2.attr "lemma" :t2.v "hund"}
              (held-as {:q "lille hund" :in "lemma" :mode "extended"})))
+      (is (= "simple" (:from (query/arrived {:q "lille hund"
+                                             :mode "extended"}))))
       (is (runs? {:q "lille hund" :in "lemma" :mode "extended"}))
       (is (= {:t1.v "hund" :t1.2.v "kat" :t1.2.join "or"}
-             (held-as {:list "hund\nkat" :mode "extended"})))
-      (let [params {:cqp "[lemma = \"x\"]" :mode "extended"}]
-        (is (= {:form "extended" :loss [[:cqp "[lemma = \"x\"]"]] :unread #{}}
+             (held-as {:q "hund\nkat" :mode "extended"})))
+      (let [params {:q "[lemma = \"x\"]" :mode "extended"}]
+        (is (= {:form "extended" :from "cqp"
+                :loss [[:cqp "[lemma = \"x\"]"]] :unread #{}}
                (arrived params)))
         (is (nil? (:held (query/arrived params))))
-        (is (not (runs? params)))))
-    (testing "out of the tokens: projected into the field, run when the
-              field holds them whole, held back when part of them was lost"
-      (let [tokens {:t1.attr "lemma" :t1.v "hund" :t2.op "any" :t2.max "3"}]
-        (is (= {:q "hund" :in "lemma"} (held-as (assoc tokens :mode "simple"))))
-        (is (= [[:any-word 2] [:repeat 2]]
-               (:loss (query/arrived (assoc tokens :mode "simple")))))
-        (is (not (runs? (assoc tokens :mode "simple"))))
-        (is (= {:cqp "[lemma = \"hund\"] []{1,3} within s"}
-               (held-as (assoc tokens :mode "cqp"))))
-        (is (runs? (assoc tokens :mode "cqp"))))
-      (is (runs? {:t1.v "hund" :mode "simple"}))
-      (is (= {:q "hund"} (held-as {:t1.v "hund" :mode "simple"}))))
-    (testing "between the modes that have a field: the ticked one reads
-              the text and runs, and the change of reading is said"
-      (is (= [[:order]]
-             (:loss (query/arrived {:q "lille hund" :mode "list"}))))
-      (is (= {:list "lille\nhund"}
-             (held-as {:q "lille hund" :mode "list"})))
-      (is (runs? {:q "lille hund" :mode "list"}))
-      (is (= [[:any]]
-             (:loss (query/arrived {:list "hund\nkat" :mode "simple"}))))
-      (is (= {:q "hund kat"} (held-as {:list "hund\nkat" :mode "simple"})))
-      (is (= [[:reading]]
-             (:loss (query/arrived {:cqp "[] []" :mode "simple"}))))
-      (is (runs? {:cqp "[] []" :mode "simple"}))
-      (testing "and CQP reads the text as typed, whatever it was"
-        (let [params {:q "hund" :mode "cqp" :in "lemma"}]
-          (is (= {:form "cqp" :loss [] :unread #{}} (arrived params)))
-          (is (= {:cqp "hund"} (held-as params))))))
-    (testing "a radio naming the mode the field is named for, or a mode the
-              app does not know, is no switch"
-      (is (= {:form "simple" :loss [] :unread #{:t1.v}}
+        (is (not (runs? params))))
+      (testing "a blank field under the extended radio is a switch that
+                seeds nothing"
+        (is (= {:form "extended" :from "simple" :loss [] :unread #{}}
+               (arrived {:q "" :mode "extended"})))
+        (is (not (runs? {:q "" :mode "extended"})))))
+    (testing "out of the tokens: handed to the field as CQP, kept within
+              their unit, which holds them whole and runs them"
+      (let [tokens {:t1.attr "lemma" :t1.v "hund" :t2.op "any" :t2.max "3"
+                    :mode "simple"}]
+        (is (= {:form "cqp" :from "extended" :loss [] :unread #{}}
+               (arrived tokens)))
+        (is (= {:q "[lemma = \"hund\"] []{1,3} within s"} (held-as tokens)))
+        (is (runs? tokens)))
+      (is (= {:q "[word = \"hund\"]"} (held-as {:t1.v "hund" :mode "simple"})))
+      (testing "and blank tokens hand over nothing"
+        (is (= {:form "cqp" :from "extended" :loss [] :unread #{}}
+               (arrived {:t1.attr "lemma" :t1.v "" :mode "simple"})))
+        (is (not (runs? {:t1.attr "lemma" :t1.v "" :mode "simple"})))))
+    (testing "a radio naming the form the query is in, or a mode the app
+              does not know, is no switch"
+      (is (= {:form "simple" :from nil :loss [] :unread #{:t1.v}}
              (arrived {:q "hund" :t1.v "kat" :mode "simple"})))
-      (is (= {:form "simple" :loss [] :unread #{}}
+      (is (= {:form "cqp" :from nil :loss [] :unread #{}}
+             (arrived {:q "[]" :mode "simple"})))
+      (is (= {:form "simple" :from nil :loss [] :unread #{}}
              (arrived {:q "hund" :mode "nonesuch"}))))))
+

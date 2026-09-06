@@ -62,6 +62,13 @@ main:not(:has(> search)) { margin-inline: auto; }
    stack does not */
 code, pre, .kwic { font-family: var(--mono); }
 code { font-size: 0.9em; }
+/* a key is drawn as one, a hairline box in the running font; a chord
+   is its keys with the plus signs between them, each key boxed; a
+   label the reader presses on the screen is drawn as the button is */
+kbd, kbd samp { font-family: inherit; }
+kbd:not(:has(> kbd)) { font-size: 0.9em; padding: 0 0.3em;
+                       border: 1px solid var(--rule); border-radius: 0.25rem; }
+kbd:has(> samp) { background: var(--accent-tint); border-color: var(--accent); }
 
 h1, h2, h3, legend, caption { text-wrap: balance; }
 h1, h2, h3 { line-height: 1.25; }
@@ -266,6 +273,12 @@ form.search :is(.status, .empty):empty {
 
 /* what the words or the tokens run as: a side note under the field */
 .query > .cqp { color: var(--tx-2); }
+
+/* the field is a text area, so that a list can be typed one word per
+   line; its rows follow its lines (see
+   dk.cst.corpus-probe.views.page/query-field) and nothing else, so no
+   handle to drag */
+.query textarea { resize: none; }
 
 /* a labelled row is a grid on the line; a label holding its control is
    a subgrid of the row, its words ending on the line and its control
@@ -488,8 +501,8 @@ body:has(.sidebar) { padding-block-end: var(--sheet-block-size); }
 
 /* Documents */
 
-main.document dt, .help dt { font-weight: bold; }
-main.document dd + dt, .help dd + dt { margin-block-start: 0.75rem; }
+main.document dt { font-weight: bold; }
+main.document dd + dt { margin-block-start: 0.75rem; }
 /* the element a link named, for the reader without a script */
 main.document :target { background: var(--mark); }
 

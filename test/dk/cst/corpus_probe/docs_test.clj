@@ -67,9 +67,12 @@
                             url/cqp-guide} %)
                          (str/starts-with? % (str url/glossary "#")))
                     hrefs)))))
-  (testing "the help has no heading: it is a key to the form, not a page"
+  (testing "the help opens on the default search and heads the extended
+            one, with no title: it is a key to the form, not a page"
     (doseq [lang i18n/languages]
-      (is (not-any? docs/heading? (docs/hiccup "help" [lang])) lang)))
+      (let [blocks (docs/hiccup "help" [lang])]
+        (is (= :p (first (first blocks))) lang)
+        (is (= [:h2] (map first (filter docs/heading? blocks))) lang))))
   (testing "the CQP guide's examples are CQP's own, untranslated"
     (doseq [lang i18n/languages]
       (is (some #{[:code "[lemma = \"x\"]"]}
