@@ -182,6 +182,9 @@
          "<link rel=\"stylesheet\" href=\"/css/reset.css\">"
          "<link rel=\"stylesheet\" href=\"/css/tokens.css\">"
          "<link rel=\"stylesheet\" href=\"/css/style.css\">"
+         ;; what the chooser hides for a client to show again is shown
+         ;; outright where no client can (see resources/public/css/noscript.css)
+         "<noscript><link rel=\"stylesheet\" href=\"/css/noscript.css\"></noscript>"
          "</head><body>"
          (correct-quote-escaping (replicant/render (layout/skip-link ui)))
          "<div id=\"masthead\">"

@@ -522,9 +522,6 @@ msgstr "ordets slutning"
 msgid "part of word"
 msgstr "del af ordet"
 
-msgid "None selected"
-msgstr "Ingen valgt"
-
 
 msgid "condition {c} of token {n}"
 msgstr "betingelse {c} i token {n}"

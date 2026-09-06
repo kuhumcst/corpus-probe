@@ -1,0 +1,9 @@
+/* Loaded from <noscript> only: what the corpus chooser and the metadata
+   filter hide at rest is hidden for a client to show again when the
+   reader reaches for it, and a browser without one can never reach for
+   it, so here nothing in them is hidden at all. Without this a
+   scriptless reader could choose only from what was already chosen. The
+   server renders the resting view rather than the whole tree so that a
+   browser with a client never shows a registry unfolding and folding up
+   again while the script loads. */
+.chooser [hidden] { display: block; }

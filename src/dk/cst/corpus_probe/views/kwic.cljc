@@ -308,20 +308,13 @@
                           (i18n/tr ui "The context did not load."))
            :else         (status-row "status" (i18n/tr ui "Loading …")))]))
 
-(defn corpus-sizes
-  "How many hits each corpus holds, from the per-corpus `counts` of a
-  result: a map of corpus name to size. A corpus whose query failed has
-  no size and so no entry, its error being reported on its own."
-  [counts]
-  (into {} (keep (fn [{:keys [corpus size]}] (when size [corpus size])))
-        counts))
-
 (defn corpus-group
   "The rows of `hits`, all from one corpus, as a row group under the
   concordance `opts` (see `concordance`): a header row naming the corpus
-  (linking to its info page in `:ui`) and, from the `:sizes` of the
-  search, how many hits it holds in all, then the hit rows with their
-  expansions. The group carries the corpus's own language from `:langs`
+  (linking to its info page in `:ui`) and, from the per-corpus `:counts`
+  of the search, how many hits it holds in all, then the hit rows with
+  their expansions. A corpus whose query failed has no count, its error
+  being reported on its own. The group carries the corpus's own language from `:langs`
   when known, since the corpus text is in its own language while the
   surrounding UI is not.
 
@@ -330,8 +323,9 @@
   them. It is of the whole corpus rather than of the rows below it: a
   page holds as many hits as it holds, which is not a fact about any
   corpus."
-  [{:keys [ui langs sizes] :as opts} [{:keys [corpus]} :as hits]]
-  (let [corpus-lang (get langs corpus)]
+  [{:keys [ui langs counts] :as opts} [{:keys [corpus]} :as hits]]
+  (let [corpus-lang (get langs corpus)
+        size        (some #(when (= corpus (:corpus %)) (:size %)) counts)]
     [:tbody (cond-> {}
               corpus      (assoc :data-corpus corpus)
               corpus-lang (assoc :lang corpus-lang))
@@ -340,7 +334,7 @@
         [:th {:scope "rowgroup" :colspan column-count}
          [:a {:href (url/corpus corpus)}
           [:code corpus]]
-         (when-let [size (get sizes corpus)]
+         (when size
            (list " " (controls/entry-count (i18n/group-digits ui size))))]])
      (mapcat #(hit-rows opts %) hits)]))
 
@@ -383,7 +377,7 @@
   `:ui` (the lookup context of the headings and row controls), `:langs`
   (corpus name to the language of its own text), `:counts`, the
   per-corpus counts of the search, which head each row group (see
-  `corpus-sizes`), `:expanded`, a map of
+  `corpus-group`), `:expanded`, a map of
   `hit-key` to a wider-context hit to render beneath its row, `:client?`,
   true where the script that answers a token click is running, and
   `:cursor`, the [hit-key index] of the one tabbable token, which falls
@@ -398,7 +392,7 @@
         ;; token, which would leave the concordance with no tab stop at all
         in-range? (when-let [n (cursor-range hits expanded (first cursor))]
                     (< (second cursor) n))
-        opts      (cond-> (assoc opts :sizes (corpus-sizes (:counts opts)))
+        opts      (cond-> opts
                     (not in-range?) (assoc :cursor (default-cursor hits)))]
     [:div.scroll {:id              region-id
                   :role            "region"

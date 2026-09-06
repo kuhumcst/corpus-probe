@@ -183,13 +183,18 @@ summary { cursor: pointer; }
 /* the words beside a disabled control are greyed with it */
 label:has(:is(input, select):disabled) { color: var(--tx-3); }
 
-/* the corpus chooser and the metadata filter: a row per entry, the
+/* a chooser, which the corpus chooser and the metadata filter both
+   are: a row per entry, the
    label the whole target; trees indent by nesting, without bullets; a
    value list of hundreds scrolls inside itself */
-.corpora li label, .filters li label { display: block;
-                                       padding-block: 0.15rem; }
-.corpora ul, .filters ul { list-style: none; padding-left: 1em; }
-.filters details > ul { max-block-size: 40vh; overflow-y: auto;
+.chooser li label { display: block; padding-block: 0.15rem; }
+.chooser ul { list-style: none; padding-left: 1em;
+                          /* the rule clearing the form's margins reaches
+                             a fieldset's own children only, and a tree of
+                             lists is deeper than that: 1em between every
+                             level is a tree of gaps */
+                          margin-block: 0; }
+.values details > ul { max-block-size: 40vh; overflow-y: auto;
                         overscroll-behavior: contain; }
 
 /* a select-all and the disclosure it governs share a row; the
@@ -197,6 +202,31 @@ label:has(:is(input, select):disabled) { color: var(--tx-3); }
    indent */
 .group { display: flex; align-items: baseline; gap: 0.25em; }
 .group > details { flex: 1; min-inline-size: 0; }
+
+/* every summary in these two boxes is a row: a marker, what it names,
+   and the count at the end, with the filter box taking the line in the
+   one summary that holds one.
+
+   They also all draw their own marker. The summary holding the box has
+   no marker of its own to draw with (a row is not a list-item, which is
+   what the user agent paints a marker for), and one summary painted by
+   the user agent beside one drawn here is two markers of two sizes,
+   which is the first thing a reader sees. Drawn from the same counter
+   style the user agent uses, so it is that marker and not a triangle
+   picked to look like one, scaled to the size the user agent paints it
+   at, and scaled in place rather than in layout so that the marker
+   column stays the character's own width */
+.chooser summary {
+  display: flex; align-items: baseline; gap: 0.3rem; list-style: none;
+}
+.chooser summary::before {
+  content: counter(disclosure, disclosure-closed);
+  display: inline-block; transform: scale(1.2);
+}
+.chooser details[open] > summary::before {
+  content: counter(disclosure, disclosure-open);
+}
+summary > .find { flex: 1; min-inline-size: 0; }
 
 /* The rail: one rhythm, and controls that fill their rows */
 
@@ -232,8 +262,7 @@ form.search :is(.status, .empty):empty {
 /* a labelled row is a grid on the line; a label holding its control is
    a subgrid of the row, its words ending on the line and its control
    filling the rest */
-.matching p:has(> label > select),
-.find {
+.matching p:has(> label > select) {
   display: grid; grid-template-columns: var(--label-col) 1fr;
   column-gap: 0.5rem; align-items: center;
 }
@@ -243,18 +272,24 @@ form.search :is(.status, .empty):empty {
   align-items: center; text-align: end;
 }
 .matching p:has(> label > select)
-  > label > :is(select, input:not([type="checkbox"])),
-.find input { inline-size: 100%; min-inline-size: 0; text-align: start; }
-.find label { text-align: end; }
+  > label > :is(select, input:not([type="checkbox"])) {
+  inline-size: 100%; min-inline-size: 0; text-align: start;
+}
 .modes > p { display: flex; flex-wrap: wrap; gap: 0.25rem 1rem; }
 
 /* a metadata attribute's pattern takes a row and its two bounds the
-   next, deeper in the box than the line reaches */
+   next, deeper in the box than the line reaches. Every part of it may
+   shrink: a field with a size of its own is wider than this box, and
+   without a floor of nought each row overflowed it.
+   TODO: these three rows want a design of their own. They are the only
+   controls this deep in a tree, and reading as a form inside a list is
+   what makes them sit oddly */
 .pattern { display: flex; flex-wrap: wrap; align-items: center;
-           gap: 0.5rem; }
-.pattern > label { display: flex; align-items: center; gap: 0.5rem; }
+           gap: 0.25rem 0.5rem; margin-block: 0.25rem; min-inline-size: 0; }
+.pattern > label { display: flex; align-items: center; gap: 0.5rem;
+                   flex: 1; min-inline-size: 0; }
 .pattern > label:first-child { flex-basis: 100%; }
-.pattern > label > input:not([inputmode]) { flex: 1; min-inline-size: 0; }
+.pattern > label > input { flex: 1; min-inline-size: 0; }
 
 /* the tokens of an extended search stand directly in the form, a box
    each: the group around them is named for a screen reader, and a box
@@ -477,7 +512,7 @@ ul.index .size, ul.index em { grid-column: 3; justify-self: end; }
 }
 @media (min-width: 48rem) and (max-width: 63.999rem) {
   .rail { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-  .rail > .filters { grid-column: 1 / -1; }
+  .rail > .values { grid-column: 1 / -1; }
 }
 
 /* wide: the boxes are a rail beside the answer, so refining a query

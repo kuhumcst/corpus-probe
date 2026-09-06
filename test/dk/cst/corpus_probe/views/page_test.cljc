@@ -63,7 +63,7 @@
         (is (< (order :div.query) (order :input)))
         (is (< (order :input) (order :fieldset.modes)))
         (is (< (order :fieldset.modes) (order :fieldset.matching)))
-        (is (< (order :fieldset.matching) (order :fieldset.corpora)))
+        (is (< (order :fieldset.matching) (order :fieldset.chooser.corpora)))
         (testing "with the status line after the mode and above the rows"
           (is (< (order :fieldset.modes)
                  (order :div.status)))
@@ -685,7 +685,7 @@
 
 (deftest pattern-row-test
   (let [years [{:value "1583"} {:value "1591"}]
-        html  (page/pattern-row en :text_year years "15.." ["1583" nil])]
+        html  (page/pattern-row en :text_year years "15.." ["1583" nil] false)]
     (testing "a pattern field under the attribute's pattern param, holding
               what is in force"
       (is (some #(and (map? %) (= "fp.text_year" (:name %)) (= "15.." (:value %)))
@@ -709,19 +709,23 @@
       (is (not (some #(and (map? %) (= "ff.text_title" (:name %)))
                      (deep (page/pattern-row en :text_title
                                              [{:value "Havfruens sang"}]
-                                             nil nil)))))
+                                             nil nil false)))))
       (is (not (page/numeric-values? []))))
     (testing "in Danish"
       (is (some #{"mønster" "fra" "til" "et helt tal"}
-                (deep (page/pattern-row da :text_year years nil nil)))))))
+                (deep (page/pattern-row da :text_year years nil nil false)))))))
 
 (deftest filter-fieldset-test
-  (testing "no metadata renders nothing"
+  (testing "no metadata renders nothing, which is what the client asks
+            before deciding whether fresh filters are worth fetching"
     (is (nil? (page/filter-fieldset en nil {})))
     (is (nil? (page/filter-fieldset en {:attrs    []
                                           :unlisted []
                                           :selected {}}
-                                    {}))))
+                                    {})))
+    (is (false? (page/filterable? {:attrs [] :unlisted [] :selected {}})))
+    (is (true? (page/filterable? {:attrs [] :unlisted [:text_title] :selected {}})))
+    (is (true? (page/filterable? {:attrs [] :unlisted [] :selected {:a #{"1"}}}))))
   (let [selected {:text_year  #{"1591" "1600"}
                   :text_title #{"Havfruens sang"}}
         html (page/filter-fieldset
@@ -733,7 +737,7 @@
                            :rows [{:value "S" :total 2}]}]
                :unlisted [:text_title]
                :selected selected}
-              {:served selected})
+              {})
         inputs (filter #(and (map? %) (= "checkbox" (:type %))) (deep html))]
     (testing "each value is a checkbox under the attribute's filter param"
       (is (= ["f.text_year" "f.text_year" "f.text_year" "f.text_party"
@@ -747,38 +751,75 @@
                                               [(:value %)]]]
                       (get-in % [:on :change]))
                   inputs)))
-    (testing "the count is of what the boxes say now"
-      (is (some #{"3 selected"} (deep html))))
-    (testing "but what is open is of what the page was served"
-      ;; ticking a first value must not open the fieldset under the reader,
-      ;; nor unticking the last one shut it
-      (is (= [false] (->> (deep (page/filter-fieldset
-                                 "en" {:attrs [] :unlisted []
-                                       :selected {:text_year #{"1591"}}}
-                                 {}))
-                          (filter #(and (map? %) (contains? % :open)))
-                          (map :open))))
-      (is (= [true] (->> (deep (page/filter-fieldset
-                                "en" {:attrs    [{:name :text_year :rows []}]
-                                      :unlisted [] :selected {}}
-                                {:served {:text_year #{"1591"}}}))
-                         (filter #(and (map? %) (contains? % :open)))
-                         (map :open)))))
+    (testing "the count is of what the boxes say now, out of the values
+              the fieldset offers"
+      (is (some #{[:small.count "(3/5)"]} (deep html))))
+    (testing "and so is what is open, the fieldset's disclosure and each
+              attribute's: part of the values chosen and the rest not is
+              the one state the count cannot show (see `open-at-rest`)"
+      (is (= [true true] (->> (deep (page/filter-fieldset
+                                     "en" {:attrs    [{:name :text_year
+                                                       :rows  [{:value "1591"}
+                                                               {:value "1592"}]}]
+                                           :unlisted []
+                                           :selected {:text_year #{"1591"}}}
+                                     {}))
+                              (filter #(and (map? %) (contains? % :open)))
+                              (map :open))))
+      (is (= [false false] (->> (deep (page/filter-fieldset
+                                       "en" {:attrs    [{:name :text_year
+                                                         :rows  [{:value "1591"}]}]
+                                             :unlisted []
+                                             :selected {:text_year #{"1591"}}}
+                                       {}))
+                                (filter #(and (map? %) (contains? % :open)))
+                                (map :open)))))
     (testing "the attributes not on offer are a caveat, so small print"
       (is (some #(and (vector? %) (= :small (first %))) (deep html)))
       (is (some #{[:code "text_title"]} (deep html))))
-    (testing "the reader owns the disclosure once they have touched it"
-      (let [open* (fn [opts] (->> (deep (page/filter-fieldset
-                                         "en" {:attrs [{:name :a :rows []}]
-                                               :unlisted [] :selected {}}
-                                         opts))
-                                  (filter #(and (map? %) (contains? % :open)))
-                                  first :open))]
-        (is (false? (open* {})))
-        (is (true? (open* {:served {:a #{"1"}}})))
-        (is (true? (open* {:open? true})))
-        ;; and a reader who shut it is not overruled by what was served
-        (is (false? (open* {:open? false :served {:a #{"1"}}})))))
+    (testing "given the set of what is open, that decides it, whatever is
+              chosen: the view never opens or shuts anything itself"
+      (let [open* (fn [chosen opts]
+                    (->> (deep (page/filter-fieldset
+                                "en" {:attrs [{:name :a
+                                               :rows [{:value "1"}
+                                                      {:value "2"}]}]
+                                      :unlisted [] :selected chosen}
+                                opts))
+                         (filter #(and (map? %) (contains? % :open)))
+                         (map :open)))]
+        (is (= [false false] (open* {} {})))
+        (is (= [true true] (open* {:a #{"1"}} {})))
+        ;; every value chosen is as settled as none, and says so itself
+        (is (= [false false] (open* {:a #{"1" "2"}} {})))
+        (is (= [true false] (open* {} {:open #{:root}})))
+        (is (= [false true] (open* {:a #{"1"}} {:open #{:a}})))
+        (is (= [false false] (open* {:a #{"1"}} {:open #{} :choosing? true})))))
+    (testing "what is held stays in view at rest, and the pattern row only
+              while something is in force in it"
+      (let [hidden (fn [filters opts]
+                     (->> (deep (page/filter-fieldset
+                                 "en" (merge {:attrs    [{:name :a
+                                                          :rows [{:value "1"}
+                                                                 {:value "2"}
+                                                                 {:value "3"}]}]
+                                              :unlisted []}
+                                             filters)
+                                 opts))
+                          (filter #(and (vector? %) (map? (second %))
+                                        (:hidden (second %))))
+                          (map first)))]
+        ;; at rest: the unchosen values and the empty pattern row
+        (is (= [:p.pattern :li :li] (hidden {:selected {:a #{"1"}}} {})))
+        ;; the value unticked at rest is held, so its row stays
+        (is (= [:p.pattern :li] (hidden {:selected {:a #{"1"}}}
+                                        {:held #{[:a "1"] [:a "2"]}})))
+        ;; nothing chosen and nothing in force: the attribute goes
+        (is (= [:details :p.pattern :li :li :li] (hidden {:selected {}} {})))
+        ;; a pattern in force keeps its attribute and its row
+        (is (= [:li :li :li] (hidden {:selected {} :patterns {:a "1."}} {})))
+        (testing "and while the reader is choosing nothing is hidden"
+          (is (= [] (hidden {:selected {}} {:choosing? true}))))))
     (testing "it is marked busy while its attributes are being fetched"
       (let [busy (fn [opts] (->> (deep (page/filter-fieldset
                                         "en" {:attrs [{:name :a :rows []}]
@@ -795,7 +836,7 @@
                                           :rows [{:value "1583"}
                                                  {:value "1591"}]}]
                               :unlisted [] :selected {}}
-                             {:client? true}))
+                             {:client? true :choosing? true}))
                       (filter #(and (map? %) (contains? % :replicant/on-render))))]
         ;; the fieldset's own control comes first, then one per attribute
         (is (= ["Clear filter" "All values of text_year"]
@@ -842,16 +883,21 @@
                                              :unlisted [] :selected {}}
                                        opts))
                                 (filter #(and (map? %)
-                                              (= "value-filter" (:id %))))
+                                              (= "values-filter" (:id %))))
                                 first))]
         (is (nil? (box {})))
         (is (= "search" (:type (box {:client? true}))))
-        ;; and its own label, not the corpus filter's
-        (is (some #{[:label {:for "value-filter"} "Filter"]}
-                  (deep (page/filter-fieldset
-                         "en" {:attrs [{:name :a :rows []}]
-                               :unlisted [] :selected {}}
-                         {:client? true}))))
+        ;; named by its placeholder, and in the summary of the disclosure
+        ;; it narrows, as the corpus chooser's box is
+        (is (= "Filter" (:placeholder (box {:client? true}))))
+        (is (= "Filter" (:aria-label (box {:client? true}))))
+        (is (= :input.find
+               (first (nth (get-in (page/filter-fieldset
+                                    "en" {:attrs    [{:name :a :rows []}]
+                                          :unlisted [] :selected {}}
+                                    {:client? true})
+                                   [3 2 2])
+                           2))))
         (is (nil? (:name (box {:client? true}))))))
     (testing "the fieldset's own control is the chooser's, minus one half"
       (let [root (fn [selected]
@@ -888,14 +934,16 @@
         (is (false? (:disabled root)))
         (is (= [:set-checkbox-state {:indeterminate true :invalid nil}]
                (:replicant/on-render root)))))
-    (testing "one disclosure over the filter, open only while it is active"
-      (is (= [true]
+    (testing "one disclosure over the filter, open only while it is active,
+              and one per attribute, open while chosen in part"
+      (is (= [true true false false]
              (keep #(when (and (map? %) (contains? % :open)) (:open %))
                    (deep html)))))
     (testing "an attribute counts its selection without reopening itself"
       (is (some #{[:small.count "(2/3)"]} (deep html))))
-    (testing "the whole filter counts what is chosen across attributes"
-      (is (some #{"3 selected"} (deep html))))
+    (testing "the whole filter counts what is chosen across attributes,
+              the same two figures an attribute of it shows"
+      (is (some #{[:small.count "(3/5)"]} (deep html))))
     (testing "the region counts are machine-readable, with their unit"
       (is (some #{[:data {:value "2"} "2 regions"]} (deep html)))
       (is (some #{[:data {:value "1"} "1 region"]} (deep html))))

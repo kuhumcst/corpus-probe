@@ -7,6 +7,10 @@ msgstr ""
 msgid "Search CWB corpora and read KWIC concordances."
 msgstr ""
 
+#: src/dk/cst/corpus_probe/views/controls.cljc
+msgid "selected"
+msgstr ""
+
 #: src/dk/cst/corpus_probe/views/corpus.cljc
 msgid "no data"
 msgstr ""
@@ -20,7 +24,7 @@ msgid "Other"
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/corpus.cljc
-msgid "Select at least one corpus"
+msgid "All corpora in"
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/corpus.cljc
@@ -28,7 +32,7 @@ msgid "All corpora"
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/corpus.cljc
-msgid "All corpora in"
+msgid "Select at least one corpus"
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/corpus.cljc
@@ -376,14 +380,6 @@ msgid "No values found."
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/page.cljc
-msgid "None selected"
-msgstr ""
-
-#: src/dk/cst/corpus_probe/views/corpus.cljc src/dk/cst/corpus_probe/views/page.cljc
-msgid "selected"
-msgstr ""
-
-#: src/dk/cst/corpus_probe/views/page.cljc
 msgid "Too many values to list: "
 msgstr ""
 
@@ -641,7 +637,7 @@ msgstr[1] ""
 msgid "page"
 msgstr ""
 
-#: src/dk/cst/corpus_probe/views/corpus.cljc src/dk/cst/corpus_probe/views/page.cljc
+#: src/dk/cst/corpus_probe/views/controls.cljc src/dk/cst/corpus_probe/views/page.cljc
 msgid "of"
 msgstr ""
 

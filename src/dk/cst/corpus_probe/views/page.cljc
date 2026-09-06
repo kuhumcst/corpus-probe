@@ -19,7 +19,8 @@
             [dk.cst.corpus-probe.views.controls :as controls]
             [dk.cst.corpus-probe.views.corpus :as corpus-views]
             [dk.cst.corpus-probe.views.kwic :as kwic]
-            [dk.cst.corpus-probe.views.layout :as layout]))
+            [dk.cst.corpus-probe.views.layout :as layout]
+            [dk.cst.corpus-probe.views.tree :as tree]))
 
 (def form-id
   "The id of the search form, so a control that acts on a result can sit
@@ -287,57 +288,28 @@
       :else                                                    v)))
 
 (defn filter-item
-  "One metadata value `m` of attribute `attr` as a filter entry: a checkbox
-  named for the attribute's filter param, checked when `chosen` holds its
-  value, and, in `ui`, how many regions carry it, when known: a
-  chosen value the corpora no longer offer has no count.
+  "One metadata value, the leaf `m` of the filter's tree (see `tree`),
+  as a filter entry: a checkbox named for the attribute's filter param,
+  checked when the set `selected` holds the leaf's id, and, in `ui`,
+  how many regions carry the value, when known: a chosen value the
+  corpora no longer offer has no count.
 
   A value the filter box has hidden keeps its checkbox in the document,
   for the reason a filtered-out corpus does: a box the form cannot see is
   part of a filter dropped without anyone saying so."
-  [ui attr chosen {:keys [value total hidden?] :as m}]
+  [ui selected {[attr value :as id] :id :keys [total hidden?] :as m}]
   [:li (cond-> {} hidden? (assoc :hidden true))
    [:label
     [:input {:type    "checkbox"
              :name    (str filter-prefix (name attr))
              :value   value
-             :checked (contains? chosen value)
+             :checked (contains? selected id)
              :on      {:change [:toggle-filter-values [attr [value]]]}}]
     " " (attribute-value attr value)
     (when total
       (list " " [:data {:value (str total)}
                  (str (i18n/group-digits ui total) " "
                       (i18n/trn ui "region" "regions" total))]))]])
-
-(defn attr-rows
-  "The rows to offer for attribute `attr`: its listed `rows` followed by
-  the `chosen` values missing from them, so a selection is never lost on
-  resubmit."
-  [rows chosen]
-  (let [listed (set (map :value rows))]
-    (into (vec rows)
-          (for [value (sort chosen) :when (not (listed value))]
-            {:value value}))))
-
-(defn narrow-attrs
-  "`attrs` (each with its rows already prepared) with every value that
-  does not answer `q` marked `:hidden?`, and an attribute left with
-  nothing showing marked too.
-
-  An attribute whose own name answers `q` keeps all of its values, so
-  naming an attribute is a way of asking for its values rather than a way
-  of finding none. Marked rather than dropped, so that what a reader has
-  chosen goes on being submitted while they look for something else."
-  [q attrs]
-  (mapv (fn [{:keys [name rows] :as attr}]
-          (let [whole? (controls/answers? q name)
-                rows   (mapv #(cond-> %
-                                (not (or whole? (controls/answers? q (:value %))))
-                                (assoc :hidden? true))
-                             rows)]
-            (cond-> (assoc attr :rows rows)
-              (every? :hidden? rows) (assoc :hidden? true))))
-        attrs))
 
 (defn numeric-values?
   "True when every listed value of `rows` is an integer, so that a range
@@ -357,8 +329,9 @@
 
   A bound takes a whole number and says so, so a bound that is not one
   is reported by the browser, in its own words, rather than dropped by
-  the server, which reads no number out of it."
-  [ui attr rows pattern [from to :as bounds]]
+  the server, which reads no number out of it. `hidden?` keeps the row
+  in the document while the reader is shown only what is in force."
+  [ui attr rows pattern [from to :as bounds] hidden?]
   (let [field (fn [prefix value attrs]
                 [:input (merge {:name         (str prefix (name attr))
                                 :value        (or value "")
@@ -372,7 +345,7 @@
                         :size      6
                         :pattern   "-?[0-9]*"
                         :title     (i18n/tr ui "a whole number")}))]
-    [:p.pattern
+    [:p.pattern (cond-> {} hidden? (assoc :hidden true))
      [:label (i18n/tr ui "pattern") " " (field "fp." pattern {:type "search"})]
      (when (numeric-values? rows)
        (list " "
@@ -380,46 +353,55 @@
              " "
              [:label (i18n/tr ui "to") " " (bound "ft." to)]))]))
 
-(defn filter-details
-  "The disclosure of one prepared metadata attribute (its `:name`, its
-  `:rows` and whether the filter has left it `:hidden?`) in the filter
-  fieldset, with what is in force for that attribute, the `:chosen`
-  values, the `:pattern` and the `:range` (see `pattern-row`), and,
-  where `client?`, a control taking every value showing.
-
-  Closed whatever is chosen, its summary counting how many of the values
-  showing are chosen (see
-  dk.cst.corpus-probe.views.controls/entry-count) and saying when a
-  pattern or range is in force: one attribute may carry hundreds of
-  values, and reopening them on every resubmit grew the form exactly
-  while the reader was refining it. The wording is in `ui`."
-  [ui client? {attr :name :keys [rows hidden?]}
-   {:keys [chosen pattern] bounds :range}]
-  ;; a set even when nothing is chosen, since it is read as a predicate
-  (let [chosen  (set chosen)
-        showing (mapv :value (remove :hidden? rows))]
-    (controls/toggled
-     (when client?
-       (controls/select-all (str (i18n/tr ui "All values of") " " (name attr))
-                            showing chosen
-                            [:toggle-filter-values [attr showing]]))
-     [:details (cond-> {} hidden? (assoc :hidden true))
-      [:summary [:code (name attr)] " "
-       (controls/entry-count (count (filter chosen showing)) (count showing))
-       (when (some #(not (str/blank? %)) (cons pattern bounds))
-         (str " · " (i18n/tr ui "pattern")))]
-      (pattern-row ui attr rows pattern bounds)
-      [:ul (map (partial filter-item ui attr chosen) rows)]])))
-
-(defn value-count
-  "How many metadata values are chosen across every attribute of
-  `selected`, a map of attribute to the set chosen under it."
+(defn pairs
+  "`selected`, each metadata attribute mapped to the values chosen under
+  it, as the set of [attribute value] pairs: how the filter's tree names
+  a value (see `tree`)."
   [selected]
-  (reduce + (map count (vals selected))))
+  (into #{} (for [[attr values] selected, value values] [attr value])))
+
+(defn attr-node
+  "The node of attribute `attr` in the filter's tree (see `tree`): its
+  listed `rows` as its leaves, followed by the values among the `chosen`
+  pairs that the rows lack, so a selection is never lost on resubmit,
+  and marked in force while a `pattern` or either of the `bounds` stands
+  for it."
+  [attr rows chosen pattern bounds]
+  (let [listed (set (map :value rows))
+        rows   (into (vec rows)
+                     (for [[a value] (sort chosen)
+                           :when (and (= a attr) (not (listed value)))]
+                       {:value value}))]
+    {:id        attr
+     :label     (name attr)
+     :in-force? (boolean (some #(not (str/blank? %)) (cons pattern bounds)))
+     :items     (mapv (fn [{:keys [value] :as row}]
+                        (assoc row :id [attr value] :text value))
+                      rows)
+     :nodes     []}))
+
+(defn tree
+  "The metadata `filters` (see `filter-fieldset`) as the tree the
+  chooser takes (see dk.cst.corpus-probe.views.tree), keeping the
+  [attribute value] pairs in `chosen`: a node per listed attribute (see
+  `attr-node`), then one per attribute the list lacks but the chosen
+  values, a pattern, a range or the unlisted names mention."
+  [{:keys [attrs unlisted patterns ranges]} chosen]
+  (let [listed (set (map :name attrs))
+        node   (fn [attr rows]
+                 (attr-node attr rows chosen
+                            (get patterns attr) (get ranges attr)))]
+    (into (mapv (fn [{attr :name :keys [rows]}] (node attr rows)) attrs)
+          (for [attr  (sort (distinct (concat (map first chosen)
+                                              (keys patterns)
+                                              (keys ranges)
+                                              unlisted)))
+                :when (not (listed attr))]
+            (node attr [])))))
 
 (defn clear-toggle
-  "The control emptying the whole metadata filter, over the prepared
-  `attrs` and the `selected` values, in `ui`.
+  "The control emptying the whole metadata filter, over the `nodes` of
+  its tree and the set of `selected` pairs, in `ui`.
 
   The same control the corpus chooser carries in this position, with the
   one direction that has no meaning here taken away. Choosing every value
@@ -433,103 +415,80 @@
   It empties the whole filter rather than the part the box is showing.
   A filter is not a thing to empty by halves: what survived would be a
   constraint the reader had just told the box to hide from them."
-  [ui attrs selected]
-  (let [items (for [{attr :name :keys [rows]} attrs
-                    {:keys [value]} rows]
-                [attr value])]
-    (controls/select-all (i18n/tr ui "Clear filter")
-                         items
-                         (fn [[attr value]]
-                           (contains? (get selected attr) value))
-                         [:clear-filter]
-                         {:clear-only? true})))
+  [ui nodes selected]
+  (controls/select-all (i18n/tr ui "Clear filter")
+                       (mapcat #(map :id (:items %)) nodes)
+                       selected
+                       [:clear-filter]
+                       {:clear-only? true}))
+
+(defn filterable?
+  "True when `filters` (see `filter-fieldset`) offer anything to filter
+  by, or hold a selection to show: what decides whether the fieldset is
+  rendered at all, and so whether a reader could open it to ask for
+  fresh ones (see dk.cst.corpus-probe.ui/filters-stale?)."
+  [{:keys [attrs unlisted selected]}]
+  (boolean (or (seq attrs) (seq unlisted) (seq selected))))
 
 (defn filter-fieldset
   "The metadata filter fieldset of the search form from `filters` (see
-  dk.cst.corpus-probe.frequency/filter-options!); nil without metadata.
+  dk.cst.corpus-probe.frequency/filter-options!); nil without metadata
+  (see `filterable?`).
 
-  One disclosure over the whole filter, counting the values chosen across
-  every attribute, so a corpus with forty annotated attributes is one line
-  rather than forty. Inside it, a disclosure per listed attribute
-  (`:attrs`) holds a pattern row and a checkbox per value (see
-  `filter-details`), followed by one per attribute the list lacks but
-  the `:selected` values, the `:patterns`, the `:ranges` or the
-  `:unlisted` name, with the pattern row alone, then a note naming the
-  `:unlisted` attributes, all worded in `ui`. `:selected` maps each
-  attribute to the set of chosen values, `:patterns` to the pattern in
-  force and `:ranges` to the [from to] in force.
+  The chooser over the filter's tree (see `tree` and
+  dk.cst.corpus-probe.views.tree/chooser, which the `opts` are for, the
+  selection and what is `:held` as pairs), so a corpus with forty
+  annotated attributes is one line rather than forty. Inside it, a
+  disclosure per attribute holds a pattern row (see `pattern-row`),
+  shown at rest only while something is in force in it, and a checkbox
+  per value (see `filter-item`), then a note naming the `:unlisted`
+  attributes, all worded in `ui`. `:selected` maps each attribute to
+  the set of chosen values, `:patterns` to the pattern in force and
+  `:ranges` to the [from to] in force. The count is of `:selected`,
+  which is live: it follows the boxes as the reader ticks them.
 
-  Where `:client?`, it carries the same three controls the corpus chooser
-  does, from the same namespace: a box narrowing it to the attributes and
-  values answering `:filter`, a control per attribute taking every value
-  showing, and one beside the whole fieldset (see `clear-toggle`).
-
-  The count is of `:selected`, which is live: it follows the boxes as the
-  reader ticks them, rather than saying what the last search was for.
-  What is open follows `:served`, the selection the page arrived with,
-  until `:open?` says the reader has opened or shut it themselves, for the
-  reason the corpus chooser's does: a count that opened and shut the
-  fieldset as it changed would be moving the controls while they were
-  being used.
-
-  Which attributes there are to filter by depends on the corpora
-  selected, and only the server knows: `:pending?` marks the fieldset busy
-  while the client is fetching them for a selection that has changed."
-  [ui {:keys [attrs unlisted selected patterns ranges] :as filters}
-   {:keys [served open? pending? client?] q :filter}]
-  (when (or (seq attrs) (seq unlisted) (seq selected))
-    (let [listed    (set (map :name attrs))
-          n         (value-count selected)
-          prepared  (concat
-                     (for [{attr :name :keys [rows]} attrs]
-                       {:name attr :rows (attr-rows rows (get selected attr))})
-                     (for [attr  (sort (distinct (concat (keys selected)
-                                                         (keys patterns)
-                                                         (keys ranges)
-                                                         unlisted)))
-                           :when (not (listed attr))]
-                       {:name attr :rows (attr-rows [] (get selected attr))}))
-          filtering (not (str/blank? q))
-          shown     (cond->> prepared
-                      filtering (narrow-attrs (str/lower-case q)))
-          nothing-found? (and filtering (every? :hidden? shown))]
-      [:fieldset.filters
-       [:legend (layout/term ui :metadata false)]
-       (when client?
-         (controls/filter-box "value-filter" (i18n/tr ui "Filter") q
-                              [:filter-values]))
-       (when client?
-         (controls/filter-status (when nothing-found?
-                                   (i18n/tr ui "No values found."))))
-       (controls/toggled
-        (when client? (clear-toggle ui prepared selected))
-       ;; TODO: a visible in-flight treatment. aria-busy says it to a
-       ;; screen reader and nothing says it to anyone else; the
-       ;; role="status" pattern of `navigation-status` is the obvious one
-       ;; to reach for when we decide what it should look like
-       [:details (cond-> {:open (or filtering
-                                    (if (some? open?)
-                                      open?
-                                      (pos? (value-count served))))
-                          :on   {:toggle [:set-filters-open]}}
-                   pending?       (assoc :aria-busy "true")
-                   ;; nothing in it answers, so the message below stands
-                   ;; where it was; hidden rather than dropped, because
-                   ;; its checkboxes are what a search submits
-                   nothing-found? (assoc :hidden true))
-        [:summary (if (zero? n)
-                    (i18n/tr ui "None selected")
-                    (str n " " (i18n/tr ui "selected")))]
-        (for [{attr :name :as m} shown]
-          (filter-details ui client? m {:chosen  (get selected attr)
-                                        :pattern (get patterns attr)
-                                        :range   (get ranges attr)}))
-        ;; a caveat about the control rather than part of it, which is
-        ;; what <small> is for: these attributes are not on offer here
-        (when (seq unlisted)
-          [:p [:small (i18n/tr ui "Too many values to list: ")
-               (interpose ", "
-                          (map (fn [attr] [:code (name attr)]) unlisted))]])])])))
+  The controls are the corpus chooser's in the same places: one per
+  attribute taking every value offered, and beside the whole fieldset
+  the one that clears it (see `clear-toggle`). Which attributes there
+  are to filter by depends on the corpora selected, and only the server
+  knows: `:pending?` marks the fieldset busy while the client is
+  fetching them for a selection that has changed."
+  [ui {:keys [unlisted selected patterns ranges] :as filters}
+   {:keys [held pending?] :as opts}]
+  (when (filterable? filters)
+    (let [selected (pairs selected)
+          nodes    (tree filters (or held selected))]
+      (tree/chooser
+       ui :values nodes
+       (assoc opts
+              :selected  selected
+              :busy?     pending?
+              :legend    (layout/term ui :metadata false)
+              :not-found (i18n/tr ui "No values found.")
+              :control   (fn [_] (clear-toggle ui nodes selected))
+              :toggle    (fn [{:keys [id offered]}]
+                           (controls/select-all
+                            (str (i18n/tr ui "All values of") " " (name id))
+                            offered selected
+                            [:toggle-filter-values [id (mapv second offered)]]))
+              :item      (partial filter-item ui selected)
+              :summary   (fn [{:keys [label in-force?] :as node}]
+                           (list [:code label] " "
+                                 (tree/node-count selected node)
+                                 (when in-force?
+                                   (str " · " (i18n/tr ui "pattern")))))
+              :extra     (fn [{:keys [id items in-force?]} resting?]
+                           (pattern-row ui id items
+                                        (get patterns id) (get ranges id)
+                                        (and resting? (not in-force?))))
+              ;; a caveat about the control rather than part of it, which
+              ;; is what <small> is for: these attributes are not on
+              ;; offer here
+              :after     (when (seq unlisted)
+                           [:p [:small (i18n/tr ui "Too many values to list: ")
+                                (interpose ", "
+                                           (map (fn [attr] [:code (name attr)])
+                                                unlisted))]]))))))
 
 (defn query-example
   "The example query shown for `mode`, in `ui`: the modes take different
@@ -1108,16 +1067,16 @@
   what they asked.
 
   Where the client runs, `navigation-status` follows the form inside the
-  landmark, and `:served-corpus`, the corpora this page was served for,
-  decides which folders of the chooser start open while `:params`
-  follows what the reader is choosing now."
+  landmark, and the chooser and the metadata filter show what is chosen
+  or everything there is to choose, by what `:lists` holds of each (see
+  dk.cst.corpus-probe.ui/lists and
+  dk.cst.corpus-probe.views.corpus/chooser)."
   [{:keys [ui view folders filter-controls search-attrs params tokens
-           value-lists switch client? pending? served-corpus served-filter
-           corpus-filter value-filter chooser-open? filters-open?
-           filters-pending?]
+           value-lists switch client? pending? lists filters-pending?]
     :as state}
    action extra]
   (let [{:keys [corpus in ci match within]} params
+        {:keys [corpora values]} lists
         mode    (url/mode params)
         text    (get params (url/field mode))
         ;; a control the mode does not read is taken away rather than
@@ -1215,18 +1174,20 @@
        ;; every corpus and submitting is indistinguishable from arriving
        ;; with no corpus named, which searches them all
        [:input {:type "hidden" :name "scope" :value "chosen"}]
+       ;; each list's state is named for the chooser's options, and what
+       ;; it holds beyond them the chooser ignores
        (corpus-views/chooser ui folders
-                             {:selected (set corpus)
-                              :served   (set (or served-corpus corpus))
-                              :client?  client?
-                              :filter   corpus-filter
-                              :open?    chooser-open?})
+                             (assoc corpora
+                                    :selected (set corpus)
+                                    :held     (into (set corpus)
+                                                    (:unticked corpora))
+                                    :client?  client?))
        (filter-fieldset ui filter-controls
-                        {:served   served-filter
-                         :open?    filters-open?
-                         :pending? filters-pending?
-                         :client?  client?
-                         :filter   value-filter})]]
+                        (assoc values
+                               :held     (into (pairs (:selected filter-controls))
+                                               (:unticked values))
+                               :pending? filters-pending?
+                               :client?  client?))]]
      ;; only where the client runs: every other navigation is the
      ;; browser's own, and the browser reports those itself
      (when client? (navigation-status ui pending?))]))

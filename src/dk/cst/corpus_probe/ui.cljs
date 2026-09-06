@@ -21,14 +21,17 @@
   Every URL this client writes, a submitted form's and the one carrying
   the expansions, goes through dk.cst.corpus-probe.url, so it is the URL
   the server would have written for the same search."
-  (:require [clojure.string :as str]
+  (:require [clojure.set :as set]
+            [clojure.string :as str]
             [cognitect.transit :as transit]
             [dk.cst.corpus-probe.i18n :as i18n]
             [dk.cst.corpus-probe.query :as query]
             [dk.cst.corpus-probe.url :as url]
+            [dk.cst.corpus-probe.views.corpus :as corpus-views]
             [dk.cst.corpus-probe.views.kwic :as kwic]
             [dk.cst.corpus-probe.views.layout :as layout]
             [dk.cst.corpus-probe.views.page :as page]
+            [dk.cst.corpus-probe.views.tree :as tree]
             [dk.cst.corpus-probe.views.app :as app-views]
             [replicant.dom :as r]))
 
@@ -289,18 +292,145 @@
       (assoc selected attr chosen)
       (dissoc selected attr))))
 
+(def lists
+  "The two lists a reader chooses from, the corpus chooser and the
+  metadata filter, by the name their controls send, each with what the
+  client needs to keep its state apart from the rest of the page.
+
+  That state is under `:lists` in the state, per list: `:open`, the set
+  of its disclosures standing open, `:root` for its own and the id of
+  each node for theirs, which the document mirrors exactly (see
+  `toggle-open!`); `:choosing?`, whether the reader is choosing from it,
+  which shows everything in it rather than only what is chosen (see
+  `engage!`); and `:unticked`, what they have unticked at rest since
+  they last left, which stays in place until then (see `tick`). Both
+  lists are one chooser (see dk.cst.corpus-probe.views.tree/chooser),
+  and its rules are applied to that state here.
+
+  Here, per list: `:tree` builds its tree from the state, with what is
+  held chosen kept in it, and `:chosen` reads its selection out of the
+  state as the set of leaf ids the tree names."
+  {:corpora {:tree   (fn [s _]
+                       (corpus-views/tree (i18n/->ui (:lang s)) (:folders s)))
+             :chosen (fn [s] (set (get-in s [:params :corpus])))}
+   :values  {:tree   (fn [s held] (page/tree (:filter-controls s) held))
+             :chosen (fn [s]
+                       (page/pairs (get-in s [:filter-controls :selected])))}})
+
+(defn held
+  "What the resting view of list `k` (see `lists`) treats as chosen in
+  state `s`: its selection, and what was unticked at rest since the
+  reader last left."
+  [s k]
+  (into ((:chosen (lists k)) s) (get-in s [:lists k :unticked])))
+
+(defn rest-open
+  "The disclosures of list `k` (see `lists`) that stand open at rest in
+  state `s` with `held` chosen (see
+  dk.cst.corpus-probe.views.tree/open-at-rest)."
+  [s k held]
+  (tree/open-at-rest ((:tree (lists k)) s held) held))
+
+(defn settle
+  "State `s` with list `k` (see `lists`) at rest: nobody choosing from
+  it, nothing unticked, and open exactly what the resting view opens
+  over what is chosen now, except the root, which stays shut if the
+  reader shut it: a reader who folded the list up has said so."
+  [s k]
+  (let [resting (rest-open s k ((:chosen (lists k)) s))]
+    (update-in s [:lists k] assoc
+               :choosing? false
+               :unticked  #{}
+               :open      (cond-> resting
+                            (not (contains? (get-in s [:lists k :open]) :root))
+                            (disj :root)))))
+
+(defn tick
+  "State `s` once the `ids` of list `k` (see `lists`) have been ticked
+  or, when `unticking?`, unticked.
+
+  At rest, what is unticked stays in place until the reader leaves (see
+  `held`), so that a box unticked by mistake is there to be ticked
+  again, and only what the change leaves chosen whole or not at all
+  shuts, which is never anything the reader is looking into. While they
+  are choosing, nothing moves at all."
+  [s k ids unticking?]
+  (let [{:keys [choosing? open]} (get-in s [:lists k])
+        s (update-in s [:lists k :unticked]
+                     (if unticking? into #(apply disj % ids)) ids)]
+    (cond-> s
+      (not choosing?)
+      (assoc-in [:lists k :open]
+                (set/intersection open (rest-open s k (held s k)))))))
+
+(defn engage!
+  "Take the reader to be choosing from list `k` (see `lists`): nothing
+  in it is hidden from here until they leave, and its root stands open,
+  since the box that asks for this sits in the root's summary and is
+  reached whether the root is open or shut."
+  [k]
+  (swap! state update-in [:lists k]
+         #(-> % (assoc :choosing? true) (update :open conj :root))))
+
+(defn leave!
+  "Put list `k` (see `lists`) at rest, the reader having gone elsewhere
+  (see `settle`), unless its filter box still holds something: a filter
+  in force is a reader still looking, and the list stays as the filter
+  left it. Nothing to do for a list already at rest with nothing
+  unticked, which is most lists most of the time."
+  [k]
+  (let [{:keys [choosing? unticked] q :filter} (get-in @state [:lists k])]
+    (when (and (str/blank? q) (or choosing? (seq unticked)))
+      (swap! state settle k))))
+
+(defn toggle-open!
+  "Record disclosure `id` of list `k` (see `lists`) as `open?`, the reader
+  having worked it, and answer what that says: a disclosure coming open
+  while nobody is choosing is the reader asking to choose (see
+  `engage!`), and the root shutting is them finishing (see `leave!`).
+
+  A <details> fires its own toggle when this client opens or shuts it
+  too. That echo says what the state already says, so it is ignored, and
+  only a toggle that differs from the state is the reader's: the state
+  is what the document was rendered from, so the two differ only where a
+  reader has worked the disclosure since."
+  [k id open?]
+  (let [{:keys [open choosing?]} (get-in @state [:lists k])]
+    (when-not (= open? (contains? open id))
+      (swap! state update-in [:lists k :open] (if open? conj disj) id)
+      (cond
+        (and open? (not choosing?)) (engage! k)
+        (and (not open?) (= :root id)) (leave! k)))))
+
+(defn filter!
+  "Narrow list `k` (see `lists`) to whatever answers `q`, and open every
+  disclosure holding something that does: a reader who has asked where
+  something is has asked to be shown it."
+  [k q]
+  (swap! state (fn [s]
+                 (cond-> (assoc-in s [:lists k :filter] q)
+                   (not (str/blank? q))
+                   (update-in [:lists k :open] into
+                              (tree/matching q ((:tree (lists k)) s
+                                                (held s k))))))))
+
 (defn toggle-corpora!
   "Select every corpus in `ids`, or clear them all when they are already
-  selected.
+  selected, and note the change for the chooser (see `tick`).
 
   One rule serves a single corpus and a whole folder alike: a box that is
   on turns off, and a folder that is wholly selected clears, while a
   folder that is only partly selected fills rather than clearing the part
   of it the reader already had."
   [ids]
-  (swap! state update-in [:params :corpus]
-         (fn [corpus]
-           (select-corpora corpus ids (not (every? (set corpus) ids))))))
+  (swap! state
+         (fn [s]
+           (let [corpus     (get-in s [:params :corpus])
+                 unticking? (every? (set corpus) ids)]
+             (-> s
+                 (assoc-in [:params :corpus]
+                           (select-corpora corpus ids (not unticking?)))
+                 (tick :corpora ids unticking?))))))
 
 (defn cancel!
   "Call off whatever `timer` was waiting to do."
@@ -362,11 +492,19 @@
   "True when the metadata filters `state` holds are not the ones the
   corpora now selected offer, and the reader is looking at them.
 
-  Only while they are open: filters nobody has opened are filters nobody
-  has to fetch, and a corpus selection is usually changed several times
-  before anyone asks what metadata it carries."
-  [{:keys [filters-open? filters-for] :as state}]
-  (and filters-open? (not= (chosen-corpora state) filters-for)))
+  Only while the filter stands open: filters nobody has opened are
+  filters nobody has to fetch, and a corpus selection is usually changed
+  several times before anyone asks what metadata it carries. Unless
+  nothing is on show at all (see
+  dk.cst.corpus-probe.views.page/filterable?), since a fieldset that is
+  not there is one the reader cannot open to ask. And never for no
+  corpora: a search cannot run without one, and what the server answers
+  for none is nothing, which would only take the fieldset away."
+  [{:keys [filters-for filter-controls] :as state}]
+  (and (or (contains? (get-in state [:lists :values :open]) :root)
+           (not (page/filterable? filter-controls)))
+       (seq (chosen-corpora state))
+       (not= (chosen-corpora state) filters-for)))
 
 (defn fetch-filters!
   "Fetch the metadata filters `corpora` offer and put them in the state,
@@ -399,7 +537,14 @@
                               (-> (assoc :filters-for corpora)
                                   (update :filter-controls merge
                                           (select-keys options
-                                                       [:attrs :unlisted])))))))))
+                                                       [:attrs :unlisted]))
+                                  ;; new attributes, so what the resting
+                                  ;; view opens is decided afresh, unless
+                                  ;; the reader is in the list by now
+                                  (cond->
+                                    (not (get-in current
+                                                 [:lists :values :choosing?]))
+                                    (settle :values)))))))))
         (.catch (fn [_] (swap! state assoc :filters-pending? false))))))
 
 (defn refresh-filters!
@@ -610,26 +755,26 @@
   can tell when the form has moved on from what ran (see
   dk.cst.corpus-probe.views.page/question).
   `:toggle-corpora` records a corpus box or a whole folder being selected
-  or cleared, and `:set-checkbox-state`, a render hook rather than an
-  event, writes the states of a checkbox that no attribute carries: partly
-  checked, for a folder holding only part of the selection, and invalid,
-  for the corpus chooser while nothing is chosen.
-  `:toggle-filter-values` records metadata values being chosen or dropped,
-  one or a whole attribute at a time, so the filter counts what the boxes
-  say rather than what the last search asked, and `:clear-filter` empties
-  it. `:filter-values` records what the reader is looking for among those
-  values and `:swallow-enter` keeps Enter in either filter box from
-  submitting the search. `:set-filters-open` records the metadata filter
-  being opened or shut, which both decides the disclosure and says whether
-  the filters it holds are worth fetching again. `:set-chooser-open`
-  records the corpus tree being opened or shut, so that a filter can open
-  it without emptying the box shutting it again. `:filter-corpora` records
-  what the reader is looking for in the corpus chooser.
+  or cleared, `:toggle-filter-values` metadata values being chosen or
+  dropped, one or a whole attribute at a time, and `:clear-filter` the
+  whole filter being emptied, so that each list counts what its boxes
+  say rather than what the last search asked (see `tick`).
+  `:set-checkbox-state`, a render hook rather than an event, writes the
+  states of a checkbox that no attribute carries: partly checked, for a
+  folder holding only part of the selection, and invalid, for the corpus
+  chooser while nothing is chosen.
+  The rest work the two lists (see `lists`), named by the action's
+  first argument: `:engage` is the filter box taking focus, `:filter`
+  what is typed in it, `:toggle-open` one of the list's disclosures
+  opening or shutting, named by the second argument, `:leave` focus
+  leaving the fieldset (a click elsewhere is heard by `leave-on-click!`),
+  and `:swallow-enter` keeps Enter in either box from submitting the
+  search.
 
   Re-rendering the form does not disturb what the reader has typed: the
   query input's value is the same in both renders, so Replicant leaves the
   element alone."
-  [data [action arg]]
+  [data [action arg id]]
   (case action
     :set-mode
     (switch-mode! (.-form (.-target (:replicant/dom-event data))) arg)
@@ -655,27 +800,47 @@
       (swap! state update-in [:tokens (dec i)] with-field field value))
     :apply-view (apply-view!)
     :toggle-corpora (do (toggle-corpora! arg) (refresh-filters!))
+    :toggle-filter-values
+    (let [[attr values] arg]
+      (swap! state
+             (fn [s]
+               (let [chosen (set (get-in s [:filter-controls :selected attr]))]
+                 (-> s
+                     (update-in [:filter-controls :selected]
+                                choose-values attr values)
+                     (tick :values (map (partial vector attr) values)
+                           (every? chosen values)))))))
+    :clear-filter
+    (swap! state
+           (fn [s]
+             (-> s
+                 (assoc-in [:filter-controls :selected] {})
+                 (tick :values (page/pairs (get-in s [:filter-controls :selected]))
+                       true))))
     ;; what metadata a selection offers is the server's to say, so it is
     ;; fetched rather than known, and only once a reader looks at it
-    :set-filters-open
-    (do (swap! state assoc :filters-open?
-               (.-open (.-target (:replicant/dom-event data))))
-        (refresh-filters!))
-    :toggle-filter-values
-    (swap! state update-in [:filter-controls :selected]
-           choose-values (first arg) (second arg))
-    :clear-filter
-    (swap! state assoc-in [:filter-controls :selected] {})
-    :filter-values (swap! state assoc :value-filter
-                          (.-value (.-target (:replicant/dom-event data))))
-    ;; the reader owns the corpus tree's disclosure once they have opened
-    ;; or shut it; before that the view decides from what was served
-    :set-chooser-open
-    (swap! state assoc :chooser-open?
-           (.-open (.-target (:replicant/dom-event data))))
-    :filter-corpora
-    (swap! state assoc :corpus-filter
-           (.-value (.-target (:replicant/dom-event data))))
+    :engage
+    (do (engage! arg)
+        (when (= :values arg) (refresh-filters!)))
+    :toggle-open
+    (do (toggle-open! arg id (.-open (.-target (:replicant/dom-event data))))
+        (when (= :values arg) (refresh-filters!)))
+    :filter
+    (filter! arg (.-value (.-target (:replicant/dom-event data))))
+    :leave
+    (let [event (:replicant/dom-event data)
+          to    (.-relatedTarget event)]
+      ;; focus moving from one control of a fieldset to another is not
+      ;; leaving it. Nor is focus landing on something outside the tab
+      ;; order: a press on a label inside the fieldset sends focus to the
+      ;; nearest focusable ancestor for a moment, which is <main> with
+      ;; its tabindex of -1 (measured in Chrome), before the box it is
+      ;; for takes it. Only the keyboard reaches an element in the tab
+      ;; order, and a press elsewhere is heard by `leave-on-click!`
+      (when (and to
+                 (<= 0 (.-tabIndex to))
+                 (not (.contains (.-currentTarget event) to)))
+        (leave! arg)))
     ;; a text field in a form submits it on Enter, and a reader finding
     ;; something to tick is not asking for an answer yet
     :swallow-enter
@@ -862,22 +1027,26 @@
 
 (defn client-state
   "Server `data` as the state this client renders from: marked as the
-  client's, seeded with the expansions the URL names, and remembering the
-  corpora the page was served for.
+  client's, seeded with the expansions the URL names, and with each list
+  at rest.
 
-  Those last two are what the corpus chooser and the metadata filter judge
-  what to open by. The selections themselves change under the reader as
-  they tick boxes, and a disclosure that opened and shut with them would
-  fight them; what the page arrived with holds still until the next page
-  does."
+  The lists start at rest: what the chooser and the metadata filter show
+  of a served page is what the search read, and nothing opens or shuts
+  under the reader's hands from there (see `lists`)."
   [data]
   (-> data
       (assoc :client?       true
              ;; the place in the page the location names, which a
              ;; document marks (see dk.cst.corpus-probe.views.app/mark-target)
              :fragment      (fragment)
-             :served-corpus (get-in data [:params :corpus])
-             :served-filter (get-in data [:filter-controls :selected])
+             :lists         (into {}
+                                  (for [[k {:keys [tree chosen]}] lists
+                                        :let [selected (chosen data)]]
+                                    [k {:open      (tree/open-at-rest
+                                                    (tree data selected)
+                                                    selected)
+                                        :choosing? false
+                                        :unticked  #{}}]))
              ;; what the filters on screen describe, so that a selection
              ;; that has changed can be told from one that has not
              :filters-for   (vec (sort (get-in data [:params :corpus]))))
@@ -1074,6 +1243,23 @@
   (url/query-string (url/canonical (form-params form)
                                    (selectable-corpora form))))
 
+(defn leave-on-click!
+  "Put a list at rest when the reader presses anywhere outside its
+  fieldset (see `leave!`): the one gesture no element of the fieldset
+  can hear, and the one a reader makes to go on to something else. A
+  press rather than a click, so that a drag begun elsewhere counts, and
+  a press rather than focus, since a label, a summary's words and the
+  page around them take no focus, and on Safari neither does a box."
+  []
+  (.addEventListener
+   js/document "pointerdown"
+   (fn [e]
+     (doseq [k (keys lists)]
+       ;; the fieldset of a list is classed by its name (see
+       ;; dk.cst.corpus-probe.views.tree/chooser)
+       (when-not (some-> (.-target e) (.closest (str "." (name k))))
+         (leave! k))))))
+
 (defn route-clicks!
   "Take over link clicks and form submits that stay inside the app, so
   moving between views keeps the state rather than reloading the document."
@@ -1142,6 +1328,7 @@
   ;; script is running to answer them
   (reset! state (client-state (read-payload)))
   (route-clicks!)
+  (leave-on-click!)
   (r/set-dispatch! handle!)
   (add-watch state ::render (fn [_ _ _ _] (render!)))
   (render!)
