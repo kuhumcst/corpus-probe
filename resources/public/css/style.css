@@ -173,7 +173,11 @@ input[type="search"] { appearance: none; }
 fieldset { border: 1px solid var(--rule); border-radius: 2px;
            padding: 0.5rem var(--box-pad) var(--box-pad); margin: 0.75rem 0; }
 legend { padding-inline: 0.3em; font-variant: all-small-caps;
-         letter-spacing: 0.04em; font-weight: 600; color: var(--legend); }
+         letter-spacing: 0.04em; font-weight: 600; color: var(--legend);
+         /* Safari lays a legend out as a flex item when its fieldset is
+            a flex column (the search form's are), and stretches it over
+            the whole border; the others keep it as wide as its words */
+         align-self: start; }
 
 /* a disclosure that shows a text cursor does not read as a control; the
    count beside a name is a side note, in a summary or over a row group */

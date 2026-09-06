@@ -37,7 +37,11 @@
   --purple-400: #8B7EC8;
 
   /* the roles, light */
-  --bg:     var(--paper);    /* the page */
+  --bg:     #F6F4F0;         /* the page: a light grey with the paper's
+                                warmth, rather than the paper itself,
+                                which read as yellow beside the white
+                                of a field. The one value not in
+                                Flexoki, since its greys start darker */
   --field:  #FFFFFF;         /* a text field: the one value outside the
                                 scheme, since nothing in it is lighter
                                 than the paper */
