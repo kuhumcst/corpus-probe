@@ -1,71 +1,29 @@
 /* The palette and the font stacks, as roles: every colour in style.css
-   is one of these. The palette is Flexoki by Steph Ango
-   (https://stephango.com/flexoki, MIT): the base scale gives the page
-   and its text, the 600 accents serve the light scheme and the 400s the
-   dark, and each accent has one job, named by its role; magenta has
-   three, all of them a thing chosen. Only the values in use are listed.
-   The font stacks are the dmlex viewer's, plus a mono stack. */
+   is one of these. The colours are Flexoki's (https://stephango.com/flexoki,
+   MIT), light scheme only while the design is moving. One accent is
+   for what can be acted on, and its lighter and deeper steps are mixed
+   from it here, so changing the accent is changing one value. */
 
 :root {
-  /* Flexoki base, light to dark */
-  --paper:    #FFFCF0;
-  --base-50:  #F2F0E5;
-  --base-100: #E6E4D9;
-  --base-200: #CECDC3;
-  --base-300: #B7B5AC;
-  --base-500: #878580;
-  --base-600: #6F6E69;
-  --base-700: #575653;
-  --base-800: #403E3C;
-  --base-850: #343331;
-  --base-900: #282726;
-  --base-950: #1C1B1A;
-  --black:    #100F0F;
+  --accent: #BC5215;   /* what can be acted on: buttons, selects, a
+                          ticked box, the current item, the cursor */
+  --link:   #205EA6;   /* kept apart from the accent */
+  --error:  #AF3029;
+  --status: #AD8301;   /* what is still happening */
+  --mark:   #F6E2A0;   /* a match */
 
-  /* Flexoki accents, and the yellow tints a match is set on */
-  --red-600:    #AF3029;
-  --red-400:    #D14D41;
-  --orange-600: #BC5215;
-  --orange-400: #DA702C;
-  --yellow-100: #F6E2A0;
-  --yellow-850: #503D02;
-  --magenta-600: #A02F6F;
-  --magenta-400: #CE5D97;
-  --blue-600:   #205EA6;
-  --blue-400:   #4385BE;
-  --purple-600: #5E409D;
-  --purple-400: #8B7EC8;
+  --bg:     #F6F4F0;   /* the page */
+  --field:  #FFFFFF;   /* a text field, and a surface lifted off the page */
+  --tx:     #100F0F;
+  --tx-2:   #6F6E69;   /* muted: side notes, keys, the footer */
+  --rule:   #B7B5AC;   /* every hairline, and faint text */
 
-  /* the roles, light */
-  --bg:     #F6F4F0;         /* the page: a light grey with the paper's
-                                warmth, rather than the paper itself,
-                                which read as yellow beside the white
-                                of a field. The one value not in
-                                Flexoki, since its greys start darker */
-  --field:  #FFFFFF;         /* a text field: the one value outside the
-                                scheme, since nothing in it is lighter
-                                than the paper */
-  --bg-2:   var(--base-50);  /* a surface on the page: a pre, an expanded hit */
-  --ui:     var(--base-100); /* a row under the pointer */
-  --button: var(--base-800); /* a button or a select: ink, like type, since
-                                every grey read as a tint of the paper */
-  --button-hover: var(--black);
-  --button-tx:    var(--paper);
-  --rule:   var(--base-300); /* every hairline: a step past the scheme's
-                                own border, so it reads on paper */
-  --tx:     var(--black);
-  --tx-2:   var(--base-600); /* muted: side notes, keys, the footer */
-  --tx-3:   var(--base-300); /* faint: a label whose control is disabled */
-  --link:   var(--blue-600);    /* where you can go */
-  --here:   var(--magenta-600); /* where you are: the current page,
-                                   language and view. Not the link's
-                                   blue, which would say the opposite */
-  --legend: var(--magenta-600); /* the name of a group of controls */
-  --chosen: var(--magenta-600); /* a ticked box, a chosen radio */
-  --cursor: var(--purple-600);  /* the concordance's cursor */
-  --status: var(--orange-600);  /* what is still happening */
-  --error:  var(--red-600);     /* what went wrong */
-  --mark:   var(--yellow-100);  /* a match */
+  /* the accent's steps: a row under the pointer, a button's fill and
+     its fill under the pointer, and a heading in the accent */
+  --accent-pale:   color-mix(in srgb, var(--accent) 12%, white);
+  --accent-tint:   color-mix(in srgb, var(--accent) 28%, white);
+  --accent-tint-2: color-mix(in srgb, var(--accent) 45%, white);
+  --accent-deep:   color-mix(in srgb, var(--accent) 80%, black);
 
   /* Charter is in Firefox's base font-visibility list, so even strict
      tracking protection renders it rather than a fallback */
@@ -75,29 +33,5 @@
   --mono:  ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono",
            monospace;
 
-  color-scheme: light dark;  /* the browser's own controls follow */
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg:     var(--black);
-    --field:  var(--base-950);
-    --bg-2:   var(--base-950);
-    --ui:     var(--base-900);
-    --button: var(--base-200);
-    --button-hover: var(--paper);
-    --button-tx:    var(--black);
-    --rule:   var(--base-700);
-    --tx:     var(--base-200);
-    --tx-2:   var(--base-500);
-    --tx-3:   var(--base-700);
-    --link:   var(--blue-400);
-    --here:   var(--magenta-400);
-    --legend: var(--magenta-400);
-    --chosen: var(--magenta-400);
-    --cursor: var(--purple-400);
-    --status: var(--orange-400);
-    --error:  var(--red-400);
-    --mark:   var(--yellow-850);
-  }
+  color-scheme: light;  /* the browser's own controls follow */
 }

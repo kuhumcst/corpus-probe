@@ -1,8 +1,7 @@
-/* The page's layout and voice: serif prose in ink on paper, a quieter
-   sans for the apparatus around it, one Flexoki colour to a job, and
-   hairlines rather than fills. Colours and families come from
-   tokens.css; reset.css runs first. A comment says why a rule is here
-   where the rule cannot. */
+/* The page's layout and voice: serif prose, a quieter sans for the
+   apparatus around it, one role per colour, and hairlines rather than
+   fills. Colours and families come from tokens.css; reset.css runs
+   first. A comment says why a rule is here where the rule cannot. */
 
 :root {
   --page-inline-size: 80rem;  /* holds the query rail and a KWIC line */
@@ -15,7 +14,7 @@
   --box-pad: 0.75rem;
   --row-gap: 0.5rem;          /* between the rows of a box */
   --label-col: var(--line);
-  accent-color: var(--chosen);
+  accent-color: var(--accent);
 }
 fieldset, .sidebar section {
   --label-col: calc(var(--line) - var(--box-pad) - 1px);
@@ -95,16 +94,22 @@ a:hover { text-decoration-color: currentColor; }
 abbr[title] { text-decoration-color: var(--rule); }
 a abbr[title] { text-decoration: none; }
 
-/* navigation rows are chrome, not text: ink, and no underline until the
-   pointer says which. Longhands, so the current item below keeps its
-   thickness and colour under the pointer */
-nav a, .sitename { color: inherit; text-decoration-line: none; }
-nav a:hover, .sitename:hover { text-decoration-line: underline; }
+/* the site's, the result's and the pages' navigation rows are chrome,
+   not text: the page's own colour, and no underline until the pointer
+   says which. Longhands, so the current item below keeps its thickness
+   and colour under the pointer. A nav inside a document (a corpus
+   page's) keeps its links as links */
+:is(header nav, nav.views, nav.pagination) a, .sitename {
+  color: inherit; text-decoration-line: none;
+}
+:is(header nav, nav.views, nav.pagination) a:hover, .sitename:hover {
+  text-decoration-line: underline;
+}
 
 /* the current page, language and view: a bar under the item, which
    unlike bold does not widen the word and shift the row */
 header [aria-current], nav.views [aria-current] {
-  color: var(--here);
+  color: var(--accent);
   text-decoration-line: underline; text-decoration-thickness: 2px;
   text-decoration-color: currentColor; text-underline-offset: 0.3em;
 }
@@ -145,22 +150,21 @@ ul.row a, .sitename { display: inline-block; padding-block: 0.2rem; }
 
 /* Controls */
 
-/* the fill says what a control is: a text field is white, since it is
-   written in; a button or a select is ink with paper type, since it is
-   pressed, and goes black under the pointer. Checkboxes and radios keep
-   the user agent's drawing and the chosen colour. Zero specificity, so
-   a control that must read as text overrides it with a class */
+/* the fill says what a control is: a field is written in, a button or
+   a select is pressed. Checkboxes and radios keep the user agent's
+   drawing and the chosen colour. Zero specificity, so a control that
+   must read as text overrides it with a class */
 :where(input:not([type="checkbox"], [type="radio"]), select, textarea,
        button) {
   border: 1px solid var(--rule); border-radius: 0.25rem;
   padding: 0.25rem 0.5rem; background: var(--field); color: var(--tx);
 }
-:where(button, select) { background: var(--button);
-                         border-color: var(--button);
-                         color: var(--button-tx); }
+:where(button, select) { background: var(--accent-tint);
+                         border-color: var(--accent);
+                         color: var(--tx); }
 :where(button:enabled) { cursor: pointer; }
 :where(button:enabled, select:enabled):hover {
-  background: var(--button-hover); border-color: var(--button-hover);
+  background: var(--accent-tint-2);
 }
 /* a disabled control fades, as the words beside it do, and answers no
    pointer: the mode reads none of it */
@@ -173,7 +177,7 @@ input[type="search"] { appearance: none; }
 fieldset { border: 1px solid var(--rule); border-radius: 2px;
            padding: 0.5rem var(--box-pad) var(--box-pad); margin: 0.75rem 0; }
 legend { padding-inline: 0.3em; font-variant: all-small-caps;
-         letter-spacing: 0.04em; font-weight: 600; color: var(--legend);
+         letter-spacing: 0.04em; font-weight: 600; color: var(--accent-deep);
          /* Safari lays a legend out as a flex item when its fieldset is
             a flex column (the search form's are), and stretches it over
             the whole border; the others keep it as wide as its words */
@@ -185,7 +189,7 @@ summary { cursor: pointer; }
 .count { color: var(--tx-2); font-weight: normal; }
 
 /* the words beside a disabled control are greyed with it */
-label:has(:is(input, select):disabled) { color: var(--tx-3); }
+label:has(:is(input, select):disabled) { color: var(--rule); }
 
 /* a chooser, which the corpus chooser and the metadata filter both
    are: a row per entry, the
@@ -379,7 +383,7 @@ ul.row.pager { display: grid; grid-template-columns: 1fr auto 1fr;
    output: the error text carries a column-aligned pointer and scrolls,
    the .info file is prose and wraps */
 pre { font-size: 0.875rem; padding: 0.75rem 1rem;
-      background: var(--bg-2); border: 1px solid var(--rule);
+      background: var(--field); border: 1px solid var(--rule);
       border-radius: 2px; overflow-x: auto; }
 .about pre { white-space: pre-wrap; }
 
@@ -416,9 +420,9 @@ caption { caption-side: top; text-align: start; padding-block: 0.25rem;
 .kwic td.match { text-align: center; }
 .kwic .corpus th { font-family: var(--sans); font-weight: 600;
                    padding-block-start: 0.75em; }
-.kwic .hit:hover { background: var(--ui); }
+.kwic .hit:hover { background: var(--accent-pale); }
 .kwic .expanded td { white-space: normal; text-align: left;
-                     background: var(--bg-2); }
+                     background: var(--field); }
 
 /* the row's one control is a target of its own (WCAG 2.5.8), without
    the box padding that would raise the row */
@@ -432,7 +436,7 @@ caption { caption-side: top; text-align: start; padding-block: 0.25rem;
 .kwic button.token { font: inherit; color: inherit; background: none;
                      border: 0; padding: 0; cursor: pointer;
                      vertical-align: baseline; }
-.kwic button.token:focus { outline: 2px solid var(--cursor);
+.kwic button.token:focus { outline: 2px solid var(--accent);
                            outline-offset: 1px; }
 
 /* the anchors a query sets, as cqp shows them (manual section 3.3).
@@ -469,7 +473,7 @@ body:has(.sidebar) { padding-block-end: var(--sheet-block-size); }
               inset-inline-start: 0.5rem; margin: 0; padding-inline: 0.3em;
               background: var(--bg); font-size: 1rem; line-height: 1;
               font-variant: all-small-caps; letter-spacing: 0.04em;
-              font-weight: 600; color: var(--legend); }
+              font-weight: 600; color: var(--accent-deep); }
 .sidebar section > p { margin-block: 0; }
 
 /* keys and values side by side, the keys ending on a line the values
