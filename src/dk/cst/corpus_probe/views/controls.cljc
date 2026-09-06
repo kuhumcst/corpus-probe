@@ -61,12 +61,20 @@
                 :on                  {:change action}}]))))
 
 (defn entry-count
-  "How many entries a disclosure holds, `n`, beside the name in its
-  summary: in parentheses and as a side note, which the user agent sets
-  smaller and the stylesheet greys, so a shut disclosure says what is
-  inside it without the count competing with the name."
-  [n]
-  [:small.count (str "(" n ")")])
+  "How many entries a disclosure holds, `n`, or how many of the `total`
+  it holds are chosen, beside the name in its summary: in parentheses and
+  as a side note, which the user agent sets smaller and the stylesheet
+  greys, so a shut disclosure says what is inside it and how much of it
+  is taken without either number competing with the name.
+
+  Both numbers count what the disclosure would show, so a filter narrows
+  them together and neither is read against a population the other does
+  not have. The whole selection, what a filter hides included, is what
+  the fieldset's own summary says."
+  ([n]
+   [:small.count (str "(" n ")")])
+  ([n total]
+   [:small.count (str "(" n "/" total ")")]))
 
 (defn toggled
   "`disclosure` with `control` beside it as one row, or the disclosure

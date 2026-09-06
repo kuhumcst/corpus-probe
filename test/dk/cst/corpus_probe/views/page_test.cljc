@@ -75,27 +75,23 @@
         (testing "and the rows on the line each of their own: the three
                   selects in one column, the case box under them"
           (is (< (at "in") (at "match") (at "within") (at "ci"))))))
-    (testing "and the options are live only for a query they can qualify,
-              as the table of what each mode reads says"
-      (let [live (fn [mode]
-                   (->> (deep (page/search-form
-                               (assoc-in state [:params :mode] mode)
-                               "/" nil))
-                        (filter #(and (map? %)
-                                      (#{"in" "ci" "match" "within"}
-                                       (:name %))))
-                        (map (juxt :name (comp not :disabled)))))]
-        (is (= [["in" true] ["match" true] ["within" true] ["ci" true]]
-               (live "simple")))
-        (is (= [["in" true] ["match" true] ["within" false] ["ci" true]]
-               (live "list")))
-        (is (= [["in" false] ["match" false] ["within" true] ["ci" false]]
-               (live "extended")))
-        (is (= [["in" false] ["match" false] ["within" false] ["ci" false]]
-               (live "cqp")))
+    (testing "and the options are offered only for a query they can
+              qualify, as the table of what each mode reads says"
+      (let [offered (fn [mode]
+                      (->> (deep (page/search-form
+                                  (assoc-in state [:params :mode] mode)
+                                  "/" nil))
+                           (keep #(when (map? %)
+                                    (#{"in" "ci" "match" "within"}
+                                     (:name %))))))]
+        (is (= ["in" "match" "within" "ci"] (offered "simple")))
+        (is (= ["in" "match" "ci"] (offered "list")))
+        (is (= ["within"] (offered "extended")))
+        (is (empty? (offered "cqp")))
         (doseq [mode url/modes]
-          (is (= (map (fn [[k _]] (url/reads? mode (keyword k))) (live mode))
-                 (map second (live mode)))
+          (is (= (filter #(url/reads? mode (keyword %))
+                         ["in" "match" "within" "ci"])
+                 (offered mode))
               mode))))
     (testing "a simple search matches one of the corpora's attributes,
               the surface form unless the URL says otherwise"
@@ -114,18 +110,17 @@
         (testing "and one the list lacks is offered rather than replaced"
           (is (= [["word" false] ["pos" false] ["lemma" false] ["msd" true]]
                  (options (assoc-in state [:params :in] "msd")))))))
-    (testing "a disabled fieldset submits nothing, so no simple option
-              rides along with a CQP query"
-      ;; the checkboxes are still there and still ticked, so looking at
-      ;; CQP and coming back does not lose what the reader had chosen
+    (testing "no matching box at all for a query that writes its own, so
+              no simple option rides along with a CQP one"
+      ;; what the reader ticked is held in the params and comes back with
+      ;; the mode that reads it, so taking the control away loses nothing
       (let [html (deep (page/search-form
                         (-> state
                             (assoc-in [:params :mode] "cqp")
                             (assoc-in [:params :ci] "on"))
                         "/" nil))]
-        (is (some #(and (map? %) (= "ci" (:name %)) (:checked %)
-                        (:disabled %))
-                  html))))
+        (is (not (some #{:fieldset.matching} html)))
+        (is (not (some #(and (map? %) (= "ci" (:name %))) html)))))
     (testing "one status region in the form, for what a change of mode
               could not keep, empty until then; the navigation's only with
               a client to put anything in it"
@@ -245,7 +240,7 @@
               only to, is heard in context"
       (is (some #{{:role "group" :aria-label "repeat"}} (deep html))))
     (testing "the unit the tokens are kept within is chosen among the
-              options, and is live"
+              options, and is offered"
       (is (= ["sentence"] (chosen html "within")))
       (is (not (:disabled (named html "within"))))
       (is (= ["paragraph"]
@@ -253,11 +248,11 @@
                                                  "paragraph")
                                        "/" nil)
                      "within"))))
-    (testing "the simple options are dead, as for a CQP query"
-      (is (= [true true true]
-             (->> (deep html)
-                  (filter #(and (map? %) (#{"in" "ci" "match"} (:name %))))
-                  (map :disabled)))))
+    (testing "the simple options are not offered at all, an extended query
+              writing its own"
+      (is (empty? (->> (deep html)
+                       (filter #(and (map? %)
+                                     (#{"in" "ci" "match"} (:name %))))))))
     (testing "the mode is marked"
       (is (some #(and (map? %) (= "mode" (:name %)) (= "extended" (:value %))
                       (:checked %))
@@ -898,7 +893,7 @@
              (keep #(when (and (map? %) (contains? % :open)) (:open %))
                    (deep html)))))
     (testing "an attribute counts its selection without reopening itself"
-      (is (some #{" · 2 selected"} (deep html))))
+      (is (some #{[:small.count "(2/3)"]} (deep html))))
     (testing "the whole filter counts what is chosen across attributes"
       (is (some #{"3 selected"} (deep html))))
     (testing "the region counts are machine-readable, with their unit"
@@ -1143,9 +1138,8 @@
         (is (= :p (first sub)))
         (is (= "in 2 corpora" (text sub)))
         (is (= :nav.views (first views)))))
-    (testing "errors are headed sections before the counts and concordance"
+    (testing "errors are headed sections before the concordance"
       (is (some #{[:h2 "CQP error"]} (deep html)))
-      (is (some #{[:caption "Hits per corpus"]} (deep html)))
       (is (some #{:table.kwic} (deep html))))
     (testing "the sort travels with the result, not with the query form"
       (is (some #{"corpus order"} (deep html)))
@@ -1162,30 +1156,19 @@
     (testing "but only the first is a landmark, since both would share a name"
       (is (= 1 (count (filter #(and (vector? %) (= :nav.pagination (first %)))
                               (deep html))))))
-    (testing "the errors come before the counts and the concordance"
+    (testing "the errors come before the concordance"
       (let [order (fn [x] (.indexOf (vec (deep html)) x))]
-        (is (< (order [:h2 "CQP error"]) (order :table.counts)))
         (is (< (order [:h2 "CQP error"]) (order :table.kwic)))))
-    (testing "but the counts break the hits down, so they follow them"
-      (let [order (fn [x] (.indexOf (vec (deep html)) x))]
-        (is (< (order :table.kwic) (order :table.counts)))
-        ;; and after the *last* page links, which belong against the foot
-        ;; of the table they turn, not merely after the first
-        (is (< (.lastIndexOf (vec (deep html)) :ul.row.pager)
-               (order :table.counts)))
-        (is (< (order :table.counts) (order :p.downloads)))))
-    (testing "and they are an aside: about the hits rather than part of them"
-      (is (some #(and (vector? %) (= :aside (first %))
-                      (= :table.counts (first (second %))))
-                (deep html))))
-    (testing "an erroring corpus shows no count in the table"
-      (is (some #{[:em "error"]} (deep html))))
-    (testing "a single corpus gets no counts table"
-      (let [html (page/result-section
-                  {:lang   "en"
-                   :result (assoc example-result
-                                  :counts [{:corpus "PROBE" :size 5}])})]
-        (is (not (some #{[:caption "Hits per corpus"]} (deep html)))))))
+    (testing "the per-corpus counts head the concordance's row groups
+              rather than standing in a table of their own"
+      (let [html (deep (page/result-section
+                        {:lang   "en"
+                         :result (assoc example-result
+                                        :hits [{:corpus "PROBE" :cpos 9
+                                                :anchors {:matchend 9}
+                                                :match   [{:word "hund"}]}])}))]
+        (is (some #{[:small.count "(5)"]} html))
+        (is (not (some #{:table.counts} html))))))
   (testing "nothing searchable means only the errors, and the heading names one"
     (let [html (page/result-section
                 {:lang   "en"
@@ -1282,7 +1265,7 @@
 
 (deftest match-control-test
   (let [options (fn [match]
-                  (->> (deep (page/match-control en match false))
+                  (->> (deep (page/match-control en match))
                        (filter #(and (map? %) (contains? % :selected)))
                        (map (juxt :value :selected))))]
     (testing "one select over how much of the form the query must cover,
@@ -1291,13 +1274,12 @@
              (options nil)))
       (is (= [["" false] ["prefix" false] ["suffix" false] ["infix" true]]
              (options "infix"))))
-    (testing "named, and disabled while the query writes its own"
-      (is (= [:label "match" " "] (subvec (page/match-control en nil false) 0 3)))
-      (is (true? (:disabled (second (last (page/match-control en nil true)))))))
+    (testing "named"
+      (is (= [:label "match" " "] (subvec (page/match-control en nil) 0 3))))
     (testing "in either language"
-      (is (some #{"whole word" "part of word"} (deep (page/match-control en nil false))))
+      (is (some #{"whole word" "part of word"} (deep (page/match-control en nil))))
       (is (some #{"hele ordet" "en del af ordet"}
-                (deep (page/match-control da "infix" false)))))))
+                (deep (page/match-control da "infix")))))))
 
 (deftest query-field-test
   (testing "a simple or CQP query is a search box holding the query"

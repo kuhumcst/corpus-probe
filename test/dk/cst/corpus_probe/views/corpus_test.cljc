@@ -70,25 +70,19 @@
                                litteratur))))))
     (testing "the summary is computed, so a closed folder can still count,
               the count a side note beside the name"
-      (is (= [:summary (list "Litteratur" " " [:small.count "(1)"] nil)]
+      (is (= [:summary (list "Litteratur" " " [:small.count "(0/1)"])]
              (nth (corpus/folder-view
                    {:item    item
-                    :summary (partial corpus/folder-summary en #{})
+                    :summary (partial corpus/folder-summary #{})
                     :open?   (constantly false)}
                    litteratur)
                   2)))
-      (testing "and whether the selection is inside it"
-        (is (= ["Litteratur (1) · 1 selected"]
+      (testing "and how much of it the selection is, which needs no words
+                and so says the same in either language"
+        (is (= ["Litteratur (1/1)"]
                (summaries (corpus/folder-view
                            {:item    item
-                            :summary (partial corpus/folder-summary en
-                                              #{"VISER"})
-                            :open?   (constantly false)}
-                           litteratur))))
-        (is (= ["Litteratur (1) · 1 valgt"]
-               (summaries (corpus/folder-view
-                           {:item    item
-                            :summary (partial corpus/folder-summary da
+                            :summary (partial corpus/folder-summary
                                               #{"VISER"})
                             :open?   (constantly false)}
                            litteratur))))))
@@ -297,9 +291,9 @@
         ;; VISER's box is still there to be submitted, just not shown
         (is (some #(and (map? %) (= "VISER" (:value %))) html))
         (is (some #{{:hidden true}} html))
-        ;; the count is of what the filter left showing
-        (is (some #{"Folketinget (1)"} (summaries html)))
-        (is (some #{"Litteratur (0)"} (summaries html)))))
+        ;; both numbers are of what the filter left showing
+        (is (some #{"Folketinget (0/1)"} (summaries html)))
+        (is (some #{"Litteratur (0/0)"} (summaries html)))))
     (testing "the region saying nothing was found is there before it says it"
       (let [region (fn [opts]
                      (->> (corpus/chooser en folders

@@ -146,19 +146,18 @@
 
 
 (defn folder-summary
-  "What the chooser's disclosure of `folder` says of it, in `ui`: its
-  label, how many corpora it holds (see
-  dk.cst.corpus-probe.views.controls/entry-count) and how many of them
-  are in the set `selected`, so a shut folder still says what is inside
-  it and whether the selection is. Under a filter the count is of what
-  the filter left showing; the selection counts whatever it hides too,
-  since a selection out of sight is still one."
-  [ui selected folder]
-  (let [corpora (folder-corpora folder)
-        n       (count (filter (comp selected :id) corpora))]
+  "What the chooser's disclosure of `folder` says of it: its label and
+  how many of the corpora it holds are in the set `selected` (see
+  dk.cst.corpus-probe.views.controls/entry-count), so a shut folder
+  still says what is inside it and how much of it is chosen.
+
+  Both numbers are of what a filter left showing, a selection out of
+  sight being counted by the chooser's own summary instead."
+  [selected folder]
+  (let [showing (remove :hidden? (folder-corpora folder))]
     (list (:label folder) " "
-          (controls/entry-count (count (remove :hidden? corpora)))
-          (when (pos? n) (str " · " n " " (i18n/tr ui "selected"))))))
+          (controls/entry-count (count (filter (comp selected :id) showing))
+                                (count showing)))))
 
 (defn chooser-summary
   "What the corpus chooser's disclosure says about the set `selected` out
@@ -339,7 +338,7 @@
        [:summary (chooser-summary ui selected corpora)]
        (map (partial folder-view
                      {:item    (partial chooser-item ui selected)
-                      :summary (partial folder-summary ui selected)
+                      :summary (partial folder-summary selected)
                       :toggle  (when client?
                                  (partial folder-toggle ui selected))
                       :open?   (fn [folder]

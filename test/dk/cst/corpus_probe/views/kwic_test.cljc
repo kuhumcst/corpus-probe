@@ -243,9 +243,25 @@
              (get-in table [2 1 5]))))
     (testing "hits are grouped by corpus, each group headed by its name"
       (is (= 2 (count groups)))
+      ;; the count is an explicit nil where the search has none, the
+      ;; header keeping its shape whether or not one arrives
       (is (= [:th {:scope "rowgroup" :colspan 5}
-              [:a {:href "/corpora/probe"} [:code "PROBE"]]]
+              [:a {:href "/corpora/probe"} [:code "PROBE"]]
+              nil]
              (get-in (first groups) [2 1]))))
+    (testing "and by how many hits its corpus holds in all, beside the
+              name and styled as the counts in the chooser are; a corpus
+              whose query failed has none to show"
+      (let [groups (-> (kwic/concordance
+                        hits
+                        {:ui     en
+                         :counts [{:corpus "PROBE" :size 1113}
+                                  {:corpus "VISER" :error {:type :cqp}}]})
+                       (nth 2)
+                       (nth 3))]
+        (is (= [" " [:small.count "(1,113)"]]
+               (get-in (first groups) [2 1 3])))
+        (is (nil? (get-in (second groups) [2 1 3])))))
     (testing "a group carries its corpus's language when known"
       (is (nil? (:lang (second (first groups)))))
       (is (= "da" (:lang (second (second groups))))))

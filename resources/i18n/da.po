@@ -81,9 +81,6 @@ msgstr "korpusser"
 msgid "Corpora"
 msgstr "Korpusser"
 
-msgid "corpus"
-msgstr "korpus"
-
 msgid "Corpus"
 msgstr "Korpus"
 
@@ -105,9 +102,6 @@ msgstr "Hent"
 msgid "ends with"
 msgstr "slutter med"
 
-msgid "error"
-msgstr "fejl"
-
 msgid "Extended"
 msgstr "Udvidet"
 
@@ -125,9 +119,6 @@ msgstr "frekvens"
 
 msgid "Group by"
 msgstr "Gruppér efter"
-
-msgid "Hits per corpus"
-msgstr "Forekomster pr. korpus"
 
 msgid "ignore case"
 msgstr "ignorer store/små bogstaver"

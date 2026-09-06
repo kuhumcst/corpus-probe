@@ -1,8 +1,7 @@
 (ns dk.cst.corpus-probe.views.page
-  "Hiccup for the search page: the result summary, per-corpus counts,
-  pagination and the inspection sidebar, plus the pieces shared with the
-  frequency page: the search form, the error sections and the download
-  links.
+  "Hiccup for the search page: the result summary, pagination and the
+  inspection sidebar, plus the pieces shared with the frequency page:
+  the search form, the error sections and the download links.
 
   The page these build is assembled by
   dk.cst.corpus-probe.views.app/search-view, which knows both views a
@@ -388,11 +387,12 @@
   values, the `:pattern` and the `:range` (see `pattern-row`), and,
   where `client?`, a control taking every value showing.
 
-  Closed whatever is chosen, its summary counting the values showing
-  (see dk.cst.corpus-probe.views.controls/entry-count) and the selection,
-  and saying when a pattern or range is in force: one attribute may carry
-  hundreds of values, and reopening them on every resubmit grew the form
-  exactly while the reader was refining it. The wording is in `ui`."
+  Closed whatever is chosen, its summary counting how many of the values
+  showing are chosen (see
+  dk.cst.corpus-probe.views.controls/entry-count) and saying when a
+  pattern or range is in force: one attribute may carry hundreds of
+  values, and reopening them on every resubmit grew the form exactly
+  while the reader was refining it. The wording is in `ui`."
   [ui client? {attr :name :keys [rows hidden?]}
    {:keys [chosen pattern] bounds :range}]
   ;; a set even when nothing is chosen, since it is read as a predicate
@@ -405,9 +405,7 @@
                             [:toggle-filter-values [attr showing]]))
      [:details (cond-> {} hidden? (assoc :hidden true))
       [:summary [:code (name attr)] " "
-       (controls/entry-count (count showing))
-       (when (seq chosen)
-         (str " · " (count chosen) " " (i18n/tr ui "selected")))
+       (controls/entry-count (count (filter chosen showing)) (count showing))
        (when (some #(not (str/blank? %)) (cons pattern bounds))
          (str " · " (i18n/tr ui "pattern")))]
       (pattern-row ui attr rows pattern bounds)
@@ -627,11 +625,10 @@
 (defn attribute-control
   "The control choosing which positional attribute a simple search
   matches, in `ui`: a select over `attrs` with `selected` chosen (see
-  `attribute-options`), `disabled?` while the query names its own
-  attributes."
-  [ui attrs selected disabled?]
+  `attribute-options`)."
+  [ui attrs selected]
   [:label (i18n/tr ui "attribute") " "
-   [:select {:name "in" :disabled disabled?}
+   [:select {:name "in"}
     (attribute-options attrs selected)]])
 
 (defn operator-label
@@ -851,11 +848,10 @@
   "The control choosing the unit of text a search of several tokens is
   kept within, in `ui`: a select over the dk.cst.corpus-probe.url/units
   with `within` chosen, the sentence when it names none (see
-  dk.cst.corpus-probe.query/within), `disabled?` where the mode reads no
-  unit."
-  [ui within disabled?]
+  dk.cst.corpus-probe.query/within)."
+  [ui within]
   [:label (i18n/tr ui "within") " "
-   [:select {:name "within" :disabled disabled?}
+   [:select {:name "within"}
     (for [unit url/units]
       [:option {:value unit :selected (= unit (or within "sentence"))}
        (unit-label ui unit)])]])
@@ -881,13 +877,13 @@
   "The control choosing how much of the form a simple search must
   cover, in `ui`: a select over the `match-values`, each named by
   `match-label`, with `match` chosen and the whole form when it names
-  none, `disabled?` while the query is CQP, which writes its own.
+  none.
 
   One control rather than a box for each end: two boxes both ticked
   meant any part of the form, and nothing said so."
-  [ui match disabled?]
+  [ui match]
   [:label (i18n/tr ui "match") " "
-   [:select {:name "match" :disabled disabled?}
+   [:select {:name "match"}
     (for [value match-values]
       [:option {:value value :selected (= value (or match ""))}
        (match-label ui value)])]])
@@ -1076,7 +1072,8 @@
   it could not keep (its `:switch`, see `switch-notice`), and the
   matching, a row each for what a simple search matches, how loosely,
   the unit of text a search of several tokens is kept within (see
-  `within-control`) and the case. Then the scope of the search, the
+  `within-control`) and the case, of those the mode reads. Then the
+  scope of the search, the
   corpus chooser
   and the metadata filter, each behind one disclosure. So the field the
   reader reaches for is the first control in the form, whatever the
@@ -1088,8 +1085,9 @@
   The query example is the placeholder of the mode in `:params`, and the
   mode radios dispatch `:set-mode`, so choosing a mode swaps the example
   and the shape of the field without a round trip. Which options are
-  live is the mode's row of dk.cst.corpus-probe.url/fields, on both
-  sides; without the client all of it is as the search was submitted.
+  offered at all is the mode's row of dk.cst.corpus-probe.url/fields, on
+  both sides; without the client all of it is as the search was
+  submitted.
 
   The query is required, except when the form is submitted from the
   frequency view (its `:view`), which counts every token of a blank one,
@@ -1122,12 +1120,14 @@
   (let [{:keys [corpus in ci match within]} params
         mode    (url/mode params)
         text    (get params (url/field mode))
-        ;; a control the mode does not read is disabled rather than taken
-        ;; away: a reader who looks at CQP and comes back finds what they
-        ;; had ticked still ticked, the form does not change height under
-        ;; them, and a disabled control is not submitted, so nothing about
-        ;; a simple search rides along with a CQP one
-        dead?   (fn [k] (not (url/reads? mode k)))
+        ;; a control the mode does not read is taken away rather than
+        ;; shown dead: a row of greyed controls is something to read past
+        ;; before reaching one that can be used, and nothing is lost by
+        ;; taking it away, since what the reader chose is held in the
+        ;; params and comes back with the mode that reads it. A control
+        ;; that is not there is not submitted either, so nothing about a
+        ;; simple search rides along with a CQP one
+        live?   (fn [k] (url/reads? mode k))
         button  [:button {:type "submit"} (i18n/trx ui "button" "Search")]]
     [:search
      [:form.search {:id form-id :method "get" :action action}
@@ -1193,18 +1193,24 @@
        ;; matches, how loosely, the unit of text a search of several
        ;; tokens is kept within, which the words of a simple search read
        ;; as the tokens of an extended one do, and the case, from the edge
-       ;; like the modes. One row of four ran the attribute into the
-       ;; options it governs, and the case box last keeps the three
-       ;; selects in one column
-       [:fieldset.matching
-        [:legend (i18n/trx ui "legend" "Matching")]
-        [:p (attribute-control ui search-attrs in (dead? :in))]
-        [:p (match-control ui match (dead? :match))]
-        [:p (within-control ui within (dead? :within))]
-        [:p [:label [:input {:type "checkbox" :name "ci" :value "on"
-                             :checked  (some? ci)
-                             :disabled (dead? :ci)}]
-             (i18n/tr ui "ignore case")]]]
+       ;; like the modes. Only the rows the mode reads, and no box at all
+       ;; for a mode that reads none of them: a CQP query writes all four
+       ;; itself. One row of four ran the attribute into the options it
+       ;; governs, and the case box last keeps the three selects in one
+       ;; column
+       ;; TODO: what the box is called once only `within` is left in it,
+       ;; as under Extended, where the unit is the scope of a search
+       ;; rather than how a word is matched
+       (when (some live? [:in :match :within :ci])
+         [:fieldset.matching
+          [:legend (i18n/trx ui "legend" "Matching")]
+          (when (live? :in) [:p (attribute-control ui search-attrs in)])
+          (when (live? :match) [:p (match-control ui match)])
+          (when (live? :within) [:p (within-control ui within)])
+          (when (live? :ci)
+            [:p [:label [:input {:type    "checkbox" :name "ci" :value "on"
+                                 :checked (some? ci)}]
+                 (i18n/tr ui "ignore case")]])])
        ;; marks a selection the reader actually made: without it, unticking
        ;; every corpus and submitting is indistinguishable from arriving
        ;; with no corpus named, which searches them all
@@ -1343,26 +1349,6 @@
              ;; empty
              (when (pos? (or size 0))
                (sample-phrase ui sample searched))])))
-
-(defn counts-table
-  "The per-corpus hit `counts` of a search over several corpora as a table,
-  each corpus linking to its info page; a corpus whose query failed shows
-  no count (its error is reported separately). The wording is in `ui`."
-  [ui counts]
-  [:table.counts
-   [:caption (i18n/tr ui "Hits per corpus")]
-   [:thead
-    [:tr [:th {:scope "col"} (i18n/tr ui "corpus")]
-     ;; a column heading takes the plural form of what it counts
-     [:th {:scope "col"} (i18n/trn ui "hit" "hits" 2)]]]
-   [:tbody
-    (for [{:keys [corpus size error]} counts]
-      [:tr
-       [:th {:scope "row"}
-        [:a {:href (url/corpus corpus)} [:code corpus]]]
-       [:td.n (if error
-                [:em (i18n/tr ui "error")]
-                (i18n/group-digits ui size))]])]])
 
 (defn error-groups
   "The errors among the per-corpus `counts`, grouped by identical error:
@@ -1601,10 +1587,10 @@
   searched and found something, the sort, context and sample controls
   with the near control behind its disclosure (see `view-controls`), the
   pagination above and below the table, the concordance with its
-  `:expanded` hits and `:langs`, then the per-corpus counts as an aside
-  and the download links (`:export-hrefs`, exports holding at most
-  `:export-limit` hits), all worded in the state's `:ui` and wrapped in
-  the shared `results-region`. The result answers the params the search
+  `:expanded` hits, its `:langs` and the per-corpus counts that head its
+  row groups, then the download links (`:export-hrefs`, exports holding
+  at most `:export-limit` hits), all worded in the state's `:ui` and
+  wrapped in the shared `results-region`. The result answers the params the search
   was `:asked` with, not the form's `:params`, which the client's form
   leaves behind at a change of mode."
   [{:keys [ui sort-modes asked result error langs expanded client?
@@ -1641,19 +1627,11 @@
           (kwic/concordance hits {:caption  (layout/term ui :kwic false)
                                   :ui       ui
                                   :langs    langs
+                                  :counts   counts
                                   :expanded expanded
                                   :client?  client?
                                   :cursor   (:cursor state)})
           (pager-links ui prev-href next-href position)
-          ;; an <aside>, after the hits rather than before them: it is
-          ;; about the answer rather than part of it, and where the hits
-          ;; came from is a question a reader has once they have read
-          ;; them. After the page links too, which belong against the
-          ;; foot of the table they turn, where a reader who has finished
-          ;; reading reaches. Unnamed, so that inside the results
-          ;; <section> it stays a container rather than becoming a second
-          ;; complementary landmark: the table's own caption names it
-          (when (next counts) [:aside (counts-table ui counts)])
           ;; what to do next with these hits, so it follows them: reading
           ;; the concordance is the task, taking it elsewhere is the one
           ;; after

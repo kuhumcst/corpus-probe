@@ -363,10 +363,6 @@ msgstr ""
 msgid "All values of"
 msgstr ""
 
-#: src/dk/cst/corpus_probe/views/corpus.cljc src/dk/cst/corpus_probe/views/page.cljc
-msgid "selected"
-msgstr ""
-
 #: src/dk/cst/corpus_probe/views/page.cljc
 msgid "Clear filter"
 msgstr ""
@@ -381,6 +377,10 @@ msgstr ""
 
 #: src/dk/cst/corpus_probe/views/page.cljc
 msgid "None selected"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/corpus.cljc src/dk/cst/corpus_probe/views/page.cljc
+msgid "selected"
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/page.cljc
@@ -659,18 +659,6 @@ msgstr ""
 
 #: src/dk/cst/corpus_probe/api.clj src/dk/cst/corpus_probe/views/page.cljc
 msgid "All tokens"
-msgstr ""
-
-#: src/dk/cst/corpus_probe/views/page.cljc
-msgid "Hits per corpus"
-msgstr ""
-
-#: src/dk/cst/corpus_probe/views/page.cljc
-msgid "corpus"
-msgstr ""
-
-#: src/dk/cst/corpus_probe/views/page.cljc
-msgid "error"
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/page.cljc

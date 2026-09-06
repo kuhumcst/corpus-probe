@@ -176,9 +176,9 @@ legend { padding-inline: 0.3em; font-variant: all-small-caps;
          letter-spacing: 0.04em; font-weight: 600; color: var(--legend); }
 
 /* a disclosure that shows a text cursor does not read as a control; the
-   count beside its name is a side note */
+   count beside a name is a side note, in a summary or over a row group */
 summary { cursor: pointer; }
-summary .count { color: var(--tx-2); }
+.count { color: var(--tx-2); font-weight: normal; }
 
 /* the words beside a disabled control are greyed with it */
 label:has(:is(input, select):disabled) { color: var(--tx-3); }
@@ -350,12 +350,10 @@ table { border-collapse: collapse; }
 thead th { border-block-end: 1px solid var(--rule); }
 caption { caption-side: top; text-align: start; padding-block: 0.25rem;
           font-family: var(--sans); color: var(--tx-2); }
-.attributes, .counts, .frequencies { font-family: var(--sans);
-                                     font-size: 0.9rem; }
+.attributes, .frequencies { font-family: var(--sans); font-size: 0.9rem; }
 .attributes th, .attributes td,
-.counts th, .counts td,
 .frequencies th, .frequencies td { padding: 0.15em 0.5em; text-align: left; }
-.attributes .n, .counts .n, .frequencies .n { text-align: right; }
+.attributes .n, .frequencies .n { text-align: right; }
 
 /* The concordance (PLAN.md §7: the terminal KWIC, by decision) */
 
