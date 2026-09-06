@@ -29,7 +29,8 @@ CQP {#cqp}:
   forespørgslen til CQP, som du skrev den, bortset fra to navne: et
   sætningsmærke, `<s>`, og enheden i en `within`-klausul, `within s`,
   som hvert korpus omdøber efter sin egen attribut. I den simple søgning
-  skriver grænsefladen forespørgslen for dig.
+  skriver grænsefladen forespørgslen for dig. [CQP-vejledningen](/cqp)
+  viser syntaksen med eksempler.
   [CQP-manualen](https://cwb.sourceforge.io/files/CQP_Manual/) har den
   fulde syntaks.
 

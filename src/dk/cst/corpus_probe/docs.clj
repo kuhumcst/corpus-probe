@@ -1,7 +1,7 @@
 (ns dk.cst.corpus-probe.docs
   "The documents the app renders from Markdown: the frontpage, the
-  glossary and the search guide, one file per language under
-  resources/docs (`guide.da.md` beside `guide.en.md`), parsed on the
+  search help, the CQP guide and the glossary, one file per language
+  under resources/docs (`help.da.md` beside `help.en.md`), parsed on the
   server into the hiccup the views render, so the client needs no
   parser. CommonMark plus a definition list (see
   dk.cst.corpus-probe.markdown); raw HTML renders as nothing."
@@ -80,8 +80,8 @@
   (some-> (resource name langs) slurp ->hiccup))
 
 (comment
-  (hiccup "guide" ["da"])
-  (hiccup "guide" ["xx" "en"])
+  (hiccup "help" ["da"])
+  (hiccup "cqp-guide" ["xx" "en"])
   (->hiccup "# A\n\n<!-- dropped -->\n\nsome *prose*")
   ;; => ([:h1 {:id "a"} "A"] [:p "some " [:em "prose"]])
 

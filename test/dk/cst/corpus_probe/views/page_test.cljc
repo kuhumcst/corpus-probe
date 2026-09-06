@@ -412,18 +412,16 @@
                                     :switch  {:loss   [[:any]]
                                               :unread #{}}}))))))))
 
-(deftest guide-test
-  (let [blocks [[:h1 {:id "query-help"} "Query help"]
-                [:ul [:li [:code "\"hund\""] " finds a word form."]]]
-        html   (page/guide blocks)]
-    (testing "a region named by the guide's own heading, holding it"
-      (is (= [:section.help {:aria-labelledby "query-help"} blocks] html)))
-    (testing "a guide without a heading is a section without a name"
-      (is (= [:section.help {:aria-labelledby nil} [[:p "x"]]]
-             (page/guide [[:p "x"]]))))
-    (testing "no guide, no section"
-      (is (nil? (page/guide nil)))
-      (is (nil? (page/guide []))))
+(deftest help-test
+  (let [blocks [[:dl [:dt "Simple"] [:dd "Finds the words in order."]]]
+        html   (page/help en blocks)]
+    (testing "a region named by the interface, holding the document"
+      (is (= [:section.help {:aria-label "Help"} blocks] html)))
+    (testing "named in the reader's language"
+      (is (= "Hjælp" (:aria-label (second (page/help da blocks))))))
+    (testing "no help, no section"
+      (is (nil? (page/help en nil)))
+      (is (nil? (page/help en []))))
     (testing "it is not in the form: it stands where the results will"
       (is (not (some #{:section.help}
                      (deep (page/search-form {:lang "en" :folders []

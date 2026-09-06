@@ -26,15 +26,15 @@
 
 (deftest hiccup-test
   (testing "a document in the reader's language"
-    (is (= [:h1 {:id "hjælp-til-forespørgsler"} "Hjælp til forespørgsler"]
-           (first (docs/hiccup "guide" ["da"]))))
-    (is (= [:h1 {:id "query-help"} "Query help"]
-           (first (docs/hiccup "guide" ["en"])))))
+    (is (= [:h1 {:id "cqp-vejledning"} "CQP-vejledning"]
+           (first (docs/hiccup "cqp-guide" ["da"]))))
+    (is (= [:h1 {:id "cqp-guide"} "CQP guide"]
+           (first (docs/hiccup "cqp-guide" ["en"])))))
   (testing "a language without a file falls through to the next read"
-    (is (= (docs/hiccup "guide" ["da"]) (docs/hiccup "guide" ["xx" "da" "en"])))
-    (is (= (docs/hiccup "guide" ["en"]) (docs/hiccup "guide" ["xx" "en"]))))
+    (is (= (docs/hiccup "help" ["da"]) (docs/hiccup "help" ["xx" "da" "en"])))
+    (is (= (docs/hiccup "help" ["en"]) (docs/hiccup "help" ["xx" "en"]))))
   (testing "no file in any language, nothing"
-    (is (nil? (docs/hiccup "guide" ["xx"])))
+    (is (nil? (docs/hiccup "help" ["xx"])))
     (is (nil? (docs/hiccup "nonesuch" ["en"])))))
 
 (deftest title-test
@@ -44,9 +44,13 @@
   (is (nil? (docs/title [[:p "x"]]))))
 
 
+(def documents
+  "The name of every document the app serves."
+  ["frontpage" "help" "cqp-guide" "glossary"])
+
 (deftest documents-test
   (testing "every document exists in every language the interface has"
-    (doseq [name ["frontpage" "guide" "glossary"]
+    (doseq [name documents
             lang i18n/languages]
       (is (some? (docs/resource name [lang])) (str name " in " lang))
       (is (str/ends-with? (str (docs/resource name [lang]))
@@ -59,13 +63,17 @@
                        (map :href)
                        (filter #(str/starts-with? % "/")))]
         (is (seq hrefs))
-        (is (every? #(or (#{url/search url/corpora url/glossary} %)
+        (is (every? #(or (#{url/search url/corpora url/glossary
+                            url/cqp-guide} %)
                          (str/starts-with? % (str url/glossary "#")))
                     hrefs)))))
-  (testing "the guide's examples are CQP's own, untranslated"
+  (testing "the help has no heading: it is a key to the form, not a page"
+    (doseq [lang i18n/languages]
+      (is (not-any? docs/heading? (docs/hiccup "help" [lang])) lang)))
+  (testing "the CQP guide's examples are CQP's own, untranslated"
     (doseq [lang i18n/languages]
       (is (some #{[:code "[lemma = \"x\"]"]}
-                (deep (docs/hiccup "guide" [lang])))))))
+                (deep (docs/hiccup "cqp-guide" [lang])))))))
 
 (defn glossary-terms
   "The ids of the terms of the glossary in `lang`, in order."
@@ -89,7 +97,7 @@
             has, in that language"
     (doseq [lang i18n/languages]
       (let [terms (set (glossary-terms lang))]
-        (doseq [name ["frontpage" "guide" "glossary"]
+        (doseq [name documents
                 href (->> (deep (docs/hiccup name [lang]))
                           (filter #(and (map? %) (:href %)))
                           (map :href)

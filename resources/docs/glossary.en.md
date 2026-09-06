@@ -58,9 +58,9 @@ CQP {#cqp}:
   the query goes to CQP as you typed it, but for two names: a sentence
   tag, `<s>`, and the unit of a `within` clause, `within s`, which each
   corpus renames after its own attribute. In the simple mode, the
-  interface writes the query for you. [The CQP
-  manual](https://cwb.sourceforge.io/files/CQP_Manual/) has the full
-  syntax.
+  interface writes the query for you. The [CQP guide](/cqp) shows the
+  syntax by example. [The CQP
+  manual](https://cwb.sourceforge.io/files/CQP_Manual/) has all of it.
 
 CWB {#cwb}:
   The [IMS Open Corpus Workbench](https://cwb.sourceforge.io/): the

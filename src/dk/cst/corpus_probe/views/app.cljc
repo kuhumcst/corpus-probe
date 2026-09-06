@@ -37,14 +37,14 @@
   carrying the `:view` as a hidden input so that a control applied from
   one view answers in that view), the inspection panel while a token is
   `:selected`, and the results region when the params described a
-  search, or the `:guide` (see dk.cst.corpus-probe.views.page/guide)
+  search, or the `:help` (see dk.cst.corpus-probe.views.page/help)
   where they did not.
 
   No heading of its own: a search landmark with a search button says
   what it is, and a heading saying so again was one more thing between
   the reader and the field. The results region heads the page once there
-  is an answer, and the guide until then, so the page is headed by what
-  it shows.
+  is an answer; until then the help stands there, and nothing heads the
+  page.
 
   The form submits to the results fragment, so a search lands the reader
   on its own answer rather than at the top of the form that asked for it.
@@ -66,7 +66,7 @@
    ;; reader who has not searched yet is the one with room to read it
    (if (or result error)
      (result-view state)
-     (page/guide (:guide state)))])
+     (page/help ui (:help state)))])
 
 (defn mark-target
   "The hiccup `body` with the content of the element whose id is

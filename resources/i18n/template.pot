@@ -511,6 +511,10 @@ msgstr ""
 msgid "whole word"
 msgstr ""
 
+#: src/dk/cst/corpus_probe/views/page.cljc
+msgid "Help"
+msgstr ""
+
 #: src/dk/cst/corpus_probe/views/kwic.cljc src/dk/cst/corpus_probe/views/page.cljc
 msgid "Loading …"
 msgstr ""

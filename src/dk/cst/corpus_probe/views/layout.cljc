@@ -82,6 +82,9 @@
 (def nav-items
   "The top-level navigation, in display order: the key naming each page
   (which is also the key its URL arrives under) and its path."
+  ;; TODO: the CQP guide is linked from the search help and the glossary
+  ;; only, and a reader who has searched has neither in view. Does it
+  ;; belong here, as a fourth entry?
   [[:search url/search]
    [:corpora-heading url/corpora]
    [:glossary url/glossary]])

@@ -49,6 +49,10 @@
   [id]
   (str glossary "#" id))
 
+(def cqp-guide
+  "The CQP guide: the query language by example."
+  "/cqp")
+
 (defn export
   "The path of the `view` of a result (`:kwic` or `:frequencies`) as a
   file in `format`: `/search/kwic.tsv`."

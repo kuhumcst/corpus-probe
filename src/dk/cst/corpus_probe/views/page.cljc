@@ -543,7 +543,7 @@
   break aside, so that the render never moves what the reader is typing.
 
   Required when `required?`: a search of nothing is then reported by the
-  browser before it is sent, rather than answered with the guide again.
+  browser before it is sent, rather than answered with the help again.
   The caller says when a blank query means something (see
   `search-form`)."
   [ui mode text required?]
@@ -847,27 +847,21 @@
       [:option {:value value :selected (= value (or match ""))}
        (match-label ui value)])]])
 
-(defn heading-id
-  "The id of the first heading among the hiccup `blocks` of a document,
-  which is the name the document gives itself; nil when none carries
-  one."
-  [blocks]
-  (some (fn [[tag attrs]]
-          (when (and (re-matches #"h[1-6]" (name tag)) (map? attrs))
-            (:id attrs)))
-        (filter vector? blocks)))
-
-(defn guide
-  "The search guide, the hiccup `blocks` of its document (see
+(defn help
+  "The search help, the hiccup `blocks` of its document (see
   dk.cst.corpus-probe.docs), standing where the results will once there
-  are any, as a region named by the guide's own heading; nil without a
-  guide.
+  are any, as a region named in `ui`; nil without a help document.
 
   It stands where the results will: help belongs in the empty answer
-  space, not in the form."
-  [blocks]
+  space, not in the form. The document has no heading, so the interface
+  names the region.
+
+  TODO: the help's heading used to be the h1 of the search page until
+  an answer headed it, and now the page has no h1 until then. Does the
+  empty page want one, and of what?"
+  [ui blocks]
   (when (seq blocks)
-    [:section.help {:aria-labelledby (heading-id blocks)} blocks]))
+    [:section.help {:aria-label (i18n/tr ui "Help")} blocks]))
 
 (defn navigation-status
   "The live region reporting a routed navigation in flight in `ui`,

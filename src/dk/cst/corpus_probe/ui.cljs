@@ -1194,7 +1194,7 @@
   business: an export is a download rather than a page, and fetching one
   as data would run the search a second time and then hand the reader
   nothing."
-  #{url/home url/search url/corpora url/glossary})
+  #{url/home url/search url/corpora url/glossary url/cqp-guide})
 
 (defn routable?
   "True when `url` names a page this client knows how to render."

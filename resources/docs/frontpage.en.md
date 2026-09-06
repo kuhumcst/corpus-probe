@@ -9,6 +9,8 @@ a line of its own, with the words around it.
   query. Search in one corpus or in all of them. Then read the hits,
   sort them, take a [sample](/glossary#sample), count them by an
   [attribute](/glossary#positional-attributes), or download them.
+- [CQP guide](/cqp) shows the query language of the Corpus Workbench by
+  example.
 - [Corpora](/corpora) lists each corpus with its size in
   [tokens](/glossary#token) and its attributes.
 - [Glossary](/glossary) explains the words that the interface uses.
@@ -17,5 +19,3 @@ a line of its own, with the words around it.
 Each result has an address. The URL of a page of hits contains the
 query, the corpora and each setting. You can cite the URL, bookmark it,
 or send it to a colleague. The colleague opens the same hits.
-
-The search page shows a guide to CQP queries until you make a search.

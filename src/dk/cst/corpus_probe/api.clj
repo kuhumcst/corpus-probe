@@ -1068,7 +1068,7 @@
 (defn search-page
   "Handle a search-page `request` against `ctx`: render the form, and when
   the query params describe a search, its concordance or the reason there
-  is none, else the search guide (see dk.cst.corpus-probe.docs) where
+  is none, else the search help (see dk.cst.corpus-probe.docs) where
   the results will be.
 
   A document asked for by a query string that is not the search's
@@ -1094,8 +1094,8 @@
              :as   data} (search-view-data ctx request)
             data (cond-> (assoc (dissoc data :cited) :route :search)
                    (not (or result error))
-                   (assoc :guide (docs/hiccup "guide"
-                                              (request-languages request))))]
+                   (assoc :help (docs/hiccup "help"
+                                             (request-languages request))))]
         (page-response request
                        (result-title (i18n/->ui lang) view params result)
                        data
@@ -1104,9 +1104,9 @@
 (defn document-page
   "Handle a `request` for the document called `name` (see
   dk.cst.corpus-probe.docs): the frontpage, where the app says what it
-  is and where a reader goes from here, or the glossary. Served in the
-  first language the request reads that the document has, and titled as
-  the document titles itself."
+  is and where a reader goes from here, the CQP guide or the glossary.
+  Served in the first language the request reads that the document has,
+  and titled as the document titles itself."
   [_ctx name request]
   (let [langs  (request-languages request)
         blocks (docs/hiccup name langs)]
@@ -1522,6 +1522,8 @@
      :route-name ::home]
     [url/glossary                 :get (partial document-page ctx "glossary")
      :route-name ::glossary]
+    [url/cqp-guide                :get (partial document-page ctx "cqp-guide")
+     :route-name ::cqp-guide]
     [url/search                   :get (partial search-page ctx)
      :route-name ::search]
     [(str url/search "/:file")    :get (partial export-page ctx)

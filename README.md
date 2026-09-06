@@ -62,8 +62,9 @@ positional attribute of the searched corpora, for example lemma. A
 simple search of several words is kept within one sentence, as the CQP
 manual advises, or within a paragraph or a text when the reader selects
 one. The search uses the name that each corpus gives its sentences.
-Until the reader makes a search, a guide of CQP examples stands where
-the results will be.
+Until the reader makes a search, a key to the query modes stands where
+the results will be, one line for each mode, with a link to the CQP
+guide, a page of CQP examples.
 
 A third query mode, List, takes one word per line and finds any of
 them. The compiler turns the list into one token pattern with an
@@ -120,9 +121,10 @@ tags.
 
 ### Documents
 
-The frontpage, the guide and the glossary are Markdown. There is one
-file per language under [resources/docs/](resources/docs/). The files
-are named like the PO files, `guide.da.md` next to `guide.en.md`. The
+The frontpage, the search help, the CQP guide and the glossary are
+Markdown. There is one file per language under
+[resources/docs/](resources/docs/). The files are named like the PO
+files, `help.da.md` next to `help.en.md`. The
 server parses them into the hiccup that the views render, so the client
 needs no parser. If a language has no file, the server tries the
 languages that the request accepts, and then English. Thus a reader who
@@ -131,8 +133,8 @@ as nothing.
 
 The Markdown is CommonMark plus a definition list of this app's own
 (`dk.cst.corpus-probe.markdown`). A term is a line that ends in a
-colon. Its definition is indented under it. The glossary and the
-examples of the guide are written in this form:
+colon. Its definition is indented under it. The glossary, the help and
+the examples of the CQP guide are written in this form:
 
 ```markdown
 KWIC {#kwic}:
@@ -150,6 +152,7 @@ Each page has a plain address:
 | corpus index | `/corpora` |
 | one corpus | `/corpora/viser` |
 | glossary | `/glossary` |
+| CQP guide | `/cqp` |
 | an export | `/search/kwic.tsv` |
 
 The terms of the glossary name their own ids, `KWIC {#kwic}:`. Thus a

@@ -5,13 +5,13 @@
             [dk.cst.corpus-probe.views.layout :as layout]
             [dk.cst.corpus-probe.views.app :as app-views]))
 
-(def guide
-  "A search guide, as api/search-page puts one in the data."
-  [[:h1 {:id "query-help"} "Query help"] [:p "Type a word."]])
+(def help
+  "A search help, as api/search-page puts one in the data."
+  [[:p "Type a word."]])
 
 (def base
   "A search page with nothing searched for yet."
-  {:ui en :folders [] :params {} :guide guide})
+  {:ui en :folders [] :params {} :help help})
 
 (def views
   "The two views of one result, as api/view-hrefs builds them."
@@ -26,10 +26,9 @@
 (deftest search-view-test
   (testing "the bypass link can reach the page"
     (is (= layout/main-attrs (second (app-views/search-view base)))))
-  (testing "nothing heads the page but what it shows: the guide until there
-            is an answer, then the answer"
-    (is (= [[:h1 {:id "query-help"} "Query help"]]
-           (h1s (app-views/search-view base))))
+  (testing "nothing heads the page but what it shows: the answer, and
+            nothing until there is one"
+    (is (empty? (h1s (app-views/search-view base))))
     (is (= [[:h1 {:id "results-heading"} "The search did not finish in time"]]
            (h1s (app-views/search-view (assoc base :error {:type :timeout}))))))
   (testing "the form submits to the results, so a search lands on its answer"
@@ -37,17 +36,17 @@
            (get-in (app-views/search-view base) [2 1 1 :action])))
     (is (= (str url/search url/results-fragment)
            (get-in (app-views/search-view base) [2 1 1 :action]))))
-  (testing "no query renders no results region at all, but the guide
+  (testing "no query renders no results region at all, but the help
             where the results will be"
     (is (not (some #{"results"} (deep (app-views/search-view base)))))
     (is (= :section.help (first (last (app-views/search-view base)))))
     (is (some #{"Type a word."} (deep (app-views/search-view base)))))
-  (testing "and the guide gives way to an answer"
+  (testing "and the help gives way to an answer"
     (is (not (some #{:section.help}
                    (deep (app-views/search-view
                           (assoc base :error {:type :timeout})))))))
-  (testing "a page without a guide simply has none"
-    (is (nil? (last (app-views/search-view (dissoc base :guide))))))
+  (testing "a page without a help document simply has none"
+    (is (nil? (last (app-views/search-view (dissoc base :help))))))
   (testing "an error is shown as the outcome of the search"
     (let [html (app-views/search-view (assoc base :error {:type :cqp
                                                        :message "boom"}))]
