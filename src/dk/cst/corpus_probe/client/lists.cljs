@@ -43,7 +43,7 @@
   (chooser/open-at-rest ((:tree (lists k)) state held) held))
 
 (defn settle
-  "`state` with list `k` at rest: nobody choosing from it, nothing
+  "Put list `k` of `state` at rest: nobody choosing from it, nothing
   unticked, and open exactly what the resting view opens over what is
   chosen now, except the root, which stays shut if the reader shut it."
   [state k]
@@ -57,10 +57,13 @@
                             (disj :root)))))
 
 (defn tick
-  "`state` once the `ids` of list `k` have been ticked or, when
-  `unticking?`, unticked: at rest, what is unticked stays in place until
-  the reader leaves (see `held`), and only what the change leaves chosen
-  whole or not at all shuts; while they are choosing, nothing moves."
+  "Record in `state` that the reader ticked the `ids` of list `k`, or
+  unticked them when `unticking?`, and adjust what the list shows.
+
+  Nothing moves while they are choosing. At rest an unticked row stays
+  until they leave (see `held`), a node may shut but never open, and the
+  root follows the resting view: a node springing open would move the
+  page, and a shut root would answer a tick with a ticked box and no list."
   [state k ids unticking?]
   (let [{:keys [choosing? open]} (get-in state [:lists k])
         state (update-in state [:lists k :unticked]
@@ -68,21 +71,23 @@
     (cond-> state
       (not choosing?)
       (assoc-in [:lists k :open]
-                (set/intersection open (rest-open state k (held state k)))))))
+                (let [resting (rest-open state k (held state k))]
+                  (cond-> (set/intersection open resting)
+                    (contains? resting :root) (conj :root)))))))
 
 (defn engage
-  "`state` with the reader choosing from list `k`: nothing in it is
-  hidden until they leave, and its root stands open, since the box that
-  asks for this sits in the root's summary."
+  "Set list `k` of `state` to choosing: nothing in it is hidden until the
+  reader leaves, and its root stands open, since the box that asks for
+  this sits in the root's summary."
   [state k]
   (update-in state [:lists k]
              #(-> % (assoc :choosing? true) (update :open conj :root))))
 
 (defn leave
-  "`state` with list `k` at rest (see `settle`), the reader having gone
-  elsewhere, unless its filter box still holds something: a filter in
-  force is a reader still looking. `state` itself for a list already at
-  rest."
+  "Put list `k` of `state` at rest now the reader has gone elsewhere (see
+  `settle`), unless its filter box still holds something: a filter in
+  force is a reader still looking. `state` unchanged for a list already
+  at rest."
   [state k]
   (let [{:keys [choosing? unticked] q :filter} (get-in state [:lists k])]
     (if (and (str/blank? q) (or choosing? (seq unticked)))
@@ -90,10 +95,10 @@
       state)))
 
 (defn toggle-open
-  "`state` with disclosure `id` of list `k` recorded as `open?`, the
-  reader having worked it, and what that says answered: a disclosure
-  coming open while nobody is choosing is the reader asking to choose
-  (see `engage`), and the root shutting is them finishing (see `leave`)."
+  "Record in `state` that the reader worked disclosure `id` of list `k`,
+  leaving it `open?`, and answer what that says: one coming open while
+  nobody is choosing is the reader asking to choose (see `engage`), and
+  the root shutting is them finishing (see `leave`)."
   [state k id open?]
   (let [{:keys [open choosing?]} (get-in state [:lists k])]
     ;; a <details> fires toggle when this client opens or shuts it too,
@@ -107,9 +112,9 @@
           :else                          state)))))
 
 (defn apply-filter
-  "`state` with list `k` narrowed to whatever answers `q`, and every
-  disclosure holding something that does open: a reader who has asked
-  where something is has asked to be shown it."
+  "Narrow list `k` of `state` to whatever answers `q`, opening every
+  disclosure that holds something: a reader who has asked where
+  something is has asked to be shown it."
   [state k q]
   (cond-> (assoc-in state [:lists k :filter] q)
     (not (str/blank? q))
@@ -125,11 +130,11 @@
     (vec (sort (if add? (into selected ids) (reduce disj selected ids))))))
 
 (defn choose-values
-  "`selected`, each metadata attribute mapped to the values chosen under
-  it, with every value in `values` added under `attr`, or all of them
-  taken away when they are all there already: one rule for one value and
-  for every value of an attribute, as the corpus chooser has for a corpus
-  and a folder."
+  "Add every value in `values` under `attr` of `selected`, the map of
+  metadata attribute to the values chosen under it, or take them all away
+  when they are all there already: one rule for one value and for every
+  value of an attribute, as the corpus chooser has for a corpus and a
+  folder."
   [selected attr values]
   (let [chosen (set (get selected attr))
         chosen (if (every? chosen values)

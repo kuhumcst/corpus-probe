@@ -116,7 +116,7 @@
                                  :unlisted []
                                  :selected {:text_year #{"1591"}}}
                            {}))))
-      (is (= [false false]
+      (is (= [true false]
              (open-states (filter-views/filter-fieldset
                            "en" {:attrs    [{:name :text_year
                                              :rows  [{:value "1591"}]}]
@@ -137,8 +137,9 @@
                                   opts)))]
         (is (= [false false] (open* {} {})))
         (is (= [true true] (open* {:a #{"1"}} {})))
-        ;; every value chosen is as settled as none, and says so itself
-        (is (= [false false] (open* {:a #{"1" "2"}} {})))
+        ;; every value chosen settles the attribute, whose own row says
+        ;; so, but not the fieldset, which would then name nothing
+        (is (= [true false] (open* {:a #{"1" "2"}} {})))
         (is (= [true false] (open* {} {:open #{:root}})))
         (is (= [false true] (open* {:a #{"1"}} {:open #{:a}})))
         (is (= [false false] (open* {:a #{"1"}} {:open #{} :choosing? true})))))

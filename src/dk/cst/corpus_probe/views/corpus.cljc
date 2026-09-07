@@ -76,6 +76,11 @@
   ([label selected ids opts]
    (widgets/select-all label ids selected [:toggle-corpora (vec ids)] opts)))
 
+;; TODO: if selecting every corpus proves too costly in production, the
+;; choices are a `:clear-only?` box here, as the metadata filter has, or
+;; a configured cap on how many corpora a search may name. Only the cap
+;; bites: ticking each folder still selects the lot, and a URL naming no
+;; corpus already means every corpus (see url/with-corpora).
 (defn all-toggle
   "`corpus-toggle` over every corpus on offer, the `ids`, named for the
   registry in `ui`: the one control that selects or clears the lot.

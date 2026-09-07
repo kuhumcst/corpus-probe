@@ -19,8 +19,8 @@
     (boolean (and s (str/includes? (str/lower-case (str s)) q)))))
 
 (defn narrow
-  "`node` with everything that does not answer `q` marked `:hidden?`,
-  itself included when nothing in it survives; a node whose own label
+  "Mark `:hidden?` everything in `node` that does not answer `q`, and
+  `node` itself when nothing in it survives; a node whose own label
   answers keeps everything in it."
   [q {:keys [items nodes] :as node}]
   (let [whole? (answers? q node)
@@ -55,37 +55,16 @@
   [nodes]
   (mapcat #(tree-seq :nodes :nodes %) nodes))
 
-(defn open-at-rest
-  "The disclosures of the chooser over `nodes` that stand open while
-  nobody is choosing, with the leaves in the set `selected` chosen: the
-  id of every node chosen in part, and `:root` while the tree as a whole
-  is. A node chosen whole or not at all is shut: its box and its count
-  already say which."
-  [nodes selected]
-  (let [nodes (map counted nodes)
-        part? (fn [offered]
-                (< 0 (count (filter selected offered)) (count offered)))]
-    (into (if (part? (mapcat :offered nodes)) #{:root} #{})
-          (comp (filter (comp part? :offered)) (map :id))
-          (node-seq nodes))))
-
-(defn matching
-  "The ids of the nodes among `nodes` holding something that answers `q`
-  (see `narrow`): what typing `q` opens."
-  [q nodes]
-  (->> nodes
-       (map (comp counted (partial narrow (str/lower-case q))))
-       (node-seq)
-       (remove :hidden?)
-       (map :id)))
-
 (defn only-chosen
-  "`node` with every leaf not in the set `held` marked `:hidden?`, all of
-  them when every leaf it offers is held, and itself when nothing under
-  it is held and it is not `:in-force?`: what the chooser shows at rest,
-  the search will read and nothing else."
-  [held {:keys [items nodes offered in-force?] :as node}]
-  (let [whole? (and (seq offered) (every? held offered))
+  "The resting view of `node`: everything the reader has not chosen is
+  marked `:hidden?`, `held` saying what counts as chosen, so what shows
+  is what the search will read.
+
+  A leaf stays when held, a node when something under it is held or it
+  is `:in-force?`. A labelled node whose leaves are all held hides them,
+  its summary row speaking for them; a bare list has no such row."
+  [held {:keys [items nodes offered in-force? label] :as node}]
+  (let [whole? (and label (seq offered) (every? held offered))
         items  (mapv #(cond-> % (or whole? (not (held (:id %))))
                               (assoc :hidden? true))
                      items)
@@ -98,6 +77,33 @@
            (every? :hidden? items)
            (every? :hidden? nodes))
       (assoc :hidden? true))))
+
+(defn open-at-rest
+  "Which disclosures stand open while nobody is choosing from `nodes`,
+  `selected` being the leaves they have chosen: every node chosen in
+  part, by id, and `:root` whenever the resting view shows anything.
+
+  A node chosen whole, or not at all, is shut: its own row says which,
+  having both a label and a count. The root has only the count, so
+  shutting it would leave a ticked box that names nothing."
+  [nodes selected]
+  (let [nodes (map counted nodes)
+        part? (fn [offered]
+                (< 0 (count (filter selected offered)) (count offered)))
+        show? (fn [node] (not (:hidden? (only-chosen selected node))))]
+    (into (if (some show? nodes) #{:root} #{})
+          (comp (filter (comp part? :offered)) (map :id))
+          (node-seq nodes))))
+
+(defn matching
+  "The ids of the nodes among `nodes` holding something that answers `q`
+  (see `narrow`): what typing `q` opens."
+  [q nodes]
+  (->> nodes
+       (map (comp counted (partial narrow (str/lower-case q))))
+       (node-seq)
+       (remove :hidden?)
+       (map :id)))
 
 (defn node-count
   "How many of the leaves a counted `node` offers are in the set

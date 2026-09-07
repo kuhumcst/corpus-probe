@@ -59,10 +59,8 @@
              (:offered (chooser/counted (chooser/narrow "anden" litteratur))))))))
 
 (deftest open-at-rest-test
-  (testing "open at rest is exactly what is chosen in part: the root
-            while the selection as a whole is, and each such node"
+  (testing "the nodes open at rest are exactly those chosen in part"
     (is (= #{} (chooser/open-at-rest nodes #{})))
-    (is (= #{} (chooser/open-at-rest nodes #{"VISER" "ANDEN" "DIGTE" "VERS" "TALER"})))
     (is (= #{:root ["Litteratur"]} (chooser/open-at-rest nodes #{"VISER"})))
     (is (= #{:root ["Litteratur"] ["Litteratur" "Folkeviser"]}
            (chooser/open-at-rest nodes #{"VISER" "DIGTE"})))
@@ -71,8 +69,20 @@
       (is (= #{:root ["Litteratur"]}
              (chooser/open-at-rest nodes #{"VISER" "DIGTE" "VERS"})))
       (is (= #{:root} (chooser/open-at-rest nodes #{"TALER"})))))
+  (testing "the root stands open whenever the resting view shows
+            anything, a whole selection included: it has no label of its
+            own, so shut it would name nothing that is chosen"
+    (is (= #{:root}
+           (chooser/open-at-rest nodes #{"VISER" "ANDEN" "DIGTE" "VERS"
+                                         "TALER"})))
+    (is (= #{:root} (chooser/open-at-rest [(second nodes)] #{"TALER"}))))
+  (testing "and over a node in force with nothing chosen under it, which
+            the resting view shows too"
+    (let [in-force [(assoc (second nodes) :in-force? true)]]
+      (is (= #{} (chooser/open-at-rest [(second nodes)] #{})))
+      (is (= #{:root} (chooser/open-at-rest in-force #{})))))
   (testing "a leaf that cannot be chosen never leaves a node part chosen"
-    (is (= #{} (chooser/open-at-rest [(second nodes)] #{"TALER"})))))
+    (is (= #{:root} (chooser/open-at-rest [(second nodes)] #{"TALER"})))))
 
 (deftest matching-test
   (testing "typing opens every node holding something that answers,
@@ -97,6 +107,13 @@
               says it"
       (is (= ["VISER" "ANDEN" ["Litteratur" "Folkeviser"] "DIGTE" "VERS"]
              (hidden #{"VISER" "ANDEN" "DIGTE" "VERS"} litteratur))))
+    (testing "but a node without a label has no row to say it with, so
+              its held leaves stay on show"
+      (let [bare (chooser/counted (dissoc litteratur :label))]
+        ;; VISER and ANDEN stay; the labelled node under them still
+        ;; collapses, having a row of its own
+        (is (= ["DIGTE" "VERS"] (hidden #{"VISER" "ANDEN" "DIGTE" "VERS"}
+                                        bare)))))
     (testing "and nothing held hides the node itself, unless something
               else is in force in it"
       (is (:hidden? (chooser/only-chosen #{} litteratur)))
@@ -175,13 +192,14 @@
     (testing "classed by the instance where a layout places it"
       (is (= "filters" (:class (second (chooser {:class "filters"}))))))
     (testing "without a set of what is open it rests: part chosen opens
-              the root and the node, whole and nothing shut them
+              the root and the node, whole shuts the node but leaves the
+              root open over it, nothing shuts both
               [root Litteratur Folkeviser Folketinget]"
       (is (= [true true false false]
              (open-states (chooser {:selected #{"VISER"}}))))
       (is (= [false false false false]
              (open-states (chooser {:selected #{}}))))
-      (is (= [false false false false]
+      (is (= [true false false false]
              (open-states (chooser {:selected #{"VISER" "ANDEN" "DIGTE" "VERS"
                                                 "TALER"}})))))
     (testing "given the set, it is that and nothing else, whatever is

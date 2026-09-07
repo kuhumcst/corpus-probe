@@ -105,11 +105,12 @@
              (open-states (corpus-views/corpus-chooser en folders
                                                        {:selected #{"VISER"}})))))
     (testing "a corpus that cannot be read cannot be chosen, so a folder
-              holding one is not partly chosen for ever"
+              holding one is not partly chosen for ever: the folder is
+              shut, the chooser over it open on what is chosen"
       (let [unreadable [{:label   "Litteratur"
                          :corpora [{:id "VISER" :size 48} {:id "GONE"}]
                          :folders []}]]
-        (is (= [false false]
+        (is (= [true false]
                (open-states (corpus-views/corpus-chooser en unreadable
                                                          {:selected #{"VISER"}}))))))
     (testing "the summary counts the selection rather than naming it: two
