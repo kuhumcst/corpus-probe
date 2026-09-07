@@ -5,7 +5,7 @@
             [clojure.test :refer [deftest is testing]]
             [dk.cst.corpus-probe.server.corpora :as corpora]))
 
-(deftest corpus-page-test
+(deftest serve-corpus-test
   (let [ctx  {:registry "test/resources"}
         page (fn [id] (corpora/serve-corpus ctx {:path-params {:id id}
                                                  :headers {"cookie" "lang=en"}}))]
@@ -30,7 +30,7 @@
                                                       :query-params
                                                       {nil "foo"}})))))))
 
-(deftest text-page-test
+(deftest serve-text-test
   (let [page (fn [id params]
                (corpora/serve-text {:registry "test/resources"}
                                    {:path-params  {:id id}

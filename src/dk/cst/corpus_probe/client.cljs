@@ -1,8 +1,12 @@
 (ns dk.cst.corpus-probe.client
   "Client entry point: read the bootstrap payload the server embedded,
   mount Replicant on the server-rendered page, and take over navigation so
-  moving between views swaps the page's data rather than reloading it
-  (see dk.cst.corpus-probe.client.router).
+  moving between views swaps the page's data rather than reloading it.
+  The location and the document listeners are
+  dk.cst.corpus-probe.client.router's, the pure step
+  dk.cst.corpus-probe.client.actions', its effects
+  dk.cst.corpus-probe.client.effects' and the rules of the two chooser
+  lists dk.cst.corpus-probe.client.lists'.
 
   Interactivity is progressive: without this script the page is a working
   server-rendered concordance, a token is text rather than a control, and

@@ -97,7 +97,7 @@
       (is (= (count routes)
              (count (distinct (map #(nth % 4) routes))))))))
 
-(deftest document-page-test
+(deftest serve-document-test
   (let [page (fn [name lang]
                (server/serve-document {} name
                                       {:headers {"cookie" (str "lang=" lang)}}))]
@@ -112,7 +112,7 @@
         (is (str/includes? body "<h1 id=\"glossary\">Glossary</h1>"))
         (is (str/includes? body "<dt id=\"kwic\">KWIC</dt>"))))))
 
-(deftest preferences-page-test
+(deftest serve-preferences-test
   (let [post (fn [params] (server/serve-preferences nil {:form-params params}))]
     (testing "the choice is stored and the reader sent back where they were"
       (let [{:keys [status headers]} (post {:lang "en" :return "/?q=hund"})]
@@ -129,7 +129,7 @@
       (is (not (contains? (:headers (post {:lang "xx" :return "/"}))
                           "Set-Cookie"))))))
 
-(deftest public-file-test
+(deftest serve-file-test
   (let [file (fn [path]
                (server/serve-file "text/css; charset=utf-8" "css"
                                   {:path-params {:path path}}))]

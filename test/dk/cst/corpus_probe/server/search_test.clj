@@ -66,7 +66,7 @@
                                              {:uri          "/search"
                                               :query-params {nil "foo"}}))))))
 
-(deftest context-page-validation-test
+(deftest serve-context-validation-test
   (let [context (fn [params] (search/serve-context {} {:query-params params}))]
     (testing "a hostile corpus name is rejected before touching cqp"
       (is (= 400 (:status (context {:corpus   "bad; exit"
@@ -77,7 +77,7 @@
                                     :cpos     "x"
                                     :matchend "9"})))))))
 
-(deftest filters-page-test
+(deftest serve-filters-test
   (let [asked (atom nil)
         call  (fn [params]
                 (with-redefs [registry/entries
@@ -141,7 +141,7 @@
       (is (= 0 (:size result)))
       (is (= 1 (:pages result))))))
 
-(deftest counts-page-test
+(deftest serve-counts-test
   (when-cwb
    (cache/forget-counts!)
    (let [request {:headers      {"accept" "application/transit+json"}

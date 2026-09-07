@@ -1,11 +1,14 @@
 (ns dk.cst.corpus-probe.server
   "The HTTP server: configuration, the route table with the handlers
-  behind it, start/stop and the main entry point.
-
-  The handlers of a search, of the corpus pages and of the exports are
-  the server's helpers; the documents, the preferences and the compiled
-  client assets are served from here. Where each of these is, and how a
-  search is spelt as a URL, is dk.cst.corpus-probe.url's.
+  behind it, start/stop and the main entry point. The handlers of a
+  search (dk.cst.corpus-probe.server.search), of the corpus pages
+  (dk.cst.corpus-probe.server.corpora) and of the exports
+  (dk.cst.corpus-probe.server.export) are the server's helpers, over the
+  request readers (dk.cst.corpus-probe.server.request) and the responses
+  (dk.cst.corpus-probe.server.response); the documents, the preferences
+  and the compiled client assets are served from here. Where each of
+  these is, and how a search is spelt as a URL, is
+  dk.cst.corpus-probe.url's.
 
   Startup vets the installation (see dk.cst.corpus-probe.server.vet):
   the CWB programs and the sort collation before the port is bound, the

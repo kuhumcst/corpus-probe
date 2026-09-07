@@ -1,16 +1,18 @@
 (ns dk.cst.corpus-probe.search
-  "High-level search operations: one function call in, plain data out.
+  "Running a search of this app: one function call in, plain data out. A
+  KWIC page, a text, an export or a match count for one corpus, and a
+  concordance over several. The helpers: the options as one corpus runs
+  them (dk.cst.corpus-probe.search.opts, the trust boundary of the web
+  layer), the batches of commands (dk.cst.corpus-probe.search.batch), a
+  result read from the saved query result when one is stored and run
+  afresh otherwise (dk.cst.corpus-probe.search.result), the saved results
+  themselves (dk.cst.corpus-probe.search.cache), the breakdowns of the
+  matches (dk.cst.corpus-probe.search.frequency) and the TSV and CSV
+  exports (dk.cst.corpus-probe.search.export).
 
-  Composes the batches (dk.cst.corpus-probe.search.batch), the
-  child-process driver (dk.cst.corpus-probe.cwb) and the output parsers
-  (dk.cst.corpus-probe.cwb.parse) into complete round trips: a KWIC page,
-  a text, an export or a match count for one corpus, and a concordance
-  over several. The options of each are resolved and checked for the
-  corpus first (dk.cst.corpus-probe.search.opts, the trust boundary of
-  the web layer), and a result is read from the saved query result when
-  one is stored and run afresh otherwise
-  (dk.cst.corpus-probe.search.result). Breakdowns of those matches are
-  dk.cst.corpus-probe.search.frequency, composed on the same two.
+  Each round trip composes the batches, the child-process driver
+  (dk.cst.corpus-probe.cwb) and its output parsers
+  (dk.cst.corpus-probe.cwb.parse).
 
   Every search takes a :filter option, a metadata filter, and a :patterns
   option, the regexes its values may match instead (see

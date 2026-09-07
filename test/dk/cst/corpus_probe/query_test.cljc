@@ -245,7 +245,7 @@
       (is (= cqp (cqp-of params)) (pr-str params))
       (is (= within (within-of params)) (pr-str params)))))
 
-(deftest params-test
+(deftest ->params-test
   (testing "the params of a mode read back as the query they carry, and
             print again as themselves, nothing at its default"
     (doseq [[mode params]

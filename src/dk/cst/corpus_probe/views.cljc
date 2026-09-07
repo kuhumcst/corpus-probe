@@ -2,7 +2,15 @@
   "Every page the app serves, by the route that names it, its document
   title by the same route, and the chrome every page shares: the bypass
   link, the site masthead with its navigation and the language switch,
-  and the site footer.
+  and the site footer. The pages are composed of the generic widgets
+  (dk.cst.corpus-probe.views.widgets), the chooser over a tree of
+  checkboxes (dk.cst.corpus-probe.views.chooser), the search form
+  (dk.cst.corpus-probe.views.search, with its token rows and its
+  metadata filter under it), the results region
+  (dk.cst.corpus-probe.views.result), the concordance and its inspector
+  (dk.cst.corpus-probe.views.concordance), the frequency tables
+  (dk.cst.corpus-probe.views.frequency) and the corpus pages
+  (dk.cst.corpus-probe.views.corpus).
 
   This is the one namespace that knows the whole set: the server renders
   a request through `page` and titles it through `title`, and the client

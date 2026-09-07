@@ -344,7 +344,7 @@
                           (stored-name ctx "PROBE" "\"kat.*\" %c"
                                        {:sort "word"})))))))
 
-(deftest stored-breakdown-test
+(deftest read-stored-breakdown-test
   (when-cwb
    (let [ctx       (caching-ctx!)
          q         "[pos = \"N.*\"]"

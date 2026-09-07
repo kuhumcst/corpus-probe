@@ -1,20 +1,21 @@
 (ns dk.cst.corpus-probe.i18n
   "The Danish and English user interface: the gettext tables the views
-  render their strings through.
+  render their strings through. The tables are read from the PO files
+  under resources/i18n by dk.cst.corpus-probe.i18n.po, and the template
+  a translator starts from is regenerated from the source by
+  dk.cst.corpus-probe.i18n.scan.
 
   Every UI string is written in the source in English, and that English
   is its own key, so a view reads as the sentence it renders and a
   string no translation covers falls back to readable English rather
-  than to an identifier. The translations live in resources/i18n/*.po
-  (see dk.cst.corpus-probe.i18n.po), which Poedit and Weblate read
-  directly; the template a translator starts from is regenerated from
-  the source by dk.cst.corpus-probe.i18n.scan.
+  than to an identifier. The PO files are what Poedit and Weblate read
+  directly.
 
   A `ui` is the context the lookups take: the chosen language and its
   table. dk.cst.corpus-probe.views derives it once per render and
-  hands it down, as the language code used to be handed down. The state
-  itself carries only that code: it travels to the client as transit,
-  and the client already holds every table.
+  hands it down. The state itself carries only the language code: it
+  travels to the client as transit, and the client already holds every
+  table.
 
   Only the interface is translated. CQP's own error messages, attribute
   names, corpus titles and corpus content are shown verbatim, in their

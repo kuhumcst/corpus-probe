@@ -24,7 +24,7 @@
       (is (= [[:h1 {:id "a"} "A"] [:p "b " "c"]] html))
       (is (not (some #{:div :b} (deep html)))))))
 
-(deftest hiccup-test
+(deftest document-test
   (testing "a document in the reader's language"
     (is (= [:h1 {:id "cqp-vejledning"} "CQP-vejledning"]
            (first (docs/document "cqp-guide" ["da"]))))

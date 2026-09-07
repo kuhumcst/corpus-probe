@@ -2,7 +2,12 @@
   "Child-process driver for CQP, the query processor of the IMS Open Corpus
   Workbench, and what running it for a request needs beside it: the error
   text scrubbed for display, the collation the installation sorts in, and
-  running one batch per corpus under a deadline.
+  running one batch per corpus under a deadline. Its helpers parse the
+  output (dk.cst.corpus-probe.cwb.parse), read the registry
+  (dk.cst.corpus-probe.cwb.registry), hold the facts of a corpus
+  (dk.cst.corpus-probe.cwb.corpus), run the other CWB programs
+  (dk.cst.corpus-probe.cwb.tools) and write the commands
+  (dk.cst.corpus-probe.cwb.command).
 
   CQP is spawned per batch as `cqp -c -r <registry>` (child mode). Commands
   are written to stdin, each followed by the pseudo-command `.EOL.;`, and

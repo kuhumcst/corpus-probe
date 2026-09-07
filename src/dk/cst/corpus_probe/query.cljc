@@ -2,19 +2,19 @@
   "The query a search asks, as one value: the tokens of an extended search
   kept within a unit of text, which the words of a simple search and the
   alternatives of a list are too, at their own sizes; or CQP as the
-  reader wrote it, which the app compiles into and never out of. It is
-  read from the search params by the mode that carries them (see `of`),
-  printed back as the params of a mode (see `->params`), compiled to CQP
-  (see `->cqp`), and held by each of the two forms as far as it can (see
-  `project` and `loss`).
+  reader wrote it, which the app compiles into and never out of. The
+  modes and forms are dk.cst.corpus-probe.query.mode's, the fields of
+  the extended form dk.cst.corpus-probe.query.tokens' and the readers
+  and writers of the params dk.cst.corpus-probe.query.params'.
 
-  Every word or value is escaped for a double-quoted CQP literal (see
-  dk.cst.corpus-probe.cqp). Shared by the server and the client, so both
-  can say what a form will run. The modes and forms are
-  dk.cst.corpus-probe.query.mode's, the fields of the extended form
-  dk.cst.corpus-probe.query.tokens' and the readers and writers of the
-  params dk.cst.corpus-probe.query.params'. The commands the compiled
-  query is run by are dk.cst.corpus-probe.cwb.command's."
+  A query is read from the search params by the mode that carries them
+  (see `of`), printed back as the params of a mode (see `->params`),
+  compiled to CQP (see `->cqp`), and held by each of the two forms as
+  far as it can (see `project` and `loss`). Every word or value is
+  escaped for a double-quoted CQP literal (see dk.cst.corpus-probe.cqp).
+  Shared by the server and the client, so both can say what a form will
+  run. The commands the compiled query is run by are
+  dk.cst.corpus-probe.cwb.command's."
   (:require [clojure.string :as str]
             [dk.cst.corpus-probe.cqp :as cqp]
             [dk.cst.corpus-probe.query.mode :as mode]

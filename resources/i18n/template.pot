@@ -3,7 +3,7 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Plural-Forms: nplurals=2; plural=(n != 1);\n"
 
-#: src/dk/cst/corpus_probe/api.clj
+#: src/dk/cst/corpus_probe/server/response.clj
 msgid "Search CWB corpora and read KWIC concordances."
 msgstr ""
 

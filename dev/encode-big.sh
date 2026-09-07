@@ -11,7 +11,7 @@
 #   dev/encode-big.sh
 #
 # The measurements it exists for are in the (comment ...) block at the end
-# of src/dk/cst/corpus_probe/cache.clj.
+# of dev/cache_bench.clj.
 set -euo pipefail
 cd "$(dirname "$0")/corpus"
 

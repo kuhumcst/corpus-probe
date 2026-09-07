@@ -107,10 +107,11 @@ one before the search is sent, as it reports an empty query.
 
 The query has two forms, the field and the extended form, chosen by a
 radio. A form whose radio is changed submits the old form's query under
-the new radio. The server reads the query as one value (`dk.cst.corpus-
-probe.query`) and holds it in the new form as far as that form can: the
-field's text seeds the tokens, read by its shape, and the tokens are
-handed to the field as the CQP they compile to, which the field reads.
+the new radio. The server reads the query as one value
+(`dk.cst.corpus-probe.query`) and holds it in the new form as far as
+that form can: the field's text seeds the tokens, read by its shape,
+and the tokens are handed to the field as the CQP they compile to,
+which the field reads.
 The extended form cannot read CQP, nor a list of more than fifty words.
 Then nothing runs: the form shows what it kept, and a status line under
 the radios says what it dropped, so the reader is told before the loss.
@@ -352,7 +353,7 @@ clojure -X:test        # run the tests
 clojure -M:i18n        # re-extract the translation template
 clojure -M:cljs -m shadow.cljs.devtools.cli compile app   # build the client
 clojure -M:cljs -m shadow.cljs.devtools.cli compile test && node target/test.js
-                       # run the shared query compiler's tests in JavaScript
+                       # run the tests of the shared code and the client in JavaScript
 clojure -M -m dk.cst.corpus-probe.server                  # serve (config.edn)
 ```
 
@@ -401,3 +402,54 @@ The parsers are developed against byte-exact golden files in
 [test/resources/golden/](test/resources/golden/). Regenerate them
 deliberately with `dev/capture-golden.sh`. The integration tests skip
 themselves when `cqp` or the encoded dev corpus is missing.
+
+### Layout
+
+The source under `src/dk/cst/corpus_probe/` is a set of islands. An
+island is a root namespace and the helpers under it. The root is what
+another island calls first. A helper may be called directly too, as
+`clojure.string` is. The tree is in PLAN.md section 11.
+
+Six islands are shared by the server and the client. `cqp` is the
+lexical rules of the CQP language: escaping, names and the units of
+text. `hiccup` is helpers over hiccup that know nothing of the app.
+`stats` is the arithmetic of a frequency table. `i18n` is the gettext
+tables, with `i18n.po` reading the PO files and `i18n.scan` extracting
+the template. `query` is the query a search asks, as one value, and its
+compiler to CQP, with `query.mode` holding the forms and modes,
+`query.tokens` the rows of the extended form and `query.params` the
+readers and writers of the params. `url` is the path of each page and
+the one query string a search has.
+
+Four islands run on the server. `docs` renders the Markdown documents,
+with `docs.markdown` as the parser. `cwb` runs CQP as a child process
+under a deadline, with `cwb.parse` reading its output, `cwb.registry`
+reading the registry, `cwb.corpus` holding the facts of a corpus,
+`cwb.tools` running the other CWB programs and `cwb.command` writing
+the commands. `search` runs a search of this app, a KWIC page, a text,
+an export or a count, with `search.opts` checking the options for a
+corpus, `search.batch` writing the batches, `search.result` reading a
+stored result or running a fresh one, `search.cache` keeping the saved
+results, `search.frequency` counting and `search.export` writing TSV
+and CSV. `server` is HTTP, the configuration, the routes and start and
+stop, with `server.request` reading a request, `server.response`
+writing one, `server.search`, `server.corpora` and `server.export` as
+the handlers and `server.vet` checking the installation at startup.
+
+Two islands are the interface. `views` is the hiccup of each page by
+route and the chrome, over `views.widgets`, `views.chooser`,
+`views.search` (with `views.search.tokens` and `views.search.filter`),
+`views.result`, `views.concordance`, `views.frequency` and
+`views.corpus`. `client` is the Replicant app, with `client.router`
+reading the location and listening to the document, `client.actions`
+as the pure step, `client.effects` running its effects and
+`client.lists` holding the rules of the two chooser lists.
+
+The islands depend on each other in one direction. No namespace
+requires an island later in this order: cqp, hiccup, stats, i18n,
+query, url, docs, cwb, search, views, client, server. Two chains meet
+in the server. `query` builds on `cqp`, `url` on `query`, `views` on
+`url` and `client` on `views`. `cwb` builds on `cqp`, `search` on `cwb`
+and `server` on `search`, and the server renders through `views` and
+`docs`. `stats` serves `search` and `views`, `hiccup` serves `docs` and
+`views`, and `i18n` serves `views`, `client` and `server`.
