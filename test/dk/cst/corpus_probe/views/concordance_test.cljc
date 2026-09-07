@@ -66,7 +66,7 @@
         (testing "and inspecting follows focus, not only a press"
           (is (= [:inspect (assoc source :token m)]
                  (get-in attrs [:on :focus])))
-          (is (= [:move-cursor [["PROBE" 9] 0]]
+          (is (= [:move-cursor [["PROBE" 9] 0] :event/key]
                  (get-in attrs [:on :keydown]))))))
     (testing "every other token is out of the tab order"
       (is (= "-1" (:tabindex (second (concordance/token

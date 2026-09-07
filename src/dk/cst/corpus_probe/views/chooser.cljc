@@ -18,11 +18,12 @@
 
   The chooser has two faces (see `chooser`), and the rules deciding them
   are the pure functions here, which the client applies to its own state
-  too (see dk.cst.corpus-probe.ui/lists). The markup is deliberately not
-  the ARIA tree pattern: nested <details> with native checkboxes, which
-  works without a script and submits every box, and promises no
-  arrow-key navigation it does not have. What HTML has no element for,
-  a box to find an entry among hundreds and the row a control shares
+  too (see dk.cst.corpus-probe.client.lists/lists). The markup is
+  deliberately not the ARIA tree pattern: nested <details> with native
+  checkboxes, which works without a script and submits every box, and
+  promises no arrow-key navigation it does not have. What HTML has no
+  element for, a box to find an entry among hundreds and the row a
+  control shares
   with its disclosure, is built here, and the box exists only where the
   client runs to answer it."
   (:require [clojure.string :as str]
@@ -188,9 +189,9 @@
   collapsed tree navigable at a registry of a hundred and fifty. The
   disclosure dispatches `(:on-toggle opts)` of the node as it opens or
   shuts, which is how the reader's own word on it is kept (see
-  dk.cst.corpus-probe.ui/toggle-open!). A node without a label renders
-  as its bare list, and so never has a control: there is nothing there
-  to include or exclude.
+  dk.cst.corpus-probe.client.lists/toggle-open). A node without a label
+  renders as its bare list, and so never has a control: there is nothing
+  there to include or exclude.
 
   The row is there whether or not there is a control to put in it (see
   `toggled`), and a hidden node has none: its control stands outside the
@@ -230,7 +231,7 @@
 
   `actions` are what it dispatches: `:input` for every change to what it
   holds, and `:focus` as it takes focus, which is a reader asking to see
-  the list it narrows (see dk.cst.corpus-probe.ui/engage!).
+  the list it narrows (see dk.cst.corpus-probe.client.lists/engage).
 
   It carries no name, so it is not part of the search: what a reader typed
   to find something is how they found it, not what they asked for. Enter
@@ -249,13 +250,13 @@
     :aria-label   label
     :value        (or q "")
     :autocomplete "off"
-    :on           (assoc actions :keydown [:swallow-enter])}])
+    :on           (assoc actions :keydown [:swallow-enter :event/key])}])
 
 (defn fieldset
   "The box a list too long to work through by hand stands in, which the
   corpus chooser and the metadata filter are twice over, named for the
   client by list `k` in a data attribute (see
-  dk.cst.corpus-probe.ui/leave-on-click!): its `:legend` names it,
+  dk.cst.corpus-probe.client.router/listen!): its `:legend` names it,
   `:class` classes it for a layout that places it, `:control` takes
   every entry at once beside the disclosure the entries are behind (see
   dk.cst.corpus-probe.views.widgets/select-all), `:box` narrows what
@@ -284,8 +285,8 @@
 
   `:leave` is what focus leaving the fieldset dispatches, which is one of
   the two ways a reader is known to have finished choosing from the list
-  (see dk.cst.corpus-probe.ui/leave!); the other is a click anywhere
-  else, which no element of the fieldset can hear."
+  (see dk.cst.corpus-probe.client.lists/leave); the other is a click
+  anywhere else, which no element of the fieldset can hear."
   [ui k {:keys [class legend control box chosen total details status leave]}
    & entries]
   [:fieldset.chooser.box (cond-> {:data-list (name k)}
@@ -305,8 +306,9 @@
 
 (defn chooser
   "The fieldset over the `nodes` of list `k` in `ui`, `k` being the name
-  the client knows the list by (see dk.cst.corpus-probe.ui/lists): the
-  leaves as checkboxes, the ids in the set `:selected` checked, behind
+  the client knows the list by (see
+  dk.cst.corpus-probe.client.lists/lists): the leaves as checkboxes, the
+  ids in the set `:selected` checked, behind
   one disclosure counting the selection (see `fieldset`), named
   `:legend` and classed `:class` where a layout places the fieldset.
 
@@ -328,15 +330,16 @@
   decides it. The reader's own openings and shuttings go into that set,
   and it is recomputed from the selection only as they finish, never
   under their hands (see `open-at-rest` and
-  dk.cst.corpus-probe.ui/lists). Without a client to keep such a set, it
-  is the resting one.
+  dk.cst.corpus-probe.client.lists/lists). Without a client to keep such
+  a set, it is the resting one.
 
   `:held` is what the resting face treats as chosen: the selection, and
   whatever the reader unticked at rest since they last left, so that a
   box unticked there stays in place, to be ticked again, until they have
-  gone (see dk.cst.corpus-probe.ui/tick). Hidden is never dropped: a
-  closed disclosure and a hidden row both keep their checkboxes in the
-  document and submit them, so no face of this narrows a search.
+  gone (see dk.cst.corpus-probe.client.lists/tick). Hidden is never
+  dropped: a closed disclosure and a hidden row both keep their
+  checkboxes in the document and submit them, so no face of this narrows
+  a search.
 
   The instance says how it is drawn: `:item` renders a leaf, `:summary`
   what a node's disclosure says (see `node-summary`, the default),
@@ -371,14 +374,15 @@
       :box     (when client?
                  (filter-box (str (name k) "-filter")
                              (i18n/tr ui "Filter") q
-                             {:input [:filter k]
+                             {:input [:filter k :event.target/value]
                               :focus [:engage k]}))
       :chosen  (count (filter selected offered))
       :total   (count offered)
       :details (cond-> {:open (contains? open :root)
-                        :on   {:toggle [:toggle-open k :root]}}
+                        :on   {:toggle [:toggle-open k :root
+                                        :event.target/open]}}
                  busy? (assoc :aria-busy "true"))
-      :leave   [:leave k]
+      :leave   [:leave k :event/focus-left?]
       :status  (when nothing-found? not-found)}
      (map (partial node-view
                    {:item      item
@@ -386,6 +390,7 @@
                     :extra     (when extra #(extra % resting?))
                     :toggle    (when client? toggle)
                     :open?     (comp (partial contains? open) :id)
-                    :on-toggle (fn [{:keys [id]}] [:toggle-open k id])})
+                    :on-toggle (fn [{:keys [id]}]
+                                 [:toggle-open k id :event.target/open])})
           nodes)
      after)))

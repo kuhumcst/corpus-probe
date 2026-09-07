@@ -84,7 +84,7 @@
 (defn corpus-filter!
   "Metadata `filter` (a map of attribute to the set of values accepted)
   and `patterns` (a map of attribute to the regexes accepted, see
-  dk.cst.corpus-probe.api/pattern-params) as
+  dk.cst.corpus-probe.server.request/pattern-params) as
   dk.cst.corpus-probe.cwb.command/filter-query takes them for `corpus`
   via `ctx`: [attr values patterns] triples, the attribute with the most
   regions first, that being the innermost one the filter query must

@@ -299,7 +299,8 @@
              (map (comp boolean :checked) (radios {:t1.v "x"})))))
     (testing "each radio dispatches the form it selects, so the client can
               swap the field for the tokens without a round trip"
-      (is (= [[:set-mode "simple"] [:set-mode "extended"]]
+      (is (= [[:set-mode "simple" :event.target.form/params]
+              [:set-mode "extended" :event.target.form/params]]
              (map (comp :change :on) (radios {})))))))
 
 (deftest match-control-test
@@ -342,8 +343,12 @@
                        :spellcheck   "false"
                        :enterkeyhint "search"
                        :required     true
-                       :on           {:input   [:set-query]
-                                      :keydown [:submit-on-enter]}
+                       :on           {:input   [:set-query
+                                                :event.target/value]
+                                      :keydown [:submit-on-enter
+                                                :event/key
+                                                :event/shift?
+                                                :event/composing?]}
                        :replicant/on-render [:set-validity nil]}
             "hund"]
            (search/query-field en "hund" true nil)))

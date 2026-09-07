@@ -122,8 +122,9 @@
 
 (def defaults
   "What each param means when a URL leaves it out, so the value no URL
-  carries. Each is the default its reader in dk.cst.corpus-probe.api,
-  .commands or .query.params applies, restated as the string a URL would
+  carries. Each is the default its reader in
+  dk.cst.corpus-probe.server.request, .cwb.command or .query.params
+  applies, restated as the string a URL would
   carry, but for the query keys' (see
   dk.cst.corpus-probe.query.mode/defaults) and the distance a nearby
   word may stand at, which is the manual's own example (section 3.7) and

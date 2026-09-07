@@ -113,7 +113,8 @@
   it, once the form above has moved on from it: retyped, or switched to
   a mode that could not keep it, so that the answer still says what it
   is of. Its `:asked` params are what ran (see
-  dk.cst.corpus-probe.api/search-view-data); the form's query is read
+  dk.cst.corpus-probe.server.search/search-view-data); the form's query
+  is read
   from its `:params` and `:tokens` (see `form-query`). Nil while the
   form holds the query, which then says it, and the answer names only
   how many."

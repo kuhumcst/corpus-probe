@@ -342,8 +342,8 @@
     (is (not (some #{"alert"} (deep (corpus-views/unreadable-section en false)))))))
 
 (def hverdag
-  "A text of the dev corpus, as dk.cst.corpus-probe.api/text-page hands
-  it to the view."
+  "A text of the dev corpus, as dk.cst.corpus-probe.server.corpora/serve-text
+  hands it to the view."
   {:corpus  "PROBE"
    :from    0
    :to      12

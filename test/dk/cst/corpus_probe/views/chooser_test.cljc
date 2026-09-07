@@ -214,7 +214,9 @@
       (let [html (chooser {:client? true :choosing? true
                            :control (fn [offered] [:input.all {:offered (vec offered)}])
                            :toggle  (fn [{:keys [id]}] [:input.node {:id id}])})]
-        (is (some #(and (map? %) (= [:filter :corpora] (get-in % [:on :input]))
+        (is (some #(and (map? %)
+                        (= [:filter :corpora :event.target/value]
+                           (get-in % [:on :input]))
                         (= [:engage :corpora] (get-in % [:on :focus]))
                         (= "corpora-filter" (:id %)))
                   (deep html)))
@@ -224,12 +226,14 @@
                (keep #(when (and (vector? %) (= :input.node (first %)))
                         (:id (second %)))
                      (deep html))))
-        (is (= [[:toggle-open :corpora :root]
-                [:toggle-open :corpora ["Litteratur"]]
-                [:toggle-open :corpora ["Litteratur" "Folkeviser"]]
-                [:toggle-open :corpora ["Folketinget"]]]
+        (is (= [[:toggle-open :corpora :root :event.target/open]
+                [:toggle-open :corpora ["Litteratur"] :event.target/open]
+                [:toggle-open :corpora ["Litteratur" "Folkeviser"]
+                 :event.target/open]
+                [:toggle-open :corpora ["Folketinget"] :event.target/open]]
                (keep #(when (map? %) (get-in % [:on :toggle])) (deep html))))
-        (is (= [:leave :corpora] (get-in html [1 :on :focusout]))))
+        (is (= [:leave :corpora :event/focus-left?]
+               (get-in html [1 :on :focusout]))))
       (let [html (deep (chooser {:control (constantly [:input.all])
                                  :toggle  (constantly [:input.node])}))]
         (is (not (some #{:input.all :input.node :input.chooser-find} html)))))
@@ -240,7 +244,8 @@
         (is (= ["Litteratur (0/0)" "Folkeviser (0/0)" "Folketinget (0/1)"]
                (rest (summary-texts html))))
         (is (= [{:open   false
-                 :on     {:toggle [:toggle-open :corpora ["Litteratur"]]}
+                 :on     {:toggle [:toggle-open :corpora ["Litteratur"]
+                                   :event.target/open]}
                  :hidden true}]
                (filter #(and (map? %) (contains? % :open) (:hidden %)
                              (= ["Litteratur"] (get-in % [:on :toggle 2])))

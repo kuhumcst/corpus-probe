@@ -372,7 +372,7 @@ The watch pushes recompiled code over a socket on its own port. The
 Content-Security-Policy blocks this socket unless a configuration names
 it. That is the purpose of [dev/watch.edn](dev/watch.edn). It is a file
 outside the jar, not a default, so that the strict policy is the one
-that ships. `dk.cst.corpus-probe.ui/reload!` renders again after each
+that ships. `dk.cst.corpus-probe.client/reload!` renders again after each
 swap. Thus a saved file shows up, and the search on screen stays.
 
 After you edit a PO file, force a recompile of the client. The

@@ -37,20 +37,22 @@
   stylesheet takes the handle away); the text is read by its shape
   (see dk.cst.corpus-probe.query.mode/shape and `reading-line`). On the
   client Enter submits the form and Shift+Enter starts a line (see
-  dk.cst.corpus-probe.ui/handle!). No visible label: a field with a
-  search button beside it needs none to say what it is, so the name it
-  keeps is the one only a screen reader reads, and the line under it
-  describes the field to the same reader when its id is given as
-  `described-by`. Every key dispatches `:set-query`, so the state holds
-  the text as typed and the answer can tell when the form has moved on
-  from what ran (see dk.cst.corpus-probe.views.result/question).
+  dk.cst.corpus-probe.client.actions/submit-on-enter). No visible label:
+  a field with a search button beside it needs none to say what it is,
+  so the name it keeps is the one only a screen reader reads, and the
+  line under it describes the field to the same reader when its id is
+  given as `described-by`. Every key dispatches `:set-query`, so the
+  state holds the text as typed and the answer can tell when the form
+  has moved on from what ran (see
+  dk.cst.corpus-probe.views.result/question).
 
   Required when `required?`: a search of nothing is then reported by the
   browser before it is sent, rather than answered with the help again.
   The browser's own check passes whitespace, so the field reports a
   blank of any length itself, through the render hook `:set-validity`
-  (see dk.cst.corpus-probe.ui/handle!), in the interface's words. The
-  caller says when a blank query means something (see `search-form`)."
+  (see dk.cst.corpus-probe.client.effects/set-validity!), in the
+  interface's words. The caller says when a blank query means something
+  (see `search-form`)."
   [ui text required? described-by]
   (let [text  (str text)
         attrs (cond-> {:id           "q"
@@ -63,8 +65,12 @@
                        :spellcheck   "false"
                        :enterkeyhint "search"
                        :required     required?
-                       :on           {:input   [:set-query]
-                                      :keydown [:submit-on-enter]}
+                       :on           {:input   [:set-query
+                                                :event.target/value]
+                                      :keydown [:submit-on-enter
+                                                :event/key
+                                                :event/shift?
+                                                :event/composing?]}
                        :replicant/on-render
                        [:set-validity (when (and required?
                                                  (str/blank? text))
@@ -188,8 +194,9 @@
    ;; where a reader is actually looking when they are waiting (the foot
    ;; of the rail is where the button is, but not where the answer will
    ;; be); whether it wants a minimum time on screen, since an answer at
-   ;; 450ms still flashes past `dk.cst.corpus-probe.ui/pending-delay-ms`;
-   ;; and whether waiting should say more than that it is waiting. The
+   ;; 450ms still flashes past
+   ;; `dk.cst.corpus-probe.client.effects/pending-delay-ms`; and whether
+   ;; waiting should say more than that it is waiting. The
    ;; metadata filter has the same decision pending (see
    ;; dk.cst.corpus-probe.views.search.filter/filter-fieldset), as does
    ;; the count of a result still being made (see
@@ -282,7 +289,9 @@
                    [:label [:input {:type    "radio" :name "mode"
                                     :value   m
                                     :checked (= m form)
-                                    :on      {:change [:set-mode m]}}]
+                                    :on      {:change
+                                              [:set-mode m
+                                               :event.target.form/params]}}]
                     (mode-label ui m)]))])
 
 (defn modes-fieldset
@@ -385,7 +394,7 @@
   Where the client runs, `navigation-status` follows the form inside the
   landmark, and the metadata filter shows what is chosen or everything
   there is to choose, by what `:lists` holds of it (see
-  dk.cst.corpus-probe.ui/lists)."
+  dk.cst.corpus-probe.client.lists/lists)."
   [{:keys [ui view filter-controls search-attrs params tokens value-lists
            switch client? pending? lists filters-pending?]
     :as state}

@@ -174,7 +174,7 @@
               :id       (token-id hit i)
               :tabindex (if (= cursor k) "0" "-1")
               :on       {:focus   inspect
-                         :keydown [:move-cursor k]
+                         :keydown [:move-cursor k :event/key]
                          :click   inspect})
        (:word m)])))
 
@@ -617,8 +617,8 @@
 
 (def inspector-id
   "The id of the inspection panel, by which the client finds it (see
-  dk.cst.corpus-probe.ui/leave-concordance!) rather than by the class the
-  stylesheet uses, as it finds the region (see `region-id`)."
+  dk.cst.corpus-probe.client.effects/leave-concordance!) rather than by
+  the class the stylesheet uses, as it finds the region (see `region-id`)."
   "inspector")
 
 (defn detail-group
@@ -648,7 +648,7 @@
   anywhere in it lands focus in the panel rather than on the page, and
   it reports focus leaving it, since the client closes it once focus
   has left both it and the concordance (see
-  dk.cst.corpus-probe.ui/leave-concordance!).
+  dk.cst.corpus-probe.client.effects/leave-concordance!).
 
   The group titles are in `ui`; the attribute names inside them are the
   corpus's own."

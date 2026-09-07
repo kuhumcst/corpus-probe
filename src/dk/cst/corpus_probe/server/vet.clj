@@ -1,4 +1,4 @@
-(ns dk.cst.corpus-probe.vet
+(ns dk.cst.corpus-probe.server.vet
   "Startup self-checks: does this machine have what the app drives, and
   does the registry read?
 
@@ -25,19 +25,32 @@
   "How long a self-check waits for a command that should answer at once."
   5000)
 
-(defn installed?
-  "True when `command` can be launched on this machine at all, whatever it
-  then exits with.
+(defn log-problems!
+  "Log each of `problems` as an event `id` with the options `f` gives it
+  (a function of the problem to its :level and :data), and return them."
+  [id f problems]
+  (doseq [problem problems]
+    ;; the macro reads a map literal as its options and anything else as
+    ;; a level, so the options are spelt out here
+    (let [{:keys [level data]} (f problem)]
+      (t/event! id {:level level :data data})))
+  problems)
+
+(defn missing-tools!
+  "The `commands` that cannot be launched on this machine at all, whatever
+  the others then exit with.
 
   The cwb-* tools exit non-zero for `-h` and for no arguments alike, so
   their exit code says nothing about whether they are installed; being
   launchable at all does."
-  [command]
-  (try
-    (not (cwb/timeout? (cwb/run! [command "-h"] timeout-ms {})))
-    (catch Exception _ false)))
+  [commands]
+  (vec (remove (fn [command]
+                 (try
+                   (not (cwb/timeout? (cwb/run! [command "-h"] timeout-ms {})))
+                   (catch Exception _ false)))
+               commands)))
 
-(defn tools!
+(defn tool-problems!
   "Log the CWB programs `ctx` drives that this machine cannot launch, and
   return them: its :cqp (default cqp) and the cwb-* tools (see
   dk.cst.corpus-probe.cwb.tools/tool-names).
@@ -47,10 +60,11 @@
   filters all fail. Logs the CQP version too, since the app generates the
   subset that is safe on the oldest supported one."
   [ctx]
-  (let [missing (vec (remove installed?
-                             (cons (:cqp ctx "cqp") tools/tool-names)))]
-    (doseq [command missing]
-      (t/event! ::tool-missing {:level :warn :data {:command command}}))
+  (let [missing (log-problems! ::tool-missing
+                               (fn [command]
+                                 {:level :warn :data {:command command}})
+                               (missing-tools! (cons (:cqp ctx "cqp")
+                                                     tools/tool-names)))]
     (when (empty? missing)
       ;; the app's own timeout is for a query; a banner answers at once
       (t/event! ::cwb-version
@@ -90,7 +104,7 @@
       named
       "UTF-8")))
 
-(defn pipeline-order
+(defn pipeline-order!
   "The line numbers the sort pipeline CQP runs puts `collation-probe` in
   under LC_ALL `sort-locale`; nil when the pipeline cannot be run at all.
 
@@ -125,90 +139,73 @@
   (mapv probe-line (sort (cwb/->collator {:sort-locale sort-locale})
                          collation-probe)))
 
-(defn collation-problems
-  "What would make CQP sort differently from the app itself under
-  `sort-locale`: :sort-locale-unset when there is none to follow,
-  :pipeline-broken when CQP's sort pipeline does not run here, and
-  :collation-mismatch when it runs but disagrees with the app's collator.
+(defn collation-problems!
+  "Log what would make CQP sort differently from the app itself under the
+  :sort-locale of `ctx`, and return it: :sort-locale-unset when there is
+  none to follow, :pipeline-broken when CQP's sort pipeline does not run
+  here (see `pipeline-order!`), and :collation-mismatch when it runs but
+  disagrees with the app's collator (see `collator-order`).
 
   The app orders values with a java.text.Collator while CQP orders a
   concordance with a shell pipeline. Both are meant to follow
   :sort-locale, and the setting is worth nothing unless they agree."
-  [sort-locale]
-  (if (str/blank? (str sort-locale))
-    [:sort-locale-unset]
-    (let [order (pipeline-order sort-locale)]
-      (cond
-        (nil? order)                             [:pipeline-broken]
-        (not= order (collator-order sort-locale)) [:collation-mismatch]
-        :else                                    []))))
+  [{:keys [sort-locale] :as ctx}]
+  (let [order    (when-not (str/blank? (str sort-locale))
+                   (pipeline-order! sort-locale))
+        expected (when order (collator-order sort-locale))]
+    (log-problems! ::collation-fallback
+                   (fn [problem]
+                     {:level :warn
+                      :data  {:problem problem :sort-locale sort-locale}})
+                   (cond
+                     (str/blank? (str sort-locale)) [:sort-locale-unset]
+                     (nil? order)                   [:pipeline-broken]
+                     (not= order expected)          [:collation-mismatch]
+                     :else                          []))))
 
-(defn collation!
-  "Log the `collation-problems` of `config`'s :sort-locale and return
-  them."
-  [{:keys [sort-locale] :as config}]
-  (let [problems (collation-problems sort-locale)]
-    (doseq [problem problems]
-      (t/event! ::collation-fallback
-                {:level :warn
-                 :data  {:problem problem :sort-locale sort-locale}}))
-    problems))
-
-(defn writable?
-  "True when a file can be created in directory `dir` and removed again.
-
-  `File.canWrite` answers from the permission bits alone, which a
-  read-only mount or an ACL can contradict. It does not catch a nearly
-  full disk, an empty file still fitting on one; that is left to
-  dk.cst.corpus-probe.search.result/run-fresh!, which answers without the
-  cache when a save fails."
-  [^File dir]
-  (try
-    (.delete (File/createTempFile "probe" nil dir))
-    (catch Exception _ false)))
-
-(defn cache-problems
-  "What would stop `ctx` saving query results in its cache directory:
-  :cache-unusable when the directory is neither there nor creatable, or is
-  there but cannot be written (see `writable?`), and :cache-over-disk when
+(defn cache-problems!
+  "Log what would stop `ctx` saving query results in its cache directory,
+  and return it: :cache-unusable when the directory is neither there nor
+  creatable, or is there but cannot be written, and :cache-over-disk when
   its byte budget is larger than the filesystem has left. Nothing when
   `ctx` keeps no cache, running without one being a supported setting in
   which every request queries afresh.
 
-  The two are not equally bad. An unusable directory fails every save; a
-  budget larger than the disk only fails the saves that fill it, and goes
-  on failing them, since nothing evicts until a budget is reached that
-  never can be. The directory is created when missing."
+  The two are not equally bad. An unusable directory fails every save, so
+  it is an error rather than a warning: CQP reports a `save` it could
+  not make like any other failure, and the server drops the cache from
+  its configuration instead. A budget larger than the disk only fails
+  the saves that fill it, and goes on failing them, since nothing evicts
+  until a budget is reached that never can be. The directory is created
+  when missing.
+
+  Whether it can be written is learnt by writing: `File.canWrite`
+  answers from the permission bits alone, which a read-only mount or an
+  ACL can contradict. A nearly full disk is not caught, an empty file
+  still fitting on one; that is left to
+  dk.cst.corpus-probe.search.result/run-fresh!, which answers without
+  the cache when a save fails."
   [ctx]
-  (if-let [^File dir (cache/directory ctx)]
-    (do
-      (.mkdirs dir)
-      (cond
-        (not (and (.isDirectory dir) (writable? dir))) [:cache-unusable]
-        (< (.getUsableSpace dir) (cache/max-bytes ctx)) [:cache-over-disk]
-        :else                                          []))
-    []))
+  (let [^File dir (cache/directory ctx)
+        _         (when dir (.mkdirs dir))
+        writable  (and dir (.isDirectory dir)
+                       (try (.delete (File/createTempFile "probe" nil dir))
+                            (catch Exception _ false)))
+        free      (when dir (.getUsableSpace dir))]
+    (log-problems! ::cache-problem
+                   (fn [problem]
+                     {:level (if (= problem :cache-unusable) :error :warn)
+                      :data  {:problem    problem
+                              :cache-dir  (:cache-dir ctx)
+                              :max-bytes  (cache/max-bytes ctx)
+                              :free-bytes free}})
+                   (cond
+                     (nil? dir)                     []
+                     (not writable)                 [:cache-unusable]
+                     (< free (cache/max-bytes ctx)) [:cache-over-disk]
+                     :else                          []))))
 
-(defn cache!
-  "Log the `cache-problems` of `config` and return them.
-
-  An unusable directory is an error, not a warning: CQP reports a `save`
-  it could not make like any other failure, so it would fail every search
-  rather than merely slow one down, and the server drops the cache from
-  its configuration instead."
-  [config]
-  (let [problems (cache-problems config)]
-    (doseq [problem problems]
-      (t/event! ::cache-problem
-                {:level (if (= problem :cache-unusable) :error :warn)
-                 :data  {:problem    problem
-                         :cache-dir  (:cache-dir config)
-                         :max-bytes  (cache/max-bytes config)
-                         :free-bytes (some-> (cache/directory config)
-                                             (.getUsableSpace))}}))
-    problems))
-
-(defn corpus!
+(defn corpus-problem!
   "Vet registry entry map `m` against the installation in `ctx`: nil when
   CWB can read its corpus, else [id reason] saying why it cannot.
 
@@ -224,9 +221,10 @@
       (catch Exception e
         [id (get-in (ex-data e) [:error :type] :unreadable)]))))
 
-(defn registry!
+(defn registry-problems!
   "Read every corpus of the `ctx` registry once, in parallel, log the ones
-  CWB cannot open and return them as the [id reason] pairs of `corpus!`.
+  CWB cannot open and return them as the [id reason] pairs of
+  `corpus-problem!`.
 
   A registry that holds no corpus at all is logged as a problem rather
   than a clean run, since a mistyped :registry path reads exactly like an
@@ -234,18 +232,19 @@
   before the first request."
   [ctx]
   (let [started (System/nanoTime)
-        corpora (registry/entries ctx)
-        broken  (vec (keep identity
-                           (cwb/pmap-n (cwb/parallelism ctx)
-                                       #(corpus! ctx %)
-                                       corpora)))]
-    (doseq [[id reason] broken]
-      (t/event! ::corpus-unreadable
-                {:level :warn :data {:corpus id :reason reason}}))
+        entries (registry/entries ctx)
+        broken  (log-problems! ::corpus-unreadable
+                               (fn [[id reason]]
+                                 {:level :warn
+                                  :data  {:corpus id :reason reason}})
+                               (vec (keep identity
+                                          (cwb/pmap-n (cwb/parallelism ctx)
+                                                      #(corpus-problem! ctx %)
+                                                      entries))))]
     (t/event! ::registry-vetted
-              {:level (if (seq corpora) :info :warn)
+              {:level (if (seq entries) :info :warn)
                :data  {:registry   (:registry ctx)
-                       :corpora    (count corpora)
+                       :corpora    (count entries)
                        :unreadable (count broken)
                        :ms         (quot (- (System/nanoTime) started)
                                          1000000)}})
@@ -256,15 +255,15 @@
                            "/dev/corpus/registry")
             :sort-locale "da_DK.UTF-8"})
 
-  (tools! ctx)
+  (tool-problems! ctx)
   ;; => []
 
-  (collation! ctx)
+  (collation-problems! ctx)
   ;; => []
 
-  (collation-problems "zz_ZZ.UTF-8")
+  (collation-problems! {:sort-locale "zz_ZZ.UTF-8"})
   ;; => [:collation-mismatch]
 
-  (registry! ctx)
+  (registry-problems! ctx)
   ;; => []
   #_.)

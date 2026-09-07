@@ -95,20 +95,23 @@
               {:name       (param :join)
                :aria-label (i18n/tr ui "joined by")
                :disabled   dead?
-               :on         {:change [:set-condition [i id :join]]}}
+               :on         {:change [:set-condition [i id :join]
+                                     :event.target/value]}}
               (for [j tokens/joins]
                 (widgets/option (or join "and") j (joined j)))]
              " "))
      [:select {:name       (param :attr)
                :aria-label (i18n/tr ui "attribute")
                :disabled   any?
-               :on         {:change [:set-condition [i id :attr]]}}
+               :on         {:change [:set-condition [i id :attr]
+                                     :event.target/value]}}
       (attribute-options ui attrs attr)]
      " "
      [:select {:name       (param :op)
                :aria-label (i18n/tr ui "operator")
                :disabled   dead?
-               :on         {:change [:set-condition [i id :op]]}}
+               :on         {:change [:set-condition [i id :op]
+                                     :event.target/value]}}
       (for [o (cond->> tokens/operators (not first?) (remove #{"any"}))]
         (widgets/option op o (operator-label ui o)))]
      " "
@@ -121,14 +124,16 @@
                :spellcheck   "false"
                :required     (and required? (not any?))
                :disabled     any?
-               :on           {:input [:set-condition [i id :v]]}}
+               :on           {:input [:set-condition [i id :v]
+                                      :event.target/value]}}
         (contains? value-lists attr*)
         (assoc :list (value-list-id attr*)))]
      " "
      [:label [:input {:type     "checkbox" :name (param :ci) :value "on"
                       :checked  (some? ci)
                       :disabled any?
-                      :on       {:change [:set-condition [i id :ci]]}}]
+                      :on       {:change [:set-condition [i id :ci]
+                                          :event.target/checked]}}]
       (i18n/tr ui "ignore case")]
      (when removable?
        (list " "
@@ -180,23 +185,25 @@
        [:label (i18n/tr ui "repeat") " "
         [:input {:type "number" :name (param :min) :value (or lo "1")
                  :min  0 :max 99
-                 :on   {:input [:set-token [i :min]]}}]]
+                 :on   {:input [:set-token [i :min] :event.target/value]}}]]
        " "
        [:label (i18n/tr ui "to") " "
         [:input {:type "number" :name (param :max) :value (or hi "1")
                  :min  0 :max 99
-                 :on   {:input [:set-token [i :max]]}}]]]
+                 :on   {:input [:set-token [i :max] :event.target/value]}}]]]
       " "
       [:label.token-edges
        [:input {:type    "checkbox" :name (param :start) :value "on"
                 :checked (some? start)
-                :on      {:change [:set-token [i :start]]}}]
+                :on      {:change [:set-token [i :start]
+                                   :event.target/checked]}}]
        (i18n/tr ui "sentence start")]
       " "
       [:label.token-edges
        [:input {:type    "checkbox" :name (param :end) :value "on"
                 :checked (some? end)
-                :on      {:change [:set-token [i :end]]}}]
+                :on      {:change [:set-token [i :end]
+                                   :event.target/checked]}}]
        (i18n/tr ui "sentence end")]]
      ;; the token's own actions on a row of their own, so they stay together
      (when client?

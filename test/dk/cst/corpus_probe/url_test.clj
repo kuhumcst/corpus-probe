@@ -1,10 +1,10 @@
 (ns dk.cst.corpus-probe.url-test
   (:require [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]
-            [dk.cst.corpus-probe.api :as api]
             [dk.cst.corpus-probe.cwb.command :as command]
             [dk.cst.corpus-probe.query.params :as params]
             [dk.cst.corpus-probe.search.batch :as batch]
+            [dk.cst.corpus-probe.server.request :as request]
             [dk.cst.corpus-probe.url :as url]))
 
 (deftest paths-test
@@ -115,16 +115,17 @@
     (is (= (:context url/defaults) (str (:context batch/kwic-defaults))))
     (is (= (:sort url/defaults) (ffirst command/sort-modes)))
     (is (= (:distance url/defaults)
-           (str (:distance (api/near-param "kat" nil)))))
+           (str (:distance (request/near-param "kat" nil)))))
     (is (= (:view url/defaults) (second (first url/result-views))))
-    (is (= (api/view-param nil) (api/view-param (:view url/defaults))))
-    (is (= (:attr url/defaults) (api/attr-param nil)))
-    (is (= (:in url/defaults) (api/attr-param nil)))
+    (is (= (request/view-param nil)
+           (request/view-param (:view url/defaults))))
+    (is (= (:attr url/defaults) (request/attr-param nil)))
+    (is (= (:in url/defaults) (request/attr-param nil)))
     (is (= (:within url/defaults) (name (params/within-param nil))))
-    (is (= (:subset-attr url/defaults) (api/attr-param nil)))
-    (is (= (:at url/defaults) (api/position-param nil)))
-    (is (= (:subset-at url/defaults) (api/position-param nil)))
-    (is (= 0 (api/page-param (:page url/defaults))))))
+    (is (= (:subset-attr url/defaults) (request/attr-param nil)))
+    (is (= (:at url/defaults) (request/position-param nil)))
+    (is (= (:subset-at url/defaults) (request/position-param nil)))
+    (is (= 0 (request/page-param (:page url/defaults))))))
 
 (deftest pairs-test
   (testing "a token's fields are known, and sort together after the mode;

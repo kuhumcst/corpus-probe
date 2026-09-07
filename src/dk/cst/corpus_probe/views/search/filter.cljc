@@ -152,7 +152,7 @@
   "True when `filters` (see `filter-fieldset`) offer anything to filter
   by, or hold a selection to show: what decides whether the fieldset is
   rendered at all, and so whether a reader could open it to ask for
-  fresh ones (see dk.cst.corpus-probe.ui/filters-stale?)."
+  fresh ones (see dk.cst.corpus-probe.client.lists/filters-stale?)."
   [{:keys [attrs unlisted selected]}]
   (boolean (or (seq attrs) (seq unlisted) (seq selected))))
 

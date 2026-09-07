@@ -1,19 +1,34 @@
 (ns dk.cst.corpus-probe.server
-  "Server lifecycle: configuration, start/stop and the main entry point.
+  "The HTTP server: configuration, the route table with the handlers
+  behind it, start/stop and the main entry point.
 
-  Startup vets the installation (see dk.cst.corpus-probe.vet): the CWB
-  programs and the sort collation before the port is bound, the registry
-  once it is open, since reading every corpus can be slow on a large or
-  ailing one. None of it stops the server."
+  The handlers of a search, of the corpus pages and of the exports are
+  the server's helpers; the documents, the preferences and the compiled
+  client assets are served from here. Where each of these is, and how a
+  search is spelt as a URL, is dk.cst.corpus-probe.url's.
+
+  Startup vets the installation (see dk.cst.corpus-probe.server.vet):
+  the CWB programs and the sort collation before the port is bound, the
+  registry once it is open, since reading every corpus can be slow on a
+  large or ailing one. None of it stops the server."
   (:require [clojure.edn :as edn]
             [clojure.java.io :as io]
+            [clojure.string :as str]
+            [dk.cst.corpus-probe.docs :as docs]
+            [dk.cst.corpus-probe.i18n :as i18n]
             [dk.cst.corpus-probe.search.cache :as cache]
+            [dk.cst.corpus-probe.server.corpora :as corpora]
+            [dk.cst.corpus-probe.server.export :as export]
+            [dk.cst.corpus-probe.server.request :as request]
+            [dk.cst.corpus-probe.server.response :as response]
+            [dk.cst.corpus-probe.server.search :as search]
+            [dk.cst.corpus-probe.server.vet :as vet]
+            [dk.cst.corpus-probe.url :as url]
+            [dk.cst.corpus-probe.views :as views]
             [io.pedestal.connector :as conn]
             [io.pedestal.http.http-kit :as http-kit]
             [io.pedestal.interceptor :as interceptor]
-            [taoensso.telemere :as t]
-            [dk.cst.corpus-probe.api :as api]
-            [dk.cst.corpus-probe.vet :as vet])
+            [taoensso.telemere :as t])
   (:gen-class))
 
 (defn content-security-policy
@@ -95,6 +110,87 @@
       (:cache-dir config) (update :cache-dir absolute)
       path                (assoc :config-file path))))
 
+(defn serve-document
+  "Handle a `request` for the document called `name` (see
+  dk.cst.corpus-probe.docs): the frontpage, where the app says what it
+  is and where a reader goes from here, the CQP guide or the glossary.
+  Served in the first language the request reads that the document has,
+  and titled as the document titles itself."
+  [_ctx name request]
+  (let [langs (request/request-languages request)
+        data  {:route :document
+               :lang  (first (filter i18n/supported? langs))
+               :data  {:body (docs/document name langs)}}]
+    (response/page-response request (views/title data) data)))
+
+(defn serve-preferences
+  "Store the settings a reader chose with `request` and send them back
+  where they were.
+
+  A preference is state, so it is set with a POST and answered with a
+  redirect: the page they return to is the one they were reading, with
+  their choice applied, and a refresh does not re-submit the form they
+  came from. Cookies are the whole persistence (see
+  dk.cst.corpus-probe.server.request/preference-cookies): no URL names a
+  preference, so a link can be shared without imposing the sharer's
+  settings on whoever opens it."
+  [_ctx request]
+  (let [params  (:form-params request)
+        cookies (request/preference-cookies params)]
+    {:status  303
+     :headers (cond-> {"Location" (request/safe-return (:return params))}
+                (seq cookies) (assoc "Set-Cookie" cookies))
+     :body    ""}))
+
+(defn serve-file
+  "Serve the file under public/`dir` named by the splat `:path` of
+  `request` as `content-type`: a stylesheet, or a compiled client asset.
+
+  Rejects `..` segments directly: `io/resource` follows them out of the
+  directory, so a normalising router is not relied on as the only guard."
+  [content-type dir request]
+  (let [path (get-in request [:path-params :path])]
+    (if-let [resource (and (not (str/includes? path ".."))
+                           (io/resource (str "public/" dir "/" path)))]
+      (response/resource-response content-type resource)
+      response/not-found)))
+
+(defn routes
+  "The route table, with handlers closed over `ctx`."
+  [ctx]
+  #{[url/home                     :get (partial serve-document ctx "frontpage")
+     :route-name ::home]
+    [url/glossary                 :get (partial serve-document ctx "glossary")
+     :route-name ::glossary]
+    [url/cqp-guide                :get (partial serve-document ctx "cqp-guide")
+     :route-name ::cqp-guide]
+    [url/search                   :get (partial search/serve-search ctx)
+     :route-name ::search]
+    [(str url/search "/:file")    :get (partial export/serve-export ctx)
+     :route-name ::export]
+    [url/preferences              :post (partial serve-preferences ctx)
+     :route-name ::preferences]
+    [url/corpora                  :get (partial corpora/serve-corpora ctx)
+     :route-name ::corpora]
+    [(str url/corpora "/:id")     :get (partial corpora/serve-corpus ctx)
+     :route-name ::corpus]
+    [(str url/corpora "/:id/text") :get (partial corpora/serve-text ctx)
+     :route-name ::text]
+    [url/context-api              :get (partial search/serve-context ctx)
+     :route-name ::context]
+    [url/filters-api              :get (partial search/serve-filters ctx)
+     :route-name ::filters]
+    [url/counts-api               :get (partial search/serve-counts ctx)
+     :route-name ::counts]
+    ["/css/*path"                 :get (partial serve-file
+                                                "text/css; charset=utf-8"
+                                                "css")
+     :route-name ::css]
+    ["/js/*path"                  :get (partial serve-file
+                                                "text/javascript; charset=utf-8"
+                                                "js")
+     :route-name ::js]})
+
 (defonce ^{:doc "The running Pedestal connector, nil when stopped."}
   server
   (atom nil))
@@ -115,8 +211,8 @@
   ([{:keys [port] :as config}]
    (or @server
        (do
-         (vet/tools! config)
-         (vet/collation! config)
+         (vet/tool-problems! config)
+         (vet/collation-problems! config)
          ;; the folder tree is long and says nothing about the
          ;; installation; everything else is what an operator needs to
          ;; confirm which config.edn this process actually read
@@ -124,7 +220,8 @@
                    {:data (assoc (dissoc config :folders)
                                  :java (System/getProperty "java.version"))})
          (let [config    (cond-> config
-                           (some #{:cache-unusable} (vet/cache! config))
+                           (some #{:cache-unusable}
+                                 (vet/cache-problems! config))
                            (dissoc :cache-dir))
                ;; reaping otherwise waits for the first search, so
                ;; whatever a crash left behind sits there until then
@@ -134,14 +231,14 @@
                              (conn/with-default-interceptors)
                              (update :interceptors
                                      #(into [(csp-interceptor config)] %))
-                             (conn/with-routes (api/routes config))
+                             (conn/with-routes (routes config))
                              (http-kit/create-connector nil)
                              (conn/start!))]
            ;; nothing waits on the vetting, so its own failure has to be
            ;; logged where it happens or it is lost
            (future (t/catch->error! {:id ::registry-vetting-failed
                                      :catch-val nil}
-                                    (vet/registry! config)))
+                                    (vet/registry-problems! config)))
            (reset! server connector))))))
 
 (defn stop!
@@ -152,6 +249,8 @@
     (reset! server nil)))
 
 (defn -main
+  "Start the server from the configuration it reads (see `read-config`)
+  and say where it listens; `_args` are ignored."
   [& _args]
   (let [{:keys [port] :as config} (read-config)]
     (start! config)

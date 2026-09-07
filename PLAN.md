@@ -470,9 +470,13 @@ corpus-probe/
 │   ├── search/export.clj           ; TSV/CSV exports of concordances and
 │   │                               ;   frequency tables
 │   ├── stats.cljc                  ; relative frequencies
-│   ├── api.clj                     ; Pedestal routes + SSR handlers
-│   ├── server.clj                  ; config, start/stop, CSP
-│   ├── ui.cljs                     ; Replicant client
+│   ├── server.clj                  ; config, CSP, routes, start/stop
+│   ├── server/                     ; request readers, responses and the
+│   │                               ;   document shell, the search page
+│   │                               ;   and its endpoints, corpus pages,
+│   │                               ;   exports, startup self-checks
+│   ├── client.cljs                 ; Replicant client: state, dispatch
+│   ├── client/                     ; router, effects, lists, actions
 │   ├── views.cljc                  ; .cljc shared hiccup: the pages by
 │   │                               ;   route, their titles, the chrome
 │   └── views/                      ; widgets, chooser, result, search

@@ -8,7 +8,8 @@
             [dk.cst.corpus-probe.views.widgets :as widgets]))
 
 (def help
-  "A search help, as api/search-page puts one in the data."
+  "A search help, as dk.cst.corpus-probe.server.search/serve-search puts
+  one in the data."
   [[:p "Type a word."]])
 
 (def base

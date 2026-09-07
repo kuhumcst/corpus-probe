@@ -115,12 +115,16 @@
                  (required (assoc state :client? true)))))))
     (testing "every control records itself, so the state holds the tokens
               as typed"
-      (is (= {:input [:set-condition [1 1 :v]]} (:on (named html "t1.v"))))
-      (is (= {:change [:set-condition [1 1 :ci]]} (:on (named html "t1.ci"))))
-      (is (= {:change [:set-condition [1 2 :join]]}
+      (is (= {:input [:set-condition [1 1 :v] :event.target/value]}
+             (:on (named html "t1.v"))))
+      (is (= {:change [:set-condition [1 1 :ci] :event.target/checked]}
+             (:on (named html "t1.ci"))))
+      (is (= {:change [:set-condition [1 2 :join] :event.target/value]}
              (:on (named html "t1.2.join"))))
-      (is (= {:input [:set-token [2 :max]]} (:on (named html "t2.max"))))
-      (is (= {:change [:set-token [2 :start]]} (:on (named html "t2.start")))))
+      (is (= {:input [:set-token [2 :max] :event.target/value]}
+             (:on (named html "t2.max"))))
+      (is (= {:change [:set-token [2 :start] :event.target/checked]}
+             (:on (named html "t2.start")))))
     (testing "an any-word token has nothing to say beyond its first operator"
       (is (:disabled (named html "t2.v")))
       (is (:disabled (named html "t2.attr")))
@@ -141,12 +145,14 @@
                    [:label "repeat" " "
                     [:input {:type "number" :name "t1.min" :value "1"
                              :min  0 :max 99
-                             :on   {:input [:set-token [1 :min]]}}]]
+                             :on   {:input [:set-token [1 :min]
+                                            :event.target/value]}}]]
                    " "
                    [:label "to" " "
                     [:input {:type "number" :name "t1.max" :value "1"
                              :min  0 :max 99
-                             :on   {:input [:set-token [1 :max]]}}]]]}
+                             :on   {:input [:set-token [1 :max]
+                                            :event.target/value]}}]]]}
                 (deep html)))
       (is (= 6 (count (filter #{:label.token-edges} (deep html)))))
       (is (some #{:select.condition-join} (deep html)))
