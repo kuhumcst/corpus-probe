@@ -1,4 +1,4 @@
-(ns dk.cst.corpus-probe.export
+(ns dk.cst.corpus-probe.search.export
   "Tabular text exports of concordances and frequency tables.
 
   Each export is built as rows of strings, a header row first, with the
@@ -44,7 +44,7 @@
                (into (map #(get m % "")) struct-attrs))))
        rows))
 
-(defn frequency-table
+(defn frequency-lines
   "The merged frequency `result` as rows of strings: a header, then one row
   per value with, for every readable corpus, its frequency, its rate per
   million tokens, those tokens when the result is `:sized` (the text of
@@ -81,9 +81,9 @@
                                     (stats/row-docs row)))))))
           rows)))
 
-(defn crosstab-table
+(defn crosstab-lines
   "The cross-tabulated frequency `result` (see
-  dk.cst.corpus-probe.frequency/frequency-table! under :by) as rows of
+  dk.cst.corpus-probe.search.frequency/frequency-table! under :by) as rows of
   strings: a header naming the attribute, each of the `:columns` and the
   total, then, when the result is `:sized`, a row of the tokens each
   column measures against, then one row per value with its frequency in

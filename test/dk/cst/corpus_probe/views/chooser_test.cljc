@@ -1,11 +1,11 @@
-(ns dk.cst.corpus-probe.views.tree-test
+(ns dk.cst.corpus-probe.views.chooser-test
   "The chooser both fieldsets are: its rules over a small tree, and the
   markup of one node and of the whole."
   (:require [clojure.test :refer [deftest is testing]]
             [dk.cst.corpus-probe.hiccup :refer [deep]]
             [dk.cst.corpus-probe.test.hiccup
              :refer [en hidden-ids open-states summary-texts]]
-            [dk.cst.corpus-probe.views.tree :as tree]))
+            [dk.cst.corpus-probe.views.chooser :as chooser]))
 
 (def nodes
   "Two folders, one with a subfolder, and one corpus that cannot be read:
@@ -31,24 +31,24 @@
 (deftest narrow-test
   (let [[litteratur folketinget] nodes]
     (testing "what does not answer is marked, not removed"
-      (let [narrowed (tree/narrow "anden" litteratur)]
+      (let [narrowed (chooser/narrow "anden" litteratur)]
         (is (:hidden? (first (:items narrowed))))
         (is (not (:hidden? (second (:items narrowed)))))
         (is (:hidden? (first (:nodes narrowed))))
         ;; still in the tree, so still in the document and the search
         (is (= 2 (count (:items narrowed))))))
     (testing "a leaf answers by its text, a folder by its label"
-      (is (not (:hidden? (first (:items (tree/narrow "folkev" litteratur))))))
-      (is (not (:hidden? (tree/narrow "litt" litteratur)))))
+      (is (not (:hidden? (first (:items (chooser/narrow "folkev" litteratur))))))
+      (is (not (:hidden? (chooser/narrow "litt" litteratur)))))
     (testing "naming a node asks for everything in it"
-      (let [narrowed (tree/narrow "folkeviser" litteratur)]
+      (let [narrowed (chooser/narrow "folkeviser" litteratur)]
         (is (not (:hidden? (first (:nodes narrowed)))))
         (is (not (:hidden? (first (:items (first (:nodes narrowed)))))))))
     (testing "and nothing anywhere marks the whole node"
-      (is (:hidden? (tree/narrow "zzz" folketinget))))))
+      (is (:hidden? (chooser/narrow "zzz" folketinget))))))
 
 (deftest counted-test
-  (let [[litteratur folketinget] (map tree/counted nodes)]
+  (let [[litteratur folketinget] (map chooser/counted nodes)]
     (testing "a node offers what can be chosen in it, the nodes under it
               included, and a disabled leaf left out"
       (is (= ["VISER" "ANDEN" "DIGTE" "VERS"] (:offered litteratur)))
@@ -56,37 +56,37 @@
       (is (= ["TALER"] (:offered folketinget))))
     (testing "and not what a filter has hidden"
       (is (= ["ANDEN"]
-             (:offered (tree/counted (tree/narrow "anden" litteratur))))))))
+             (:offered (chooser/counted (chooser/narrow "anden" litteratur))))))))
 
 (deftest open-at-rest-test
   (testing "open at rest is exactly what is chosen in part: the root
             while the selection as a whole is, and each such node"
-    (is (= #{} (tree/open-at-rest nodes #{})))
-    (is (= #{} (tree/open-at-rest nodes #{"VISER" "ANDEN" "DIGTE" "VERS" "TALER"})))
-    (is (= #{:root ["Litteratur"]} (tree/open-at-rest nodes #{"VISER"})))
+    (is (= #{} (chooser/open-at-rest nodes #{})))
+    (is (= #{} (chooser/open-at-rest nodes #{"VISER" "ANDEN" "DIGTE" "VERS" "TALER"})))
+    (is (= #{:root ["Litteratur"]} (chooser/open-at-rest nodes #{"VISER"})))
     (is (= #{:root ["Litteratur"] ["Litteratur" "Folkeviser"]}
-           (tree/open-at-rest nodes #{"VISER" "DIGTE"})))
+           (chooser/open-at-rest nodes #{"VISER" "DIGTE"})))
     (testing "a node chosen whole is shut, and so is one with nothing:
               its box and its count say which"
       (is (= #{:root ["Litteratur"]}
-             (tree/open-at-rest nodes #{"VISER" "DIGTE" "VERS"})))
-      (is (= #{:root} (tree/open-at-rest nodes #{"TALER"})))))
+             (chooser/open-at-rest nodes #{"VISER" "DIGTE" "VERS"})))
+      (is (= #{:root} (chooser/open-at-rest nodes #{"TALER"})))))
   (testing "a leaf that cannot be chosen never leaves a node part chosen"
-    (is (= #{} (tree/open-at-rest [(second nodes)] #{"TALER"})))))
+    (is (= #{} (chooser/open-at-rest [(second nodes)] #{"TALER"})))))
 
 (deftest matching-test
   (testing "typing opens every node holding something that answers,
             parents first, and none that does not"
     (is (= [["Litteratur"] ["Litteratur" "Folkeviser"]]
-           (tree/matching "vers" nodes)))
-    (is (= [["Litteratur"]] (tree/matching "anden" nodes)))
-    (is (= [["Folketinget"]] (tree/matching "TALER" nodes)))
-    (is (= [] (tree/matching "zzz" nodes)))))
+           (chooser/matching "vers" nodes)))
+    (is (= [["Litteratur"]] (chooser/matching "anden" nodes)))
+    (is (= [["Folketinget"]] (chooser/matching "TALER" nodes)))
+    (is (= [] (chooser/matching "zzz" nodes)))))
 
 (deftest only-chosen-test
-  (let [[litteratur] (map tree/counted nodes)
+  (let [[litteratur] (map chooser/counted nodes)
         hidden       (fn [held node]
-                       (->> (tree-seq coll? seq (tree/only-chosen held node))
+                       (->> (deep (chooser/only-chosen held node))
                             (filter #(and (map? %) (:hidden? %)))
                             (map #(or (:id %) :node))))]
     (testing "a leaf not held is hidden, and so is a node with nothing
@@ -99,71 +99,81 @@
              (hidden #{"VISER" "ANDEN" "DIGTE" "VERS"} litteratur))))
     (testing "and nothing held hides the node itself, unless something
               else is in force in it"
-      (is (:hidden? (tree/only-chosen #{} litteratur)))
-      (is (not (:hidden? (tree/only-chosen #{} (assoc litteratur :in-force? true))))))))
+      (is (:hidden? (chooser/only-chosen #{} litteratur)))
+      (is (not (:hidden? (chooser/only-chosen #{} (assoc litteratur :in-force? true))))))))
 
 (deftest node-view-test
-  (let [litteratur (tree/counted (first nodes))
+  (let [litteratur (chooser/counted (first nodes))
         opts       {:item item :summary :label :open? (constantly true)}]
     (testing "a labelled node is a disclosure in a row of its own, open
               as told"
-      (let [[tag _ [kind attrs summary]] (tree/node-view opts litteratur)]
-        (is (= :div.group tag))
+      (let [[tag _ [kind attrs summary]] (chooser/node-view opts litteratur)]
+        (is (= :div.chooser-group tag))
         (is (= :details kind))
         (is (:open attrs))
-        (is (= [:summary "Litteratur"] summary)))
-      (is (not (:open (second (nth (tree/node-view
+        (is (= [:summary.chooser-summary "Litteratur"] summary)))
+      (is (not (:open (second (nth (chooser/node-view
                                     (assoc opts :open? (constantly false))
                                     litteratur)
                                    2))))))
     (testing "it reports its own toggling, so the reader's word on it can
               be kept"
       (is (= {:toggle [:toggle-open :corpora ["Litteratur"]]}
-             (-> (tree/node-view (assoc opts :on-toggle
-                                        (fn [{:keys [id]}]
-                                          [:toggle-open :corpora id]))
-                                 litteratur)
+             (-> (chooser/node-view (assoc opts :on-toggle
+                                           (fn [{:keys [id]}]
+                                             [:toggle-open :corpora id]))
+                                    litteratur)
                  (nth 2) (second) (:on)))))
     (testing "the summary is computed, so a shut node can still count"
       (is (= ["Litteratur (1/4)" "Folkeviser (0/2)"]
-             (summary-texts (tree/node-view
-                         (assoc opts :summary (partial tree/node-summary
-                                                       #{"VISER"}))
-                         litteratur)))))
+             (summary-texts (chooser/node-view
+                             (assoc opts :summary (partial chooser/node-summary
+                                                           #{"VISER"}))
+                             litteratur)))))
     (testing "a control takes its place beside the disclosure, not inside
               it, and the row is there with or without one"
       (let [[tag control disclosure]
-            (tree/node-view (assoc opts :toggle (constantly [:input {}]))
-                            litteratur)]
-        (is (= :div.group tag))
+            (chooser/node-view (assoc opts :toggle (constantly [:input {}]))
+                               litteratur)]
+        (is (= :div.chooser-group tag))
         (is (= [:input {}] control))
         (is (= :details (first disclosure))))
-      (is (= [:div.group nil]
-             (take 2 (tree/node-view (assoc opts :toggle (constantly nil))
-                                     litteratur))))
+      (is (= [:div.chooser-group nil]
+             (take 2 (chooser/node-view (assoc opts :toggle (constantly nil))
+                                        litteratur))))
       (testing "and a hidden node has none: it would float beside nothing"
-        (is (nil? (second (tree/node-view
+        (is (nil? (second (chooser/node-view
                            (assoc opts :toggle (constantly [:input {}]))
                            (assoc litteratur :hidden? true)))))))
     (testing "what else the instance puts in a node comes before its list"
       (is (= [:p "extra"]
-             (nth (nth (tree/node-view (assoc opts :extra (constantly [:p "extra"]))
-                                       litteratur)
+             (nth (nth (chooser/node-view (assoc opts :extra (constantly [:p "extra"]))
+                                          litteratur)
                        2)
                   3))))
+    (testing "the list is classed, so a value list of hundreds can scroll"
+      ;; after the summary and the extra's place, held even when empty
+      (is (= :ul.chooser-list
+             (first (nth (nth (chooser/node-view opts litteratur) 2) 4)))))
     (testing "a label-less node is a bare list"
-      (is (= :ul (first (tree/node-view opts (assoc litteratur :label nil))))))))
+      (is (= :ul.chooser-list
+             (first (chooser/node-view opts (assoc litteratur :label nil))))))))
 
 (deftest chooser-test
   (let [chooser (fn [opts]
-                  (tree/chooser en :corpora nodes
-                                (merge {:item item :legend "Corpora"
-                                        :not-found "Nothing."}
-                                       opts)))]
-    (testing "a fieldset classed as a chooser and by the list's name, so
-              one stylesheet and one client serve both instances"
-      (is (= :fieldset.chooser.corpora (first (chooser {}))))
+                  (chooser/chooser en :corpora nodes
+                                   (merge {:item item :legend "Corpora"
+                                           :not-found "Nothing."}
+                                          opts)))]
+    (testing "a fieldset classed as a chooser and a box, named for the
+              client by the list's name in a data attribute, so one
+              stylesheet and one client serve both instances"
+      (is (= :fieldset.chooser.box (first (chooser {}))))
+      (is (= "corpora" (:data-list (second (chooser {})))))
+      (is (not (contains? (second (chooser {})) :class)))
       (is (some #{[:legend "Corpora"]} (deep (chooser {})))))
+    (testing "classed by the instance where a layout places it"
+      (is (= "filters" (:class (second (chooser {:class "filters"}))))))
     (testing "without a set of what is open it rests: part chosen opens
               the root and the node, whole and nothing shut them
               [root Litteratur Folkeviser Folketinget]"
@@ -190,11 +200,13 @@
       ;; ANDEN unticked at rest and held: its row stays
       (is (= ["DIGTE" "VERS" "TALER" "GONE"]
              (hidden-ids (chooser {:selected #{"VISER"}
-                                      :held     #{"VISER" "ANDEN"}}))))
+                                   :held     #{"VISER" "ANDEN"}}))))
       (is (= [] (hidden-ids (chooser {:selected #{} :choosing? true})))))
     (testing "the summary counts the selection over what is offered"
       (is (= [:small.count "(1/5)"]
              (last (get-in (chooser {:selected #{"VISER"}}) [3 2 2]))))
+      (is (= :summary.chooser-summary
+             (first (get-in (chooser {:selected #{"VISER"}}) [3 2 2]))))
       (is (= {:aria-label "1 of 5 selected"}
              (second (get-in (chooser {:selected #{"VISER"}}) [3 2 2])))))
     (testing "the controls, the box and the toggles come only with a
@@ -220,7 +232,7 @@
         (is (= [:leave :corpora] (get-in html [1 :on :focusout]))))
       (let [html (deep (chooser {:control (constantly [:input.all])
                                  :toggle  (constantly [:input.node])}))]
-        (is (not (some #{:input.all :input.node :input.find} html)))))
+        (is (not (some #{:input.all :input.node :input.chooser-find} html)))))
     (testing "a filter hides what does not answer it at every level, and
               the count follows it"
       (let [html (chooser {:client? true :filter "taler"})]
@@ -236,9 +248,12 @@
     (testing "the region saying nothing was found is there before it says
               it, under the tree, which stays"
       (let [region (fn [opts] (last (chooser (assoc opts :client? true))))]
-        (is (= [:div.empty {:role "status"} nil] (region {})))
-        (is (= [:div.empty {:role "status"} nil] (region {:filter "viser"})))
-        (is (= [:div.empty {:role "status"} "Nothing."] (region {:filter "zzz"})))
+        (is (= [:div.status {:class "chooser-status" :role "status"} nil]
+               (region {})))
+        (is (= [:div.status {:class "chooser-status" :role "status"} nil]
+               (region {:filter "viser"})))
+        (is (= [:div.status {:class "chooser-status" :role "status"} "Nothing."]
+               (region {:filter "zzz"})))
         (is (nil? (:hidden (get-in (chooser {:client? true :filter "zzz"})
                                    [3 2 1]))))))
     (testing "what the instance says comes after the tree, and busy marks

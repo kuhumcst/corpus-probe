@@ -13,11 +13,11 @@
   exists, so the chooser keeps it, disabled, and its info page says CWB
   has no data for it (see dk.cst.corpus-probe.cwb.corpus/phantom?)."
   (:require [clojure.string :as str]
-            [dk.cst.corpus-probe.cache :as cache]
             [dk.cst.corpus-probe.cwb :as cwb]
             [dk.cst.corpus-probe.cwb.corpus :as corpus]
             [dk.cst.corpus-probe.cwb.registry :as registry]
             [dk.cst.corpus-probe.cwb.tools :as tools]
+            [dk.cst.corpus-probe.search.cache :as cache]
             [taoensso.telemere :as t])
   (:import [java.io File]))
 
@@ -160,7 +160,7 @@
   `File.canWrite` answers from the permission bits alone, which a
   read-only mount or an ACL can contradict. It does not catch a nearly
   full disk, an empty file still fitting on one; that is left to
-  dk.cst.corpus-probe.search/fresh-sections!, which answers without the
+  dk.cst.corpus-probe.search.result/run-fresh!, which answers without the
   cache when a save fails."
   [^File dir]
   (try

@@ -11,7 +11,7 @@
   the source by dk.cst.corpus-probe.i18n.scan.
 
   A `ui` is the context the lookups take: the chosen language and its
-  table. dk.cst.corpus-probe.views.app derives it once per render and
+  table. dk.cst.corpus-probe.views derives it once per render and
   hands it down, as the language code used to be handed down. The state
   itself carries only that code: it travels to the client as transit,
   and the client already holds every table.

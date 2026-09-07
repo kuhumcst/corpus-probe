@@ -1,11 +1,11 @@
-(ns dk.cst.corpus-probe.cache-test
+(ns dk.cst.corpus-probe.search.cache-test
   "Unit tests for the saved query result cache: naming, invalidation and
   reaping. Nothing here runs CQP; the round trip through a real save file
-  is exercised in dk.cst.corpus-probe.search-test."
+  is exercised in dk.cst.corpus-probe.search.result-test."
   (:require [babashka.fs :as fs]
             [clojure.string :as str]
             [clojure.test :refer [deftest is testing use-fixtures]]
-            [dk.cst.corpus-probe.cache :as cache]
+            [dk.cst.corpus-probe.search.cache :as cache]
             [dk.cst.corpus-probe.test.cwb :refer [cache-ctx! reset-cache!]]))
 
 (use-fixtures :each reset-cache!)

@@ -1,47 +1,42 @@
 (ns dk.cst.corpus-probe.views.corpus
-  "Hiccup for the corpus index, the corpus chooser of the search form and
-  the per-corpus info pages.
+  "Hiccup for the corpus pages: the corpus index, the corpus chooser of
+  the search form, the per-corpus info pages and the reading page of one
+  text.
 
   The index and the chooser share one folder-grouped tree over the
   registry. The chooser is a control, the same one the metadata filter
-  is (see dk.cst.corpus-probe.views.tree): each folder is a <details>
+  is (see dk.cst.corpus-probe.views.chooser): each folder is a <details>
   disclosure, so the tree collapses without any script, and each corpus
   a checkbox. The index is a document: a heading per folder and a list
   per folder's corpora, each a link to its info page. Both give the
   token count as a machine-readable <data>. The info page maps the facts
   CWB itself reports (the registry entry, `info;` and
   `cwb-describe-corpus -s`) onto a definition list and per-attribute
-  statistics tables, following PLAN.md §7."
-  (:require [dk.cst.corpus-probe.hiccup :as hiccup]
+  statistics tables, following PLAN.md §7. The reading page is one text
+  of a corpus as running prose, its metadata before it and the hit the
+  reader came from marked, so that a concordance line can be read in
+  full: its blocks are the paragraphs the corpus marks, or its sentences
+  where it marks none, each a <p>, and the words are text and nothing
+  more, since reading is the task there and the concordance is where a
+  token is inspected."
+  (:require [clojure.string :as str]
+            [dk.cst.corpus-probe.hiccup :as hiccup]
             [dk.cst.corpus-probe.i18n :as i18n]
             [dk.cst.corpus-probe.url :as url]
-            [dk.cst.corpus-probe.views.controls :as controls]
-            [dk.cst.corpus-probe.views.layout :as layout]
-            [dk.cst.corpus-probe.views.tree :as tree]))
-
-(defn count-cell
-  "A statistics table cell for count `n` in `ui`, or for the
-  tool's NO DATA when the count is nil because an attribute's data files
-  cannot be read."
-  [ui n]
-  [:td.n (if n (i18n/group-digits ui n) [:em (i18n/tr ui "no data")])])
-
-(defn token-count
-  "The token count `n` as a <data> element, in `ui`: grouped
-  digits for people, the plain number in `value` for machines."
-  [ui n]
-  [:data.size {:value (str n)}
-   (str (i18n/group-digits ui n) " " (i18n/tr ui "tokens"))])
+            [dk.cst.corpus-probe.views.chooser :as chooser]
+            [dk.cst.corpus-probe.views.result :as result]
+            [dk.cst.corpus-probe.views.widgets :as widgets]))
 
 (defn corpus-details
   "The details following a corpus's name in a tree entry for overview map
   `m`: its ID when the name shown is a title, and its token count in
-  `ui`, or a mark that the corpus cannot be read."
+  `ui` (see dk.cst.corpus-probe.views.widgets/size-data), or, standing
+  where the size would, a mark that the corpus cannot be read."
   [ui {:keys [id title size] :as m}]
   (list (when title (list [:code id] " "))
         (if size
-          (token-count ui size)
-          [:em (i18n/tr ui "unavailable")])))
+          (widgets/size-data ui size)
+          [:em.size (i18n/tr ui "unavailable")])))
 
 (defn corpus-item
   "One corpus overview map `m` as an index entry: a link to its info page
@@ -63,7 +58,7 @@
   the counts in the summaries are computed from it, and a count that
   disagreed with the boxes under it would be worse than no count."
   [ui selected {:keys [id title size hidden?] :as m}]
-  [:li (cond-> {} hidden? (assoc :hidden true))
+  [:li (widgets/hidden-attrs hidden?)
    [:label
     [:input {:type     "checkbox"
              :name     "corpus"
@@ -86,7 +81,7 @@
                           (update f :label #(or % (i18n/tr ui "Other")))))))
 
 (defn corpus-toggle
-  "dk.cst.corpus-probe.views.controls/select-all over the corpus `ids`,
+  "dk.cst.corpus-probe.views.widgets/select-all over the corpus `ids`,
   called `label`, with the set of `selected` IDs and the select-all's own
   `opts`.
 
@@ -97,11 +92,11 @@
   ([label selected ids]
    (corpus-toggle label selected ids nil))
   ([label selected ids opts]
-   (controls/select-all label ids selected [:toggle-corpora (vec ids)] opts)))
+   (widgets/select-all label ids selected [:toggle-corpora (vec ids)] opts)))
 
 (defn all-toggle
   "`corpus-toggle` over every corpus on offer, the `ids` (see
-  dk.cst.corpus-probe.views.tree/offered), named for the registry in
+  dk.cst.corpus-probe.views.chooser/offered), named for the registry in
   `ui`: the one control that selects or clears it, which is otherwise a
   click per folder and, under a filter, the only way to take everything
   the filter found at once.
@@ -131,7 +126,7 @@
    (when (seq corpora) [:ul.index (map (partial corpus-item ui) corpora)])
    (map (partial index-folder ui (cond-> level label inc)) folders)))
 
-(defn index-view
+(defn index-page
   "The corpus index page body in `ui`: the `folders` tree of corpus
   overviews laid out as a document, a heading per folder and a list per
   folder's corpora (see `index-folder`), the ungrouped tail labelled by
@@ -142,17 +137,17 @@
   headings give the page an outline. The tree is the page's own content
   rather than navigation inside it, so it sits directly in <main>."
   [ui {:keys [folders]}]
-  [:main layout/main-attrs
+  [:main widgets/main-attrs
    [:h1 (i18n/tr ui "Corpora")]
    (map (partial index-folder ui 2) (labelled-folders ui folders))])
 
-(defn tree
+(defn corpus-tree
   "The `folders` of the registry as the tree the chooser takes (see
-  dk.cst.corpus-probe.views.tree), in `ui`: a node per folder, named by
-  the path of labels down to it, which names its disclosure the same in
-  either language, and its corpora its leaves, named by their IDs, read
-  by their IDs and titles and disabled where they cannot be read. The
-  label-less tail folder is labelled among labelled siblings (see
+  dk.cst.corpus-probe.views.chooser), in `ui`: a node per folder, named
+  by the path of labels down to it, which names its disclosure the same
+  in either language, and its corpora its leaves, named by their IDs,
+  read by their IDs and titles and disabled where they cannot be read.
+  The label-less tail folder is labelled among labelled siblings (see
   `labelled-folders`), after its node has been named."
   [ui folders]
   (letfn [(node [path {:keys [label corpora folders]}]
@@ -170,9 +165,9 @@
           folders
           (labelled-folders ui folders))))
 
-(defn chooser
+(defn corpus-chooser
   "The corpus selection of the search form: the `folders` tree as the
-  chooser over it (see dk.cst.corpus-probe.views.tree/chooser, which
+  chooser over it (see dk.cst.corpus-probe.views.chooser/chooser, which
   the `opts` are for), the IDs in the set `:selected` checked, in `ui`.
 
   Each folder carries a `corpus-toggle` selecting or clearing the whole
@@ -182,8 +177,8 @@
   counted: a folder holding one would otherwise be partly chosen for
   ever, and stand open for ever with it."
   [ui folders {:keys [selected] :or {selected #{}} :as opts}]
-  (tree/chooser
-   ui :corpora (tree ui folders)
+  (chooser/chooser
+   ui :corpora (corpus-tree ui folders)
    (assoc opts
           :selected  selected
           :legend    (i18n/tr ui "Corpora")
@@ -195,18 +190,15 @@
                                       selected offered))
           :item      (partial chooser-item ui selected))))
 
-(defn facts-list
-  "The general facts of a corpus as a definition list: its token count and
-  charset from describe `stats`, then the registry properties reported by
-  `info` (minus the charset property, which would repeat the charset row).
-  The row labels are in `ui`; the registry property names are
-  CWB's own and stay as they are."
-  [ui stats info]
-  [:dl.facts
-   [:dt (i18n/tr ui "size")] [:dd (token-count ui (:size stats))]
-   [:dt (i18n/tr ui "charset")] [:dd (:charset stats)]
-   (mapcat (fn [[k v]] [[:dt (name k)] [:dd v]])
-           (sort-by key (dissoc (:properties info) :charset)))])
+(defn stat-cell
+  "A statistics table cell for count `n` in `ui` (see
+  dk.cst.corpus-probe.views.widgets/count-cell), or for the tool's NO
+  DATA when the count is nil because an attribute's data files cannot be
+  read."
+  [ui n]
+  (if n
+    (widgets/count-cell ui n)
+    [:td.num [:em (i18n/tr ui "no data")]]))
 
 (defn p-attr-table
   "The positional attributes of describe `stats` as a statistics table in
@@ -214,16 +206,16 @@
   [ui {:keys [p-attrs] :as stats}]
   (when (seq p-attrs)
     [:table.attributes
-     [:caption (layout/term ui :positional-attributes)]
+     [:caption (widgets/term ui :positional-attributes)]
      [:thead
       [:tr [:th {:scope "col"} (i18n/tr ui "attribute")]
-       [:th.n {:scope "col"} (i18n/tr ui "tokens")]
-       [:th.n {:scope "col"} (i18n/tr ui "types")]]]
+       [:th.num {:scope "col"} (i18n/tr ui "tokens")]
+       [:th.num {:scope "col"} (i18n/tr ui "types")]]]
      [:tbody
       (for [{attr :name :keys [tokens types]} p-attrs]
         [:tr [:th {:scope "row"} [:code (name attr)]]
-         (count-cell ui tokens)
-         (count-cell ui types)])]]))
+         (stat-cell ui tokens)
+         (stat-cell ui types)])]]))
 
 (defn s-attr-table
   "The structural attributes of describe `stats` as a statistics table,
@@ -231,16 +223,16 @@
   [ui {:keys [s-attrs] :as stats}]
   (when (seq s-attrs)
     [:table.attributes
-     [:caption (layout/term ui :structural-attributes)]
+     [:caption (widgets/term ui :structural-attributes)]
      [:thead
       [:tr [:th {:scope "col"} (i18n/tr ui "attribute")]
        ;; a column heading takes the plural form of what it counts
-       [:th.n {:scope "col"} (i18n/trn ui "region" "regions" 2)]
+       [:th.num {:scope "col"} (i18n/trn ui "region" "regions" 2)]
        [:th {:scope "col"} (i18n/tr ui "annotations")]]]
      [:tbody
       (for [{attr :name :keys [regions values?]} s-attrs]
         [:tr [:th {:scope "row"} [:code (name attr)]]
-         (count-cell ui regions)
+         (stat-cell ui regions)
          [:td (when values? (i18n/tr ui "with annotations"))]])]]))
 
 (defn a-attr-table
@@ -250,20 +242,14 @@
   [ui {:keys [a-attrs] :as stats}]
   (when (seq a-attrs)
     [:table.attributes
-     [:caption (layout/term ui :alignment-attributes)]
+     [:caption (widgets/term ui :alignment-attributes)]
      [:thead
       [:tr [:th {:scope "col"} (i18n/tr ui "attribute")]
-       [:th.n {:scope "col"} (i18n/tr ui "blocks")]]]
+       [:th.num {:scope "col"} (i18n/tr ui "blocks")]]]
      [:tbody
       (for [{attr :name :keys [blocks]} a-attrs]
         [:tr [:th {:scope "row"} [:code (name attr)]]
-         (count-cell ui blocks)])]]))
-
-(defn lang-attrs
-  "The attribute map marking an element's text as being in `lang`, when
-  the language is known."
-  [lang]
-  (cond-> {} lang (assoc :lang lang)))
+         (stat-cell ui blocks)])]]))
 
 (defn info-text
   "The free-text content of the corpus's .info file, verbatim from the
@@ -274,7 +260,7 @@
     [:section.about
      [:h2 (i18n/tr ui "Info")]
      ;; the corpus author's own prose, not program output, so a bare <pre>
-     [:pre (lang-attrs corpus-lang) text]]))
+     [:pre (widgets/lang-attrs corpus-lang) text]]))
 
 (defn unreadable-section
   "The section shown in `ui` in place of the corpus facts when
@@ -282,22 +268,23 @@
   the registry entry at all (`phantom?`) or reading it failed this time.
 
   Deliberately detail-free otherwise: the underlying tool output can name
-  server paths, which never reach a rendered page. No live region: the
-  section is in the document before the page is parsed, where a live
-  region announces nothing anyway."
+  server paths, which never reach a rendered page."
   [ui phantom?]
-  [:section.error
-   [:h2 (i18n/tr ui "Unreadable corpus")]
+  (widgets/error-section
+   (i18n/tr ui "Unreadable corpus")
    [:p (if phantom?
          (i18n/tr ui (str "The registry lists this corpus, but CWB has "
                           "no data for it."))
-         (i18n/tr ui "CWB cannot read the data files of this corpus."))]])
+         (i18n/tr ui "CWB cannot read the data files of this corpus."))]))
 
-(defn info-view
+(defn info-page
   "The corpus info page body for `data` in `ui`: the corpus
-  title and ID, its facts, attribute statistics and .info text, and links
-  searching it and listing its word frequencies, which a `:phantom?` entry
-  cannot be and so does not get.
+  title and ID, its facts (its token count and charset from describe
+  `stats`, then the registry properties reported by `info`, minus the
+  charset property, which would repeat the charset row; the row labels
+  in `ui`, the property names CWB's own), its attribute statistics and
+  .info text, and links searching it and listing its word frequencies,
+  which a `:phantom?` entry cannot be and so does not get.
 
   `data` holds :corpus (the uppercase name), :title (its registry NAME, when
   set), :lang (its language code, when known: the title and the .info text
@@ -305,34 +292,90 @@
   either :stats (describe) + :info (`info;`) or an :error, which is
   replaced by a fixed section saying whether the entry is a `:phantom?`."
   [ui {:keys [corpus title stats info error phantom?]
-         corpus-lang :lang :as data}]
-  [:main.corpus-info layout/main-attrs
+       corpus-lang :lang :as data}]
+  [:main widgets/main-attrs
    ;; an <hgroup> groups a heading with its own subheading, so it earns its
    ;; place only when the registry NAME gives the ID one to be grouped with
    (if title
      [:hgroup
-      [:h1 (lang-attrs corpus-lang) title]
+      [:h1 (widgets/lang-attrs corpus-lang) title]
       [:p [:code corpus]]]
      [:h1 corpus])
    (if error
      (unreadable-section ui phantom?)
      (list
-      (facts-list ui stats info)
+      (widgets/facts
+       (into [[(i18n/tr ui "size") (widgets/size-data ui (:size stats))]
+              [(i18n/tr ui "charset") (:charset stats)]]
+             (sort-by key (dissoc (:properties info) :charset))))
       (p-attr-table ui stats)
       (s-attr-table ui stats)
       (a-attr-table ui stats)
       (info-text ui info corpus-lang)))
-   ;; a corpus CWB has no data for cannot be searched, so it is not
-   ;; offered, as the chooser does not offer it either
    ;; where this page leads: the two things a reader does with a corpus
    ;; once they have read about it. A <nav> like the site's and the result
    ;; views', and named like them, since a page with two navigations owes
-   ;; a reader a way of telling them apart
+   ;; a reader a way of telling them apart. A corpus CWB has no data for
+   ;; cannot be searched, so it is not offered, as the chooser does not
+   ;; offer it either
    (when-not phantom?
      [:nav {:aria-label (i18n/tr ui "This corpus")}
-      [:ul.row
-       [:li [:a {:href (url/search-href {:corpus corpus})}
-             (str (i18n/tr ui "Search in") " " corpus)]]
-       [:li [:a {:href (url/results-href {:corpus corpus
-                                          :view   "frequencies"})}
-             (str (i18n/tr ui "Word frequencies of") " " corpus)]]]])])
+      (widgets/link-row
+       [[:search (url/search-href {:corpus corpus})
+         (str (i18n/tr ui "Search in") " " corpus)]
+        [:frequencies (url/results-href {:corpus corpus
+                                         :view   "frequencies"})
+         (str (i18n/tr ui "Word frequencies of") " " corpus)]]
+       nil)])])
+
+(defn text-name
+  "What the text with structural annotations `structs` is called, in
+  `ui`: its title, else its id, else just a text."
+  [ui structs]
+  (or (:text_title structs) (:text_id structs) (i18n/tr ui "Text")))
+
+(defn marked
+  "The `words` of one block of a text starting at corpus position
+  `from`, as text, those from `cpos` to `matchend` (the `hit`; nil for
+  none) inside a <mark>, which carries `url/hit-id` when `landing?`, so
+  that the page's URL lands on it."
+  [from [cpos matchend :as hit] landing? words]
+  (if hit
+    (->> (map-indexed (fn [i word] [(<= cpos (+ from i) matchend) word]) words)
+         (partition-by first)
+         (map (fn [run]
+                (let [text (str/join " " (map second run))]
+                  (if (ffirst run)
+                    [:mark (cond-> {} landing? (assoc :id url/hit-id)) text]
+                    text))))
+         (interpose " "))
+    (str/join " " words)))
+
+(defn reading-page
+  "The reading page's main content from `data` (see
+  dk.cst.corpus-probe.search/text!, plus the `:hit` [cpos matchend] to
+  mark and the `:lang` of the corpus text), in `ui`: the text's name,
+  the corpus it is from, its structural annotations and its `:blocks`
+  as paragraphs, the hit marked in the block that holds it (see
+  `marked`); or the `:error` that came instead of the text (see
+  dk.cst.corpus-probe.views.result/cqp-error-section).
+
+  A document like the frontpage, so the stylesheet gives it a measure."
+  [ui {:keys [corpus structs blocks from hit lang error] :as data}]
+  [:main.document widgets/main-attrs
+   [:h1 (text-name ui structs)]
+   (if error
+     (result/cqp-error-section ui error [corpus])
+     (list
+      [:p (i18n/tr ui "in") " " [:a {:href (url/corpus corpus)} [:code corpus]]]
+      (widgets/facts structs)
+      ;; the corpus text is in its own language while the page around it
+      ;; is in the reader's
+      [:div (widgets/lang-attrs lang)
+       (map (fn [block-from words]
+              (let [block-to (+ block-from (dec (count words)))]
+                [:p (marked block-from hit
+                            (and hit (<= block-from (first hit) block-to))
+                            words)]))
+            (reductions + from (map count blocks))
+            blocks)]))])

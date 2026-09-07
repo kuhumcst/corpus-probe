@@ -1,9 +1,10 @@
-(ns dk.cst.corpus-probe.views.tree
+(ns dk.cst.corpus-probe.views.chooser
   "A chooser over a tree of checkboxes behind disclosures, with a box to
   search it. The corpus chooser and the metadata filter are both one of
   these, and differ only in what they list, how a leaf is drawn and what
-  their controls are called (see dk.cst.corpus-probe.views.corpus/chooser
-  and dk.cst.corpus-probe.views.page/filter-fieldset).
+  their controls are called (see
+  dk.cst.corpus-probe.views.corpus/corpus-chooser and
+  dk.cst.corpus-probe.views.search.filter/filter-fieldset).
 
   The tree is nodes and leaves. A node is {:id :label :items :nodes}, its
   leaves under `:items` and the nodes under it under `:nodes`; a leaf is
@@ -20,10 +21,13 @@
   too (see dk.cst.corpus-probe.ui/lists). The markup is deliberately not
   the ARIA tree pattern: nested <details> with native checkboxes, which
   works without a script and submits every box, and promises no
-  arrow-key navigation it does not have."
+  arrow-key navigation it does not have. What HTML has no element for,
+  a box to find an entry among hundreds and the row a control shares
+  with its disclosure, is built here, and the box exists only where the
+  client runs to answer it."
   (:require [clojure.string :as str]
             [dk.cst.corpus-probe.i18n :as i18n]
-            [dk.cst.corpus-probe.views.controls :as controls]))
+            [dk.cst.corpus-probe.views.widgets :as widgets]))
 
 (defn answers?
   "True when node or leaf `x` answers `q`, a lower-cased fragment of a
@@ -143,14 +147,14 @@
 (defn node-count
   "How many of the leaves a counted `node` offers are in the set
   `selected`, beside how many there are (see
-  dk.cst.corpus-probe.views.controls/entry-count), so a shut node still
+  dk.cst.corpus-probe.views.widgets/count-badge), so a shut node still
   says what is inside it and how much of it is chosen.
 
   Both numbers are of what a filter left, so that a filter narrows them
   together; what the resting view hides is still counted, or every count
   at rest would be of a selection alone."
   [selected {:keys [offered]}]
-  (controls/entry-count (count (filter selected offered)) (count offered)))
+  (widgets/count-badge (count (filter selected offered)) (count offered)))
 
 (defn node-summary
   "What the disclosure of a counted `node` says of it, unless its
@@ -158,6 +162,18 @@
   (see `node-count`)."
   [selected node]
   (list (:label node) " " (node-count selected node)))
+
+(defn toggled
+  "`disclosure` with `control` beside it as one row, the row being there
+  whether or not there is a control to put in it.
+
+  Always the row, because the alternative was a <details> where a <div>
+  had been, and everything after an element that changes kind is rebuilt:
+  a reader pressing the mouse on a control further down the list had it
+  taken from under them, focus with it, by the very render their pressing
+  it caused. A nil control renders as nothing and holds its place."
+  [control disclosure]
+  [:div.chooser-group control disclosure])
 
 (defn node-view
   "One `node` of the tree, rendered by the `opts` of the chooser it
@@ -177,31 +193,122 @@
   to include or exclude.
 
   The row is there whether or not there is a control to put in it (see
-  dk.cst.corpus-probe.views.controls/toggled), and a hidden node has
-  none: its control stands outside the disclosure that is hidden, and
-  would otherwise be a checkbox floating beside nothing."
+  `toggled`), and a hidden node has none: its control stands outside the
+  disclosure that is hidden, and would otherwise be a checkbox floating
+  beside nothing."
   [{:keys [item summary extra toggle open? on-toggle] :as opts}
    {:keys [label items nodes hidden?] :as node}]
-  (let [entries    [:ul
+  (let [entries    [:ul.chooser-list
                     (map item items)
                     (map (fn [n] [:li (node-view opts n)]) nodes)]
-        disclosure [:details (cond-> {:open (boolean (open? node))}
-                               on-toggle (assoc :on {:toggle (on-toggle node)})
-                               hidden?   (assoc :hidden true))
-                    [:summary (summary node)]
+        disclosure [:details (cond-> (assoc (widgets/hidden-attrs hidden?)
+                                            :open (boolean (open? node)))
+                               on-toggle (assoc :on {:toggle (on-toggle node)}))
+                    [:summary.chooser-summary (summary node)]
                     (when extra (extra node))
                     entries]]
     (if label
-      (controls/toggled (when (and toggle (not hidden?)) (toggle node))
-                        disclosure)
+      (toggled (when (and toggle (not hidden?)) (toggle node))
+               disclosure)
       entries)))
+
+(defn filter-box
+  "A box narrowing what is under it to whatever answers what is typed in
+  it: `id` names it, `label` says what it is for, `q` is what it holds
+  and `actions` are what it dispatches.
+
+  It goes in the summary of the disclosure it narrows, which is the line
+  in view whether that disclosure is open or shut. So finding an entry
+  still never starts with opening a list of hundreds to look for the box,
+  and the box costs no line of its own: the summary already had one.
+  Clicking it works the box and not the disclosure (measured in
+  Chromium), while the words beside it still work the disclosure.
+
+  Its label is its placeholder, with `aria-label` saying the same to a
+  reader who is never shown one. A word beside it would cost the line it
+  just saved, and the summary says what the list is.
+
+  `actions` are what it dispatches: `:input` for every change to what it
+  holds, and `:focus` as it takes focus, which is a reader asking to see
+  the list it narrows (see dk.cst.corpus-probe.ui/engage!).
+
+  It carries no name, so it is not part of the search: what a reader typed
+  to find something is how they found it, not what they asked for. Enter
+  is swallowed for the same reason, since a text field in a form otherwise
+  submits it, and a reader half way through choosing has not asked for an
+  answer yet.
+
+  What it found is reported by the live region under the tree (see
+  `fieldset`), which takes the place of the list rather than sitting
+  here."
+  [id label q actions]
+  [:input.chooser-find
+   {:id           id
+    :type         "search"
+    :placeholder  label
+    :aria-label   label
+    :value        (or q "")
+    :autocomplete "off"
+    :on           (assoc actions :keydown [:swallow-enter])}])
+
+(defn fieldset
+  "The box a list too long to work through by hand stands in, which the
+  corpus chooser and the metadata filter are twice over, named for the
+  client by list `k` in a data attribute (see
+  dk.cst.corpus-probe.ui/leave-on-click!): its `:legend` names it,
+  `:class` classes it for a layout that places it, `:control` takes
+  every entry at once beside the disclosure the entries are behind (see
+  dk.cst.corpus-probe.views.widgets/select-all), `:box` narrows what
+  that disclosure shows (see `filter-box`), `:status` says what the box
+  found and `:details` are the attributes of the disclosure itself. The
+  `entries` go inside the disclosure.
+
+  The summary is the box and nothing else but how many of the `:total`
+  entries are `:chosen`, in figures at the end of the line (see
+  dk.cst.corpus-probe.views.widgets/count-badge). Two figures read the
+  same way in every such list, where a sentence about corpora and a
+  sentence about values are two things to learn, and the line the
+  sentence took is the line the box needed. What the figures do not say
+  aloud the summary's own name does, worded in `ui`.
+
+  The row is a <div> whether or not there is a control to put in it, so
+  that the live region under it keeps its identity as the filter empties
+  the list: what a live region comes after must keep its kind, or the
+  diff rebuilds it, and a rebuilt live region is a new one, which
+  announces nothing. The region stands under the disclosure it reports
+  on, where the entries it found none of would be, so a reader is told
+  what happened where they were looking, and outside the disclosure,
+  since one revealed from inside a disclosure as it fills announces
+  nothing either. It belongs to the box and is rendered with it: without
+  a client there is neither.
+
+  `:leave` is what focus leaving the fieldset dispatches, which is one of
+  the two ways a reader is known to have finished choosing from the list
+  (see dk.cst.corpus-probe.ui/leave!); the other is a click anywhere
+  else, which no element of the fieldset can hear."
+  [ui k {:keys [class legend control box chosen total details status leave]}
+   & entries]
+  [:fieldset.chooser.box (cond-> {:data-list (name k)}
+                           class (assoc :class class)
+                           leave (assoc :on {:focusout leave}))
+   [:legend legend]
+   [:div.chooser-group
+    control
+    (into [:details details
+           [:summary.chooser-summary
+            {:aria-label (str chosen " " (i18n/tr ui "of") " "
+                              total " " (i18n/tr ui "selected"))}
+            box
+            (widgets/count-badge chosen total)]]
+          entries)]
+   (when box (widgets/status "chooser-status" status))])
 
 (defn chooser
   "The fieldset over the `nodes` of list `k` in `ui`, `k` being the name
   the client knows the list by (see dk.cst.corpus-probe.ui/lists): the
   leaves as checkboxes, the ids in the set `:selected` checked, behind
-  one disclosure counting the selection (see
-  dk.cst.corpus-probe.views.controls/fieldset), named `:legend`.
+  one disclosure counting the selection (see `fieldset`), named
+  `:legend` and classed `:class` where a layout places the fieldset.
 
   It has two faces, and `:choosing?` says which. **At rest** it is what
   the search will read and nothing else: a leaf that is not chosen is
@@ -240,8 +347,9 @@
   box and the toggles are rendered only where `:client?` runs to answer
   them, and `:busy?` marks the fieldset while the client is fetching
   what it lists."
-  [ui k nodes {:keys [selected held open choosing? client? busy? legend
-                      not-found control toggle item summary extra after]
+  [ui k nodes {:keys [selected held open choosing? client? busy? class
+                      legend not-found control toggle item summary extra
+                      after]
                q     :filter
                :or   {selected #{}}}]
   (let [held      (or held selected)
@@ -255,16 +363,16 @@
         nodes     (cond->> nodes
                     resting? (mapv (partial only-chosen held)))
         nothing-found? (and filtering (every? :hidden? nodes))]
-    (controls/fieldset
-     ui
-     {:tag     (keyword (str "fieldset.chooser." (name k)))
+    (fieldset
+     ui k
+     {:class   class
       :legend  legend
       :control (when (and client? control) (control offered))
       :box     (when client?
-                 (controls/filter-box (str (name k) "-filter")
-                                      (i18n/tr ui "Filter") q
-                                      {:input [:filter k]
-                                       :focus [:engage k]}))
+                 (filter-box (str (name k) "-filter")
+                             (i18n/tr ui "Filter") q
+                             {:input [:filter k]
+                              :focus [:engage k]}))
       :chosen  (count (filter selected offered))
       :total   (count offered)
       :details (cond-> {:open (contains? open :root)

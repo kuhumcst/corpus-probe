@@ -461,17 +461,24 @@ corpus-probe/
 │   │                               ;   cwb-s-decode and their parsers
 │   ├── query.cljc                  ; the query compilers: words, lists and
 │   │                               ;   tokens to CQP, escaping (§8)
-│   ├── search.clj                  ; KWIC, concordance, frequency tables
+│   ├── search.clj                  ; KWIC, concordance, texts, exports
+│   ├── search/opts.clj             ; the options as one corpus runs them
+│   ├── search/result.clj           ; results stored or run afresh
 │   ├── search/batch.clj            ; the batches a search runs
-│   ├── stats.cljc                  ; relative frequencies
-│   ├── export.clj                  ; TSV/CSV exports of concordances and
+│   ├── search/cache.clj            ; CQP's saved query results, reaped
+│   ├── search/frequency.clj        ; frequency tables and filter values
+│   ├── search/export.clj           ; TSV/CSV exports of concordances and
 │   │                               ;   frequency tables
+│   ├── stats.cljc                  ; relative frequencies
 │   ├── api.clj                     ; Pedestal routes + SSR handlers
 │   ├── server.clj                  ; config, start/stop, CSP
 │   ├── ui.cljs                     ; Replicant client
-│   └── views/                      ; .cljc shared hiccup: layout, page
-│       └── ...                     ;   (search), kwic, frequencies, corpus
-│                                   ;   (index, chooser, info)
+│   ├── views.cljc                  ; .cljc shared hiccup: the pages by
+│   │                               ;   route, their titles, the chrome
+│   └── views/                      ; widgets, chooser, result, search
+│       └── ...                     ;   (tokens, filter), concordance,
+│                                   ;   frequency, corpus (index, chooser,
+│                                   ;   info, reading page)
 ├── test/…                          ; golden-file tests against captured outputs
 │   └── resources/                  ;   (the captures and a registry entry;
 │                                   ;   hostile cases live inline in the tests)

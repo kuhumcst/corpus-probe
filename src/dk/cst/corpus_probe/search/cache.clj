@@ -1,4 +1,4 @@
-(ns dk.cst.corpus-probe.cache
+(ns dk.cst.corpus-probe.search.cache
   "Query results kept as CQP's own saved query results, so that paging or
   re-sorting a search does not re-run it.
 
@@ -7,7 +7,7 @@
   saved in, so a page costs one `cat` rather than a query and a sort. Each
   corpus gets a directory of its own, because CQP registers every file of
   the one it is given on every startup (docs/research/gap-nqr-persistence.md
-  section 2; the comment block at the end measures both).
+  section 2; dev/cache_bench.clj measures both).
 
   Invalidation is entirely this application's job, because CQP does none of
   it and fails silently when a file is wrong: a save file written against an
@@ -400,70 +400,3 @@
       ;; read as the query failing and cost a second run of it
       (t/catch->error! {:id ::reap-failed :catch-val nil}
         (reap! ctx)))))
-
-(comment
-  (require '[babashka.fs :as fs]
-           '[dk.cst.corpus-probe.search :as search])
-
-  (def ctx {:registry  (str (System/getProperty "user.dir")
-                            "/dev/corpus/registry")
-            :cache-dir (str (System/getProperty "user.dir") "/dev/cache")})
-
-  ;; the name moves with the corpus build stamp, so it is not written down
-  (result-name ctx "VISER" "[pos=\"N.*\"]" {:sort "word"})
-
-  (stored? ctx "VISER" (result-name ctx "VISER" "[]" {}))
-  ;; => false
-
-  (count! ctx "VISER" "[]" {} #(do (Thread/sleep 1000) 48))
-  ;; => 48   (a second the first time, instant after)
-
-  (forget-counts!)
-
-  (share! ::probe (fn [] :once))
-  ;; => :once
-
-  (excess-files (max-bytes ctx) (result-files ctx))
-  ;; => []
-
-  (reap! ctx)
-  ;; => 0
-
-  ;; What the cache is for, measured against the two-million-token STOR
-  ;; corpus that dev/encode-big.sh builds (the dev corpora are 42 to 48
-  ;; tokens, where every query is instant and this proves nothing). Each
-  ;; number is one page of 25 hits out of two million matches.
-  (def big {:registry         (str (System/getProperty "user.dir")
-                                   "/dev/corpus/registry-big")
-            :sort-locale      "da_DK.UTF-8"
-            ;; as the app runs a batch that sorts (see
-            ;; dk.cst.corpus-probe.cwb/running-ctx)
-            :query-timeout-ms 900000})
-
-  (defn page-ms
-    [ctx sort page]
-    (let [started (System/nanoTime)]
-      (search/kwic! ctx "STOR" "[]" {:sort sort
-                                     :rows [(* page 25) (+ 24 (* page 25))]})
-      (quot (- (System/nanoTime) started) 1000000)))
-
-  (page-ms big "left" 100)
-  (page-ms (assoc big :cache-dir (str (fs/create-temp-dir))) "left" 100)
-
-  ;;   sort mode | uncached page | cached page | save file
-  ;;   corpus    |         77 ms |       16 ms |     16 MB
-  ;;   word      |       3144 ms |       20 ms |     24 MB
-  ;;   left      |      18600 ms |       26 ms |     24 MB
-  ;;
-  ;; And at the size of the largest corpus at KU, built with
-  ;; TOKENS=64600000 dev/encode-big.sh. These are the figures
-  ;; :query-timeout-ms is set against: neither locale-aware sort can
-  ;; finish a whole corpus of this size inside five minutes, which is
-  ;; deliberate, and a realistic query sorts a few percent of it.
-  ;;
-  ;;   sort mode | uncached page | cached page | save file
-  ;;   count     |       2400 ms |             |
-  ;;   corpus    |       2300 ms |      200 ms |    517 MB
-  ;;   word      |     649600 ms |             |    775 MB
-  ;;   left      |    >800000 ms |             |
-  #_.)

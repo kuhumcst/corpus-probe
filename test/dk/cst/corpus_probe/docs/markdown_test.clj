@@ -66,14 +66,14 @@
 (deftest keys-test
   (testing "a key in double brackets is the element for keyboard input,
             and a chord one for each key inside one for the whole"
-    (is (= [:div [:p "press " [:kbd "Enter"] "."]]
+    (is (= [:div [:p "press " [:kbd.key "Enter"] "."]]
            (markdown/->hiccup "press [[Enter]].")))
-    (is (= [:div [:p [:kbd [:kbd "Shift"] "+" [:kbd "Enter"]]]]
+    (is (= [:div [:p [:kbd.chord [:kbd.key "Shift"] "+" [:kbd.key "Enter"]]]]
            (markdown/->hiccup "[[Shift+Enter]]")))
-    (is (= [:div [:p [:kbd "+"]]] (markdown/->hiccup "[[+]]"))))
+    (is (= [:div [:p [:kbd.key "+"]]] (markdown/->hiccup "[[+]]"))))
   (testing "not inside code"
     (is (= [:div [:p [:code "[[x]]"]]] (markdown/->hiccup "`[[x]]`"))))
   (testing "a label on the screen in double braces is a sample of the
             screen inside keyboard input"
-    (is (= [:div [:p "click " [:kbd [:samp "Search"]]]]
+    (is (= [:div [:p "click " [:kbd.key.onscreen [:samp "Search"]]]]
            (markdown/->hiccup "click {{Search}}")))))

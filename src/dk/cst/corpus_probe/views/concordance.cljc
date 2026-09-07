@@ -1,5 +1,7 @@
-(ns dk.cst.corpus-probe.views.kwic
-  "Hiccup for the KWIC concordance.
+(ns dk.cst.corpus-probe.views.concordance
+  "Hiccup for the KWIC concordance: the table of hits, the controls that
+  resubmit it, the section that is the concordance view of a result and
+  the panel inspecting one of its tokens.
 
   The markup mirrors the structure CQP's own display modes imply (PLAN.md
   §7) and carries the corpus data as machine-readable HTML: the concordance
@@ -12,19 +14,24 @@
   script nothing answers a click, and a control that announces a role it
   cannot honour is worse than plain text. The server-side string renderer
   drops `:on`, so the same views render as static HTML for first paint and
-  become interactive once the client mounts."
+  become interactive once the client mounts. The pure cursor arithmetic
+  the client moves focus with lives here too."
   (:require [clojure.string :as str]
             [dk.cst.corpus-probe.i18n :as i18n]
             [dk.cst.corpus-probe.url :as url]
-            [dk.cst.corpus-probe.views.controls :as controls]
-            [dk.cst.corpus-probe.views.layout :as layout]))
+            [dk.cst.corpus-probe.views.result :as result]
+            [dk.cst.corpus-probe.views.widgets :as widgets]))
 
 (def column-count
   "How many columns a concordance row has, which a full-width row spans."
   5)
 
+(def loading
+  "Marks an expansion whose context is still in flight (see `hit-rows`)."
+  ::loading)
+
 (def failed
-  "Marks an expansion whose context could not be fetched, as `::loading`
+  "Marks an expansion whose context could not be fetched, as `loading`
   marks one still in flight."
   ::failed)
 
@@ -77,7 +84,7 @@
               :when (and i (< -1 i (token-count hit)))]
           [i k])))
 
-(defn token-offset
+(defn token->offset
   "How far token `i` of `hit` is from the start of its match: negative in
   the left context, zero at the first token of the match, positive after
   it.
@@ -89,7 +96,7 @@
   [hit i]
   (- i (count (:left hit))))
 
-(defn offset-token
+(defn offset->token
   "The index of the token of `hit` at `offset` from its match, or the
   nearest one when the offset falls outside the row: a narrow row cannot
   answer an offset only a wide one has."
@@ -98,8 +105,9 @@
        (max 0 (+ offset (count (:left hit))))))
 
 (defn cursor-range
-  "How many tokens the cursor can visit at `hit-key`, given the `expanded`
-  map: the hit's own tokens, plus its wider context's when one is showing."
+  "How many tokens the cursor can visit at hit key `k` among `hits`,
+  given the `expanded` map: the hit's own tokens, plus its wider
+  context's when one is showing."
   [hits expanded k]
   (when-let [hit (first (filter #(= k (hit-key %)) hits))]
     (+ (token-count hit)
@@ -119,6 +127,14 @@
   [hit i]
   (str "t-" (:corpus hit) "-" (:cpos hit) "-" i))
 
+(defn anchor-class
+  "The class marking the token an `anchor` falls on, as cqp marks a
+  target in bold and a keyword underlined (manual section 3.3)."
+  [anchor]
+  (case anchor
+    :target  "target"
+    :keyword "keyword"))
+
 (defn token
   "Token `i` of `hit`, the map `m`, under the concordance `opts` (see
   `concordance`): its surface form as text, its annotations as `data-*`
@@ -135,8 +151,8 @@
   cursor moves what the panel describes.
 
   Under `:anchored` (see `anchored-tokens`), the token an anchor falls on
-  carries the anchor's name as its class and in its title, as cqp marks a
-  target in bold and a keyword underlined (manual section 3.3)."
+  carries the anchor's name as its class (see `anchor-class`) and in its
+  title."
   [{:keys [client? cursor anchored] :as opts} hit source i m]
   (let [k       [(hit-key hit) i]
         inspect [:inspect (assoc source :token m)]
@@ -147,7 +163,7 @@
                      (not-empty))
         attrs   (cond-> (token-data m)
                   title  (assoc :title title)
-                  anchor (assoc :class (name anchor)))]
+                  anchor (assoc :class (anchor-class anchor)))]
     (if-not client?
       ;; no handler: nothing answers a click here, and the string renderer
       ;; would drop one anyway
@@ -207,13 +223,13 @@
   linking to the reading page of its text, with the hit marked, where
   the hit knows its corpus; the label alone otherwise."
   [{:keys [corpus structs cpos anchors] :as hit}]
-  [:td.structs {:title (source-title structs)}
+  [:td.kwic-structs {:title (source-title structs)}
    (when-let [label (source-label structs)]
      (if corpus
        [:a {:href (url/text corpus cpos (:matchend anchors))} label]
        label))])
 
-(defn context-control
+(defn expand-control
   "The corpus position of `hit` as the control revealing its wider context,
   in `ui`, `expanded?` giving its state; the bare position where
   no client answers the click.
@@ -221,12 +237,12 @@
   Its accessible name opens with the visible position, so what is said
   matches what is seen, and while expanded it names the row it revealed."
   [ui client? hit expanded?]
-  (let [cpos (str (:cpos hit))]
+  (let [cpos  (str (:cpos hit))
+        label (str cpos " · " (i18n/tr ui "Show or hide more context"))]
     (if-not client?
       cpos
       [:button (cond-> {:type          "button"
-                        :aria-label    (str cpos " · "
-                                            (i18n/tr ui "Show or hide more context"))
+                        :aria-label    label
                         :aria-expanded (str (boolean expanded?))
                         :on            {:click [:toggle-context
                                                 {:corpus   (:corpus hit)
@@ -251,11 +267,11 @@
         opts   (assoc opts :anchored (anchored-tokens hit))
         {:keys [left match right structs anchors cpos]} hit
         nl     (count left)]
-    [:tr.hit (position-data cpos anchors)
-     [:th.cpos {:scope "row"} (context-control ui client? hit expanded?)]
-     [:td.left (tokens opts hit source 0 left)]
-     [:td.match [:mark (tokens opts hit source nl match)]]
-     [:td.right (tokens opts hit source (+ nl (count match)) right)]
+    [:tr.kwic-hit (position-data cpos anchors)
+     [:th.kwic-cpos {:scope "row"} (expand-control ui client? hit expanded?)]
+     [:td.kwic-left (tokens opts hit source 0 left)]
+     [:td.kwic-match [:mark (tokens opts hit source nl match)]]
+     [:td.kwic-right (tokens opts hit source (+ nl (count match)) right)]
      (source-cell hit)]))
 
 (defn expanded-row
@@ -271,7 +287,7 @@
         base   (token-count hit)
         nl     (count (:left ex))
         nm     (count (:match ex))]
-    [:tr.expanded {:id (context-id hit)}
+    [:tr.kwic-expanded {:id (context-id hit)}
      [:td {:colspan column-count}
       (tokens opts hit source base (:left ex)) " "
       [:mark (tokens opts hit source (+ base nl) (:match ex))] " "
@@ -284,16 +300,17 @@
   These are the only rows that appear without a page load, so they are the
   only ones a live region is any use for."
   [role text]
-  [:tr.expanded
+  [:tr.kwic-expanded
    [:td {:colspan column-count} [:span {:role role} text]]])
 
 (defn hit-rows
   "The row(s) for `hit` under the concordance `opts` (see `concordance`),
-  in its `:ui`: the KWIC row, followed by its
-  expanded-context row when `:expanded` holds a fetched hit under its
-  `hit-key`, a status row while one is pending, or an alert row when the
-  fetch failed; always two children, the second nil when there is no
-  expansion, so a hit never changes how many rows it contributes."
+  in its `:ui`: the KWIC row, followed by its expanded-context row when
+  `:expanded` holds a fetched hit under its `hit-key`, an alert row when
+  the fetch `failed`, or a status row while one is pending (`loading`,
+  or anything else that is not a hit); always two children, the second
+  nil when there is no expansion, so a hit never changes how many rows
+  it contributes."
   [{:keys [ui expanded] :as opts} hit]
   (let [ex  (get expanded (hit-key hit))
         row (hit-row opts hit (some? ex))]
@@ -314,9 +331,9 @@
   (linking to its info page in `:ui`) and, from the per-corpus `:counts`
   of the search, how many hits it holds in all, then the hit rows with
   their expansions. A corpus whose query failed has no count, its error
-  being reported on its own. The group carries the corpus's own language from `:langs`
-  when known, since the corpus text is in its own language while the
-  surrounding UI is not.
+  being reported on its own. The group carries the corpus's own language
+  from `:langs` when known, since the corpus text is in its own language
+  while the surrounding UI is not.
 
   The count is beside the name it counts, so the reader is told how much
   of a corpus is under the rows they are reading where they are reading
@@ -330,12 +347,12 @@
               corpus      (assoc :data-corpus corpus)
               corpus-lang (assoc :lang corpus-lang))
      (when corpus
-       [:tr.corpus
+       [:tr.kwic-corpus
         [:th {:scope "rowgroup" :colspan column-count}
          [:a {:href (url/corpus corpus)}
           [:code corpus]]
          (when size
-           (list " " (controls/entry-count (i18n/group-digits ui size))))]])
+           (list " " (widgets/count-badge (i18n/group-digits ui size))))]])
      (mapcat #(hit-rows opts %) hits)]))
 
 (defn column-headers
@@ -347,11 +364,11 @@
   [ui]
   [:thead
    [:tr
-    [:th.cpos {:scope "col"} (layout/term ui :cpos false)]
-    [:th.left {:scope "col"} (i18n/tr ui "left context")]
-    [:th.match {:scope "col"} (layout/term ui :match false)]
-    [:th.right {:scope "col"} (i18n/tr ui "right context")]
-    [:th.structs {:scope "col"} (i18n/tr ui "source")]]])
+    [:th.kwic-cpos {:scope "col"} (widgets/term ui :cpos false)]
+    [:th.kwic-left {:scope "col"} (i18n/tr ui "left context")]
+    [:th.kwic-match {:scope "col"} (widgets/term ui :match false)]
+    [:th.kwic-right {:scope "col"} (i18n/tr ui "right context")]
+    [:th.kwic-structs {:scope "col"} (i18n/tr ui "source")]]])
 
 (def caption-id
   "The id of the concordance's caption, which names its scroll region."
@@ -377,11 +394,11 @@
   `:ui` (the lookup context of the headings and row controls), `:langs`
   (corpus name to the language of its own text), `:counts`, the
   per-corpus counts of the search, which head each row group (see
-  `corpus-group`), `:expanded`, a map of
-  `hit-key` to a wider-context hit to render beneath its row, `:client?`,
-  true where the script that answers a token click is running, and
-  `:cursor`, the [hit-key index] of the one tabbable token, which falls
-  back to the first when it names no token the page still shows.
+  `corpus-group`), `:expanded`, a map of `hit-key` to a wider-context
+  hit to render beneath its row, `:client?`, true where the script that
+  answers a token click is running, and `:cursor`, the [hit-key index]
+  of the one tabbable token, which falls back to the first when it names
+  no token the page still shows.
 
   Focus leaving the region closes the inspection panel, since the panel
   describes the token the cursor is on and there is nothing to describe
@@ -405,3 +422,251 @@
       (when caption [:caption {:id caption-id} caption])
       (column-headers ui)
       (map #(corpus-group opts %) (partition-by :corpus hits))]]))
+
+(defn sort-label
+  "What the sort mode `value` (see
+  dk.cst.corpus-probe.cwb.command/sort-modes) is called, in `ui`; a mode
+  naming a positional attribute (see
+  dk.cst.corpus-probe.cwb.command/sort-attr) is the match by that
+  attribute.
+
+  Naming them here rather than in the commands namespace keeps the CQP
+  command table free of anything the interface decides."
+  [ui value]
+  (case value
+    "corpus"  (i18n/tr ui "corpus order")
+    "word"    (i18n/tr ui "match")
+    "reverse" (i18n/tr ui "match from the end")
+    "left"    (i18n/tr ui "left context")
+    "right"   (i18n/tr ui "right context")
+    "random"  (i18n/tr ui "random")
+    (str (i18n/tr ui "match") " " value)))
+
+(defn sort-control
+  "The sort control of the concordance in `ui`: a select over
+  the `sort-modes` values (see dk.cst.corpus-probe.cwb.command/sort-modes)
+  with `sort` chosen and each named by `sort-label`.
+
+  It names the form it submits with (see
+  dk.cst.corpus-probe.views.widgets/select), so it can sit beside the
+  table it reorders rather than inside the query form: ordering a result
+  is a different task from writing the query that produced it."
+  [ui sort-modes sort]
+  (widgets/select url/form-id "sort" (i18n/tr ui "Sort")
+                  (for [value sort-modes]
+                    (widgets/option sort value (sort-label ui value)))))
+
+(def sample-sizes
+  "The sample sizes the concordance offers, in display order: as many
+  hits as a reader might work through by hand, a result larger than that
+  being read by sampling it rather than by paging to the end.
+
+  A hand-written URL may name any other size, which `sample-control`
+  then shows beside these."
+  [50 100 500 1000])
+
+(defn sample-control
+  "The sample control of the concordance in `ui`: a select over the
+  `sample-sizes` with `sample` chosen, or the whole result when it names
+  none.
+
+  A size the list does not hold is offered beside them, so that a URL
+  naming one shows as the sample it is rather than as the whole result.
+  It names the form it submits with for the reason `sort-control` does."
+  [ui sample]
+  (let [sizes (sort (cond-> (set sample-sizes) sample (conj sample)))]
+    (widgets/select url/form-id "sample" (i18n/tr ui "Sample")
+                    (list
+                     (widgets/option (or sample "") "" (i18n/tr ui "all hits"))
+                     (for [n sizes]
+                       (widgets/option sample n (i18n/group-digits ui n)))))))
+
+(def context-widths
+  "The widths of context the concordance offers, in display order: a few
+  numbers of words, then the units of text a corpus marks (see
+  dk.cst.corpus-probe.cwb.corpus/units), one region of which is shown
+  either side. The first is the usual width (see
+  dk.cst.corpus-probe.search.batch/kwic-defaults). A hand-written URL may
+  name any other number of words, which `context-control` then shows
+  beside these."
+  [5 10 20 :sentence :paragraph])
+
+(defn context-label
+  "What the context width `context` (see `context-widths`) is called, in
+  `ui`."
+  [ui context]
+  (case context
+    :sentence  (i18n/tr ui "sentence")
+    :paragraph (i18n/tr ui "paragraph")
+    (str context " " (i18n/trn ui "word" "words" context))))
+
+(defn context-control
+  "The context control of the concordance in `ui`: a select over the
+  `context-widths` with `context` (a number of words or a unit keyword)
+  chosen, named by `context-label`. A number of words the list does not
+  hold is offered among the numbers, in order. It names the form it
+  submits with, for the reason `sort-control` does."
+  [ui context]
+  (let [widths (if (or (keyword? context) (some #{context} context-widths))
+                 context-widths
+                 (into (vec (sort (conj (filterv number? context-widths)
+                                        context)))
+                       (filter keyword? context-widths)))
+        ;; a unit is named in the URL, a number of words is the number
+        value  (fn [width] (if (keyword? width) (name width) width))]
+    (widgets/select url/form-id "context" (i18n/tr ui "Context")
+                    (for [width widths]
+                      (widgets/option (value context) (value width)
+                                      (context-label ui width))))))
+
+(def near-distances
+  "The distances the near control offers, in display order."
+  [1 2 3 5 10])
+
+(defn near-control
+  "The proximity control of a result in `ui`: the word every hit must
+  have nearby and how many words away it may be, from `near` (the :word
+  and :distance in force, if any) and the `near-distances`.
+
+  The word is typed rather than chosen, so it applies once the reader is
+  done with it: a text field reports a change on Enter and on focus
+  leaving it, and the change applies the view as a select's does. Enter
+  alone could not be relied on: implicit submission does not reach a
+  form from a field that only names it. The distance applies itself as
+  the sort does. A distance the list does not hold is offered beside
+  them, as a sample size is."
+  [ui {:keys [word distance]}]
+  (let [distance (or distance (parse-long (:distance url/defaults)))
+        words    (fn [n] (str n " " (i18n/trn ui "word" "words" n)))]
+    (list
+     [:label {:for "near"} (i18n/tr ui "Near")]
+     " "
+     [:input {:id           "near"
+              :name         "near"
+              :type         "search"
+              :form         url/form-id
+              :value        (or word "")
+              :autocomplete "off"
+              :on           {:change [:apply-view]}}]
+     " "
+     (widgets/select url/form-id "distance" (i18n/tr ui "within")
+                     (for [n (sort (conj (set near-distances) distance))]
+                       (widgets/option distance n (words n)))))))
+
+(defn concordance-section
+  "The concordance view of the search in `state`: when any corpus could be
+  searched and found something, the sort, context and sample controls
+  with the near control behind its disclosure (see
+  dk.cst.corpus-probe.views.result/view-controls), the pagination above
+  and below the table, the concordance with its `:expanded` hits, its
+  `:langs` and the per-corpus counts that head its row groups, then the
+  download links (`:export-hrefs`, exports holding at most
+  `:export-limit` hits), all worded in the state's `:ui` and wrapped in
+  the shared dk.cst.corpus-probe.views.result/results-region. The result
+  answers the params the search was `:asked` with, not the form's
+  `:params`, which the client's form leaves behind at a change of mode."
+  [{:keys [ui sort-modes asked result error langs expanded client?
+           export-hrefs export-limit prev-href next-href]
+    :as state}]
+  (let [{:keys [counts hits size]} result
+        position (when result (result/page-phrase ui result))]
+    (result/results-region
+     state
+     (result/result-heading ui asked result error)
+     (result/qualifiers ui asked result)
+     (when (result/searched? result)
+       ;; a search that found nothing has nothing to page, download or
+       ;; count: the table would be a header over no rows and the exports
+       ;; header-only files. A result emptied by the word its hits had
+       ;; to be near keeps that one control, or the reader could not take
+       ;; the word away again
+       (if (zero? size)
+         (list
+          (when (:near result)
+            (result/view-controls ui client? nil
+                                  (near-control ui (:near result))
+                                  true))
+          [:p (i18n/tr ui "No hits.")])
+         (list
+          (result/view-controls ui client?
+                                (list (sort-control ui sort-modes (:sort asked))
+                                      " "
+                                      (context-control ui (:context result))
+                                      " "
+                                      (sample-control ui (:sample result)))
+                                (near-control ui (:near result))
+                                (:near result))
+          (result/pagination ui prev-href next-href position)
+          (concordance hits {:caption  (widgets/term ui :kwic false)
+                             :ui       ui
+                             :langs    langs
+                             :counts   counts
+                             :expanded expanded
+                             :client?  client?
+                             :cursor   (:cursor state)})
+          (result/pager-links ui prev-href next-href position)
+          ;; what to do next with these hits, so it follows them: reading
+          ;; the concordance is the task, taking it elsewhere is the one
+          ;; after
+          (result/download-links ui export-hrefs
+                                 (when (and export-limit (> size export-limit))
+                                   (str (i18n/tr ui "the first") " "
+                                        (i18n/group-digits ui export-limit) " "
+                                        (i18n/trn ui "hit" "hits"
+                                                  export-limit))))))))))
+
+(def inspector-id
+  "The id of the inspection panel, by which the client finds it (see
+  dk.cst.corpus-probe.ui/leave-concordance!) rather than by the class the
+  stylesheet uses, as it finds the region (see `region-id`)."
+  "inspector")
+
+(defn detail-group
+  "A titled group of attributes `m` in the inspector, a box named `title`
+  on its border like the fieldsets, or nil when empty."
+  [title m]
+  (when (seq m)
+    [:section.box
+     [:h3 title]
+     (widgets/facts m)]))
+
+(defn inspector
+  "The token inspection panel: what the concordance's cursor is on, in
+  `ui`, from `selected` (its :token, :structs, :corpus and the :cpos and
+  :matchend of its hit, which the link to the whole text takes); nil
+  while nothing is selected.
+
+  Above the rail's breakpoint it takes the query column, so it sits beside
+  the hits it describes without narrowing them; below it, it is a sheet at
+  the foot of the viewport.
+
+  It is not given focus when it opens: the cursor stays on the token so
+  the arrow keys keep moving, and the panel describes whatever the
+  cursor is on. That is why it is not a popover, which would put itself
+  in the top layer, out of the grid, and want focus of its own. Escape
+  closes it from the concordance. It can take focus, so that a click
+  anywhere in it lands focus in the panel rather than on the page, and
+  it reports focus leaving it, since the client closes it once focus
+  has left both it and the concordance (see
+  dk.cst.corpus-probe.ui/leave-concordance!).
+
+  The group titles are in `ui`; the attribute names inside them are the
+  corpus's own."
+  [ui {:keys [token structs corpus cpos matchend] :as selected}]
+  (when selected
+    [:aside.inspector {:id         inspector-id
+                       :aria-label (i18n/tr ui "Token details")
+                       :tabindex   "-1"
+                       :on         {:focusout [:leave-concordance]}}
+     [:h2 (i18n/tr ui "Token details")]
+     [:button.inspector-close {:type "button" :on {:click [:close]}}
+      (i18n/tr ui "Close")]
+     (detail-group (i18n/tr ui "Token") (dissoc token :open :close))
+     (detail-group (i18n/tr ui "Text") structs)
+     (when (and corpus cpos)
+       [:p [:a {:href (url/text corpus cpos matchend)}
+            (i18n/tr ui "Read the whole text")]])
+     (when corpus
+       [:section.box
+        [:h3 (i18n/tr ui "Corpus")]
+        [:p [:a {:href (url/corpus corpus)} [:code corpus]]]])]))

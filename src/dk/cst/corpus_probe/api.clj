@@ -25,19 +25,16 @@
             [dk.cst.corpus-probe.cwb.registry :as registry]
             [dk.cst.corpus-probe.cwb.tools :as tools]
             [dk.cst.corpus-probe.docs :as docs]
-            [dk.cst.corpus-probe.export :as export]
-            [dk.cst.corpus-probe.frequency :as frequency]
             [dk.cst.corpus-probe.i18n :as i18n]
             [dk.cst.corpus-probe.query :as query]
             [dk.cst.corpus-probe.query.mode :as mode]
             [dk.cst.corpus-probe.search :as search]
             [dk.cst.corpus-probe.search.batch :as batch]
+            [dk.cst.corpus-probe.search.export :as export]
+            [dk.cst.corpus-probe.search.frequency :as frequency]
             [dk.cst.corpus-probe.url :as url]
-            [dk.cst.corpus-probe.views.frequencies :as freq-views]
-            [dk.cst.corpus-probe.views.layout :as layout]
-            [dk.cst.corpus-probe.views.page :as page]
-            [dk.cst.corpus-probe.views.text :as text-views]
-            [dk.cst.corpus-probe.views.app :as app-views]
+            [dk.cst.corpus-probe.views :as views]
+            [dk.cst.corpus-probe.views.frequency :as frequency-views]
             [replicant.string :as replicant])
   (:import [java.io ByteArrayOutputStream]))
 
@@ -68,13 +65,6 @@
   enclosing <script> element; JSON readers decode the escape back to `<`."
   [s]
   (str/replace s "<" "\\u003c"))
-
-(defn page-title
-  "The document title: the page-specific `parts` (most specific first,
-  blanks skipped) followed by the app name, so tabs and bookmarks are
-  meaningful."
-  [& parts]
-  (str/join " · " (concat (remove str/blank? parts) ["corpus-probe"])))
 
 (defn accepted-languages
   "The languages the `Accept-Language` header value `s` offers, most
@@ -147,7 +137,7 @@
   "The complete HTML document from `opts`: its `:lang`, its `:title`, the
   bypass link, the site header with its `:path` (the page being served,
   which its navigation marks) and navigation `:nav` (see
-  dk.cst.corpus-probe.views.layout/site-header), the rendered
+  dk.cst.corpus-probe.views/site-header), the rendered
   `:body` hiccup (the page's <main>) in #app, and the site footer. The
   `:payload` is the same view data as transit, embedded as the #bootstrap
   script the client takes over from.
@@ -186,16 +176,16 @@
          ;; outright where no client can (see resources/public/css/noscript.css)
          "<noscript><link rel=\"stylesheet\" href=\"/css/noscript.css\"></noscript>"
          "</head><body>"
-         (correct-quote-escaping (replicant/render (layout/skip-link ui)))
+         (correct-quote-escaping (replicant/render (views/skip-link ui)))
          "<div id=\"masthead\">"
          (correct-quote-escaping
-          (replicant/render (layout/site-header ui path nav)))
+          (replicant/render (views/site-header ui path nav)))
          "</div>"
          "<div id=\"app\">"
          (correct-quote-escaping (replicant/render body))
          "</div>"
          "<div id=\"footer\">"
-         (correct-quote-escaping (replicant/render (layout/site-footer ui)))
+         (correct-quote-escaping (replicant/render (views/site-footer ui)))
          "</div>"
          (when payload
            (str "<script type=\"" url/transit-type "\" id=\"bootstrap\">"
@@ -349,7 +339,7 @@
 (defn by-param
   "The attribute the `by` query param value `v` asks a frequency table to
   count its values against (see
-  dk.cst.corpus-probe.frequency/frequency-table!), as a keyword; nil when
+  dk.cst.corpus-probe.search.frequency/frequency-table!), as a keyword; nil when
   it names none, the corpora being the columns then. The attribute is
   checked against each corpus by the breakdown, as every attribute is."
   [v]
@@ -393,67 +383,6 @@
                  (if (and n (pos? n))
                    n
                    (parse-long (:distance url/defaults))))}))
-
-(defn search-title
-  "The document title of the search page for `params` in `ui`:
-  the query, how many hits it found (from `result`, when given), the
-  selected corpora (`:corpus`, a vector of names, when any), the metadata
-  filter and the page number when past the first; just the app name when
-  nothing was searched for.
-
-  The hit count is in the title because a full page reload announces the
-  title and nothing else, so the title is where the outcome of a search
-  first reaches a screen reader. It is left out when no corpus could be
-  searched, since then there is no count to report."
-  ([ui params]
-   (search-title ui params nil))
-  ([ui {:keys [corpus] :as params} result]
-   (if-not (page/asked? params)
-     (page-title (i18n/tr ui "Search"))
-     (let [page-n (:page result 0)
-           ;; a search every corpus refused still has a result, of size
-           ;; 0; titling that "0 hits" reports an answer the search never
-           ;; got, and contradicts the results heading
-           hits   (when (page/searched? result)
-                    (page/hits-phrase ui (:size result)))]
-       (page-title (page/query-phrase ui params)
-                   hits
-                   ;; only ever beside a count it could have drawn from:
-                   ;; a search that found nothing sampled nothing
-                   (when (and hits (pos? (:size result 0)))
-                     (page/sample-phrase ui (:sample result) corpus))
-                   (when (seq corpus) (page/corpora-phrase ui corpus))
-                   (page/filter-phrase (filter-params params)
-                                       (pattern-params params))
-                   (when (pos? page-n)
-                     (str (i18n/tr ui "page") " " (inc page-n))))))))
-
-(defn frequency-title
-  "The document title of the frequency view for `params` in `ui`: what
-  was counted, in which corpora, within the metadata filter, and by what.
-
-  A frequency result counts values rather than hits, so it cannot borrow
-  the concordance's title: there is no hit count to report."
-  [ui {:keys [corpus attr by] :as params}]
-  (page-title (if (page/asked? params)
-                (page/query-phrase ui params)
-                (i18n/tr ui "All tokens"))
-              (when (seq corpus) (page/corpora-phrase ui corpus))
-              (page/filter-phrase (filter-params params)
-                                  (pattern-params params))
-              (str (i18n/tr ui "by") " " attr
-                   (when-not (str/blank? by)
-                     (str " " (i18n/tr ui "and") " " by)))
-              (i18n/tr ui "Frequencies")))
-
-(defn result-title
-  "The document title of the search described by `params` in `ui`, shown
-  in `view` with `result`: each view names what it shows, since a full
-  page load announces the title and nothing else."
-  [ui view params result]
-  (if (= :frequencies view)
-    (frequency-title ui params)
-    (search-title ui params result)))
 
 (defn value-lists!
   "The values of each positional attribute among `attrs` (keywords) that
@@ -518,7 +447,7 @@
   "What the pattern and range fields of the metadata filter hold, from
   `params`: the `:patterns`, attribute to its `fp.` param, and the
   `:ranges`, attribute to its [`ff.` `ft.`] params, as the form shows
-  them back (see dk.cst.corpus-probe.views.page/pattern-row)."
+  them back (see dk.cst.corpus-probe.views.search.filter/pattern-row)."
   [params]
   (let [from (prefixed-params params (:from url/filter-prefixes))
         to   (prefixed-params params (:to url/filter-prefixes))]
@@ -529,7 +458,7 @@
 (defn filter-controls!
   "The metadata filter controls of the search form over the `known`
   corpora via `ctx`: the filters they offer (see
-  dk.cst.corpus-probe.frequency/filter-options!) plus the `:selected`
+  dk.cst.corpus-probe.search.frequency/filter-options!) plus the `:selected`
   values of `params` (see `filter-params`) and what its pattern and range
   fields hold (see `pattern-fields`)."
   [ctx known params]
@@ -613,7 +542,7 @@
 (defn linked-rows
   "The frequency `result` with a dk.cst.corpus-probe.url/subset-href on
   each of the rows the table shows (its first
-  dk.cst.corpus-probe.views.frequencies/row-limit), for the search
+  dk.cst.corpus-probe.views.frequency/row-limit), for the search
   described by `params`: the rows past those go unlinked, since the
   table does not show them and an export reads no links."
   [params {:keys [attr at] :as result}]
@@ -621,13 +550,13 @@
           (fn [rows]
             (into (mapv #(assoc % :href (url/subset-href params attr at
                                                          (:value %)))
-                        (take freq-views/row-limit rows))
-                  (drop freq-views/row-limit rows)))))
+                        (take frequency-views/row-limit rows))
+                  (drop frequency-views/row-limit rows)))))
 
 (defn frequency-outcome!
   "Table the `known` corpora for `cqp` (nil for the whole corpora) by
   `attr` via `ctx` with `opts` (the :at, :by, :docs, :filter, :within,
-  :subset and :near of dk.cst.corpus-probe.frequency/frequency-table!):
+  :subset and :near of dk.cst.corpus-probe.search.frequency/frequency-table!):
   {:result ...}, the `unknown` corpus names reported among its counts,
   or {:error ...} when no corpus was selected at all. Per-corpus errors
   travel inside the result."
@@ -696,7 +625,7 @@
                  (set (corpus/readable-corpora! ctx corpora))))
 
 (defn search-view-data
-  "The data dk.cst.corpus-probe.views.app/search-view renders one
+  "The data dk.cst.corpus-probe.views/search-page renders one
   search page for `request` against `ctx` from: the state of the form, the
   outcome of the search when the params describe one, and the links out
   of it.
@@ -720,7 +649,7 @@
   dk.cst.corpus-probe.query/form-rows), the values its fields suggest
   `:value-lists` (see `value-lists!`), and what a change of mode could
   not keep is `:switch`, its `:loss` and the `:unread` params, for the
-  form's status line (see dk.cst.corpus-probe.views.page/switch-notice).
+  form's status line (see dk.cst.corpus-probe.views.search/switch-notice).
 
   The same map is embedded as transit for the client to take over from,
   so it holds corpus overviews only: the full registry maps carry
@@ -848,7 +777,7 @@
                    :path    (:path data)
                    :title   title
                    :nav     (:nav data)
-                   :body    (app-views/page data)
+                   :body    (views/page data)
                    :payload (->transit (assoc data :title title))}))))))
 
 (defn search-page
@@ -876,16 +805,12 @@
                    (url/query-string cited)))
       {:status  303
        :headers {"Location" (url/results-href cited)}}
-      (let [{:keys [lang view params result error]
-             :as   data} (search-view-data ctx request)
+      (let [{:keys [result error] :as data} (search-view-data ctx request)
             data (cond-> (assoc (dissoc data :cited) :route :search)
                    (not (or result error))
                    (assoc :help (docs/document "help"
                                              (request-languages request))))]
-        (page-response request
-                       (result-title (i18n/->ui lang) view params result)
-                       data
-                       cited)))))
+        (page-response request (views/title data) data cited)))))
 
 (defn document-page
   "Handle a `request` for the document called `name` (see
@@ -894,18 +819,16 @@
   Served in the first language the request reads that the document has,
   and titled as the document titles itself."
   [_ctx name request]
-  (let [langs  (request-languages request)
-        blocks (docs/document name langs)]
-    (page-response request
-                   (page-title (docs/title blocks))
-                   {:route :document
-                    :lang  (first (filter i18n/supported? langs))
-                    :data  {:body blocks}})))
+  (let [langs (request-languages request)
+        data  {:route :document
+               :lang  (first (filter i18n/supported? langs))
+               :data  {:body (docs/document name langs)}}]
+    (page-response request (views/title data) data)))
 
 (defn text-response
   "A 200 response serving `body` (text, or a function writing it to the
   response stream as it goes) in export `format` (a key of
-  dk.cst.corpus-probe.export/formats) as a download named `name`."
+  dk.cst.corpus-probe.search.export/formats) as a download named `name`."
   [format name body]
   {:status  200
    :headers {"Content-Type"        (:content-type (export/formats format))
@@ -927,7 +850,7 @@
 
 (defn export-response
   "The download of `rows` (a header and data rows of strings, see
-  dk.cst.corpus-probe.export) rendered in `format` under `name`, or the
+  dk.cst.corpus-probe.search.export) rendered in `format` under `name`, or the
   `export-failure` when `readable?` says no corpus of the `counts` could
   be searched, so a failed search never downloads as an empty file."
   [format name readable? {:keys [counts]} rows]
@@ -954,8 +877,8 @@
 
 (defn export-kwic
   "Handle a concordance export `request` against `ctx` in `format` (a
-  key of dk.cst.corpus-probe.export/formats): the hits of the query in
-  the selected corpora, the first dk.cst.corpus-probe.export/hit-limit
+  key of dk.cst.corpus-probe.search.export/formats): the hits of the query in
+  the selected corpora, the first dk.cst.corpus-probe.search.export/hit-limit
   of them in the requested sort, as a TSV or CSV download; 400 without
   a query, known corpora or a known format, or when no corpus could be
   searched.
@@ -1002,7 +925,7 @@
 
 (defn export-frequencies
   "Handle a frequency table export `request` against `ctx` in `format`
-  (a key of dk.cst.corpus-probe.export/formats): every row of the
+  (a key of dk.cst.corpus-probe.search.export/formats): every row of the
   breakdown of the query (or of the whole corpora) by the `attr` param,
   against the `by` param when there is one, as a TSV or CSV download;
   400 without known corpora or a known format, or when no corpus could
@@ -1020,8 +943,8 @@
                           :sort (:sort params)))]
         (export-response format "frequencies" :tokens table
                          (if (:by table)
-                           (export/crosstab-table table)
-                           (export/frequency-table table)))))))
+                           (export/crosstab-lines table)
+                           (export/frequency-lines table)))))))
 
 (def export-file
   "What an export is named as under the search path: the view of the
@@ -1045,14 +968,10 @@
   "Handle the corpus index `request` against `ctx`: every registry corpus,
   summarized and grouped by the configured folder tree."
   [ctx request]
-  (let [lang (request-language request)
-        ui   (i18n/->ui lang)]
-    (page-response request
-                   (page-title (i18n/tr ui "Corpora"))
-                   {:route :corpora
-                    :lang  lang
-                    :data  {:folders (corpus/corpus-tree!
-                                      ctx (registry/entries ctx))}})))
+  (let [data {:route :corpora
+              :lang  (request-language request)
+              :data  {:folders (corpus/corpus-tree! ctx (registry/entries ctx))}}]
+    (page-response request (views/title data) data)))
 
 (defn corpus-page
   "Handle a corpus info page `request` against `ctx`, rendering the corpus
@@ -1069,24 +988,23 @@
                                  (fn []
                                    {:stats (tools/describe-corpus! ctx corpus)
                                     :info  (corpus/info! ctx corpus)})
-                                 (fn [e] {:phantom? (corpus/phantom? e)}))]
-        (page-response request
-                       (page-title corpus)
-                       {:route :corpus
-                        :lang  lang
-                        ;; the corpus's own language lives in :data, where
-                        ;; info-view reads it; the UI language is the page's
-                        :data  (assoc outcome
-                                      :corpus corpus
-                                      :title  (not-empty (:name entry))
-                                      :lang   (registry/language entry))})))))
+                                 (fn [e] {:phantom? (corpus/phantom? e)}))
+            data    {:route :corpus
+                     :lang  lang
+                     ;; the corpus's own language lives in :data, where
+                     ;; info-page reads it; the UI language is the page's
+                     :data  (assoc outcome
+                                   :corpus corpus
+                                   :title  (not-empty (:name entry))
+                                   :lang   (registry/language entry))}]
+        (page-response request (views/title data) data)))))
 
 (defn text-page
   "Handle a reading page `request` against `ctx`: the text of the corpus
   named by the :id path parameter that holds the corpus position of the
   `cpos` query param, with the hit from there to the `matchend` param
   (`cpos` itself when absent) marked (see
-  dk.cst.corpus-probe.views.text/reading-view); 404 when the corpus is
+  dk.cst.corpus-probe.views.corpus/reading-page); 404 when the corpus is
   not a registry corpus, the position is not a number or no text holds
   it. Without any position the reader is sent to the corpus page, there
   being no text to pick without one. A corpus that marks no texts, or a
@@ -1114,20 +1032,17 @@
             end     (max cpos* (or (some-> matchend str parse-long) cpos*))]
         (if (nil? outcome)
           {:status 404 :body "not found"}
-          (page-response
-           request
-           (page-title (text-views/text-name (i18n/->ui lang)
-                                             (:structs outcome))
-                       corpus)
-           {:route :text
-            :lang  lang
-            ;; the corpus's own language lives in :data, as on the
-            ;; corpus page; the UI language is the page's
-            :data  (cond-> (assoc outcome
-                                  :corpus corpus
-                                  :hit    [cpos* end]
-                                  :lang   (registry/language entry))
-                     (:error outcome) (update :error cwb/public-error))}))))))
+          (let [data {:route :text
+                      :lang  lang
+                      ;; the corpus's own language lives in :data, as on
+                      ;; the corpus page; the UI language is the page's
+                      :data  (cond-> (assoc outcome
+                                            :corpus corpus
+                                            :hit    [cpos* end]
+                                            :lang   (registry/language entry))
+                               (:error outcome)
+                               (update :error cwb/public-error))}]
+            (page-response request (views/title data) data)))))))
 
 (defn safe-return
   "The path `s` to send a reader back to after a preference change, or the
@@ -1205,7 +1120,7 @@
   The values a reader has chosen are not answered: those are the reader's
   and the client is already holding them. An attribute list that no
   longer offers a chosen value leaves that value where it is (see
-  dk.cst.corpus-probe.views.page/filter-details), so narrowing the corpora
+  dk.cst.corpus-probe.views.search.filter/filter-fieldset), so narrowing the corpora
   never quietly drops part of a filter.
 
   The per-corpus half of this is cached against each registry file (see
@@ -1237,7 +1152,7 @@
         (let [q      (command/position-query cpos* matchend*)
               ;; one hit at a position nothing will ask for again, so
               ;; saving it would only fill the cache (see
-              ;; dk.cst.corpus-probe.cache)
+              ;; dk.cst.corpus-probe.search.cache)
               result (search/kwic! ctx corpus q {:context      expanded-context
                                                  :rows         [0 0]
                                                  :struct-attrs []
@@ -1285,8 +1200,17 @@
         (transit-response
          (merge (select-keys result [:counts :size :pages])
                 (url/page-hrefs cited page-n result)
-                {:title (search-title (i18n/->ui (request-language request))
-                                      params* result)}))))))
+                ;; titled as the page is, the filter it was kept within
+                ;; named beside the count (see
+                ;; dk.cst.corpus-probe.views/search-title)
+                {:title (views/title
+                         {:route  :search
+                          :lang   (request-language request)
+                          :view   :kwic
+                          :params params*
+                          :result (merge result
+                                         (select-keys opts [:filter
+                                                            :patterns]))})}))))))
 
 (defn public-file
   "Serve the file under public/`dir` named by the splat `:path` of

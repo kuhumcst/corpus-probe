@@ -29,12 +29,11 @@
             [dk.cst.corpus-probe.query.mode :as mode]
             [dk.cst.corpus-probe.query.tokens :as tokens]
             [dk.cst.corpus-probe.url :as url]
+            [dk.cst.corpus-probe.views :as views]
+            [dk.cst.corpus-probe.views.chooser :as chooser]
+            [dk.cst.corpus-probe.views.concordance :as concordance]
             [dk.cst.corpus-probe.views.corpus :as corpus-views]
-            [dk.cst.corpus-probe.views.kwic :as kwic]
-            [dk.cst.corpus-probe.views.layout :as layout]
-            [dk.cst.corpus-probe.views.page :as page]
-            [dk.cst.corpus-probe.views.tree :as tree]
-            [dk.cst.corpus-probe.views.app :as app-views]
+            [dk.cst.corpus-probe.views.search.filter :as filter]
             [replicant.dom :as r]))
 
 (defonce state
@@ -157,7 +156,7 @@
                      (collapse! k)))))
         (.catch (fn [_]
                   (if (contains? (:expanded @state) k)
-                    (swap! state assoc-in [:expanded k] kwic/failed)
+                    (swap! state assoc-in [:expanded k] concordance/failed)
                     (collapse! k)))))))
 
 (defn hits
@@ -172,7 +171,8 @@
   (let [[k i] (:cursor @state)
         [corpus cpos] k]
     (some-> (.getElementById js/document
-                             (kwic/token-id {:corpus corpus :cpos cpos} i))
+                             (concordance/token-id {:corpus corpus :cpos cpos}
+                                                   i))
             (.focus))))
 
 (defn cursor-rows
@@ -185,12 +185,12 @@
   []
   (let [expanded (:expanded @state)]
     (mapcat (fn [hit]
-              (let [k  (kwic/hit-key hit)
+              (let [k  (concordance/hit-key hit)
                     ex (get expanded k)]
                 (cond-> [{:key k :hit hit :from 0}]
                   (map? ex) (conj {:key  k
                                    :hit  ex
-                                   :from (kwic/token-count hit)}))))
+                                   :from (concordance/token-count hit)}))))
             (hits))))
 
 (defn row-at
@@ -216,13 +216,13 @@
         here (nth rows* at)
         i    (- (second cursor) (:from here))]
     (if (zero? rows)
-      (let [i* (min (dec (kwic/token-count (:hit here))) (max 0 (+ i tokens)))]
+      (let [i* (min (dec (concordance/token-count (:hit here))) (max 0 (+ i tokens)))]
         [(:key here) (+ (:from here) i*)])
       (let [n      (min (dec (count rows*)) (max 0 (+ at rows)))
             there  (nth rows* n)
-            offset (kwic/token-offset (:hit here) i)]
+            offset (concordance/token->offset (:hit here) i)]
         [(:key there)
-         (+ (:from there) (kwic/offset-token (:hit there) offset))]))))
+         (+ (:from there) (concordance/offset->token (:hit there) offset))]))))
 
 (defn move-cursor!
   "Answer a key pressed on the token at cursor `k`: an arrow moves the
@@ -250,7 +250,7 @@
       ;; context is its own run of text
       (contains? #{"Home" "End"} pressed)
       (let [{:keys [key hit from]} (nth rows (row-at rows k))
-            i (if (= "Home" pressed) 0 (dec (kwic/token-count hit)))]
+            i (if (= "Home" pressed) 0 (dec (concordance/token-count hit)))]
         (.preventDefault event)
         (swap! state assoc :cursor [key (+ from i)])
         (focus-cursor!))
@@ -302,18 +302,21 @@
   which shows everything in it rather than only what is chosen (see
   `engage!`); and `:unticked`, what they have unticked at rest since
   they last left, which stays in place until then (see `tick`). Both
-  lists are one chooser (see dk.cst.corpus-probe.views.tree/chooser),
+  lists are one chooser (see dk.cst.corpus-probe.views.chooser/chooser),
   and its rules are applied to that state here.
 
   Here, per list: `:tree` builds its tree from the state, with what is
   held chosen kept in it, and `:chosen` reads its selection out of the
   state as the set of leaf ids the tree names."
   {:corpora {:tree   (fn [s _]
-                       (corpus-views/tree (i18n/->ui (:lang s)) (:folders s)))
+                       (corpus-views/corpus-tree (i18n/->ui (:lang s))
+                                                 (:folders s)))
              :chosen (fn [s] (set (get-in s [:params :corpus])))}
-   :values  {:tree   (fn [s held] (page/tree (:filter-controls s) held))
+   :values  {:tree   (fn [s held]
+                       (filter/filter-tree (:filter-controls s) held))
              :chosen (fn [s]
-                       (page/pairs (get-in s [:filter-controls :selected])))}})
+                       (filter/filter-pairs
+                        (get-in s [:filter-controls :selected])))}})
 
 (defn held
   "What the resting view of list `k` (see `lists`) treats as chosen in
@@ -325,9 +328,9 @@
 (defn rest-open
   "The disclosures of list `k` (see `lists`) that stand open at rest in
   state `s` with `held` chosen (see
-  dk.cst.corpus-probe.views.tree/open-at-rest)."
+  dk.cst.corpus-probe.views.chooser/open-at-rest)."
   [s k held]
-  (tree/open-at-rest ((:tree (lists k)) s held) held))
+  (chooser/open-at-rest ((:tree (lists k)) s held) held))
 
 (defn settle
   "State `s` with list `k` (see `lists`) at rest: nobody choosing from
@@ -409,8 +412,8 @@
                  (cond-> (assoc-in s [:lists k :filter] q)
                    (not (str/blank? q))
                    (update-in [:lists k :open] into
-                              (tree/matching q ((:tree (lists k)) s
-                                                (held s k))))))))
+                              (chooser/matching q ((:tree (lists k)) s
+                                                   (held s k))))))))
 
 (defn toggle-corpora!
   "Select every corpus in `ids`, or clear them all when they are already
@@ -494,13 +497,13 @@
   filters nobody has to fetch, and a corpus selection is usually changed
   several times before anyone asks what metadata it carries. Unless
   nothing is on show at all (see
-  dk.cst.corpus-probe.views.page/filterable?), since a fieldset that is
-  not there is one the reader cannot open to ask. And never for no
-  corpora: a search cannot run without one, and what the server answers
-  for none is nothing, which would only take the fieldset away."
+  dk.cst.corpus-probe.views.search.filter/filterable?), since a fieldset
+  that is not there is one the reader cannot open to ask. And never for
+  no corpora: a search cannot run without one, and what the server
+  answers for none is nothing, which would only take the fieldset away."
   [{:keys [filters-for filter-controls] :as state}]
   (and (or (contains? (get-in state [:lists :values :open]) :root)
-           (not (page/filterable? filter-controls)))
+           (not (filter/filterable? filter-controls)))
        (seq (chosen-corpora state))
        (not= (chosen-corpora state) filters-for)))
 
@@ -510,8 +513,8 @@
 
   Only `:attrs` and `:unlisted` are replaced. `:selected` is the reader's,
   and a chosen value the new corpora do not offer keeps its checkbox (see
-  dk.cst.corpus-probe.views.page/filter-details), so narrowing a selection
-  never quietly drops part of a filter.
+  dk.cst.corpus-probe.views.search.filter/filter-fieldset), so narrowing a
+  selection never quietly drops part of a filter.
 
   A response is applied only while it still describes the selection, so a
   slow answer to a question the reader has moved on from is dropped rather
@@ -570,7 +573,7 @@
   renaming a style hook cannot quietly leave focus on the body."
   []
   (swap! state dissoc :selected)
-  (some-> (.getElementById js/document kwic/region-id) (.focus)))
+  (some-> (.getElementById js/document concordance/region-id) (.focus)))
 
 (defn leave-concordance!
   "Close the inspection panel once focus has settled outside both the
@@ -587,8 +590,8 @@
   (js/setTimeout
    (fn []
      (let [el     (.-activeElement js/document)
-           region (.getElementById js/document kwic/region-id)
-           panel  (.querySelector js/document "aside.sidebar")]
+           region (.getElementById js/document concordance/region-id)
+           panel  (.getElementById js/document concordance/inspector-id)]
        (when-not (or (and region (.contains region el))
                      (and panel (.contains panel el)))
          (swap! state dissoc :selected))))
@@ -697,8 +700,8 @@
   token comes back from the field.
 
   The result on screen is left as it is: it answers what was asked (see
-  dk.cst.corpus-probe.views.page/result-section), and the form has
-  moved on."
+  dk.cst.corpus-probe.views.concordance/concordance-section), and the
+  form has moved on."
   [form mode]
   (swap! state
          (fn [{:keys [params tokens remembered projected] :as s}]
@@ -755,10 +758,10 @@
   `:set-condition` and `:set-token` record a condition's or a token's
   field as the reader sets it, so the state holds the tokens as typed
   and the CQP line under them follows (see
-  dk.cst.corpus-probe.views.page/cqp-line), a checkbox as its `on` or
+  dk.cst.corpus-probe.views.search/cqp-line), a checkbox as its `on` or
   nothing; `:set-query` records the query field likewise, so the answer
   can tell when the form has moved on from what ran (see
-  dk.cst.corpus-probe.views.page/question).
+  dk.cst.corpus-probe.views.result/question).
   `:toggle-corpora` records a corpus box or a whole folder being selected
   or cleared, `:toggle-filter-values` metadata values being chosen or
   dropped, one or a whole attribute at a time, and `:clear-filter` the
@@ -833,7 +836,8 @@
            (fn [s]
              (-> s
                  (assoc-in [:filter-controls :selected] {})
-                 (tick :values (page/pairs (get-in s [:filter-controls :selected]))
+                 (tick :values (filter/filter-pairs
+                                (get-in s [:filter-controls :selected]))
                        true))))
     ;; what metadata a selection offers is the server's to say, so it is
     ;; fetched rather than known, and only once a reader looks at it
@@ -882,7 +886,7 @@
     :leave-concordance (leave-concordance!)
     :toggle-context
     (let [{:keys [corpus cpos matchend]} arg
-          k (kwic/hit-key arg)]
+          k (concordance/hit-key arg)]
       (if (contains? (:expanded @state) k)
         (swap! state update :expanded dissoc k)
         ;; commit intent immediately (loading placeholder) so the toggle and
@@ -944,13 +948,13 @@
     ;; the masthead's links carry the current search, so it re-renders with
     ;; the page rather than keeping whatever the first server render said
     (r/render (.getElementById js/document "masthead")
-              (layout/site-header (i18n/->ui lang) path nav))
-    (r/render (.getElementById js/document "app") (app-views/page state))
+              (views/site-header (i18n/->ui lang) path nav))
+    (r/render (.getElementById js/document "app") (views/page state))
     ;; the footer's words are in the UI language, so a language switch
     ;; that does not reload the document has to re-render it too, or it
     ;; keeps the language the page was served in
     (r/render (.getElementById js/document "footer")
-              (layout/site-footer (i18n/->ui lang))))
+              (views/site-footer (i18n/->ui lang))))
   (sync-expand-url!))
 
 (defn at-hand?
@@ -1014,7 +1018,7 @@
   wanted); `?expand` is scoped to one page, so off-page hits are ignored."
   [data wanted]
   (when wanted
-    (filter (comp wanted kwic/hit-key) (get-in data [:result :hits]))))
+    (filter (comp wanted concordance/hit-key) (get-in data [:result :hits]))))
 
 (defn with-expansions
   "`data` with the hits the URL asks to expand seeded as loading
@@ -1029,7 +1033,7 @@
     (cond-> data
       (seq hits) (assoc :expanded
                         (into {}
-                              (map (fn [hit] [(kwic/hit-key hit) ::loading]))
+                              (map (fn [hit] [(concordance/hit-key hit) ::loading]))
                               hits)))))
 
 (defn client-state
@@ -1049,7 +1053,7 @@
              :lists         (into {}
                                   (for [[k {:keys [tree chosen]}] lists
                                         :let [selected (chosen data)]]
-                                    [k {:open      (tree/open-at-rest
+                                    [k {:open      (chooser/open-at-rest
                                                     (tree data selected)
                                                     selected)
                                         :choosing? false
@@ -1065,7 +1069,7 @@
   []
   (doseq [[[corpus cpos] v] (:expanded @state)
           :when (= ::loading v)
-          :let [hit (first (filter #(= [corpus cpos] (kwic/hit-key %))
+          :let [hit (first (filter #(= [corpus cpos] (concordance/hit-key %))
                                    (hits)))]
           :when hit]
     (fetch-context! corpus cpos (:matchend (:anchors hit)))))
@@ -1262,9 +1266,10 @@
    js/document "pointerdown"
    (fn [e]
      (doseq [k (keys lists)]
-       ;; the fieldset of a list is classed by its name (see
-       ;; dk.cst.corpus-probe.views.tree/chooser)
-       (when-not (some-> (.-target e) (.closest (str "." (name k))))
+       ;; the fieldset of a list is named for it in a data attribute (see
+       ;; dk.cst.corpus-probe.views.chooser/fieldset)
+       (when-not (some-> (.-target e)
+                         (.closest (str "[data-list=" (name k) "]")))
          (leave! k))))))
 
 (defn route-clicks!

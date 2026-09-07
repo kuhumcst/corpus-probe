@@ -106,7 +106,7 @@
   "The views a search result can be shown in, in display order: the
   keyword naming each and its `view` param value. What each is called is
   the interface's business (see
-  dk.cst.corpus-probe.views.page/view-label).
+  dk.cst.corpus-probe.views.result/view-label).
 
   A frequency table is not another page, it is the same search counted
   rather than listed, so it is a view of the result rather than a place of
@@ -117,7 +117,7 @@
 (def export-formats
   "The formats a view of a result is exported in, in display order, each
   as the extension of its `export` path (see
-  dk.cst.corpus-probe.export/formats, which renders each)."
+  dk.cst.corpus-probe.search.export/formats, which renders each)."
   ["tsv" "csv"])
 
 (def defaults

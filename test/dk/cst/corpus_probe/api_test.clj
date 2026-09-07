@@ -3,11 +3,11 @@
             [clojure.test :refer [deftest is testing]]
             [cognitect.transit :as transit]
             [dk.cst.corpus-probe.api :as api]
-            [dk.cst.corpus-probe.cache :as cache]
+            [dk.cst.corpus-probe.search.cache :as cache]
             [dk.cst.corpus-probe.cwb.registry :as registry]
             [dk.cst.corpus-probe.test.cwb :refer [ctx when-cwb]]
             [dk.cst.corpus-probe.test.hiccup :refer [da en]]
-            [dk.cst.corpus-probe.frequency :as frequency]
+            [dk.cst.corpus-probe.search.frequency :as frequency]
             [dk.cst.corpus-probe.query :as query]
             [dk.cst.corpus-probe.url :as url]
             [taoensso.telemere :as t])
@@ -164,12 +164,6 @@
         (is (str/includes? body "Unreadable corpus"))
         (is (not (str/includes? body "/corpora/data/probe")))))))
 
-(deftest page-title-test
-  (is (= "corpus-probe" (api/page-title)))
-  (is (= "VISER · corpus-probe" (api/page-title "VISER")))
-  (testing "blank parts are skipped"
-    (is (= "corpus-probe" (api/page-title nil "")))))
-
 (deftest document-test
   (let [switch {"da" "/?lang=da" "en" "/?lang=en"}
         base   {:lang "en" :switch switch :title "T"
@@ -218,71 +212,11 @@
     (testing "the frequency table is not a place: it is a view of a result"
       (is (not (contains? (:nav data) :frequencies))))))
 
-(deftest result-title-test
-  (let [params {:q "hund" :corpus ["PROBE"] :attr "lemma"}
-        result {:size 6 :page 0 :counts [{:corpus "PROBE" :size 6}]}]
-    (testing "the concordance names its hit count"
-      (is (= "hund · 6 hits · PROBE · corpus-probe"
-             (api/result-title en :kwic params result))))
-    (testing "a frequency table counts values, so it names what it grouped"
-      (is (= "hund · PROBE · by lemma · Frequencies · corpus-probe"
-             (api/result-title en :frequencies params result))))
-    (testing "a whole-corpus table says so rather than naming a query"
-      (is (= "All tokens · PROBE · by lemma · Frequencies · corpus-probe"
-             (api/result-title en :frequencies (assoc params :q "")
-                               result))))))
-
 (deftest view-param-test
   (is (= :kwic (api/view-param nil)))
   (is (= :kwic (api/view-param "kwic")))
   (is (= :kwic (api/view-param "nonesuch")))
   (is (= :frequencies (api/view-param "frequencies"))))
-
-(deftest search-title-test
-  (testing "no query names the page, which the frontpage's title does not"
-    (is (= "Search · corpus-probe" (api/search-title en {})))
-    (is (= "Søgning · corpus-probe" (api/search-title da {}))))
-  (testing "a search names the query and corpus"
-    (is (= "hund · PROBE · corpus-probe"
-           (api/search-title en {:q "hund" :corpus ["PROBE"]}))))
-  (testing "several corpora are counted"
-    (is (= "hund · 2 corpora · corpus-probe"
-           (api/search-title en {:q "hund" :corpus ["PROBE" "VISER"]})))
-    (is (= "hund · 2 korpusser · corpus-probe"
-           (api/search-title da {:q "hund" :corpus ["PROBE" "VISER"]}))))
-  (testing "no corpora are not counted"
-    (is (= "hund · corpus-probe"
-           (api/search-title en {:q "hund" :corpus []}))))
-  (testing "the outcome rides in the title, which is all a reload announces"
-    (is (= "hund · 6 hits · PROBE · corpus-probe"
-           (api/search-title en {:q "hund" :corpus ["PROBE"]}
-                             {:size 6 :page 0
-                              :counts [{:corpus "PROBE" :size 6}]})))
-    (testing "with the page number once past the first"
-      (is (= "hund · 6 hits · PROBE · page 3 · corpus-probe"
-             (api/search-title en {:q "hund" :corpus ["PROBE"]}
-                               {:size 6 :page 2
-                                :counts [{:corpus "PROBE" :size 6}]}))))
-    (testing "a search no corpus answered reports no count"
-      (is (= "hund · PROBE · corpus-probe"
-             (api/search-title en {:q "hund" :corpus ["PROBE"]}
-                               {:size 0 :page 0
-                                :counts [{:corpus "PROBE"
-                                          :error {:type :timeout}}]})))))
-  (testing "a metadata filter is named"
-    (is (= "hund · PROBE · text_year 1591 · corpus-probe"
-           (api/search-title en {:q "hund" :corpus ["PROBE"]
-                                   :f.text_year ["1591"]}))))
-  (testing "a sample says so beside the count it drew"
-    (let [title (fn [size]
-                  (api/search-title en {:q "hund" :corpus ["PROBE"]}
-                                    {:size   size :page 0 :sample 100
-                                     :counts [{:corpus "PROBE" :size size}]}))]
-      (is (= (str "hund · 6 hits · a random sample of at most 100"
-                  " · PROBE · corpus-probe")
-             (title 6)))
-      (testing "and a search that found nothing drew nothing, so it does not"
-        (is (= "hund · 0 hits · PROBE · corpus-probe" (title 0)))))))
 
 (deftest accepted-languages-test
   (testing "every language offered, most preferred first, primary subtags"
@@ -589,20 +523,6 @@
       (is (= 404 (:status (export nil {:corpus "REGISTRY-PROBE" :q "hund"})))))))
 
 (deftest extended-mode-test
-  (testing "the titles name the CQP the rows compiled to"
-    (let [params {:mode "extended" :t1.attr "lemma" :t1.v "hund"
-                  :corpus ["PROBE"]}]
-      (is (str/starts-with? (api/search-title en params {:size   5
-                                                          :page   0
-                                                          :counts [{:corpus "PROBE"
-                                                                    :size   5}]})
-                            "[lemma = \"hund\"] · 5 hits"))
-      (is (str/starts-with? (api/frequency-title en (assoc params :attr "word"))
-                            "[lemma = \"hund\"]"))
-      (is (str/starts-with? (api/search-title en (dissoc params :t1.attr
-                                                         :t1.v)
-                                              nil)
-                            "Search"))))
   (when-cwb
    (testing "an extended search runs, and the page knows its CQP, its
              tokens and the values its fields suggest"
@@ -762,10 +682,7 @@
     (is (= "[lemma = \"(hund|kat)\"]"
            (query/->cqp (query/of {:q "hund\nkat" :in "lemma"})))))
   (testing "a list is one token, so it is kept within nothing"
-    (is (nil? (query/within (query/of {:q "hund\nkat"})))))
-  (testing "a list is titled by its length, a title being one line"
-    (is (str/starts-with? (api/search-title en {:q "hund\nkat\n"})
-                          "2 words"))))
+    (is (nil? (query/within (query/of {:q "hund\nkat"}))))))
 
 (deftest text-page-test
   (let [page (fn [id params]

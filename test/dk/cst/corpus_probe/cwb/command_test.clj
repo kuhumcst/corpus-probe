@@ -123,7 +123,7 @@
 (deftest sort-modes-test
   (testing "each mode is a param value and the command it runs, no more"
     ;; what a mode is called is the interface's business rather than this
-    ;; namespace's (see dk.cst.corpus-probe.views.page/sort-label)
+    ;; namespace's (see dk.cst.corpus-probe.views.concordance/sort-label)
     (is (every? (fn [[value command]]
                   (and (string? value) (string? command)))
                 command/sort-modes))

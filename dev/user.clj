@@ -4,9 +4,9 @@
             [dk.cst.corpus-probe.cwb.corpus :as corpus]
             [dk.cst.corpus-probe.cwb.registry :as registry]
             [dk.cst.corpus-probe.cwb.tools :as tools]
-            [dk.cst.corpus-probe.frequency :as frequency]
             [dk.cst.corpus-probe.query :as query]
-            [dk.cst.corpus-probe.search :as search]))
+            [dk.cst.corpus-probe.search :as search]
+            [dk.cst.corpus-probe.search.frequency :as frequency]))
 
 (def ctx
   {:registry (str (System/getProperty "user.dir") "/dev/corpus/registry")})

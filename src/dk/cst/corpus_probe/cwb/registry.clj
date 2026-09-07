@@ -135,7 +135,7 @@
   its registry entry, and the same of its token stream (see `data-file`)
   when that is there to read.
 
-  Part of every saved result's name (see dk.cst.corpus-probe.cache) and
+  Part of every saved result's name (see dk.cst.corpus-probe.search.cache) and
   of every cached fact's key (see dk.cst.corpus-probe.cwb.corpus/facts!),
   and it has to cover both. cwb-encode rewrites the entry only when
   passed -R, so rebuilding a corpus in place leaves the entry

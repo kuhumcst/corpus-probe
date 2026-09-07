@@ -351,7 +351,7 @@
   A mode naming a positional attribute sorts by that attribute instead
   (see `sort-attr`). What each mode is called is the interface's
   business rather than this namespace's (see
-  dk.cst.corpus-probe.views.page/sort-label)."
+  dk.cst.corpus-probe.views.concordance/sort-label)."
   (let [external "set ExternalSort on; sort Last by word"]
     [["corpus"  "sort Last;"]
      ["word"    (str external ";")]

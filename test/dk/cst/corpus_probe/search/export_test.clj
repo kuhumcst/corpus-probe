@@ -1,7 +1,7 @@
-(ns dk.cst.corpus-probe.export-test
+(ns dk.cst.corpus-probe.search.export-test
   (:require [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]
-            [dk.cst.corpus-probe.export :as export]
+            [dk.cst.corpus-probe.search.export :as export]
             [dk.cst.corpus-probe.url :as url]))
 
 (deftest formats-test
@@ -29,8 +29,8 @@
                               :rows        [["9" "9" "en" "hund" "i" "NCSI"
                                              "hund" "Hverdag"]]})))))
 
-(deftest frequency-table-test
-  (let [rows (export/frequency-table
+(deftest frequency-lines-test
+  (let [rows (export/frequency-lines
               {:attr   :lemma
                :counts [{:corpus "PROBE" :tokens 47 :size 15}
                         {:corpus "VISER" :tokens 48 :size 16}
@@ -43,7 +43,7 @@
            (first rows)))
     (is (= ["hund" "5" "106383.0" "1" "20833.3" "6" "63157.9"] (second rows)))
     (testing "the texts counted make a third column per group"
-      (let [rows (export/frequency-table
+      (let [rows (export/frequency-lines
                   {:attr   :lemma
                    :docs   true
                    :counts [{:corpus "PROBE" :tokens 47 :size 15}
@@ -60,7 +60,7 @@
                (second rows)))))
     (testing "one corpus means no totals"
       (is (= ["word" "PROBE frequency" "PROBE per million"]
-             (first (export/frequency-table
+             (first (export/frequency-lines
                      {:attr :word :counts [{:corpus "PROBE" :tokens 47}]
                       :rows []})))))))
 
@@ -76,8 +76,8 @@
   (testing "the text starts with a byte order mark"
     (is (str/starts-with? (export/csv [["a"]]) "\ufeff"))))
 
-(deftest sized-frequency-table-test
-  (let [rows (export/frequency-table
+(deftest sized-frequency-lines-test
+  (let [rows (export/frequency-lines
               {:attr   :text_year
                :sized  true
                :counts [{:corpus "PROBE" :tokens 47 :size 15}
@@ -94,7 +94,7 @@
       (is (= ["2023" "8" "400000.0" "20" "0" "" "0" "8" "400000.0" "20"]
              (second rows))))))
 
-(deftest crosstab-table-test
+(deftest crosstab-lines-test
   (let [result {:attr    :lemma
                 :by      :text_year
                 :sized   true
@@ -102,7 +102,7 @@
                 :columns [{:value "2023" :total 3 :tokens 20}
                           {:value "2024" :total 2 :tokens 27}]
                 :rows    [{:value "hund" :cells {"2023" 3 "2024" 2} :total 5}]}
-        [header tokens row] (export/crosstab-table result)]
+        [header tokens row] (export/crosstab-lines result)]
     (is (= ["lemma" "2023 frequency" "2023 per million" "2024 frequency"
             "2024 per million" "total frequency" "total per million"]
            header))
@@ -111,7 +111,7 @@
     (is (= ["hund" "3" "150000.0" "2" "74074.1" "5" "106383.0"] row))
     (testing "unsized, a column is its frequency alone"
       (is (= [["lemma" "2023 frequency" "total frequency"] ["hund" "3" "3"]]
-             (export/crosstab-table
+             (export/crosstab-lines
               {:attr    :lemma
                :counts  [{:corpus "PROBE" :tokens 47}]
                :columns [{:value "2023" :total 3}]

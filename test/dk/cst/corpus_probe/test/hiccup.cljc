@@ -37,8 +37,10 @@
        (map #(get-in % [2 1 1 :value]))))
 
 (defn summary-texts
-  "The text of every disclosure summary in hiccup `html`, in order."
+  "The text of every disclosure summary in hiccup `html`, in order, the
+  chooser's classed ones included."
   [html]
   (->> (deep html)
-       (filter #(and (vector? %) (= :summary (first %))))
+       (filter #(and (vector? %)
+                     (#{:summary :summary.chooser-summary} (first %))))
        (map #(apply str (filter string? (tree-seq coll? seq (rest %)))))))

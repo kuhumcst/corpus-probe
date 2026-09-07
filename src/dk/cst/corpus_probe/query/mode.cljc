@@ -53,7 +53,7 @@
   A param outside its mode's set says nothing to the search, so a URL
   does not carry it (see dk.cst.corpus-probe.url/canonical), and the
   form's control for it is not shown (see
-  dk.cst.corpus-probe.views.page/search-form)."
+  dk.cst.corpus-probe.views.search/matching-fieldset)."
   {"simple"   #{:q :in :ci :match :within}
    "list"     #{:q :in :ci :match}
    "extended" #{::tokens :within}

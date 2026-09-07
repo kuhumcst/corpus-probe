@@ -13,7 +13,7 @@
 
 (defn readable-counts
   "The `counts` of a frequency result (see
-  dk.cst.corpus-probe.frequency/frequency-table!) whose corpus could be
+  dk.cst.corpus-probe.search.frequency/frequency-table!) whose corpus could be
   counted: the ones carrying its tokens; the rest report a failure."
   [counts]
   (filter :tokens counts))

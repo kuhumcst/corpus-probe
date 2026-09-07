@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Encode STOR, a two-million-token synthetic Danish corpus, for measuring
-# the saved query result cache (dk.cst.corpus-probe.cache) at a size the
+# the saved query result cache (dk.cst.corpus-probe.search.cache) at a size the
 # dev corpora cannot reach: PROBE, VISER and TALER hold 42 to 48 tokens
 # each, where every query is instant and a cache proves nothing.
 #

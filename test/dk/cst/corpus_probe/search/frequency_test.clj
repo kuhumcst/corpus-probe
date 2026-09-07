@@ -1,12 +1,11 @@
-(ns dk.cst.corpus-probe.frequency-test
-  "Frequency breakdowns and metadata filter value lists; skipped when CWB
+(ns dk.cst.corpus-probe.search.frequency-test
+  "Frequency breakdowns and metadata filter value lists, and that a
+  breakdown counts the matches the concordance shows; skipped when CWB
   or the dev corpora are missing."
   (:require [babashka.fs :as fs]
             [clojure.test :refer [deftest is testing]]
-            [dk.cst.corpus-probe.cache :as cache]
-            [dk.cst.corpus-probe.cwb.command :as command]
-            [dk.cst.corpus-probe.frequency :as frequency]
             [dk.cst.corpus-probe.search :as search]
+            [dk.cst.corpus-probe.search.frequency :as frequency]
             [dk.cst.corpus-probe.test.cwb
              :refer [ctx da-collator when-cwb with-value-limit]]
             [taoensso.telemere :as t]))
@@ -206,43 +205,69 @@
         (is (= ["x" "y"]
                (map :value (frequency/columns @da-collator [{}] rows))))))))
 
-(deftest stored-breakdown-test
+(deftest concordance-agreement-test
   (when-cwb
-   (let [ctx       (assoc ctx :cache-dir (str (fs/create-temp-dir)))
-         q         "[pos = \"N.*\"]"
-         hunde     "\"hund.*\" %c"
-         breakdown #(frequency/frequencies! ctx "PROBE" q :lemma
-                                            {:docs true :sort "word"})
-         fresh     (breakdown)
-         opts      (search/cache-opts ctx "PROBE" q {:sort "word"})
-         counting  [(command/count-command "match" :lemma)]
-         file      (cache/result-file ctx "PROBE" (:nqr opts))]
-     (testing "until a concordance saves the result there is nothing to read"
-       (is (nil? (frequency/stored-breakdown! ctx "PROBE" q opts counting))))
-     (search/kwic! ctx "PROBE" q {:sort "word"})
-     (testing "once one has, the breakdown reads it and agrees with a fresh run"
-       (is (= [["hund\t5" "kat\t2" "København\t1" "bord\t1" "dag\t1" "hav\t1"
-                "have\t1" "sol\t1" "strand\t1" "ven\t1"]]
-              (frequency/stored-breakdown! ctx "PROBE" q opts counting)))
-       (is (= fresh (breakdown))))
-     (testing "and it is the file that is counted, not the query"
-       ;; give the query another query's stored result: if the breakdown
-       ;; reads the file rather than running the query, it counts that
-       (search/kwic! ctx "PROBE" hunde {:sort "word"})
-       (fs/copy (cache/result-file
-                 ctx "PROBE"
-                 (:nqr (search/cache-opts ctx "PROBE" hunde {:sort "word"})))
-                file
-                {:replace-existing true})
-       (is (= [{:values ["hund"] :freq 5 :docs 3}] (breakdown))))
-     (testing "a truncated file is discarded and the query run instead"
-       (with-open [f (java.io.RandomAccessFile. file "rw")]
-         (.setLength f 12))
-       (is (= fresh (t/with-min-level :fatal (breakdown))))
-       (is (not (cache/stored? ctx "PROBE" (:nqr opts)))))
-     (testing "a sampled concordance is never counted"
-       (search/kwic! ctx "PROBE" q {:sort "word" :sample 3})
-       (is (cache/stored? ctx "PROBE"
-                          (:nqr (search/cache-opts ctx "PROBE" q
-                                                   {:sort "word" :sample 3}))))
-       (is (= fresh (breakdown)))))))
+   (let [nouns  "[pos = \"N.*\"]"
+         phrase "[pos = \"D\"] [pos = \"A.*\"]? [pos = \"N.*\"]"
+         near   {:word "katten" :distance 5}]
+     (testing "a breakdown kept within a sentence is of the matches the
+               concordance keeps"
+       ;; a full stop ends one sentence and Hunde opens the next
+       (is (empty? (frequency/frequencies! ctx "PROBE"
+                                           "[word = \"\\.\"] [word = \"Hunde\"]"
+                                           :word {:within :sentence}))))
+     (testing "the whole match, counted as the strings it matched"
+       (is (= [{:values ["en hund"] :freq 1}
+               {:values ["en lille hund"] :freq 1}]
+              (frequency/frequencies! ctx "PROBE" phrase :word
+                                      {:at "match..matchend"}))))
+     (testing "a breakdown at a position, and of the narrowed hits"
+       (is (= {:values ["PP"] :freq 6}
+              (first (frequency/frequencies! ctx "PROBE" nouns :pos
+                                             {:at "match[-1]"}))))
+       (is (= [{:values ["hund"] :freq 5}]
+              (frequency/frequencies! ctx "PROBE" nouns :lemma
+                                      {:subset {:anchor "match"
+                                                :attr   :lemma
+                                                :value  "hund"}}))))
+     (testing "a breakdown counts the hits with the word nearby"
+       ;; two noun phrases, only one of them within five words of Katten
+       (is (= [{:values ["en"] :freq 1}]
+              (frequency/frequencies! ctx "PROBE" phrase :word {:near near}))))
+     (testing "a narrowing of nothing is nothing, not CQP's refusal to
+               narrow an empty result"
+       (is (= [] (frequency/frequencies! ctx "PROBE" "[word = \"nonesuch\"]"
+                                         :word {:near near})))
+       (is (= [] (frequency/frequencies! ctx "PROBE" nouns :lemma
+                                         {:filter {:text_year #{"1591"}}
+                                          :near   near}))))
+     (testing "a frequency table counts within the filter, tokens included"
+       (let [table (frequency/frequency-table!
+                    ctx ["VISER"] "[lemma = \"hund\"]" :text_year
+                    {:filter {:text_year #{"1591"}}})]
+         (is (= [{:corpus "VISER" :tokens 19 :size 1}] (:counts table)))
+         (is (= [{:value "1591" :freqs {"VISER" 1} :total 1
+                  :tokens {"VISER" 19}}]
+                (:rows table)))))
+     (testing "a blank query under a filter tables the filtered tokens"
+       (let [table (frequency/frequency-table!
+                    ctx ["VISER"] "" :lemma {:filter {:text_year #{"1591"}}})]
+         (is (= [{:corpus "VISER" :tokens 19 :size 19}] (:counts table)))))
+     (testing "a breakdown of the whole corpus under a pattern counts the
+               filtered regions"
+       (is (= (search/size! ctx "VISER" "[word = \".*\"]"
+                            {:patterns {:text_year ["158."]}})
+              (:tokens (frequency/corpus-frequencies!
+                        ctx "VISER" "" :word
+                        {:patterns {:text_year ["158."]}}))))))))
+
+(deftest interpolation-guard-test
+  (when-cwb
+   (testing "attribute names outside the corpus inventory are rejected"
+     (let [canary "/tmp/corpus-probe-pwned-attr"]
+       (fs/delete-if-exists canary)
+       (is (thrown? Exception
+                    (frequency/frequencies!
+                     ctx "PROBE" "\"hund\""
+                     (str "lemma > \"| touch " canary "\""))))
+       (is (not (fs/exists? canary)))))))

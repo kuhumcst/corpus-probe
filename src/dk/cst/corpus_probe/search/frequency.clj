@@ -1,4 +1,4 @@
-(ns dk.cst.corpus-probe.frequency
+(ns dk.cst.corpus-probe.search.frequency
   "Frequency breakdowns, and the value lists a metadata filter offers.
 
   Both are the same shape of answer: how often something occurs, counted
@@ -11,11 +11,11 @@
   that its rate is per million tokens of that text rather than of the
   corpus, and a breakdown may count one attribute against another.
 
-  Composed on dk.cst.corpus-probe.search, which resolves the corpus
-  options a breakdown takes, and on the bounded fan-out over corpora and
-  the collator of dk.cst.corpus-probe.cwb."
+  Composed on dk.cst.corpus-probe.search.opts, which resolves the corpus
+  options a breakdown takes, on dk.cst.corpus-probe.search.result, which
+  counts from the saved result or afresh, and on the bounded fan-out over
+  corpora and the collator of dk.cst.corpus-probe.cwb."
   (:require [clojure.string :as str]
-            [dk.cst.corpus-probe.cache :as cache]
             [dk.cst.corpus-probe.cwb :as cwb]
             [dk.cst.corpus-probe.cwb.command :as command]
             [dk.cst.corpus-probe.cwb.corpus :as corpus]
@@ -23,6 +23,9 @@
             [dk.cst.corpus-probe.cwb.tools :as tools]
             [dk.cst.corpus-probe.search :as search]
             [dk.cst.corpus-probe.search.batch :as batch]
+            [dk.cst.corpus-probe.search.cache :as cache]
+            [dk.cst.corpus-probe.search.opts :as opts]
+            [dk.cst.corpus-probe.search.result :as result]
             [taoensso.telemere :as t])
   (:import [java.util Comparator]))
 
@@ -55,96 +58,63 @@
                                 {:corpus corpus :attr attr}))))
           attrs)))
 
-(defn run-breakdown!
-  "The sections of `batch` ([section command] pairs, see
-  dk.cst.corpus-probe.search.batch/batch-sections) run against `corpus`
-  via `ctx`, `query` being what they count, which the error names when
-  CQP reports one, times out or dies (see dk.cst.corpus-probe.cwb/batch!)."
-  [ctx corpus query batch]
-  ;; a frequency breakdown runs the user's query like any other
-  (batch/batch-sections batch (cwb/batch! (cwb/running-ctx ctx) corpus query
-                                          (mapv second batch))))
-
-(defn fresh-breakdown!
-  "The output sections of the `counting` commands over the matches of
-  `query` in `corpus` via `ctx`, run afresh: within the :filter of
-  `opts` and narrowed to its :subset and :near (see
-  dk.cst.corpus-probe.search.batch/count-batch)."
-  [ctx corpus query opts counting]
-  (:count (run-breakdown! ctx corpus query
-                          (batch/count-batch corpus query opts counting))))
-
-(defn stored-breakdown!
-  "The output sections of the `counting` commands over the saved query
-  result `:nqr` of `opts` in `corpus` via `ctx` (see
-  dk.cst.corpus-probe.search.batch/stored-count-batch), or nil when none
-  is stored or the stored one does not read, as
-  dk.cst.corpus-probe.search/stored-sections! judges that: a result CQP
-  cannot read is discarded, and the caller runs the query instead.
+(defn count-sections!
+  "The output sections of the `counting` commands (see
+  dk.cst.corpus-probe.cwb.command/count-command) over the matches of
+  `query` in `corpus` via `ctx` under `opts`, with the :nqr and
+  :cache-dir of dk.cst.corpus-probe.search.opts/cache-opts!: read from
+  the saved query result when one is stored (see
+  dk.cst.corpus-probe.search.result/read-stored! and
+  dk.cst.corpus-probe.search.batch/stored-count-batch), and run afresh
+  otherwise (see dk.cst.corpus-probe.search.batch/count-batch).
 
   What the concordance saved is what the breakdown counts, so switching
-  a result to its frequency view runs no query. The result is sorted
-  back into corpus order first, since it was saved in the order it was
-  read in and a document frequency needs corpus order (see
-  `frequencies!`). Its size is checked against the file (see
-  dk.cst.corpus-probe.cache/holds?), because a whole result is read here
-  and a file that has shrunk reads back short without CQP saying so."
+  a result to its frequency view runs no query. The stored result's size
+  is checked against the file (see
+  dk.cst.corpus-probe.search.cache/holds?), because a whole result is
+  read here and a file that has shrunk reads back short without CQP
+  saying so. A count saves nothing, so a fresh one runs the user's query
+  like any other and no more."
   [ctx corpus query {:keys [nqr] :as opts} counting]
-  (when (and nqr (cache/stored? ctx corpus nqr))
-    (try
-      (let [{[size-lines] :size counts :count}
-            (run-breakdown! ctx corpus query
-                            (batch/stored-count-batch corpus nqr opts
-                                                      counting))]
-        (when-not (cache/holds? ctx corpus nqr (parse/size->n size-lines))
-          (throw (ex-info "Stored result read back damaged"
-                          {:corpus corpus :error {:type :damaged}})))
-        (cache/touch! ctx corpus nqr)
-        (cache/reap-due! ctx)
-        counts)
-      (catch Exception e
-        (when (cwb/timeout? e)
-          (throw e))
-        (t/event! ::stored-result-discarded
-                  {:level :warn
-                   :data  {:corpus corpus :error (ex-message e)}})
-        (cache/discard! ctx corpus nqr)
-        nil))))
+  (:count (or (result/read-stored! ctx corpus query opts
+                                   #(batch/stored-count-batch %1 %2 %3 counting)
+                                   #(cache/holds? ctx corpus nqr
+                                                  (result/match-count %)))
+              (result/run-result! (cwb/running-ctx ctx) corpus query
+                                  (batch/count-batch corpus query opts
+                                                     counting)))))
 
 (defn breakdown!
   "The frequencies of `query`, kept within its unit already, in `corpus`
   by `attr` via `ctx` under `opts`, counted from the saved result or
-  afresh: what `frequencies!` answers with once it knows there is
-  something to count. See it for the arguments."
+  afresh (see `count-sections!`): what `frequencies!` answers with once
+  it knows there is something to count. See it for the arguments."
   [ctx corpus query attr {:keys [filter patterns subset at docs by]
                           :or   {at "match"}
                           :as   opts}]
   (let [[attr by] (groupable! ctx corpus (cond-> [attr] by (conj by)))
         ;; the options that decide which matches there are, as the
         ;; concordance that may have saved them had them (see
-        ;; dk.cst.corpus-probe.search/kwic-opts!), so the two name one
-        ;; saved result
-        opts      (search/cache-opts
+        ;; dk.cst.corpus-probe.search.opts/kwic-opts!), so the two name
+        ;; one saved result
+        opts      (opts/cache-opts!
                    ctx corpus query
                    (assoc opts
-                          :filter (search/corpus-filter! ctx corpus filter
-                                                         patterns)
-                          :subset (search/corpus-subset! ctx corpus subset)
+                          :filter (opts/corpus-filter! ctx corpus filter
+                                                       patterns)
+                          :subset (opts/corpus-subset! ctx corpus subset)
                           :sample nil))
         whole?    (command/whole-match? at)
         text      (when (and docs (not whole?) (not by))
-                    (search/within-attr! ctx corpus :text))
+                    (opts/within-attr! ctx corpus :text))
         counting  (cond-> [(command/count-command at attr {:by by})]
                     text (conj (command/count-command at attr {:within text})))
         parse     (cond
                     whole? parse/count->freqs
                     by     parse/group-pairs->freqs
                     :else  parse/group->freqs)
-        [counts doc-counts] (map parse
-                                 (or (stored-breakdown! ctx corpus query opts
-                                                        counting)
-                                     (fresh-breakdown! ctx corpus query opts
-                                                       counting)))]
+        [counts doc-counts] (map parse (count-sections! ctx corpus query opts
+                                                        counting))]
     (if text
       (with-docs counts doc-counts)
       counts)))
@@ -154,7 +124,7 @@
   position of `opts` (a dk.cst.corpus-probe.cwb.command/positions entry;
   the start of the match by default) via the installation described by
   `ctx`, within the :filter of `opts` when there is one, kept within its
-  :within unit (see dk.cst.corpus-probe.search/within-attr!) and narrowed
+  :within unit (see dk.cst.corpus-probe.search.opts/within-attr!) and narrowed
   to its :subset and :near (see dk.cst.corpus-probe.cwb.command/narrowing),
   returning [{:values [...] :freq <n>} ...] sorted by frequency. Under
   :docs, each map also carries the number of texts the value occurs in
@@ -169,20 +139,21 @@
 
   When `ctx` keeps a cache and a concordance has saved these matches
   under the :sort of `opts`, they are counted from the saved result
-  rather than queried again (see `stored-breakdown!`); a sampled
+  rather than queried again (see `count-sections!`); a sampled
   concordance is never read, a count of a sample being no count.
 
   A thin wrapper over CQP's `group`, or its `count` over the whole match
   (see dk.cst.corpus-probe.cwb.command/count-command); `attr` and :by
   must name the corpus's `groupable-attrs!` (see `groupable!`). A
   narrowing of nothing is answered without CQP (see
-  dk.cst.corpus-probe.search/narrowing-nothing?)."
+  dk.cst.corpus-probe.search.result/narrowing-nothing?)."
   ([ctx corpus query attr]
    (frequencies! ctx corpus query attr {}))
   ([ctx corpus query attr {:keys [within] :as opts}]
    (let [ctx   (corpus/corpus-ctx ctx corpus)
-         query (search/corpus-query! ctx corpus query within)]
-     (if (search/narrowing-nothing? ctx corpus query (dissoc opts :within))
+         query (opts/corpus-query! ctx corpus query within)]
+     (if (result/narrowing-nothing? ctx corpus query (dissoc opts :within)
+                                    search/size!)
        []
        (breakdown! ctx corpus query attr opts)))))
 

@@ -224,9 +224,9 @@
   keys pressed together."
   [_ctx {:keys [text]}]
   ;; a plus between two characters divides keys; a key of its own does not
-  (let [keys (map (fn [k] [:kbd k]) (str/split text #"(?<=.)\+(?=.)"))]
+  (let [keys (map (fn [k] [:kbd.key k]) (str/split text #"(?<=.)\+(?=.)"))]
     (if (next keys)
-      (into [:kbd] (interpose "+" keys))
+      (into [:kbd.chord] (interpose "+" keys))
       (first keys))))
 
 (defn label->hiccup
@@ -235,7 +235,7 @@
   them, which is how HTML marks input given through what is on the
   screen."
   [_ctx {:keys [text]}]
-  [:kbd [:samp text]])
+  [:kbd.key.onscreen [:samp text]])
 
 (def renderers
   "The hiccup renderers: the library's own, the definition list as the
@@ -264,6 +264,6 @@
   ;; => [:div [:p "For example:"] [:pre [:code "x\n"]]]
 
   (->hiccup "press [[Shift+Enter]] or {{Search}}")
-  ;; => [:div [:p "press " [:kbd [:kbd "Shift"] "+" [:kbd "Enter"]]
-  ;;           " or " [:kbd [:samp "Search"]]]]
+  ;; => [:div [:p "press " [:kbd.chord [:kbd.key "Shift"] "+" [:kbd.key "Enter"]]
+  ;;           " or " [:kbd.key.onscreen [:samp "Search"]]]]
   #_.)

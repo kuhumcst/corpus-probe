@@ -8,10 +8,10 @@
             [clojure.java.io :as io]
             [clojure.string :as str]
             [clojure.test :refer [is]]
-            [dk.cst.corpus-probe.cache :as cache]
             [dk.cst.corpus-probe.cwb :as cwb]
             [dk.cst.corpus-probe.cwb.corpus :as corpus]
-            [dk.cst.corpus-probe.cwb.tools :as tools]))
+            [dk.cst.corpus-probe.cwb.tools :as tools]
+            [dk.cst.corpus-probe.search.cache :as cache]))
 
 (def ctx
   "A context over the dev registry, encoded by dev/encode.sh."

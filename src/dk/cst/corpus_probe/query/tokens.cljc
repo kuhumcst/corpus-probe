@@ -15,7 +15,7 @@
   a token's first condition or none of them. Compiled by
   dk.cst.corpus-probe.query/condition->cqp; what each is called is the
   interface's business (see
-  dk.cst.corpus-probe.views.page/operator-label)."
+  dk.cst.corpus-probe.views.search.tokens/operator-label)."
   ["is" "not" "prefix" "suffix" "infix" "regex" "not-regex" "any"])
 
 (def joins

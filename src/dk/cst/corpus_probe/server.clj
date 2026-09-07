@@ -7,7 +7,7 @@
   ailing one. None of it stops the server."
   (:require [clojure.edn :as edn]
             [clojure.java.io :as io]
-            [dk.cst.corpus-probe.cache :as cache]
+            [dk.cst.corpus-probe.search.cache :as cache]
             [io.pedestal.connector :as conn]
             [io.pedestal.http.http-kit :as http-kit]
             [io.pedestal.interceptor :as interceptor]
