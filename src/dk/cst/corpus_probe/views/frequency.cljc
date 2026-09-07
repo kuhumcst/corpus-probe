@@ -1,13 +1,8 @@
 (ns dk.cst.corpus-probe.views.frequency
   "Hiccup for the frequency view: the breakdown of the hits (or of the
   whole corpora) by one attribute, merged over the selected corpora into
-  one table, with the controls that resubmit it.
-
-  The table keeps the columns CQP's `group` prints (value and frequency)
-  per corpus and adds the computed relative frequencies and totals
-  (PLAN.md §7), or, counted against a second attribute, has a column per
-  value of it; the value cells render like the inspector's attribute
-  values, so a text title is a <cite> and a year a <time>."
+  one table, with the controls that resubmit it. Counted against a second
+  attribute, the table has a column per value of it instead."
   (:require [dk.cst.corpus-probe.i18n :as i18n]
             [dk.cst.corpus-probe.stats :as stats]
             [dk.cst.corpus-probe.url :as url]
@@ -32,10 +27,8 @@
   and the structural attributes in their own option groups, under CWB's
   names for them.
 
-  It names the form it submits with (see
-  dk.cst.corpus-probe.views.widgets/select), so it can sit beside the
-  table it regroups rather than inside the query form: regrouping a
-  result is a different task from writing the query that produced it."
+  It names the form it submits with, so it can sit beside the table it
+  regroups rather than inside the query form."
   [ui attrs selected]
   (let [{p :positional s :structural} (group-by :type attrs)]
     (widgets/select url/form-id "attr" (i18n/tr ui "Group by")
@@ -49,12 +42,10 @@
 
 (defn position-control
   "The control choosing where in the match the table counts, in `ui`: a
-  select over the `positions` (see
-  dk.cst.corpus-probe.cwb.command/positions), each named by
+  select over the `positions`, each named by
   dk.cst.corpus-probe.views.result/position-label, with `at` chosen. It
   follows the attribute it qualifies as a phrase, so it is named for a
-  screen reader alone (see dk.cst.corpus-probe.views.widgets/select), and
-  names the form it submits with, as `attr-control` does."
+  screen reader alone."
   [ui positions at]
   (widgets/select url/form-id "at" (i18n/tr ui "Position")
                   (for [position positions]
@@ -68,8 +59,7 @@
   the attribute descriptions `attrs`, the corpora then summed, `by` (a
   keyword; nil for the corpora) chosen. The structural attributes come
   first, a breakdown over the years or the authors being what this is
-  mostly for. It follows the position it qualifies and names the form it
-  submits with, as `attr-control` does."
+  mostly for."
   [ui attrs by]
   (let [{p :positional s :structural} (group-by :type attrs)
         selected (or (some-> by name) "")]
@@ -96,21 +86,20 @@
 (defn grouping-phrase
   "How the frequency `result` counted, as a phrase in `ui`: by which
   attribute, where in the match, and against which second attribute when
-  it is a cross-tabulation. The first of the phrases under the heading
-  (see dk.cst.corpus-probe.views.result/qualifiers), being what this view
-  asks that the concordance does not."
+  it is a cross-tabulation."
   [ui {:keys [attr at by]}]
   (list (i18n/tr ui "by") " " [:code (name attr)]
         (when at (str " " (result/position-label ui at)))
         (when by (list " " (i18n/tr ui "and") " " [:code (name by)]))))
 
 (defn table-caption
-  "The caption of the table of frequency `result`, in `ui`: its name,
-  how many values it holds and shows (see `shown-phrase`, `row-limit`),
-  the columns likewise when it is counted `:by` a second attribute, and
-  what the parentheses hold when those columns are `:sized`. The counts
-  are here rather than in the heading: they are the table's size, which
-  is what a caption says of a table."
+  "The caption of the table of frequency `result`, in `ui`: its name, how
+  many values it holds and shows, the columns likewise when it is counted
+  `:by` a second attribute, and what the parentheses hold when those
+  columns are `:sized`.
+
+  The counts are here rather than in the heading: they are the table's
+  size, which is what a caption says of a table."
   [ui {:keys [rows by columns column-count sized]}]
   (let [n (count rows)]
     [:caption (i18n/tr ui "Frequencies") " · "
@@ -137,12 +126,11 @@
    " " (i18n/tr ui "count texts")])
 
 (defn frequency-cells
-  "The cells of a frequency `n` against `tokens` tokens, in `ui` (see
-  dk.cst.corpus-probe.views.widgets/count-cell): the count and its rate
-  per million of them, then the tokens themselves where the table is
-  `sized` (they are then the text of the value rather than the corpus,
-  and differ from row to row), then the number of texts `docs` when the
-  table counts them (a number, nil otherwise)."
+  "The cells of a frequency `n` against `tokens` tokens, in `ui`: the
+  count and its rate per million of them, then the tokens themselves
+  where the table is `sized` (they are then the text of the value rather
+  than the corpus, and differ from row to row), then the number of texts
+  `docs` when the table counts them (a number, nil otherwise)."
   [ui n tokens sized docs]
   (list (widgets/count-cell ui n)
         [:td.num (i18n/group-digits ui (stats/per-million n tokens) 1)]
@@ -161,9 +149,8 @@
   "The merged frequency `result` as a table: a row per value (the
   `row-limit` most frequent, each linking to the hits it counted where
   the row carries an `:href`), a column group per readable corpus (its
-  frequency, the rate per million tokens, those tokens when the result
-  is `:sized`, since they are then the text of the value rather than of
-  the corpus, and, when it counts `:docs`, the texts it occurs in) and,
+  frequency, the rate per million tokens, those tokens when the result is
+  `:sized`, and, when it counts `:docs`, the texts it occurs in) and,
   over several corpora, a total group. The counts are headed frequency,
   CWB's own word for what `group` and cwb-lexdecode report; the headings
   are in `ui`."
@@ -211,17 +198,12 @@
 (defn crosstab-table
   "The cross-tabulated frequency `result` (see
   dk.cst.corpus-probe.search.frequency/frequency-table! under :by) as a
-  table: a row per value of the attribute counted (the `row-limit` most
-  frequent, linked as `frequency-table` links them), a column per value
-  of the attribute it was counted against (the `:columns`) and a total
+  table in `ui`: a row per value of the attribute counted (the
+  `row-limit` most frequent, linked as `frequency-table` links them), a
+  column per value of the attribute it was counted against and a total
   column, the corpora summed. Where the result is `:sized`, the tokens
-  each column measures against head the rows, and each cell gives the
-  rate per million of them after the count, in parentheses, as KORP's
-  statistics do; a count of nothing has no rate. The headings are in
-  `ui`.
-
-  Inside the region that scrolls it: a column per year is wider than the
-  page, which must not scroll sideways with it."
+  each column measures against head the rows and each cell gives the rate
+  per million of them in parentheses, as KORP's do."
   [ui {:keys [attr by counts columns rows sized] :as result}]
   (let [tokens (stats/tokens counts)
         cell   (fn [n t]
@@ -231,6 +213,8 @@
                                        (when rate
                                          (str " (" (i18n/group-digits ui rate 1)
                                               ")")))))]
+    ;; a column per year is wider than the page, which must not scroll
+    ;; sideways with it
     [:div.scroll
      [:table.frequencies.crosstab
       (table-caption ui result)
@@ -262,10 +246,9 @@
 
 (defn frequency-heading
   "The heading naming the results region in `ui`: what the search
-  `params` describe found (see
-  dk.cst.corpus-probe.views.result/hits-heading), counted over the corpora
-  of the frequency `result` that could be counted, else the name of the
-  `error` that came instead."
+  `params` describe found, counted over the corpora of the frequency
+  `result` that could be counted, else the name of the `error` that came
+  instead."
   [ui params {:keys [counts] :as result} error]
   (if (tabled? result)
     (result/hits-heading ui params
@@ -273,19 +256,14 @@
     (result/error-heading ui (or error (some :error counts)))))
 
 (defn frequency-section
-  "The frequency view of the search in `state`.
-
-  Holds, when any corpus could be counted, the grouping, position and
-  column controls, with the text count where the columns are the corpora
-  (a cross-tabulation counts no texts), the near control behind their
-  disclosure (see dk.cst.corpus-probe.views.result/view-controls and
-  dk.cst.corpus-probe.views.result/near-control) and the table,
+  "The frequency view of the search in `state`: when any corpus could be
+  counted, the grouping, position and column controls, the table,
   cross-tabulated when the result is counted `:by` a second attribute,
-  then the download links (`:export-hrefs`, exports holding every row),
-  in the state's `:ui`, wrapped in the shared
-  dk.cst.corpus-probe.views.result/results-region. The table answers the
-  params the search was `:asked` with, not the form's `:params` (see
-  dk.cst.corpus-probe.views.concordance/concordance-section)."
+  and the download links, in the state's `:ui` and wrapped in
+  dk.cst.corpus-probe.views.result/results-region.
+
+  The table answers the params the search was `:asked` with, not the
+  form's `:params`."
   [{:keys [ui attrs positions asked result error export-hrefs client?]
     :as   state}]
   (let [tabled (tabled? result)]

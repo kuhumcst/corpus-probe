@@ -11,15 +11,10 @@
             [dk.cst.corpus-probe.views.widgets :as widgets]))
 
 (defn filter-item
-  "One metadata value, the leaf `m` of the filter's tree (see
-  `filter-tree`), as a filter entry: a checkbox named for the
-  attribute's filter param, checked when the set `selected` holds the
-  leaf's id, and, in `ui`, how many regions carry the value, when
-  known: a chosen value the corpora no longer offer has no count.
-
-  A value the filter box has hidden keeps its checkbox in the document,
-  for the reason a filtered-out corpus does: a box the form cannot see is
-  part of a filter dropped without anyone saying so."
+  "One metadata value, the leaf `m` of the filter's tree, as a checkbox
+  named for the attribute's filter param, checked when the set
+  `selected` holds the leaf's id, with how many regions carry the value
+  in `ui` when known."
   [ui selected {[attr value :as id] :id :keys [total hidden?] :as m}]
   [:li (widgets/hidden-attrs hidden?)
    [:label
@@ -41,19 +36,10 @@
   (boolean (and (seq rows) (every? #(parse-long (:value %)) rows))))
 
 (defn pattern-row
-  "The controls asking for the values of `attr` a pattern matches,
-  `pattern` being the one in force, and, over `rows` that are all
-  numbers, those from one number to another, `bounds` being the [from to]
-  in force, in `ui`: the way to a decade of years, to one year of dates,
-  or to any value of an attribute with too many to list.
-
-  Text fields, so they apply on Enter, which submits the form: a pattern
-  is typed rather than chosen.
-
-  A bound takes a whole number and says so, so a bound that is not one
-  is reported by the browser, in its own words, rather than dropped by
-  the server, which reads no number out of it. `hidden?` keeps the row
-  in the document while the reader is shown only what is in force."
+  "The controls asking for the values of `attr` a `pattern` matches and,
+  over `rows` that are all numbers, those within `bounds` ([from to]),
+  in `ui`; `hidden?` keeps the row in the document while only what is
+  in force is shown."
   [ui attr rows pattern [from to :as bounds] hidden?]
   (let [field (fn [prefix value attrs]
                 [:input (merge {:name         (str prefix (name attr))
@@ -61,6 +47,8 @@
                                 :autocomplete "off"
                                 :spellcheck   "false"}
                                attrs)])
+        ;; a text field with a numeric pattern: the browser then reports a
+        ;; bound that is not a whole number, which the server would drop
         bound (fn [prefix value]
                 (field prefix value
                        {:type      "text"
@@ -81,17 +69,16 @@
 
 (defn filter-pairs
   "`selected`, each metadata attribute mapped to the values chosen under
-  it, as the set of [attribute value] pairs: how the filter's tree names
-  a value (see `filter-tree`)."
+  it, as the set of [attribute value] pairs the filter's tree names a
+  value by."
   [selected]
   (into #{} (for [[attr values] selected, value values] [attr value])))
 
 (defn filter-node
-  "The node of attribute `attr` in the filter's tree (see `filter-tree`):
-  its listed `rows` as its leaves, followed by the values among the
-  `chosen` pairs that the rows lack, so a selection is never lost on
-  resubmit, and marked in force while a `pattern` or either of the
-  `bounds` stands for it."
+  "The node of attribute `attr` in the filter's tree: its listed `rows`
+  as its leaves, then the `chosen` pairs the rows lack, so a selection
+  is never lost on resubmit; in force while a `pattern` or either of
+  the `bounds` stands for it."
   [attr rows chosen pattern bounds]
   (let [listed (set (map :value rows))
         rows   (into (vec rows)
@@ -107,11 +94,10 @@
      :nodes     []}))
 
 (defn filter-tree
-  "The metadata `filters` (see `filter-fieldset`) as the tree the
-  chooser takes (see dk.cst.corpus-probe.views.chooser), keeping the
-  [attribute value] pairs in `chosen`: a node per listed attribute (see
-  `filter-node`), then one per attribute the list lacks but the chosen
-  values, a pattern, a range or the unlisted names mention."
+  "The metadata `filters` as the tree the chooser takes, keeping the
+  [attribute value] pairs in `chosen`: a node per listed attribute, then
+  one per attribute only the chosen values, a pattern, a range or the
+  unlisted names mention."
   [{:keys [attrs unlisted patterns ranges]} chosen]
   (let [listed (set (map :name attrs))
         node   (fn [attr rows]
@@ -127,59 +113,35 @@
 
 (defn clear-toggle
   "The control emptying the whole metadata filter, over the `nodes` of
-  its tree and the set of `selected` pairs, in `ui`.
-
-  The same control the corpus chooser carries in this position, with the
-  one direction that has no meaning here taken away. Choosing every value
-  of every attribute is not a filter at all: it accepts every region
-  carrying the attribute, which is what choosing none already does, and it
-  would put one query parameter per value into the URL, tens of thousands
-  of them at the KU registry. So it is disabled while nothing is chosen,
-  which is the only state it could do that from, and every state it is
-  offered in clears.
-
-  It empties the whole filter rather than the part the box is showing.
-  A filter is not a thing to empty by halves: what survived would be a
-  constraint the reader had just told the box to hide from them."
+  its tree and the set of `selected` pairs, in `ui`: the corpus
+  chooser's control with the one direction that means nothing here
+  taken away."
   [ui nodes selected]
   (widgets/select-all (i18n/tr ui "Clear filter")
+                      ;; every item, hidden ones included: a filter emptied
+                      ;; by halves leaves a constraint the reader told the
+                      ;; box to hide from them
                       (mapcat #(map :id (:items %)) nodes)
                       selected
                       [:clear-filter]
+                      ;; taking every value is no filter at all, and would
+                      ;; put a query parameter per value in the URL
                       {:clear-only? true}))
 
 (defn filterable?
-  "True when `filters` (see `filter-fieldset`) offer anything to filter
-  by, or hold a selection to show: what decides whether the fieldset is
-  rendered at all, and so whether a reader could open it to ask for
-  fresh ones (see dk.cst.corpus-probe.client.lists/filters-stale?)."
+  "True when `filters` offer anything to filter by or hold a selection
+  to show, which decides whether the fieldset is rendered at all."
   [{:keys [attrs unlisted selected]}]
   (boolean (or (seq attrs) (seq unlisted) (seq selected))))
 
 (defn filter-fieldset
-  "The metadata filter fieldset of the search form from `filters` (see
-  dk.cst.corpus-probe.search.frequency/filter-options!); nil without
-  metadata (see `filterable?`).
-
-  The chooser over the filter's tree (see `filter-tree` and
-  dk.cst.corpus-probe.views.chooser/chooser, which the `opts` are for, the
-  selection and what is `:held` as pairs), so a corpus with forty
-  annotated attributes is one line rather than forty. Inside it, a
-  disclosure per attribute holds a pattern row (see `pattern-row`),
-  shown at rest only while something is in force in it, and a checkbox
-  per value (see `filter-item`), then a note naming the `:unlisted`
-  attributes, all worded in `ui`. `:selected` maps each attribute to
-  the set of chosen values, `:patterns` to the pattern in force and
-  `:ranges` to the [from to] in force. The count is of `:selected`,
-  which is live: it follows the boxes as the reader ticks them.
-
-  The controls are the corpus chooser's in the same places: one per
-  attribute taking every value offered, and beside the whole fieldset
-  the one that clears it (see `clear-toggle`). Which attributes there
-  are to filter by depends on the corpora selected, and only the server
-  knows: `:pending?` marks the fieldset busy while the client is
-  fetching them for a selection that has changed. The fieldset is
-  classed for the middle layout, which gives it the whole row."
+  "The metadata filter fieldset of the search form: the chooser over the
+  tree of `filters` (see dk.cst.corpus-probe.search.frequency/filter-options!)
+  with the chooser `opts`, what is `:held` among them as pairs, worded
+  in `ui`; nil without metadata. `:selected` maps each attribute to its
+  chosen values, `:patterns` to the pattern in force and `:ranges` to
+  the [from to]; `:pending?` marks the fieldset busy while the client
+  fetches the options of a changed corpus selection."
   [ui {:keys [unlisted selected patterns ranges] :as filters}
    {:keys [held pending?] :as opts}]
   (when (filterable? filters)

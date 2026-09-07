@@ -1,13 +1,9 @@
 (ns dk.cst.corpus-probe.client.effects
   "The edge of the client: everything that touches the world, the timers,
-  the fetches, focus, the history, the document's title and language, the
-  cookie, and `perform!`, which runs the effects an action answered with
-  (see dk.cst.corpus-probe.client.actions/act).
-
-  Nothing here reads or writes the state. A fetch comes back as an
-  action: what arrived is dispatched, and the pure step decides what to
-  keep of it, so a late answer to a question the reader has moved on from
-  is a decision of the step rather than of a callback."
+  the fetches, focus, the history, the document's title and language,
+  the cookie, and `perform!`, which runs the effects an action answered
+  with. Nothing here reads or writes the state: a fetch comes back as an
+  action, so what to keep of a late answer is the pure step's decision."
   (:require [cognitect.transit :as transit]
             [dk.cst.corpus-probe.client.router :as router]
             [dk.cst.corpus-probe.query.mode :as mode]
@@ -34,21 +30,16 @@
 
 (def pending-delay-ms
   "How long a routed navigation may take before it is worth saying that
-  it is in flight.
-
-  A search of the dev registry answers in tens of milliseconds, and
-  saying so and then unsaying it is a flicker where the reader asked a
-  question: worse than saying nothing. The case this exists for is the KU
-  registry, where a whole-corpus sort has been measured at 649 seconds
-  against a 300 second timeout. So nothing is said until an answer is
-  late enough that a reader has begun to wonder."
+  it is in flight."
+  ;; a dev search answers at once and a whole-corpus sort runs for
+  ;; minutes: nothing is said until a reader has begun to wonder
   400)
 
 (def filters-debounce-ms
   "How long the corpus selection must hold still before the metadata
-  filters it offers are fetched. Long enough that ticking several boxes in
-  a row is one request, short enough that a reader who has stopped is not
-  left waiting on a timer."
+  filters it offers are fetched: long enough that ticking several boxes
+  is one request, short enough that a reader who has stopped is not left
+  waiting."
   300)
 
 (defn read-transit
@@ -64,11 +55,8 @@
 
 (defn debounce!
   "Call `f` after `ms`, cancelling whatever `timer` was already waiting to
-  do.
-
-  For a control that fires while a reader is still working it: only the
-  state they stop on is worth acting on, and the ones on the way are
-  worth nothing and cost a search each."
+  do: for a control that fires while a reader is still working it, only
+  the state they stop on is worth acting on."
   [timer ms f]
   (cancel! timer)
   (reset! timer (js/setTimeout f ms)))
@@ -76,8 +64,7 @@
 (defn fetch-transit!
   "Fetch `href` as transit, called off by `signal` where there is one: a
   promise of `[data landed]`, the decoded answer and the address it came
-  from (see dk.cst.corpus-probe.client.router/landed-href), rejected when
-  the request fails."
+  from, rejected when the request fails."
   ([href]
    (fetch-transit! href nil))
   ([href signal]
@@ -93,7 +80,7 @@
   "Fetch the hit at `cpos`/`matchend` in `corpus` with wider context and
   dispatch its arrival through `dispatch!`: `[:context-arrived k hit]`,
   or `[:context-failed k]` when the request fails, `k` being the hit's
-  key (see dk.cst.corpus-probe.views.concordance/hit-key)."
+  key."
   [dispatch! corpus cpos matchend]
   (let [k [corpus cpos]]
     (-> (fetch-transit! (str url/context-api "?corpus=" corpus
@@ -115,31 +102,26 @@
 
 (defn fetch-counts!
   "Fetch the count of the search `state` shows while its corpora are
-  still being counted (see dk.cst.corpus-probe.search/concordance!) and
-  dispatch its arrival through `dispatch!`: `[:counts-arrived counted]`.
-
-  Asked with the page's own query string, so the server counts the
-  question the page answered. Dispatched only while that page is still
-  the one on screen (see dk.cst.corpus-probe.client.router/shown), so a
-  count arriving after the reader has moved on is dropped rather than
-  written over the answer to their next question. A count that fails
-  falls back to a real navigation, as a page that fails does: the server
-  renders the page with its count in full."
+  still being counted and dispatch its arrival through `dispatch!`:
+  `[:counts-arrived counted]`."
   [dispatch! state]
   (when (seq (get-in state [:result :remaining]))
     (let [key (router/page-key)]
+      ;; the page's own query string, so the server counts the question
+      ;; the page answered; dropped once the reader has moved on
       (-> (fetch-transit! (str url/counts-api js/location.search))
           (.then (fn [[counted]]
                    (when (= key @router/shown)
                      (dispatch! [:counts-arrived counted]))))
+          ;; a real navigation, as a page that fails: the server renders
+          ;; the page with its count in full
           (.catch (fn [_]
                     (when (= key @router/shown)
                       (set! (.-href js/location) js/location.href))))))))
 
 (defn fetch-expansions!
   "Fetch the wider context of every hit `state` holds as loading in
-  `:expanded` (see dk.cst.corpus-probe.views.concordance/loading), each
-  arriving through `dispatch!` (see `fetch-context!`)."
+  `:expanded`, each arriving through `dispatch!` (see `fetch-context!`)."
   [dispatch! state]
   (doseq [[[corpus cpos :as k] v] (:expanded state)
           :when (= concordance/loading v)
@@ -151,33 +133,21 @@
 (defn refresh-filters!
   "Ask, once the corpus selection has held still for
   `filters-debounce-ms`, whether the metadata filters want fetching:
-  `[:filters-due]` through `dispatch!`, which decides (see
-  dk.cst.corpus-probe.client.lists/filters-stale?)."
+  `[:filters-due]` through `dispatch!`."
   [dispatch!]
   (debounce! filters-timer filters-debounce-ms #(dispatch! [:filters-due])))
 
 (defn navigate!
   "Fetch the route at absolute `href` as data and dispatch its arrival
   through `dispatch!`: `[:page-arrived data landed push?]`, `landed`
-  being where the answer came from (see
-  dk.cst.corpus-probe.client.router/landed-href) and `push?` whether it
-  gets a history entry; a popstate replaces nothing.
-
-  Falls back to a real navigation on any failure, so a route the client
-  cannot render is still a working page: the server renders every one of
-  them.
-
-  Dispatches `[:pending]` once an answer is `pending-delay-ms` late, and
-  not before. A whole-corpus search can run for minutes, and until the
-  client routed anything the browser reported that wait itself; an answer
-  that arrives at once wants no report at all.
-
-  A navigation started while one is in flight calls the first off rather
-  than racing it, so the reader gets the answer to their latest question,
-  and the abandoned one does not mistake being called off for failing and
-  load the page the reader has already left."
+  being where the answer came from and `push?` whether it gets a history
+  entry; `[:pending]` once an answer is `pending-delay-ms` late. Falls
+  back to a real navigation on any failure, so a route the client cannot
+  render is still a working page."
   [dispatch! href push?]
   (let [controller (js/AbortController.)]
+    ;; called off rather than raced, so the reader gets the answer to
+    ;; their latest question
     (some-> @in-flight (.abort))
     (reset! in-flight controller)
     (debounce! pending-timer pending-delay-ms #(dispatch! [:pending]))
@@ -189,9 +159,9 @@
                  (dispatch! [:page-arrived data (router/landed-href href landed)
                              push?])))
         (.catch (fn [_]
-                  ;; an abort leaves the timer alone: it belongs to the
-                  ;; navigation that did the aborting, which is still in
-                  ;; flight and may yet be worth reporting
+                  ;; an abort is no failure to fall back from, and its
+                  ;; timer belongs to the navigation that did the
+                  ;; aborting, still in flight and maybe worth reporting
                   (when-not (.-aborted (.-signal controller))
                     (cancel! pending-timer)
                     (set! (.-href js/location) href)))))))
@@ -205,13 +175,9 @@
 
 (defn set-preference!
   "Store `v` under setting `k` (see `set-cookie!`) and fetch this page
-  again with it applied (see `navigate!`), dispatching through
-  `dispatch!`.
-
-  A fetch rather than a re-render, because the server words the document
-  title and the result summaries, not the client. The server decides what
-  a setting accepts, so nothing is validated here: a reader can only
-  mislead themselves."
+  again with it applied, dispatching through `dispatch!`: a fetch rather
+  than a re-render, since the server words the document title and the
+  result summaries."
   [dispatch! k v]
   (set-cookie! k v)
   (navigate! dispatch! js/location.href false))
@@ -224,9 +190,8 @@
 
 (defn focus-field!
   "Move focus to the form control named `name`, once the render that put
-  it there has run: a reader who added or took away a token or a
-  condition is left on what is now there rather than on the body, which
-  is where focus falls when the button under it goes."
+  it there has run: where a reader who added or took away a token or a
+  condition is left, rather than on the body."
   [name]
   (some-> (.querySelector js/document (str "[name=\"" name "\"]"))
           (.focus)))
@@ -248,21 +213,16 @@
 
 (defn set-lang!
   "Give the document the language `lang`, which only the server sets: a
-  routed change of it would otherwise leave the page saying it is in the
-  language it was served in while every word on it is in another."
+  routed change would otherwise leave the page saying it is in the
+  language it was served in."
   [lang]
   (set! (.-lang (.-documentElement js/document)) lang))
 
 (defn resubmit!
-  "Submit the form with `form-id` again, as it now stands.
-
-  At once, because a <select> reports the value a reader settled on
-  rather than the ones they passed over on the way: choosing an order is
-  asking for it, and any wait between the two is a wait nobody asked for.
-
-  Through the form rather than by building a URL, so that the sort or the
-  grouping travels with everything else the form holds and takes the same
-  routed path a reader pressing the button would."
+  "Submit the form with `form-id` again, as it now stands, at once: a
+  <select> reports only the value a reader settled on. Through the form
+  rather than a built URL, so that the sort or the grouping travels with
+  everything else the form holds, by the routed path a press would take."
   [form-id]
   (some-> (.getElementById js/document form-id) (.requestSubmit)))
 
@@ -281,27 +241,20 @@
   "Write to checkbox `node` the states of `m` that no attribute carries:
   `:indeterminate`, for a folder holding only part of the selection, and
   `:invalid`, the message the corpus chooser reports while nothing is
-  chosen. A checkbox has three states and only two of them are
-  attributes, and the constraint of a group of them is no attribute of
-  any one box, so both are written to the element itself on every
-  render."
+  chosen; both are written to the element on every render."
   [node {:keys [indeterminate invalid]}]
   (set! (.-indeterminate node) indeterminate)
   (.setCustomValidity node (or invalid "")))
 
 (defn leave-concordance!
   "Close the inspection panel, `[:inspect nil]` through `dispatch!`, once
-  focus has settled outside both the concordance and the panel, which are
-  one pool: focus moving between them keeps the panel and focus leaving
-  either for the page closes it, so both report focus leaving, and which
-  of them did does not matter.
-
-  Deferred by a tick because focusout fires before the next element has
-  focus, and read from `activeElement` rather than the event's
-  relatedTarget so that clicking the page background closes the panel
-  while merely switching windows does not: a blurred window keeps its
-  active element, an abandoned concordance does not."
+  focus has settled outside both the concordance and the panel, which
+  are one pool: focus moving between them keeps the panel."
   [dispatch!]
+  ;; a tick later, since focusout fires before the next element has
+  ;; focus; and activeElement rather than relatedTarget, so that a click
+  ;; on the page background closes the panel while switching windows,
+  ;; which keeps the active element, does not
   (js/setTimeout
    (fn []
      (let [el     (.-activeElement js/document)
@@ -314,11 +267,8 @@
 
 (defn at-hand?
   "True when `el` begins in the upper half of the viewport, which is what
-  it means to already be looking at the start of something.
-
-  Anywhere on screen is too weak a test: a region beginning near the foot
-  of the viewport shows one row of itself, and a reader who has just asked
-  a question is owed more of the answer than that."
+  it means to be looking at the start of something already: a region
+  beginning near the foot shows one row of itself."
   [el]
   (let [top (.-top (.getBoundingClientRect el))]
     (and (>= top 0) (< top (/ (.-innerHeight js/window) 2)))))
@@ -327,28 +277,21 @@
   "Put the reader where a routed navigation should leave them: at the
   place in the page the URL's fragment names, when it names one; else
   focused on the results, when the page has any, and moved to them only
-  if they are not already on screen; else at the top of the page.
-
-  A fragment other than the results is handed to the browser, since
-  replacing the location with itself is a fragment navigation, which
-  scrolls, marks the `:target` and sets where Tab starts, none of which
-  scrollIntoView does; the popstate it fires names the page on screen,
-  so the router ignores it.
-
-  Focus moves to the results because that is what tells a reader the
-  outcome arrived. Scrolling to them only happens when they are not
-  already at hand: switching the view of a result, or searching again
-  beside one, leaves the page where it is, while a turn of the page from
-  the foot of a long one, or a first search on a narrow screen, brings
-  them up. The browser scrolls on a real navigation, from the fragment
-  on the form action; pushState does not, so the client decides."
+  if they are not already at hand; else at the top of the page."
   []
   (let [hash   (.-hash js/location)
         target (.getElementById js/document url/results-id)]
     (cond
+      ;; replacing the location with itself is a fragment navigation,
+      ;; which scrolls, marks the :target and sets where Tab starts, none
+      ;; of which scrollIntoView does; its popstate names the page on
+      ;; screen, so the router ignores it
       (and (seq hash) (not= hash url/results-fragment))
       (.replace js/location js/location.href)
 
+      ;; focus is what tells a reader the outcome arrived; the browser
+      ;; scrolls on a real navigation, from the fragment on the form
+      ;; action, but pushState does not
       target
       (do (when-not (at-hand? target)
             (.scrollIntoView target))
@@ -358,43 +301,33 @@
       (.scrollTo js/window 0 0))))
 
 (defn sync-url!
-  "Mirror the hits `state` shows expanded in the URL's `expand` parameter
-  as `CORPUS:cpos` items, replacing history so the URL stays shareable
-  without new entries, and record the page on screen (see
-  dk.cst.corpus-probe.client.router/shown!), so a fragment jump is not
-  taken for a page to fetch.
-
-  The whole query string is rewritten rather than one param set on it,
-  so the URL in the bar is the canonical one whatever was typed:
-  `mode=simple` goes and the corpora become one param. Only on the search
-  page, whose query string is the one that rule knows: on any other
-  page it would drop what it does not know, and the reading page names
-  its position that way. And only when it would say something new:
-  Safari throws past roughly a hundred history writes in thirty seconds."
+  "Mirror the hits `state` shows expanded in the URL's `expand` parameter,
+  replacing history so the URL stays shareable without new entries, and
+  record the page on screen (see dk.cst.corpus-probe.client.router/shown!)."
   [state]
-  ;; a switch URL, carrying the query of the mode the form was in, is
-  ;; left as it is: the rule would drop that query, and a reload would
-  ;; then find an empty form (see dk.cst.corpus-probe.query/arrived)
+  ;; only on the search page, whose query string the rule knows (the
+  ;; reading page names its position in one), and not on a switch URL,
+  ;; whose query of the old form the rule would drop, leaving a reload
+  ;; an empty form (see dk.cst.corpus-probe.query/arrived)
   (when (and (= url/search js/location.pathname)
              (not (mode/unread-query? (router/location-params))))
     (let [url    (router/current-url)
           params (url/with-expanded (router/location-params)
                                     (keys (:expanded state)))]
+      ;; the whole query string, so the bar shows the canonical URL
+      ;; whatever was typed
       (set! (.-search url) (url/query-string params))
+      ;; only when it would say something new: Safari throws past a
+      ;; hundred history writes in thirty seconds
       (when (not= (.-href url) js/location.href)
         (replace-url! (.-href url)))))
   (router/shown!))
 
 (defn perform!
   "Run `effects`, the vectors an action answered with, in order, for the
-  Replicant dispatch `data` of the event or hook that raised it, with the
-  `:state` the step left under it; what comes back from the world goes
-  through `dispatch!` as an action.
-
-  `[:prevent-default]` and the two render hooks, `[:set-validity msg]`
-  and `[:set-checkbox-state m]`, read the event or the node from `data`;
-  `[:fetch-counts]`, `[:fetch-expansions]` and `[:sync-url]` read the
-  state; the rest carry what they need."
+  Replicant dispatch `data` of the event or hook that raised it, with
+  the `:state` the step left under it; what comes back from the world
+  goes through `dispatch!` as an action."
   [dispatch! {:keys [state] :as data} effects]
   (doseq [[effect & args] effects]
     (case effect

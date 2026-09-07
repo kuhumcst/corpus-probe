@@ -1,11 +1,10 @@
 (ns dk.cst.corpus-probe.server.search
   "The search page and the data behind it: what a search request asks,
-  the search run in the view asked for (a concordance or a frequency
-  table over the selected corpora), the state of the form and the links
-  out of the result, and the three endpoints the client asks on its own:
-  the metadata filters a corpus selection offers, one hit with wider
-  context, and the count of a search still being counted when its page
-  was served."
+  the search run in the view asked for, the state of the form and the
+  links out of the result, and the three endpoints the client asks on
+  its own: the metadata filters a corpus selection offers, one hit with
+  wider context, and the count of a search still being counted when its
+  page was served."
   (:require [dk.cst.corpus-probe.cqp :as cqp]
             [dk.cst.corpus-probe.cwb :as cwb]
             [dk.cst.corpus-probe.cwb.command :as command]
@@ -28,12 +27,11 @@
 (defn selected-corpora!
   "The corpus names `params` asks for against the registry `entries` via
   `ctx`: those it names, or every readable corpus when it names none and
-  the selection is not one the reader made (see
-  dk.cst.corpus-probe.cwb.corpus/readable-corpora!).
+  the selection is not one the reader made.
 
-  The search form submits a `scope` param alongside its checkboxes, so an
-  empty selection a reader ticked their way to is answered with the no
-  corpus error rather than silently widened to the whole registry."
+  The form submits a `scope` param alongside its checkboxes, so an empty
+  selection a reader ticked their way to is answered with the no-corpus
+  error rather than silently widened to the whole registry."
   [ctx entries params]
   (let [named (url/corpora-param (:corpus params))]
     (if (or (seq named) (contains? params :scope))
@@ -42,20 +40,10 @@
 
 (defn search-request!
   "What `request` asks of `ctx`: its scalar query `:params`, the
-  registry's `:entries`, the corpus names `:named` in the params, the
-  names `:selected` to search, those split into the `:known` and the
-  `:unknown` (see dk.cst.corpus-probe.cwb.corpus/split-known), what
-  `:arrived` with the form, a change of its mode allowed for (see
-  dk.cst.corpus-probe.query/arrived), the `:cqp` the query that runs
-  compiles to (see dk.cst.corpus-probe.query/->cqp) and the `:opts` every
-  search of it takes: its metadata :filter (see
-  dk.cst.corpus-probe.server.request/filter-params) and the :patterns
-  beside it (see dk.cst.corpus-probe.server.request/pattern-params), the
-  unit of text it is kept :within (see dk.cst.corpus-probe.query/within),
-  the :subset of its hits kept (see
-  dk.cst.corpus-probe.server.request/subset-param) and the word its hits
-  are :near (see dk.cst.corpus-probe.server.request/near-param). A request
-  naming no corpus searches every readable one (see `selected-corpora!`).
+  registry's `:entries`, the corpus names `:named`, `:selected`, `:known`
+  and `:unknown`, what `:arrived` with the form, the `:cqp` the query
+  compiles to and the `:opts` every search of it takes. A request naming
+  no corpus searches every readable one (see `selected-corpora!`).
 
   Every handler that answers a search starts from this."
   [ctx request]
@@ -82,12 +70,11 @@
 
 (defn read-request!
   "What the search page `request` asks of `ctx`: the search it describes
-  (see `search-request!`) with what the page reads beside it: the `:view`
-  of the result (see dk.cst.corpus-probe.server.request/view-param), the
-  `:attr` and `:at` a frequency table groups by and whether it counts
-  `:docs`, the `:page` of a concordance, the `:lang` the page is served
-  in, and whether the client asked for the data alone, `:transit?` (see
-  dk.cst.corpus-probe.server.request/wants-transit?)."
+  (see `search-request!`) plus what the page reads beside it: the `:view`
+  of the result, the `:attr` and `:at` a frequency table groups by and
+  whether it counts `:docs`, the `:page` of a concordance, the `:lang`
+  the page is served in, and whether the client asked for the data
+  alone, `:transit?`."
   [ctx request]
   (let [{:keys [params] :as req} (search-request! ctx request)]
     (assoc req
@@ -103,8 +90,7 @@
   "True when the search `req` (see `read-request!`) runs in its `:view`:
   it carries a query, or it is the frequency view of the corpora whole,
   which a blank query counts, unless the query is blank only because a
-  change of mode could not keep it (see
-  dk.cst.corpus-probe.query/arrived), when the form is shown and nothing
+  change of mode could not keep it, when the form is shown and nothing
   runs."
   [{:keys [view params cqp known unknown]}]
   (boolean (or cqp
@@ -116,13 +102,11 @@
   "The params the search page for `req` (see `read-request!`) shows in
   its form and cites in its links: what arrived, less the form's own
   query keys, with the query the form holds in the form's own spelling
-  (see dk.cst.corpus-probe.query/->params) over it, so that a control the
-  mode does not read keeps what it carried, as memory; the corpora
-  searched, or only those named when nothing runs (see `runs?`), since a
+  over it, so a control the mode does not read keeps what it carried;
+  the corpora searched, or only those named when nothing runs, since a
   reader arriving at the form starts with none selected; and the
-  grouping of the frequency view. The mode is the form's (see
-  dk.cst.corpus-probe.query.mode/form-of), which the radios read and no
-  URL carries."
+  grouping of the frequency view. The mode is the form's, which the
+  radios read and no URL carries."
   [{:keys [params arrived selected named] :as req}]
   (let [{:keys [form held]} arrived]
     (-> (apply dissoc params (mode/read-keys form params))
@@ -155,14 +139,13 @@
 
 (defn attr-options!
   "The attribute descriptions ({:type :name}) offered for grouping the
-  `corpora` via `ctx`: their union, positional attributes first.
+  `corpora` via `ctx`: their union, positional attributes first, each
+  kind keeping the registry order of the first corpus reporting it.
+  Falls back to word, the one attribute every corpus has.
 
-  Each kind keeps the registry order of the first corpus reporting it; a
-  corpus that cannot be read contributes none. Falls back to word, the one
-  attribute every corpus has. Every attribute is offered whatever the
-  query: a structural one cannot table a whole corpus, and that request
-  is then rejected with its reason, so the form still shows what was
-  asked."
+  Every attribute is offered whatever the query: a structural one cannot
+  table a whole corpus, and that request is rejected with its reason, so
+  the form still shows what was asked."
   [ctx corpora]
   (let [attrs (->> (corpora-attrs! ctx frequency/groupable-attrs! corpora)
                    (map #(select-keys % [:type :name]))
@@ -183,12 +166,8 @@
 
 (defn filter-controls!
   "The metadata filter controls of the search form over the `known`
-  corpora via `ctx`: the filters they offer (see
-  dk.cst.corpus-probe.search.frequency/filter-options!) plus the
-  `:selected` values of `params` (see
-  dk.cst.corpus-probe.server.request/filter-params) and what its pattern
-  and range fields hold (see
-  dk.cst.corpus-probe.server.request/pattern-fields)."
+  corpora via `ctx`: the filters they offer, the `:selected` values of
+  `params` and what its pattern and range fields hold."
   [ctx known params]
   (merge (frequency/filter-options! ctx known)
          {:selected (request/filter-params params)}
@@ -196,12 +175,10 @@
 
 (defn value-lists!
   "The values of each positional attribute among `attrs` (keywords) that
-  every one of `corpora` via `ctx` can list (see
-  dk.cst.corpus-probe.cwb.tools/attribute-values!): attribute to its
-  values over all of them, collated. An attribute one corpus cannot list,
-  or lacks, has no entry, since a list missing part of what a reader may
-  search for would mislead. The value fields of the extended search
-  offer them as suggestions."
+  every one of `corpora` via `ctx` can list: attribute to its values over
+  all of them, collated. An attribute one corpus cannot list, or lacks,
+  has no entry, since a list missing part of what a reader may search for
+  would mislead."
   [ctx corpora attrs]
   (let [collator (cwb/->collator ctx)
         lists    (cwb/pmap-n (cwb/parallelism ctx)
@@ -240,12 +217,11 @@
     (not (:remaining result)) (assoc :pages (url/page-count result))))
 
 (defn search-outcome!
-  "Search the `known` corpora for `cqp` via `ctx` with `opts` (the :page,
-  :sort, :context, :sample, :filter, :near, :within and :incremental? of
-  dk.cst.corpus-probe.search/concordance!): {:result <concordance with
-  its :pages, once every corpus is counted>}, the `unknown` corpus names
-  reported among its counts, or {:error ...} when no corpus was selected
-  at all. Per-corpus errors travel inside the result."
+  "Search the `known` corpora for `cqp` via `ctx` with `opts` (see
+  dk.cst.corpus-probe.search/concordance!): {:result <the concordance>},
+  the `unknown` corpus names reported among its counts, or {:error ...}
+  when no corpus was selected at all. Per-corpus errors travel inside
+  the result."
   [ctx known unknown cqp opts]
   (if (and (empty? known) (empty? unknown))
     {:error {:type :no-corpus}}
@@ -255,10 +231,9 @@
 
 (defn linked-rows
   "The frequency `result` with a dk.cst.corpus-probe.url/subset-href on
-  each of the rows the table shows (its first
-  dk.cst.corpus-probe.views.frequency/row-limit), for the search
-  described by `params`: the rows past those go unlinked, since the
-  table does not show them and an export reads no links."
+  each of the rows the table shows, for the search described by `params`:
+  the rows past those go unlinked, since the table does not show them and
+  an export reads no links."
   [params {:keys [attr at] :as result}]
   (update result :rows
           (fn [rows]
@@ -269,8 +244,7 @@
 
 (defn frequency-outcome!
   "Table the `known` corpora for `cqp` (nil for the whole corpora) by
-  `attr` via `ctx` with `opts` (the :at, :by, :docs, :filter, :within,
-  :subset and :near of
+  `attr` via `ctx` with `opts` (see
   dk.cst.corpus-probe.search.frequency/frequency-table!): {:result ...},
   the `unknown` corpus names reported among its counts, or {:error ...}
   when no corpus was selected at all. Per-corpus errors travel inside
@@ -318,20 +292,11 @@
   "The state of the search form for `req` (see `read-request!`) via
   `ctx`, over the attribute descriptions `attrs` offered for its corpora
   (see `attr-options!`): the corpus chooser's `:folders`, the metadata
-  `:filter-controls` (see `filter-controls!`), the `:search-attrs` a
-  simple search may match and a concordance sorts by (the positional
-  ones), the `:tokens` of the extended form (see
-  dk.cst.corpus-probe.query/form-rows), the `:value-lists` its fields
-  suggest (see `value-lists!`), the `:params` that fill the form (see
-  `shown-params`), the same as `:asked` for the result to read, and what
-  a change of mode could not keep as `:switch`, its `:loss` and the
-  `:unread` params, for the form's status line (see
-  dk.cst.corpus-probe.views.search/switch-notice).
-
-  `:params` names every corpus searched, or only what the URL named when
-  nothing was searched: a reader arriving at the form starts with no
-  corpus selected, while a URL naming no corpus still searches every
-  readable one and shows them all."
+  `:filter-controls`, the `:search-attrs` a simple search may match and a
+  concordance sorts by, the `:tokens` of the extended form, the
+  `:value-lists` its fields suggest, the `:params` that fill the form
+  (see `shown-params`), the same as `:asked`, and what a change of mode
+  could not keep as `:switch`, for the form's status line."
   [ctx {:keys [params arrived entries known] :as req} attrs]
   (let [{:keys [form held]} arrived
         shown   (shown-params req)
@@ -349,12 +314,11 @@
 
 (defn result-data
   "The outcome of the search `req` (see `read-request!`) ran, for the
-  results region: its `:result` or `:error` from `outcome` (see
-  `run-view!`), the language of each corpus searched as `:langs`, and
-  the controls its view offers: the `:attrs` and `:positions` a
-  frequency table groups by, from the attribute descriptions `attrs`
-  (see `attr-options!`), or the `:sort-modes` of a concordance (see
-  `sort-options`) and the `:export-limit` an export of it holds."
+  results region: its `:result` or `:error` from `outcome`, the language
+  of each corpus searched as `:langs`, and the controls its view offers:
+  the `:attrs` and `:positions` a frequency table groups by, from the
+  attribute descriptions `attrs`, or the `:sort-modes` of a concordance
+  and the `:export-limit` an export of it holds."
   [{:keys [view entries selected] :as req} attrs outcome]
   (cond-> {:result (:result outcome)
            :error  (:error outcome)
@@ -397,22 +361,14 @@
              (url/page-hrefs cited page result)))))
 
 (defn search-view-data
-  "The data dk.cst.corpus-probe.views/search-page renders one search
-  page from, for `request` against `ctx`, or for the search `req` it
-  reads (see `read-request!`) with the citation `cited` the page carries
-  (see `citation!`): the state of the form (see `form-data!`), the
-  outcome of the search when the params describe one (see `run-view!`
-  and `result-data`), and the links out of it (see `links`).
+  "The data dk.cst.corpus-probe.views/search-page renders one search page
+  from, for `request` against `ctx`, or for the search `req` it reads
+  with the citation `cited`: the state of the form (see `form-data!`),
+  the outcome of the search when the params describe one, and the links
+  out of it.
 
-  One search, two views: the `view` param decides whether its hits are
-  listed as a concordance or counted as a frequency table, and each view
-  contributes only the controls and links it has (a sort and pagination
-  for the concordance, a grouping for the table). Links are built from
-  `:cited`, the params as the URL cites them; `:params` fills the form.
-
-  The same map is embedded as transit for the client to take over from,
-  so it holds corpus overviews only: the full registry maps carry
-  absolute server paths and stay here."
+  The same map is embedded as transit for the client, so it holds corpus
+  overviews only: the registry maps carry absolute server paths."
   ([ctx request]
    (let [req (read-request! ctx request)]
      (search-view-data ctx req (citation! ctx req))))
@@ -425,22 +381,14 @@
             (links req cited outcome)))))
 
 (defn serve-search
-  "Handle a search-page `request` against `ctx`: render the form, and when
-  the query params describe a search, its concordance or the reason there
-  is none, else the search help (see dk.cst.corpus-probe.docs) where
-  the results will be.
+  "Handle a search-page `request` against `ctx`: render the form, and
+  when the query params describe a search, its concordance or the reason
+  there is none, else the search help where the results will be.
 
-  A document asked for by a query string that is not the search's
-  citation (see `citation!`) is answered with a redirect to it, so that
-  the address bar of a submit without the client shows the one URL the
-  search has, as a routed submit does (see
-  dk.cst.corpus-probe.client.router/submit-query-string). Not for a form
-  submitted
-  with its mode changed, whose citation is what the form holds rather
-  than what it was given, and which runs nothing until sent again.
-
-  `:cited` goes to the masthead's navigation and not to the client, which
-  does not read it."
+  A request whose query string is not the search's citation (see
+  `citation!`) is answered with a redirect to it, so a submit without the
+  client ends on the one URL the search has. Not one whose mode changed,
+  whose citation is what the form holds rather than what it was given."
   [ctx request]
   (let [req   (read-request! ctx request)
         cited (citation! ctx req)]
@@ -451,6 +399,8 @@
       {:status  303
        :headers {"Location" (url/results-href cited)}}
       (let [{:keys [result error] :as data} (search-view-data ctx req cited)
+            ;; the masthead's navigation takes the citation; the client
+            ;; does not read it
             data (cond-> (assoc (dissoc data :cited) :route :search)
                    (not (or result error))
                    (assoc :help (docs/document
@@ -462,20 +412,10 @@
   `ctx`, as transit, so the client can refresh the filter fieldset when
   the corpus selection changes without submitting a search.
 
-  Only names the registry has reach CQP (see
-  dk.cst.corpus-probe.cwb.corpus/split-known); an unknown one simply
-  contributes nothing, since nothing is being searched here.
-
   The values a reader has chosen are not answered: those are the reader's
   and the client is already holding them. An attribute list that no
-  longer offers a chosen value leaves that value where it is (see
-  dk.cst.corpus-probe.views.search.filter/filter-fieldset), so narrowing
-  the corpora never quietly drops part of a filter.
-
-  The per-corpus half of this is cached against each registry file (see
-  dk.cst.corpus-probe.cwb.tools/annotation-values!), so a repeat
-  selection costs the merge and the collated sort rather than a CQP
-  round trip."
+  longer offers a chosen value leaves that value where it is, so
+  narrowing the corpora never quietly drops part of a filter."
   [ctx request]
   (let [entries   (registry/entries ctx)
         named     (url/corpora-param (:corpus (:query-params request)))
@@ -518,16 +458,12 @@
 (defn serve-counts
   "Answer the count of the search `request` describes against `ctx`, as
   transit: the per-corpus `:counts`, the `:size` and `:pages` of the
-  whole result, the `:prev-href` and `:next-href` of the page the
-  request names and the document `:title`, everything about a page that
-  the count decides. For the client, whose page arrived while its
-  corpora were still being counted (see `run-view!`).
+  result, the `:prev-href` and `:next-href` of the page named and the
+  document `:title`, everything about a page the count decides. For the
+  client, whose page arrived while its corpora were still being counted.
 
   Asked with the page's own params, so it counts the question the page
-  answered. The corpora the page showed were remembered as it was filled
-  (see dk.cst.corpus-probe.search/remember-size!), so only the rest cost
-  a query, and each count is remembered for the next page. A request
-  describing no search is refused."
+  answered; a request describing no search is refused."
   [ctx request]
   (let [{:keys [params selected known unknown cqp opts page lang] :as req}
         (read-request! ctx request)]

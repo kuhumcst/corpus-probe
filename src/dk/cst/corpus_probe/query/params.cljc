@@ -3,8 +3,7 @@
   param's value into what the query holds, `token-params` reads the
   tokens of an extended search out of them, and the `->params` print a
   condition, a token or the words of a query back as the params its form
-  submits, nothing at its default. The query itself is
-  dk.cst.corpus-probe.query's."
+  submits, nothing at its default."
   (:require [clojure.string :as str]
             [dk.cst.corpus-probe.cqp :as cqp]
             [dk.cst.corpus-probe.query.mode :as mode]
@@ -12,14 +11,8 @@
 
 (defn match-op
   "The operator the `match` query param value `v` gives every word of a
-  simple search or a list (see dk.cst.corpus-probe.query.tokens/match-ops):
-  the start of the form matched for prefix, the end for suffix, either
-  for infix, and equality for the whole form, which is what a URL leaves
-  out.
-
-  One param rather than one per end, because a query that may fall at
-  either end may fall anywhere, and two params both set said so to
-  nobody."
+  simple search or a list: one of the match-ops, or equality for the
+  whole form, which is what a URL leaves out."
   [v]
   (if (some #{v} (remove str/blank? tokens/match-ops)) v "is"))
 
@@ -37,15 +30,12 @@
   (if (some #{v} (map (comp name first) cqp/units)) (keyword v) :sentence))
 
 (defn condition-params
-  "The condition `row` of an extended-search token (see
-  dk.cst.corpus-probe.query.tokens/token-rows) as
-  dk.cst.corpus-probe.query/condition->cqp takes it: its :attr (a
-  keyword; word unless the name is a plausible attribute name, since it
-  is spliced into the query), its :op (one of
-  dk.cst.corpus-probe.query.tokens/operators, equality otherwise), its
-  :value as typed, :ci? for its ignore-case box and its :join as typed,
-  which `joined` reads by its place among its token's conditions."
+  "The condition `row` of an extended-search token as the compiler takes
+  it: its :attr, its :op, its :value as typed, :ci? for its box and its
+  :join as typed, which `joined` reads by its place among its token's
+  conditions."
   [{:keys [attr op v ci join]}]
+  ;; spliced into the query, so only a name CQP's lexer takes is kept
   {:attr  (keyword (if (cqp/name? (str attr)) attr "word"))
    :op    (if (some #{op} tokens/operators) op "is")
    :value (str v)
@@ -54,9 +44,8 @@
 
 (defn joined
   "`conditions` (see `condition-params`) with the :join of each after the
-  first read from its `join` field: one of
-  dk.cst.corpus-probe.query.tokens/joins, and otherwise; the first has
-  none, since it joins nothing."
+  first read as one of the joins, and otherwise; the first has none,
+  since it joins nothing."
   [conditions]
   (into []
         (map-indexed (fn [i {:keys [join] :as condition}]
@@ -69,14 +58,10 @@
         conditions))
 
 (defn token-params
-  "The tokens of the extended search `params` describe, as
-  dk.cst.corpus-probe.query/extended->cqp takes them: each token asking
-  for anything (see dk.cst.corpus-probe.query.tokens/asks?), in order,
-  with the :conditions of it that ask (see
-  dk.cst.corpus-probe.query.tokens/condition-asks?, `condition-params`
-  and `joined`), its repeat as :min and :max (see `repeat-param`), the
-  most never below the least, and :start? and :end? for the sentence
-  edges it stands at."
+  "The tokens the extended search `params` describe, as the compiler
+  takes them: each token that asks for anything, in order, with the
+  :conditions of it that ask, its repeat as :min and :max, the most
+  never below the least, and :start? and :end? for the sentence edges."
   [params]
   (into []
         (comp (filter tokens/asks?)
@@ -94,8 +79,7 @@
 
 (defn condition->params
   "The fields of `condition`, the `c`th of token `n`, as the extended
-  form submits them and its URL carries them (see
-  dk.cst.corpus-probe.query.tokens/token-key), nothing at its default."
+  form submits them and its URL carries them, nothing at its default."
   [n c {:keys [attr op value ci? join]}]
   (let [k (fn [field] (keyword (tokens/token-key n c field)))]
     (cond-> {}
@@ -116,9 +100,8 @@
 
 (defn token->params
   "The fields of `token`, the `n`th of an extended search, as its form
-  submits them and its URL carries them: those of its conditions (see
-  `condition->params`), its repeat and its sentence edges, nothing at
-  its default."
+  submits them and its URL carries them: those of its conditions, its
+  repeat and its sentence edges, nothing at its default."
   [n {:keys [conditions start? end?] lo :min hi :max}]
   (let [k (fn [field] (keyword (tokens/token-key n 1 field)))]
     (cond-> (into {}
@@ -133,10 +116,9 @@
 (defn word-params
   "The params of the words of `query` as a simple search or a list
   spells them, by `mode`: the values of its tokens in order, or of its
-  one token's alternatives, in the field, one line each for a list,
-  with the first condition's attribute, operator and case flag as the
-  options every word shares (see dk.cst.corpus-probe.query/condition).
-  For a query the form holds (see dk.cst.corpus-probe.query/project)."
+  one token's alternatives one line each, in the field, with the first
+  condition's attribute, operator and case flag as the options every
+  word shares."
   [mode {:keys [tokens within]}]
   (let [{:keys [attr op ci?] :or {attr :word op "is"}}
         (first (:conditions (first tokens)))

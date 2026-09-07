@@ -1,10 +1,7 @@
 (ns dk.cst.corpus-probe.cwb.registry
   "The CWB registry read from disk: the entry files naming each corpus's
-  data location, encoding and attributes (see docs/research/cwb-core.md
-  §2.5), and the folders the configuration groups the corpora in.
-
-  Nothing here runs CQP; what CQP reports about a corpus is
-  dk.cst.corpus-probe.cwb.corpus's."
+  data location, encoding and attributes, and the folders the
+  configuration groups the corpora in. Nothing here runs CQP."
   (:require [clojure.java.io :as io]
             [clojure.string :as str]
             [dk.cst.corpus-probe.cqp :as cqp]))
@@ -24,11 +21,10 @@
            "ALIGNED"   :aligned} k) (keyword v)])))
 
 (defn entry
-  "Parse the registry entry `file` into a registry entry map.
-
-  Returns {:id <s> :name <s> :home <s> :info <s> :charset <s> :language <s>
-  :p-attrs [<kw> ...] :s-attrs [<kw> ...] :aligned [<kw> ...]} with
-  attributes in declaration order, which is the order CQP displays them in."
+  "Parse the registry entry `file` into {:id <s> :name <s> :home <s> :info
+  <s> :charset <s> :language <s> :p-attrs [<kw> ...] :s-attrs [<kw> ...]
+  :aligned [<kw> ...]}, the attributes in declaration order, which is the
+  order CQP displays them in."
   [file]
   (->> (str/split (slurp file) #"\n")
        (keep registry-line)
@@ -52,13 +48,9 @@
   (io/file registry (str/lower-case (str corpus))))
 
 (defn entries
-  "Read every registry entry in `ctx`'s :registry directory into registry
-  entry maps, sorted by :id.
-
-  The :id is the entry's filename, which is the name CQP resolves a corpus
-  by, whatever the ID field inside says. Files that are not entries
-  (subdirectories, names that are not corpus IDs, text without a HOME line)
-  are skipped."
+  "Read every registry entry in `ctx`'s :registry directory into entry
+  maps sorted by :id, the entry's filename, which is the name CQP resolves
+  a corpus by whatever the ID field inside says."
   [{:keys [registry] :as ctx}]
   (->> (.listFiles (io/file registry))
        (filter entry-file?)
@@ -68,12 +60,12 @@
        (vec)))
 
 (defn entry-of
-  "The registry entry map of the corpus `id` names under `ctx`, read as
-  `entries` reads it, or nil when `id` is no corpus name or names no
-  entry. The name is matched case-insensitively, so a path can carry it
-  in lowercase; it is checked before it becomes a filename."
+  "The registry entry map of the corpus `id` names under `ctx` (matched
+  case-insensitively, read as `entries` reads it), or nil when `id` is no
+  corpus name or names no entry."
   [ctx id]
   (let [corpus (str/upper-case (str id))]
+    ;; the name is checked before it becomes a filename
     (when (cqp/corpus-name? corpus)
       (let [file (entry-file ctx corpus)]
         (when (entry-file? file)
@@ -107,11 +99,10 @@
    "latin9"   "ISO-8859-15"})
 
 (defn charset
-  "Return the Java charset name for `corpus` in `ctx`, read from the
-  `##:: charset` property of its registry entry; defaults to UTF-8.
-
-  CQP transcodes nothing, so both commands sent to and output read from a
-  corpus must use its own encoding."
+  "The Java charset name for `corpus` in `ctx`, from the `##:: charset`
+  property of its registry entry; UTF-8 when it names none. CQP transcodes
+  nothing, so commands sent to a corpus and output read from it must use
+  its own encoding."
   [ctx corpus]
   (let [file (entry-file ctx corpus)]
     (or (when (entry-file? file)
@@ -133,18 +124,14 @@
 (defn build-stamp
   "What `corpus` reads as under `ctx`: the modification time and length of
   its registry entry, and the same of its token stream (see `data-file`)
-  when that is there to read.
-
-  Part of every saved result's name (see dk.cst.corpus-probe.search.cache) and
-  of every cached fact's key (see dk.cst.corpus-probe.cwb.corpus/facts!),
-  and it has to cover both. cwb-encode rewrites the entry only when
-  passed -R, so rebuilding a corpus in place leaves the entry
-  byte-identical while every word changes underneath it. The entry counts
-  too, declaring the charset everything is read in, so correcting a
-  mis-declared one changes which matches exist without touching the data."
+  when that is there to read. Part of the name of every saved result and
+  of the key of every cached fact."
   [ctx corpus]
   (let [^java.io.File file (entry-file ctx corpus)
         ^java.io.File data (data-file ctx corpus)]
+    ;; both: cwb-encode rewrites the entry only under -R, so a rebuild in
+    ;; place leaves it byte-identical, and the entry declares the charset
+    ;; everything is read in
     [(.lastModified file) (.length file)
      (when (and data (.isFile data)) [(.lastModified data) (.length data)])]))
 

@@ -1,32 +1,22 @@
 /* The page's layout and voice: serif prose, a quieter sans for the
-   apparatus around it, one role per colour, and hairlines rather than
-   fills. Colours and families come from tokens.css; reset.css runs
-   first. A comment says why a rule is here where the rule cannot.
-   Sectioned by the views that emit the classes, in their order: the
-   shell and the pages, the widgets, the chooser, the search form, the
-   result, the concordance, the inspector, the frequency and corpus
-   tables, the documents. A component's breakpoint rules stand with
-   its base rules; the search page's grid places the parts it holds. */
+   apparatus, one role per colour, hairlines rather than fills. Colours
+   and families are tokens.css's; a part's breakpoints stand with it. */
 
 :root {
   --page-inline-size: 80rem;  /* holds the query rail and a KWIC line */
-  --sheet-block-size: 45vh;   /* the token panel as a sheet, and the room
-                                 kept under it */
-  /* the line through the rail: labels end on it and controls begin on
-     it. Inside a box the column is narrowed by the box's padding and
-     edge, so the line runs straight through the boxes */
+  --sheet-block-size: 45vh;   /* also the room kept under the sheet */
+  /* the line through the rail, where labels end and controls begin; a
+     box narrows its column by its padding and edge to keep the line */
   --line: 5.5rem;
   --box-pad: 0.75rem;
   --label-col: var(--line);
   accent-color: var(--accent);
 }
 
-/* Shell and page (dk.cst.corpus-probe.views) */
+/* Shell and page */
 
-/* a centred column no wider than a page; the root and body are columns
-   so the footer's mount can take the room left under a short page. The
-   body needs its width said: an auto-margined flex item shrinks to its
-   content */
+/* root and body are columns so the footer can sink to the foot of a
+   short page; an auto-margined flex item shrinks unless its width is said */
 html { display: flex; flex-direction: column; min-block-size: 100%; }
 body { flex: 1; display: flex; flex-direction: column;
        inline-size: 100%; max-inline-size: var(--page-inline-size);
@@ -37,9 +27,8 @@ body { flex: 1; display: flex; flex-direction: column;
 #footer { margin-block-start: auto; }
 main { padding-block-start: 1rem; margin-block-end: 3rem; }
 
-/* prose wants a measure (WCAG 1.4.8), centred like the rest of the page.
-   The search page is a form beside a table and keeps its width; its
-   guide takes the measure where it stands, beside the rail */
+/* prose keeps to a measure (WCAG 1.4.8); the search page is a form
+   beside a table and keeps its width, its guide takes the measure */
 main:not(.search-page), .help { max-inline-size: 40rem; }
 main:not(.search-page) { margin-inline: auto; }
 
@@ -50,15 +39,13 @@ main:not(.search-page) { margin-inline: auto; }
 /* a GET search lands on #results: keep it clear of the viewport edge */
 :target { scroll-margin-block-start: 1rem; }
 
-/* the apparatus speaks in sans, set on the containers so a control
-   inside the concordance keeps the concordance's face; the answer's own
-   header keeps the page's voice for its heading */
+/* the apparatus speaks in sans, set on containers so a control inside
+   the concordance keeps the concordance's face */
 .masthead, .footer, search, .inspector, .view-controls, nav, summary {
   font-family: var(--sans);
 }
 
-/* `monospace` alone makes the user agent shrink the text to 13px; the
-   stack does not */
+/* bare `monospace` makes the user agent shrink the text; a stack does not */
 code, pre, .kwic { font-family: var(--mono); }
 code { font-size: 0.9em; }
 
@@ -66,26 +53,20 @@ h1, h2, h3, legend, caption { text-wrap: balance; }
 h1, h2, h3 { line-height: 1.25; }
 mark { background: var(--mark); color: inherit; }
 
-/* underlined in a tint of the link colour, the full colour under the
-   pointer. No visited colour: these pages are apparatus, revisited
-   constantly, and a browsed page would end up mottled */
+/* no visited colour: these pages are apparatus, revisited constantly,
+   and a browsed page would end up mottled */
 a { color: var(--link);
     text-decoration-color: color-mix(in srgb, currentColor 45%,
                                      transparent);
     text-underline-offset: 0.15em; }
 a:hover { text-decoration-color: currentColor; }
 
-/* an abbreviation inside a link takes the link's underline, not its own
-   as well */
+/* an abbreviation inside a link takes the link's underline, not both */
 abbr[title] { text-decoration-color: var(--rule); }
 a abbr[title] { text-decoration: none; }
 
-/* the site's, the result's and the pages' navigation rows are chrome,
-   not text: the page's own colour, and no underline until the pointer
-   says which. Longhands, so the current item below keeps its thickness
-   and colour under the pointer, and `:where`, so that the class in the
-   list does not outweigh that rule. A nav inside a document (a corpus
-   page's) keeps its links as links */
+/* navigation rows are chrome, not text. Longhands, so the current item
+   keeps its bar under the pointer; `:where`, so its rule outweighs this */
 :where(.menu) a, .sitename {
   color: inherit; text-decoration-line: none;
 }
@@ -93,17 +74,13 @@ a abbr[title] { text-decoration: none; }
   text-decoration-line: underline;
 }
 
-/* the current page, language and view: a bar under the item, which
-   unlike bold does not widen the word and shift the row */
+/* the current item gets a bar: bold would widen the word and shift the row */
 .masthead [aria-current], .views [aria-current] {
   color: var(--accent);
   text-decoration-line: underline; text-decoration-thickness: 2px;
   text-decoration-color: currentColor; text-underline-offset: 0.3em;
 }
 
-/* a bar with its parts at the start, the middle and the end on one
-   baseline, wrapping when narrow: the masthead and the footer framing
-   the page, and the answer's head */
 .masthead, .result-head, .footer {
   display: flex; flex-wrap: wrap; align-items: baseline;
   justify-content: space-between;
@@ -113,8 +90,7 @@ a abbr[title] { text-decoration: none; }
 .sitename { font-weight: bold; }
 .languages p { margin-block: 0.5rem; }
 
-/* the other languages are buttons that store a preference, but they
-   stand in a row of names and read as its links */
+/* the language buttons stand in a row of names and read as its links */
 .languages button { border: 0; padding: 0; background: none;
                     color: inherit; text-decoration: underline;
                     text-decoration-color: var(--rule);
@@ -126,19 +102,12 @@ a abbr[title] { text-decoration: none; }
           border-block-start: 1px solid var(--rule);
           font-size: 0.875rem; color: var(--tx-2); }
 .footer > * { margin-block: 0; }
-/* the footer's links are the site's other navigation, as prominent as
-   the masthead's */
+/* the footer's links are navigation, as prominent as the masthead's */
 .footer .row { font-size: 1rem; color: var(--tx); }
 
-/* wide: the search page's boxes are a rail beside the answer, so
-   refining a query costs no scroll, and the query row stands above the
-   answer, where a field has room. The landmark and the form give up
-   their boxes, so that the row, the rail, the navigation's status and
-   the answer are items of one grid. The rail is as wide as centring a
-   40rem measure beside it leaves, and no narrower than 16rem, so the
-   guide stands where every other page's prose stands and the rail does
-   not move when an answer arrives. The grid and its placements are
-   here; what a part is on its own is in the part's section */
+/* wide: the boxes are a rail beside the answer; the landmark and the
+   form give up their boxes so the parts are items of one grid, and the
+   rail takes what centring the measure leaves, so an answer cannot move it */
 @media (min-width: 64rem) {
   .search-page {
     display: grid;
@@ -149,22 +118,18 @@ a abbr[title] { text-decoration: none; }
     grid-template-rows: auto auto 1fr;
     grid-template-areas: "rail query" "rail status" "rail results";
     column-gap: 2rem;
-    align-items: start;  /* the rail keeps its own height, which lets it stick */
+    align-items: start;  /* the rail keeps its height, so it sticks */
   }
   .search-page :is(search, .search-form) { display: contents; }
   .search-page > .result,
   .search-page > .help   { grid-area: results; }
 
-  /* the query row keeps to the measure, like the guide under it, starts
-     half a legend's line down so that the field's edge meets the boxes'
-     border, which runs through the middle of their legends, and steps
-     down to the answer; the status between them takes a step only while
-     it says something */
+  /* the query row keeps to the measure and starts where the boxes'
+     border runs, through the middle of their legends */
   .search-page .query { grid-area: query;
                         max-inline-size: 40rem;
                         margin-block: 0.75rem 1rem; }
-  /* the tokens are boxes like the rail's: their border line is the
-     rail's already, and a row of them wants the column */
+  /* token boxes carry the rail's border line already, and want the column */
   .search-page .query-extended {
     max-inline-size: none; margin-block-start: 0;
   }
@@ -173,10 +138,8 @@ a abbr[title] { text-decoration: none; }
     margin-block-end: 1rem;
   }
 
-  /* the rail follows the reader down the results and scrolls inside
-     itself when taller than the viewport. A scroll container clips at
-     its padding edge, where a focus ring would be: the padding gives it
-     room and the margin takes it back */
+  /* a scroll container clips at its padding edge, where a focus ring
+     would be: the padding gives it room and the margin takes it back */
   .search-page .rail,
   .search-page > .inspector {
     grid-area: rail; position: sticky; inset-block-start: 1rem;
@@ -184,18 +147,14 @@ a abbr[title] { text-decoration: none; }
     padding: 0.25rem; margin: -0.25rem;
   }
 
-  /* the panel takes the rail's column while open; the form still
-     submits, it is just not what the column is for right now */
+  /* the panel takes the rail's column while open; the form still submits */
   .inspecting .rail { display: none; }
 }
 
-/* Widgets (dk.cst.corpus-probe.views.widgets, and the controls every
-   view uses) */
+/* Widgets, and the controls every view uses */
 
-/* the fill says what a control is: a field is written in, a button or
-   a select is pressed. Checkboxes and radios keep the user agent's
-   drawing and the chosen colour. Zero specificity, so a control that
-   must read as text overrides it with a class */
+/* the fill says what a control is: written in, or pressed. Zero
+   specificity, so a control that must read as text overrides it */
 :where(input:not([type="checkbox"], [type="radio"]), select, textarea,
        button) {
   border: 1px solid var(--rule); border-radius: 0.25rem;
@@ -208,70 +167,54 @@ a abbr[title] { text-decoration: none; }
 :where(button:enabled, select:enabled):hover {
   background: var(--accent-tint-2);
 }
-/* a disabled control fades, as the words beside it do, and answers no
-   pointer: the mode reads none of it */
 :where(input, select, textarea, button):disabled { opacity: 0.4; }
 /* Safari draws a search field its own way until told not to */
 input[type="search"] { appearance: none; }
 
-/* a fieldset keeps none of the user agent's groove, padding or side
-   margins: a group that is a box says so with the class, and the group
-   of tokens, named for a screen reader around boxes of its own, is not */
+/* no user-agent groove: a group that is a box says so with the class */
 fieldset { border: 0; padding: 0; margin: 0; }
 legend { padding-inline: 0.3em;
-         /* Safari lays a legend out as a flex item when its fieldset is
-            a flex column (the search form's are), and stretches it over
-            the whole border; the others keep it as wide as its words */
+         /* Safari lays a legend out as a flex item of a flex-column
+            fieldset and stretches it over the whole border */
          align-self: start; }
 
-/* a disclosure that shows a text cursor does not read as a control; the
-   count beside a name is a side note, in a summary or over a row group */
+/* a disclosure with a text cursor does not read as a control; the
+   count beside a name is a side note */
 summary { cursor: pointer; }
 .count { color: var(--tx-2); font-weight: normal; }
 
-/* the words beside a disabled control are greyed with it */
 label:has(:is(input, select):disabled) { color: var(--rule); }
 
-/* a group of controls or of facts is a hairline box named on its
-   border, the way a print dictionary heads a section: a column of rows
-   with one gap between them, and the line through the rail narrowed by
-   its padding and edge */
+/* a group is a hairline box named on its border, the way a print
+   dictionary heads a section; its column narrows to keep the line */
 .box { --row-gap: 0.5rem;
        --label-col: calc(var(--line) - var(--box-pad) - 1px);
        display: flex; flex-direction: column; gap: var(--row-gap);
        border: 1px solid var(--rule); border-radius: 2px;
        padding: 0.5rem var(--box-pad) var(--box-pad); }
 
-/* the small-caps voice of the apparatus, in sans: a box's name on its
-   border (a legend, or the inspector's heading set there by hand) in
-   the deep accent, and a key, the label of the value beside it, muted */
+/* the small-caps voice of the apparatus: a box's name on its border in
+   the deep accent, and a key beside its value, muted */
 legend, .inspector h3, .facts dt, thead th {
   font-family: var(--sans); font-variant: all-small-caps;
   letter-spacing: 0.04em; font-weight: 600; color: var(--accent-deep);
 }
 .facts dt, thead th { color: var(--tx-2); }
 
-/* a live region is rendered whether or not it says anything, so that
-   the change is announced; while empty it is a row of nothing and takes
-   no step: it gives back the row gap of the box it stands in, which the
-   box names, and where the step is a margin, that margin */
+/* a live region is rendered even when empty, so its changes are
+   announced; while empty it takes no step */
 .status { color: var(--status); }
 .status:empty { margin-block-start: calc(-1 * var(--row-gap, 0px)); }
 .error h2 { color: var(--error); }
 
-/* a list of links read as one row, matched by its own class so that
-   restructuring the markup around it cannot quietly stop it matching */
 .row { list-style: none; display: flex; gap: 1.5em; padding: 0; }
-/* a link's own line box is 19px, under the 24px WCAG 2.5.8 asks for */
+/* a link's line box is under the target size WCAG 2.5.8 asks for */
 .row a, .sitename { display: inline-block; padding-block: 0.2rem; }
 
-/* a heading and the line under it, close together, the line muted */
 hgroup { display: flex; flex-direction: column; gap: 0.25rem; }
 hgroup > * { margin-block: 0; }
 hgroup p { color: var(--tx-2); }
 
-/* keys and values side by side, the keys ending on a line the values
-   begin on */
 .facts { display: grid; grid-template-columns: max-content 1fr;
          gap: 0.25rem 1rem; margin-block: 0.5rem; }
 .facts dt { text-align: end; }
@@ -282,47 +225,28 @@ thead th { border-block-end: 1px solid var(--rule); }
 caption { caption-side: top; text-align: start; padding-block: 0.25rem;
           font-family: var(--sans); color: var(--tx-2); }
 
-/* cqp's error text and a corpus .info file are another program's
-   output: the error text carries a column-aligned pointer and scrolls;
-   the .info file wraps (see .about pre) */
+/* cqp's error text carries a column-aligned pointer, so no wrapping */
 pre { font-size: 0.875rem; padding: 0.75rem 1rem;
       background: var(--field); border: 1px solid var(--rule);
       border-radius: 2px; overflow-x: auto; }
 
-/* The chooser (dk.cst.corpus-probe.views.chooser): the corpus chooser
-   and the metadata filter */
+/* The chooser: the corpus chooser and the metadata filter */
 
-/* a row per entry, the label the whole target; trees indent by nesting,
-   without bullets; a value list of hundreds scrolls inside itself */
+/* the label is the row's whole target; a value list scrolls inside itself */
 .chooser li label { display: block; padding-block: 0.15rem; }
 .chooser-list { list-style: none; padding-left: 1em;
-                          /* the rule clearing the form's margins reaches
-                             a fieldset's own children only, and a tree of
-                             lists is deeper than that: 1em between every
-                             level is a tree of gaps */
+                          /* the form's margin-clearing rule reaches a
+                             fieldset's own children only */
                           margin-block: 0; }
 .filters details > .chooser-list { max-block-size: 40vh; overflow-y: auto;
                                    overscroll-behavior: contain; }
 
-/* a select-all and the disclosure it governs share a row; the
-   disclosure may not shrink below its content or the tree loses its
-   indent */
+/* a select-all and the disclosure it governs share a row */
 .chooser-group { display: flex; align-items: baseline; gap: 0.25em; }
 .chooser-group > details { flex: 1; min-inline-size: 0; }
 
-/* every summary in these two boxes is a row: a marker, what it names,
-   and the count at the end, with the filter box taking the line in the
-   one summary that holds one.
-
-   They also all draw their own marker. The summary holding the box has
-   no marker of its own to draw with (a row is not a list-item, which is
-   what the user agent paints a marker for), and one summary painted by
-   the user agent beside one drawn here is two markers of two sizes,
-   which is the first thing a reader sees. Drawn from the same counter
-   style the user agent uses, so it is that marker and not a triangle
-   picked to look like one, scaled to the size the user agent paints it
-   at, and scaled in place rather than in layout so that the marker
-   column stays the character's own width */
+/* a flex summary is no list-item and gets no marker from the user agent,
+   so every summary draws the agent's own glyph, scaled in place */
 .chooser-summary {
   display: flex; align-items: baseline; gap: 0.3rem; list-style: none;
 }
@@ -335,46 +259,29 @@ pre { font-size: 0.875rem; padding: 0.75rem 1rem;
 }
 .chooser-find { flex: 1; min-inline-size: 0; }
 
-/* The search form (dk.cst.corpus-probe.views.search, with its tokens
-   and its metadata filter): one rhythm, and controls that fill their
-   rows */
+/* The search form */
 
 .search-form, .rail { display: flex; flex-direction: column; gap: 1rem; }
-/* the form's gaps are its rhythm, so nothing in it keeps a margin of
-   its own; `:where`, so that the empty live region above, a widget rule
-   written before this one, still outweighs it */
+/* the form's gaps are its rhythm, so nothing in it keeps a margin;
+   `:where`, so the empty live region's rule still outweighs this */
 .search-form > *,
 .search-form :where(.query, .rail, fieldset, noscript) > * { margin-block: 0; }
 
-/* the query: the field or the tokens, the row that submits, and what
-   they run as, in a wrapper of one kind whatever the mode, close
-   together */
 .query { display: flex; flex-direction: column; gap: 0.5rem; }
 
-/* the row that submits: what is typed in takes the width and the button
-   keeps to the end, aligned to the foot so it sits at the foot of a
-   list's text area; in an extended search the row holds buttons alone */
+/* the submit button keeps to the end, at the foot of a tall text area */
 .query > p:has(> button[type="submit"]) { display: flex; flex-wrap: wrap;
                                           align-items: end; gap: 0.5rem; }
 .query > p > :is(input, textarea) { flex: 1; min-inline-size: 0; }
 .query > p > button[type="submit"] { margin-inline-start: auto; }
 
-/* what the words or the tokens run as: a side note under the field */
 .query > .cqp { color: var(--tx-2); }
 
-/* the field is a text area, so that a list can be typed one word per
-   line; its rows follow its lines (see
-   dk.cst.corpus-probe.views.search/query-field) and nothing else, so no
-   handle to drag */
+/* the field's rows follow its lines, so no handle to drag */
 .query textarea { resize: none; }
 
-/* the matching box reads as a sentence, and is one grid so that its
-   rows share their columns: the words before the controls take a column
-   as narrow as the widest of them, ending on the line, and the controls
-   fill the rest, one select each or one across; the case box is a row
-   from the edge. The rows are paragraphs in the markup and nothing in
-   the grid. After the box rule, to outweigh the flex column every box
-   is */
+/* the matching box reads as a sentence, one grid whose paragraphs are
+   nothing in it so its rows share columns; after .box, to outweigh it */
 .matching {
   display: grid; grid-template-columns: max-content 1fr 1fr;
   gap: var(--row-gap) 0.5rem; align-items: center;
@@ -386,13 +293,9 @@ pre { font-size: 0.875rem; padding: 0.75rem 1rem;
 .matching-case > label { grid-column: 1 / -1; }
 .modes > p { display: flex; flex-wrap: wrap; gap: 0.25rem 1rem; }
 
-/* a metadata attribute's pattern takes a row and its two bounds the
-   next, deeper in the box than the line reaches. Every part of it may
-   shrink: a field with a size of its own is wider than this box, and
-   without a floor of nought each row overflowed it.
-   TODO: these three rows want a design of their own. They are the only
-   controls this deep in a tree, and reading as a form inside a list is
-   what makes them sit oddly */
+/* a sized field would overflow the box without a floor of nought.
+   TODO: these three rows want a design of their own: the only controls
+   this deep in a tree, they read as a form inside a list */
 .pattern { display: flex; flex-wrap: wrap; align-items: center;
            gap: 0.25rem 0.5rem; margin-block: 0.25rem; min-inline-size: 0; }
 .pattern > label { display: flex; align-items: center; gap: 0.5rem;
@@ -400,20 +303,13 @@ pre { font-size: 0.875rem; padding: 0.75rem 1rem;
 .pattern > label:first-child { flex-basis: 100%; }
 .pattern > label > input { flex: 1; min-inline-size: 0; }
 
-/* the tokens of an extended search stand directly in the form, a box
-   each (the group around them is a fieldset without the class, see the
-   fieldset rule). The boxes fill the row and wrap, in the order the
-   tokens match, so a query reads across like the text it matches; each
-   keeps its own height, and the grid's gap is their rhythm */
+/* token boxes fill the row and wrap in the order the tokens match, so
+   a query reads across like the text it matches */
 .tokens ol { list-style: none; padding: 0; margin-block: 0; }
 .tokens > ol { display: grid; gap: 1rem; align-items: start;
                grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr)); }
 .token-box > ol { display: flex; flex-direction: column; gap: 0.75rem; }
 
-/* a condition: attribute and operator on the first row, the value on
-   the next, the case box last from the edge, the button that removes it
-   at the end of the first row in a column only a removable one has; a
-   condition after the first says how it joins on a row before these */
 .condition { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
              gap: 0.5rem; align-items: center; }
 .condition.removable {
@@ -427,9 +323,6 @@ pre { font-size: 0.875rem; padding: 0.75rem 1rem;
 .condition-remove { grid-column: 3; grid-row: 1; }
 .condition:has(> .condition-join) > .condition-remove { grid-row: 2; }
 
-/* a token's settings on the line, the repeat's two numbers under each
-   other, the sentence boxes on rows of their own; its two buttons at
-   either end of the last row */
 .token-box > p { display: grid; grid-template-columns: var(--label-col) 1fr;
                  gap: 0.5rem; align-items: center; }
 .token-repeat,
@@ -445,14 +338,11 @@ pre { font-size: 0.875rem; padding: 0.75rem 1rem;
 .token-actions > button { justify-self: start; }
 .token-actions > button:last-child { justify-self: end; }
 
-/* narrow: the answer under the form gets a step of air */
 @media (max-width: 63.999rem) {
   main > search { margin-block-end: 1.5rem; }
 }
 
-/* middle: the form spans the page with the answer below it, so its
-   four boxes share rows under the query: two and two from 40rem, three
-   from 48rem with the metadata box across the width */
+/* middle: the rail's boxes share rows under the query */
 @media (min-width: 40rem) and (max-width: 63.999rem) {
   .rail { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
@@ -461,51 +351,38 @@ pre { font-size: 0.875rem; padding: 0.75rem 1rem;
   .rail > .filters { grid-column: 1 / -1; }
 }
 
-/* The result (dk.cst.corpus-probe.views.result) */
+/* The result */
 
-/* the answer's rhythm: a step between its parts, and none inside them
-   (the empty live region between the head and the views gives its step
-   back, see .status:empty) */
 .result > * { margin-block: 0; }
 .result > * + * { margin-block-start: 1rem; }
 
-/* the answer's head: what was found at the start and the views at the
-   end, on one baseline like the masthead, closed off by a hairline */
 .result-head { column-gap: 1.5rem; row-gap: 0.25rem;
                padding-block-end: 0.5rem;
                border-block-end: 1px solid var(--rule); }
 
-/* the controls over a result: a label close to its control and a step
-   from the pair before */
 .view-controls { display: flex; flex-direction: column; gap: 0.5rem; }
 .view-controls p { display: flex; flex-wrap: wrap; align-items: center;
                    gap: 0.5rem; margin-block: 0; }
 .view-controls :is(select, input) + label { margin-inline-start: 0.75rem; }
 
-/* the page links around their position, each in a column of its own,
-   so the position keeps the middle when a direction is missing */
+/* a column each, so the position stays centred when a direction is missing */
 .pager { display: grid; grid-template-columns: 1fr auto 1fr;
          column-gap: 1.5em; }
 .pager-prev { grid-column: 1; justify-self: end; }
 .pager > li:not(.pager-prev, .pager-next) { grid-column: 2; }
 .pager-next { grid-column: 3; justify-self: start; }
 
-/* a KWIC line or a wide table must not reflow, so it scrolls inside its
-   box (WCAG 1.4.10). On a screen wider than the page the box first runs
-   into the right margin, stopping a rem short of its end: 100vw counts
-   a classic scrollbar, and the rem keeps the document from scrolling
-   under one */
+/* a KWIC line scrolls inside its box rather than reflow (WCAG 1.4.10),
+   running out into the right margin; it stops short of the edge since
+   the viewport width counts a classic scrollbar */
 .scroll { overflow-x: auto; overscroll-behavior-x: contain;
           margin-inline-end:
             calc(-1 * max(0px, (100vw - var(--page-inline-size)) / 2
                                - 1rem)); }
 
-/* The concordance (dk.cst.corpus-probe.views.concordance; PLAN.md §7:
-   the terminal KWIC, by decision) */
+/* The concordance */
 
-/* the match is the central column: the contexts share the width the
-   position and source columns leave, so the match stands in the middle
-   whatever the contexts hold. A longer context still widens its column */
+/* the contexts share the width, so the match stands in the middle */
 .kwic { font-size: 0.875rem; white-space: nowrap; inline-size: 100%; }
 .kwic th.kwic-left, .kwic th.kwic-right { inline-size: 50%; }
 .kwic th, .kwic td { padding: 0.15em 0.25em; }
@@ -519,36 +396,29 @@ pre { font-size: 0.875rem; padding: 0.75rem 1rem;
 .kwic .kwic-expanded td { white-space: normal; text-align: left;
                           background: var(--field); }
 
-/* the row's one control is a target of its own (WCAG 2.5.8), without
-   the box padding that would raise the row */
+/* its own target (WCAG 2.5.8), without padding that would raise the row */
 .kwic .kwic-cpos button { min-inline-size: 24px; min-block-size: 24px;
                           padding-block: 0; }
 
-/* a token is a button once the client runs, and must still read as
-   running text. The cursor is a position, not a passing focus, so it
-   is shown however the reader put it there: :focus, not :focus-visible,
-   or a clicked token would look like no token at all */
+/* a token is a button that must still read as running text; the cursor
+   is a position, not a passing focus, so :focus, not :focus-visible */
 .kwic button.token { font: inherit; color: inherit; background: none;
                      border: 0; padding: 0; cursor: pointer;
                      vertical-align: baseline; }
 .kwic button.token:focus { outline: 2px solid var(--accent);
                            outline-offset: 1px; }
 
-/* the anchors a query sets, as cqp shows them (manual section 3.3).
-   Both classes, or the button rule above wins on specificity */
+/* the anchors as cqp shows them; both classes, or the button rule wins */
 .kwic .token.target { font-weight: bold; }
 .kwic .token.keyword { text-decoration: underline; }
 
-/* narrow: a KWIC line wraps, and the source column goes (it is still on
-   the row as a title) */
+/* narrow: the source column goes; it is still on the row as a title */
 @media (max-width: 63.999rem) {
   .kwic { white-space: normal; }
   .kwic .kwic-structs { display: none; }
 }
 
-/* The inspector (dk.cst.corpus-probe.views.concordance/inspector),
-   drawn in the rail's manner: as a sheet at the foot of the viewport,
-   closed off by a hairline, until the wide layout makes it a column */
+/* The inspector: a sheet at the foot of the viewport, a column when wide */
 
 .inspector { position: fixed; inset: auto 0 0 0;
              max-block-size: var(--sheet-block-size); overflow: auto;
@@ -559,15 +429,12 @@ pre { font-size: 0.875rem; padding: 0.75rem 1rem;
 /* the document ends above the sheet rather than under it */
 body:has(.inspector) { padding-block-end: var(--sheet-block-size); }
 
-/* the title and the close button share the first row */
 .inspector > * { grid-column: 1 / -1; margin-block: 0; }
 .inspector > h2 { grid-column: 1; font-size: 1.15rem; }
 .inspector-close { grid-column: 2; justify-self: end;
                    align-self: center; }
 
-/* its groups are boxes like the fieldsets, with room at the top for the
-   heading, which is set on the border by hand since only a legend gets
-   there by itself */
+/* the heading is set on the border by hand; only a legend gets there itself */
 .inspector .box { position: relative; padding-block-start: 0.75rem;
                   margin-block-start: 0.4rem; }
 .inspector h3 { position: absolute; inset-block-start: -0.55em;
@@ -575,24 +442,19 @@ body:has(.inspector) { padding-block-end: var(--sheet-block-size); }
                 background: var(--bg); font-size: 1rem; line-height: 1; }
 .inspector .box > p { margin-block: 0; }
 
-/* the panel's line is the rail's, and its key column grows only for a
-   key longer than it */
+/* the panel's line is the rail's; a longer key widens the column */
 .inspector .facts { grid-template-columns: minmax(var(--label-col), max-content) 1fr;
                     column-gap: 0.5rem; margin-block: 0; }
 
-/* wide: a column, not a sheet (see the search page's grid): nothing
-   closes it off and nothing is owed under it. After the sheet rules,
-   which the body rule matches exactly */
+/* wide: a column, not a sheet. After the sheet rules, which the body
+   rule matches exactly */
 @media (min-width: 64rem) {
   .search-page > .inspector { border-block-start: 0; }
   body:has(.inspector) { padding-block-end: 0; }
 }
 
-/* Frequency and corpus tables (dk.cst.corpus-probe.views.frequency and
-   views.corpus) */
+/* Frequency and corpus tables */
 
-/* a table of counts in the apparatus voice, a size down, its numbers
-   ending together */
 .attributes, .frequencies { font-family: var(--sans); font-size: 0.9rem; }
 :is(.attributes, .frequencies) :is(th, td) { padding: 0.15em 0.5em;
                                              text-align: left; }
@@ -601,8 +463,6 @@ body:has(.inspector) { padding-block-end: var(--sheet-block-size); }
 /* a corpus .info file is prose and wraps */
 .about pre { white-space: pre-wrap; }
 
-/* the corpus index in columns: name, id and size, the sizes ending
-   together like the numbers they are */
 .index { display: grid; grid-template-columns: max-content max-content
                                                 max-content;
          column-gap: 1.5rem; padding: 0; }
@@ -610,19 +470,15 @@ body:has(.inspector) { padding-block-end: var(--sheet-block-size); }
               grid-column: 1 / -1; align-items: baseline; }
 .index .size { grid-column: 3; justify-self: end; }
 
-/* Documents (dk.cst.corpus-probe.docs: the frontpage, the glossary and
-   the guides, rendered from Markdown) */
+/* Documents: the frontpage, the glossary and the guides */
 
-/* a key is drawn as one, a hairline box in the running font; a chord
-   is its keys with the plus signs between them, each key boxed; a
-   label the reader presses on the screen is drawn as the button is */
+/* a key is drawn as one; a label pressed on the screen, as the button is */
 kbd, kbd samp { font-family: inherit; }
 .key { font-size: 0.9em; padding: 0 0.3em;
        border: 1px solid var(--rule); border-radius: 0.25rem; }
 .onscreen { background: var(--accent-tint); border-color: var(--accent); }
 
-/* a glossary's terms stay bold, since they are its content, and each
-   entry steps down from the one before */
+/* a glossary's terms are its content, so they stay bold */
 .terms dt { font-weight: bold; }
 .terms dd + dt { margin-block-start: 0.75rem; }
 /* the element a link named, for the reader without a script */

@@ -1,12 +1,9 @@
 /* The palette and the font stacks, as roles: every colour in style.css
    is one of these. The colours are Flexoki's (https://stephango.com/flexoki,
-   MIT), light scheme only while the design is moving. One accent is
-   for what can be acted on, and its lighter and deeper steps are mixed
-   from it here, so changing the accent is changing one value. */
+   MIT); the accent's steps are mixed from it, so it changes as one value. */
 
 :root {
-  --accent: #BC5215;   /* what can be acted on: buttons, selects, a
-                          ticked box, the current item, the cursor */
+  --accent: #BC5215;   /* what can be acted on */
   --link:   #205EA6;   /* kept apart from the accent */
   --error:  #AF3029;
   --status: #AD8301;   /* what is still happening */

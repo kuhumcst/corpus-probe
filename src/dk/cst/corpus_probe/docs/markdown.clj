@@ -2,24 +2,17 @@
   "Markdown for the documents under resources/docs: nextjournal's
   markdown library (commonmark-java underneath) plus a definition list,
   which CommonMark lacks, and notations for keys and for the labels on
-  the screen a reader presses (see `keys-tokenizer` and
-  `labels-tokenizer`).
+  the screen a reader presses.
 
       term:
         the definition, over as many
         indented lines as it takes
 
-  Pairs one after another, or a blank line apart, are one list. A
-  paragraph is a list only when it is nothing but such pairs, so a line
-  ending in a colon with prose after it stays prose.
-
-  The list is found after parsing: commonmark-java never tries block
-  starts on a line beginning with a letter, so a block parser would not
-  see `term:`. A post-processor sees the paragraph, and the source spans
-  say how far each line was indented. The parser is rebuilt here with
-  the library's own extensions, formulas aside, because the library's
-  builder takes no post-processor; its tree goes back to the library for
-  the data and the hiccup."
+  A paragraph is a list only when it is nothing but such pairs, so a line
+  ending in a colon with prose after it stays prose. The list is found
+  after parsing, because commonmark-java never tries block starts on a
+  line beginning with a letter and a block parser would never see
+  `term:`."
   (:require [clojure.string :as str]
             [nextjournal.markdown.impl :as impl]
             [nextjournal.markdown.impl.utils :as u]
@@ -149,7 +142,8 @@
 (def parser
   "The commonmark parser: the library's own extensions but its formulas,
   source spans for the post-processor to read indentation from, and the
-  definition list."
+  definition list. Built here rather than through the library, whose
+  builder takes no post-processor."
   (-> (Parser/builder)
       (.extensions [(AutolinkExtension/create)
                     (TaskListItemsExtension/create)

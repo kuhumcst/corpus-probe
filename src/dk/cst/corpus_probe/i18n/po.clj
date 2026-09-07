@@ -2,14 +2,11 @@
   "The UI translations, read from the gettext PO files on the classpath.
 
   One file per language under resources/i18n/, keyed by the English
-  source string, so adding a language is dropping in a file and naming
-  it here rather than editing a map in the source. English needs no
-  file: it is what the msgids are written in.
-
-  The server reads the files at load time; the ClojureScript build
-  cannot, so it inlines the tables at compile time through
-  `inline-tables`. After editing a PO file, force a recompile of the
-  frontend: the build cannot see through the macro to the file."
+  source string; English needs no file, being what the msgids are
+  written in. The server reads the files at load time, the ClojureScript
+  build inlines the tables at compile time through `inline-tables`, so
+  after editing a PO file force a recompile of the frontend: the build
+  cannot see through the macro to the file."
   (:require [clojure.java.io :as io]
             [clojure.string :as str]
             [pottery.core :as pottery]))
@@ -24,9 +21,8 @@
   it.
 
   The reader unescapes a newline and leaves everything else, so a msgid
-  holding a double quote (the CQP example query does) would otherwise
-  come back with its backslashes still in it and match nothing the
-  source passes to `tr`."
+  holding a double quote would otherwise come back with its backslashes
+  still in it and match nothing the source passes to `tr`."
   [s]
   (str/replace s #"\\(.)" "$1"))
 

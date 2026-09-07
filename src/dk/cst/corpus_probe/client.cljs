@@ -1,27 +1,10 @@
 (ns dk.cst.corpus-probe.client
   "Client entry point: read the bootstrap payload the server embedded,
-  mount Replicant on the server-rendered page, and take over navigation so
-  moving between views swaps the page's data rather than reloading it.
-  The location and the document listeners are
-  dk.cst.corpus-probe.client.router's, the pure step
-  dk.cst.corpus-probe.client.actions', its effects
-  dk.cst.corpus-probe.client.effects' and the rules of the two chooser
-  lists dk.cst.corpus-probe.client.lists'.
-
-  Interactivity is progressive: without this script the page is a working
-  server-rendered concordance, a token is text rather than a control, and
-  the browser lands the reader on the results from the fragment on the
-  form action. With it, the same views become live and the client lands
-  the reader itself (see dk.cst.corpus-probe.client.effects/land!). The
-  set of expanded hits is mirrored in the URL's `expand` parameter, so an
-  expanded view survives a reload and can be shared.
-
-  Every action a view dispatches is data, answered by a pure step (see
-  dk.cst.corpus-probe.client.actions/act) whose effects run at the edge
-  (see dk.cst.corpus-probe.client.effects/perform!); `dispatch!` joins
-  the two. Every URL this client writes goes through
-  dk.cst.corpus-probe.url, so it is the URL the server would have written
-  for the same search."
+  mount Replicant on the server-rendered page, and take over navigation
+  so moving between views swaps the page's data rather than reloading
+  it. Every action a view dispatches is data, answered by the pure step
+  (dk.cst.corpus-probe.client.actions) whose effects run at the edge
+  (dk.cst.corpus-probe.client.effects); `dispatch!` joins the two."
   (:require [clojure.walk :as walk]
             [dk.cst.corpus-probe.client.actions :as actions]
             [dk.cst.corpus-probe.client.effects :as effects]
@@ -32,37 +15,26 @@
             [replicant.dom :as r]))
 
 (defonce ^{:doc "The application state, which every render reads and
-  `dispatch!` writes (see dk.cst.corpus-probe.client.actions/data->state
-  for its shape)."}
+  `dispatch!` writes."}
   state
   (atom nil))
 
 (defn focus-left?
   "True when focusout `event` says focus left the element listening: it
-  went to something in the tab order outside it.
-
-  Focus moving from one control of a fieldset to another is not leaving
-  it. Nor is focus landing on something outside the tab order: a press
-  on a label inside the fieldset sends focus to the nearest focusable
-  ancestor for a moment, which is <main> with its tabindex of -1
-  (measured in Chrome), before the box it is for takes it. Only the
-  keyboard reaches an element in the tab order, and a press elsewhere is
-  heard by dk.cst.corpus-probe.client.router/listen!."
+  went to something in the tab order outside it."
   [event]
   (let [to (.-relatedTarget event)]
     (boolean (and to
+                  ;; a press on a label sends focus to <main>, tabindex -1,
+                  ;; for a moment before the box it is for takes it
                   (<= 0 (.-tabIndex to))
                   (not (.contains (.-currentTarget event) to))))))
 
 (def placeholders
   "What a view puts in an action where it needs something only the event
-  knows, each read from the Replicant dispatch data of the event: the
-  control's value, whether a checkbox is checked, whether a disclosure
-  is open, the key pressed and whether Shift was held or an input method
-  composing, the fields of the control's form as the params map (see
-  dk.cst.corpus-probe.client.router/form-params), and whether focus has
-  left the element (see `focus-left?`). An action stays data in the
-  hiccup, which is what lets a render leave an unchanged control alone."
+  knows, each read from the Replicant dispatch data of the event. An
+  action stays data in the hiccup, which is what lets a render leave an
+  unchanged control alone."
   {:event.target/value       (fn [{:replicant/keys [node]}]
                                (.-value node))
    :event.target/checked     (fn [{:replicant/keys [node]}]
@@ -101,19 +73,14 @@
 (defn render!
   "Render the state into the masthead, #app and the footer."
   []
-  ;; The first render clears #app and rebuilds the server-rendered markup
-  ;; rather than adopting it, so a query typed, a disclosure opened or
-  ;; focus taken while the script loads is lost. replicant.dom/render
-  ;; promises to replace whatever it finds, and there is no adoption API
-  ;; in 2026.07.1 (upstream issue 53 is open); if one arrives it has to
-  ;; be a new entry point. The cheap mitigation, should the window ever
-  ;; matter, is to read #q's live value here before rendering.
+  ;; the first render rebuilds the server-rendered markup rather than
+  ;; adopting it (replicant.dom/render replaces what it finds, and
+  ;; 2026.07.1 has no adoption API), so what a reader typed or opened
+  ;; while the script loaded is lost
   (let [{:keys [lang path nav] :as current} @state
         ui (i18n/->ui lang)]
-    ;; the masthead's links carry the current search, so it re-renders
-    ;; with the page rather than keeping whatever the first server render
-    ;; said; the footer's words are in the UI language, so a language
-    ;; switch that does not reload the document has to re-render it too
+    ;; the masthead's links carry the current search and the footer's
+    ;; words are in the UI language, so both re-render with the page
     (r/render (.getElementById js/document "masthead")
               (views/site-header ui path nav))
     (r/render (.getElementById js/document "app") (views/page current))
@@ -122,22 +89,12 @@
 (defn dispatch!
   "Answer `action` for the Replicant dispatch `data` of the event or
   life-cycle hook that raised it, or for none, as the listeners and the
-  fetches raise theirs (see dk.cst.corpus-probe.client.router/listen! and
-  dk.cst.corpus-probe.client.effects/perform!).
-
-  A life-cycle hook goes straight to the effects: what it asks is written
-  to its node, and the state is not touched, so nothing renders from
-  inside a render. An event's action has its placeholders filled in from
-  the event (see `placeholders`), goes through the pure step (see
-  dk.cst.corpus-probe.client.actions/act), the state it answers is
-  swapped in once, which renders through the watch (see `init!`), and
-  its effects run in the same call: so `[:prevent-default]` reaches the
-  event before the handler returns, and `[:focus id]` finds the node the
-  render has just made. A step that changes nothing swaps nothing, so
-  nothing renders for it."
+  fetches raise theirs."
   ([action]
    (dispatch! {} action))
   ([{:replicant/keys [trigger] :as data} action]
+   ;; a hook's ask is written to its node without touching the state, so
+   ;; nothing renders from inside a render
    (if (= :replicant.trigger/life-cycle trigger)
      (effects/perform! dispatch! data [action])
      (let [before @state]
@@ -145,24 +102,22 @@
                   (actions/act before (interpolate data action))]
          (when-not (identical? before after)
            (reset! state after))
+         ;; in the same call, once the watch has rendered: a
+         ;; prevent-default reaches the event before the handler returns
+         ;; and a focus finds the node the render has just made
          (effects/perform! dispatch! (assoc data :state after) effects))))))
 
 (defn ^:dev/after-load reload!
-  "Render again once shadow-cljs has swapped in recompiled code.
-
-  Nothing else would: the views are called from the state watcher, and a
-  recompile changes the code without changing the state, so a saved file
-  would sit invisible until the reader next did something. State itself
-  survives, which is the point of a watch: the search stays on screen
-  while the view that draws it is edited."
+  "Render again once shadow-cljs has swapped in recompiled code: the
+  views are called from the state watcher, and a recompile changes the
+  code without changing the state."
   []
   (render!))
 
 (defn init!
   "Boot the client: seed the state from the bootstrap payload, install the
   listeners and the dispatch, render on every change of the state, and
-  then, as a page arriving does, mirror the URL and fetch the expansions
-  it names (see dk.cst.corpus-probe.client.actions/page-arrived)."
+  arrive on the page as a fetched one does."
   []
   ;; the views render tokens and disclosures as controls only where this
   ;; script is running to answer them

@@ -1,36 +1,9 @@
 (ns dk.cst.corpus-probe.views
-  "Every page the app serves, by the route that names it, its document
-  title by the same route, and the chrome every page shares: the bypass
-  link, the site masthead with its navigation and the language switch,
-  and the site footer. The pages are composed of the generic widgets
-  (dk.cst.corpus-probe.views.widgets), the chooser over a tree of
-  checkboxes (dk.cst.corpus-probe.views.chooser), the search form
-  (dk.cst.corpus-probe.views.search, with its token rows and its
-  metadata filter under it), the results region
-  (dk.cst.corpus-probe.views.result), the concordance and its inspector
-  (dk.cst.corpus-probe.views.concordance), the frequency tables
-  (dk.cst.corpus-probe.views.frequency) and the corpus pages
-  (dk.cst.corpus-probe.views.corpus).
-
-  This is the one namespace that knows the whole set: the server renders
-  a request through `page` and titles it through `title`, and the client
-  renders its state through the same `page`, so a route cannot look one
-  way to a reader who waited for the document and another to one whose
-  client swapped it in.
-
-  A frequency table is not another page: it is the same search counted
-  rather than listed. So one page holds the query form and one results
-  region, and the `:view` of the application state decides which view of
-  the hits that region holds.
-
-  The frontpage and the glossary are prose rather than interface: the
-  hiccup of a Markdown document (see dk.cst.corpus-probe.docs), rendered
-  as it arrives.
-
-  No URL here names a language. Which language a reader wants is their own
-  preference, remembered for them, so the same URL serves either one and
-  a link can be shared without imposing the sharer's language on whoever
-  opens it."
+  "Every page the app serves, by route, its document title by the same
+  route, and the chrome every page shares: the bypass link, the masthead
+  with its navigation and language switch, and the footer. The server
+  renders a request through `page` and titles it through `title`; the
+  client renders its state through the same `page`."
   (:require [clojure.string :as str]
             [dk.cst.corpus-probe.hiccup :as hiccup]
             [dk.cst.corpus-probe.i18n :as i18n]
@@ -44,12 +17,9 @@
 
 (defn skip-link
   "The bypass link past the masthead to the page's own content, in
-  `ui`: the first focusable thing in the document, off screen
-  until a keyboard reaches it.
-
-  WCAG 2.4.1 asks for a mechanism past the blocks a page repeats, and the
-  masthead is one on every page here."
+  `ui`: the first focusable thing in the document."
   [ui]
+  ;; WCAG 2.4.1: a way past the blocks every page repeats
   [:a.skip {:href (str "#" widgets/main-id)} (i18n/tr ui "Skip to content")])
 
 (def language-names
@@ -61,27 +31,10 @@
 (defn language-switch
   "The language switch in `ui`: every supported language named in
   itself, the one in use as plain text and each other as a button that
-  stores it, submitting to dk.cst.corpus-probe.url/preferences and
-  returning to `path`.
-
-  The language in use is shown but is not a control, because choosing it
-  would do nothing and a control that can do nothing is one a reader has
-  to reason about; the others are controls, because choosing them does
-  something. So the switch says both what the page is in and what it could
-  be in. The one in use is marked current, which the stylesheet shows in
-  bold, as it shows the current page in the navigation beside it.
-
-  No visible name: a row of language names at the end of the masthead is
-  a language switch, and saying so would say what the row already says.
-  The form carries the name instead, so it is a named landmark for a
-  reader who cannot see the row.
-
-  A form rather than links, because the language a reader wants is their
-  preference rather than a property of the page they are on: the same URL
-  serves either language, and the choice is remembered for them. Each name
-  carries its own language, since none of them is in the language of the
-  page around it."
+  stores it, posted to the preferences URL and returning to `path`."
   [ui path]
+  ;; a form, not links: the language is a stored preference rather than
+  ;; a property of the page, and the same URL serves either one
   [:form.languages {:method     "post"
                     :action     url/preferences
                     :aria-label (i18n/tr ui "Language")}
@@ -89,6 +42,7 @@
    [:p (interpose
         " · "
         (for [code i18n/languages]
+          ;; the one in use is text, not a control that could do nothing
           (if (= code (:lang ui))
             [:span {:lang code :aria-current "true"} (language-names code)]
             [:button {:type  "submit"
@@ -117,32 +71,17 @@
     (name k)))
 
 (defn site-header
-  "The site masthead shared by every page, in `ui`: three
-  things with one role each. Who this is (the name, linking to the
-  frontpage), where a reader can go (the top-level navigation over `nav`,
-  each `nav-items` key to its URL, with `path`, the page being served,
-  marked as the current one), and how they want it (the language switch,
-  which returns to `path`).
-
-  What the app is, the masthead does not say: the frontpage does, and a
-  reader of a tool needs it once.
-
-  The nav's hrefs are given rather than built here, because the search
-  keeps its query across the masthead and only the handler knows what that
-  query is.
-
-  The site name is a paragraph, not a heading: it is the same string on
-  every page, so it names the site rather than the page, and each page's
-  own <h1> lives inside its <main>. Every link here carries the
-  site name included, so following one keeps the language the reader
-  chose."
+  "The site masthead shared by every page, in `ui`: the site name
+  linking home, the navigation over `nav` (each `nav-items` key to its
+  href, the page at `path` marked current) and the language switch
+  returning to `path`."
   [ui path nav]
   [:header.masthead
-   ;; the site's name is a link home and nothing else: HTML has no element
-   ;; for the name of a site, and what this actually is, is the way back to
-   ;; the frontpage. It keeps no query: the navigation beside it is what
-   ;; carries a search onward
+   ;; a link home, not a heading: HTML has no element for a site's name.
+   ;; It keeps no query; the navigation beside it carries a search onward
    [:a.sitename {:href url/home} "corpus-probe"]
+   ;; the hrefs come from the handler: the search keeps its query across
+   ;; the masthead, and only the handler knows what that query is
    [:nav.menu {:aria-label (i18n/tr ui "Site")}
     (widgets/link-row (for [[k p] nav-items] [p (get nav k p) (nav-label ui k)])
                       path)]
@@ -157,16 +96,10 @@
 
 (defn site-footer
   "The site's contentinfo in `ui`: what this is a front end for, whose it
-  is, and where its manual and its source are, in the order the row
-  shows them.
+  is, and where its manual and its source are.
 
-  All of it belongs here rather than in the masthead, where a credit and
-  a row of links would compete with the site's name and its navigation on
-  every page: a reader of a tool needs these once, and looks for them at
-  the foot. What the app is, it does not say: the frontpage does.
-
-  Rendered as a direct child of <body>, so it is the document's
-  contentinfo rather than a section footer inside the main content."
+  Belongs directly under <body>: inside <main> it would be a section
+  footer rather than the document's contentinfo."
   [ui]
   [:footer.footer
    [:p (i18n/tr ui "Powered by") " "
@@ -189,28 +122,10 @@
     nil)])
 
 (defn search-page
-  "The search page's main content from application `state`, in its
-  `:ui`: the query form (see dk.cst.corpus-probe.views.search/search-form,
-  carrying the `:view` as a hidden input so that a control applied from
-  one view answers in that view, and the corpus chooser over its
-  `:folders`, see dk.cst.corpus-probe.views.corpus/corpus-chooser, showing
-  what is chosen or everything there is to choose by what `:lists` holds
-  of it), the inspection panel while a token is `:selected`, and the
-  results region when the params described a search, the hits counted as
-  a frequency table or listed as a concordance by its `:view`, or the
-  `:help` (see dk.cst.corpus-probe.views.search/help) where they did not.
-
-  No heading of its own: a search landmark with a search button says
-  what it is, and a heading saying so again was one more thing between
-  the reader and the field. The results region heads the page once there
-  is an answer; until then the help stands there, and nothing heads the
-  page.
-
-  The form submits to the results fragment, so a search lands the reader
-  on its own answer rather than at the top of the form that asked for it.
-  The <main> is focusable so the bypass link can move the reader into it,
-  and classed for the wide layout, which marks it while the inspector is
-  open, since the panel takes the rail's column."
+  "The search page's main content from application `state`: the query
+  form with the corpus chooser over its `:folders`, the inspector while
+  a token is `:selected`, and the results region by `:view` once the
+  `:params` described a search, else the `:help`."
   [{:keys [ui view folders params lists result error selected client?]
     :as state}]
   (let [{:keys [corpora]} lists
@@ -222,19 +137,21 @@
                                    :selected corpus
                                    :held     (into corpus (:unticked corpora))
                                    :client?  client?))]
+    ;; no h1 of its own: the results region heads the page once there is
+    ;; an answer, and the search landmark says what the page is until then
     [:main.search-page (cond-> widgets/main-attrs
                          selected (assoc :class "inspecting"))
      ;; the form has to say which view it is being submitted from, or a
      ;; result regrouped from the frequency table comes back as a
-     ;; concordance: one page serves both, and only this says which
+     ;; concordance: one page serves both, and only this says which.
+     ;; It submits to the results fragment, so a search lands on its answer
      (search/search-form state (str url/search url/results-fragment)
                          (when (= :frequencies view)
                            [:input {:type  "hidden" :name "view"
                                     :value "frequencies"}])
                          chooser)
-     ;; the panel takes the form's column while it is open, so it sits next
-     ;; to the hits it describes; it comes before them in the document so
-     ;; reading order and visual order agree at every width
+     ;; before the hits in the document, so reading order and visual
+     ;; order agree; the panel takes the form's column while it is open
      (when client? (concordance/inspector ui selected))
      ;; the help stands where the answer will, until there is one: the
      ;; reader who has not searched yet is the one with room to read it
@@ -244,27 +161,18 @@
        :else                   (concordance/concordance-section state))]))
 
 (defn document-page
-  "The main content of a page that is a document, the frontpage or the
-  glossary: the `:body` of `data`, the hiccup of the document, whose own
-  first heading names the page, with the element the `fragment` of the
-  location names marked (see dk.cst.corpus-probe.hiccup/mark-target)."
+  "The main content of a document page, the frontpage or the glossary:
+  the `:body` of `data`, with the element `fragment` names marked."
   [{:keys [body]} fragment]
   [:main.document widgets/main-attrs (hiccup/mark-target fragment body)])
 
 (defn page
-  "The main content of the page `state` describes, by its `:route`; nil
-  for a route this app does not render.
-
-  The lookup context every view translates through is derived here from
-  the state's `:lang` and handed down as `:ui`, so the state itself
-  carries only the language code: it travels to the client as transit,
-  and the client already holds every table (see
-  dk.cst.corpus-probe.i18n).
-
-  The two corpus pages and the reading page take that context and their
-  own data, whose `:lang` is the corpus's rather than the interface's;
-  a document page needs neither."
+  "The main content of the page `state` describes, by its `:route`, the
+  `:ui` every view translates through derived from its `:lang`; nil for
+  a route this app does not render."
   [{:keys [route lang] :as state}]
+  ;; derived here rather than carried in the state, which travels to the
+  ;; client as transit; the client already holds every table
   (let [ui    (i18n/->ui lang)
         state (assoc state :ui ui)]
     (case route
@@ -277,22 +185,15 @@
 
 (defn page-title
   "The document title: the page-specific `parts` (most specific first,
-  blanks skipped) followed by the app name, so tabs and bookmarks are
-  meaningful."
+  blanks skipped) followed by the app name."
   [& parts]
   (str/join " · " (concat (remove str/blank? parts) ["corpus-probe"])))
 
 (defn search-title
-  "The document title of the search page for `params` in `ui`:
-  the query, how many hits it found (from `result`, when given), the
-  selected corpora (`:corpus`, a vector of names, when any), the metadata
-  filter the result was kept within and the page number when past the
-  first; just the app name when nothing was searched for.
-
-  The hit count is in the title because a full page reload announces the
-  title and nothing else, so the title is where the outcome of a search
-  first reaches a screen reader. It is left out when no corpus could be
-  searched, since then there is no count to report."
+  "The document title of the search page for `params` in `ui`: the
+  query, how many hits `result` found (when given), the corpora, the
+  metadata filter and the page number when past the first; the app name
+  alone when nothing was searched for."
   ([ui params]
    (search-title ui params nil))
   ([ui {:keys [corpus] :as params} result]
@@ -318,10 +219,7 @@
 (defn frequency-title
   "The document title of the frequency view for `params` in `ui`: what
   was counted, in which corpora, within the metadata filter of `result`,
-  and by what.
-
-  A frequency result counts values rather than hits, so it cannot borrow
-  the concordance's title: there is no hit count to report."
+  and by what."
   [ui {:keys [corpus attr by] :as params} result]
   (page-title (if (result/asked? params)
                 (result/query-phrase ui params)
@@ -349,12 +247,9 @@
   (some #(when (hiccup/heading? %) (hiccup/heading-text %)) blocks))
 
 (defn title
-  "The document title of the page `state` describes, by its `:route`, in
-  the language of its `:lang`: the search page by its `:view`, `:params`
-  and `:result` (see `result-title`), a document by its own first
-  heading, the corpus index by name, a corpus page by its corpus and the
-  reading page by its text and corpus, from its `:data`; the app name
-  alone for a route this app does not title."
+  "The document title of the page `state` describes, by its `:route` and
+  in the language of its `:lang`; the app name alone for a route this
+  app does not title."
   [{:keys [route lang view params result data] :as state}]
   (let [ui (i18n/->ui lang)]
     (case route

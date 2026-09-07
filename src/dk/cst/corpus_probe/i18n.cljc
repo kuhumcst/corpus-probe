@@ -1,26 +1,10 @@
 (ns dk.cst.corpus-probe.i18n
   "The Danish and English user interface: the gettext tables the views
-  render their strings through. The tables are read from the PO files
-  under resources/i18n by dk.cst.corpus-probe.i18n.po, and the template
-  a translator starts from is regenerated from the source by
-  dk.cst.corpus-probe.i18n.scan.
-
-  Every UI string is written in the source in English, and that English
-  is its own key, so a view reads as the sentence it renders and a
-  string no translation covers falls back to readable English rather
-  than to an identifier. The PO files are what Poedit and Weblate read
-  directly.
-
-  A `ui` is the context the lookups take: the chosen language and its
-  table. dk.cst.corpus-probe.views derives it once per render and
-  hands it down. The state itself carries only the language code: it
-  travels to the client as transit, and the client already holds every
-  table.
-
-  Only the interface is translated. CQP's own error messages, attribute
-  names, corpus titles and corpus content are shown verbatim, in their
-  own language. So are the TSV and CSV exports, whose column names are
-  CWB's own and are read by other programs."
+  render their strings through, read from the PO files under
+  resources/i18n. Every UI string is written in the source in English,
+  which is its own key, so a string no translation covers falls back to
+  readable English. Only the interface is translated: corpus content,
+  CQP's messages and the exports' column names are shown as they are."
   (:require [clojure.string :as str]
             #?(:clj [dk.cst.corpus-probe.i18n.po :as po]))
   #?(:cljs (:require-macros
@@ -62,12 +46,9 @@
 
 (defn fill
   "`s` with each `{key}` in it replaced by the value under that key in
-  `values`: what a translated string takes after lookup, so that a
-  translator can put the value where their language wants it. A value
-  goes in as it is, so a number that wants its digits grouped is
-  formatted by the caller (see `group-digits`); a key the map lacks is
-  left as it stands, which is what a translation with a key of its own
-  shows.
+  `values`, a key the map lacks left as it stands; a value goes in as it
+  is, so a number that wants its digits grouped is formatted first (see
+  `group-digits`).
 
   (fill \"token {n}\" {:n 2})
   ;; => \"token 2\""
@@ -90,35 +71,25 @@
 
 (defn trx
   "The translation of English UI string `s` in the disambiguating
-  `context` under `ui`, or `s` itself.
-
-  gettext's answer to one English word that several languages split.
-  The context is part of the msgid, `context|string`, because the PO
-  reader has no msgctxt; it never reaches the page, the fallback being
-  `s` alone.
+  `context` under `ui`, or `s` itself: gettext's answer to one English
+  word that several languages split.
 
   (trx (->ui \"da\") \"button\" \"Search\")
   ;; => \"Søg\"   (the button; the page heading is \"Søgning\")"
   [ui context s]
+  ;; the context is part of the msgid, the PO reader having no msgctxt
   (get (:table ui) (str context "|" s) s))
 
 (defn trn
   "The translation of English singular `s1` or plural `s2` for the
-  count `n` under `ui`.
-
-  The two are one gettext entry, so which form a count takes is the
-  translator's to state rather than the view's. The rule here is the
-  one Danish and English share: one is singular, everything else is
-  plural. A language that divides them otherwise needs its rule added,
-  and a PO reader that keeps more than two forms.
-
-  The count may stand in the string itself, as `{n}`, filled from
-  `values` when given (see `fill`).
+  count `n` under `ui`, its `{n}` filled from `values` when given.
 
   (trn (->ui \"da\") \"region\" \"regions\" 2)
   ;; => \"regioner\""
   ([ui s1 s2 n]
    (let [[one many] (get (:table ui) [s1 s2] [s1 s2])]
+     ;; the rule Danish and English share; a language dividing them
+     ;; otherwise needs its own, and a PO reader keeping more forms
      (if (= 1 n) one many)))
   ;; the lookup again rather than `(trn ui s1 s2 n)`, as in `tr`
   ([ui s1 s2 n values]
@@ -127,19 +98,15 @@
 
 (def number-formats
   "How each language writes a number: its thousands and decimal
-  separators, which Danish and English swap.
-
-  Not translations. A msgid of `.` says nothing to a translator, and
-  the two languages would give the PO file two entries that differ in
-  nothing a human could read."
+  separators, which Danish and English swap. Not translations, since a
+  msgid of `.` says nothing to a translator."
   {"da" {:group "." :decimal ","}
    "en" {:group "," :decimal "."}})
 
 (defn fixed
   "Number `n` written with `decimals` digits after the point, whatever
   the platform: a JVM double prints its .0 and a JavaScript number does
-  not, so a rate of a whole number would read as a count in the
-  browser and as a rate on the server."
+  not."
   [n decimals]
   #?(:clj  (.toPlainString (.setScale (bigdec n) (int decimals)
                                       java.math.RoundingMode/HALF_UP))
@@ -147,22 +114,12 @@
 
 (defn group-digits
   "Write number `n` the way `ui`'s language writes it: its digits
-  grouped in thousands, its fraction (when it has one) after the
-  decimal separator, and with exactly `decimals` digits of it when
-  given (see `fixed`); nil for nil, so a statistic that could not be
-  computed shows as nothing.
-
-  Danish and English swap the two separators, so a rate beside a
-  grouped count is ambiguous unless both follow the same language.
-
-  (group-digits (->ui \"da\") 64600000)
-  ;; => \"64.600.000\"
+  grouped in thousands, its fraction after the decimal separator, with
+  exactly `decimals` digits of it when given (see `fixed`); nil for nil,
+  so a statistic that could not be computed shows as nothing.
 
   (group-digits (->ui \"da\") 1234.5)
-  ;; => \"1.234,5\"
-
-  (group-digits (->ui \"en\") 1234 1)
-  ;; => \"1,234.0\""
+  ;; => \"1.234,5\""
   ([ui n]
    (group-digits ui n nil))
   ([{:keys [lang] :as ui} n decimals]

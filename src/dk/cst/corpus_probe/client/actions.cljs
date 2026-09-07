@@ -1,9 +1,6 @@
 (ns dk.cst.corpus-probe.client.actions
-  "The pure step of the client: `act` takes the state and an action, the
-  vector a view dispatched with its placeholders filled in (see
-  dk.cst.corpus-probe.client/dispatch!) or one an effect dispatched as
-  something arrived, and answers with the state to keep and the effects
-  to run (see dk.cst.corpus-probe.client.effects/perform!). Nothing here
+  "The pure step of the client: `act` takes the state and an action and
+  answers with the state to keep and the effects to run. Nothing here
   touches the document, a timer, the network or the history."
   (:require [dk.cst.corpus-probe.client.lists :as lists]
             [dk.cst.corpus-probe.client.router :as router]
@@ -31,11 +28,9 @@
 (defn cursor-rows
   "Every row the cursor can visit in `state`, in the order they are read:
   each hit's own row and, beneath it, its wider context while one is
-  showing.
-
-  A row is {:key <hit-key> :hit <the hit holding its tokens> :from <the
-  index its first token carries>}. An expanded row numbers its tokens past
-  the row it expands, so one index names one token across both."
+  showing, as {:key hit-key :hit hit :from index-of-first-token}; an
+  expanded row numbers its tokens past the row it expands, so one index
+  names one token across both."
   [state]
   (let [expanded (:expanded state)]
     (mapcat (fn [hit]
@@ -57,14 +52,11 @@
       0))
 
 (defn step-cursor
-  "The cursor moved `[rows tokens]` through `rows*` (see `cursor-rows`).
-
-  Along a row the cursor stops at its ends rather than wrapping. Between
-  rows it keeps its distance from the match rather than its column, so
-  stepping into a hit's wider context lands on the word the cursor was
-  already on and stepping out lands back where it came from. Rows hold
-  different amounts of text, so an offset only the wider one has is
-  answered with its nearest token."
+  "The cursor moved `[rows tokens]` through `rows*` (see `cursor-rows`):
+  along a row it stops at its ends rather than wrapping; between rows it
+  keeps its distance from the match rather than its column, so stepping
+  into a hit's wider context lands on the word the cursor was on, or its
+  nearest token where the rows differ."
   [rows* cursor [rows tokens]]
   (let [at   (row-at rows* cursor)
         here (nth rows* at)
@@ -88,11 +80,8 @@
 (defn move-cursor
   "Answer key `pressed` on the token at cursor `k` in `state`: an arrow
   moves the cursor and focus with it, Home and End go to the ends of the
-  row the cursor is in, and Escape closes the panel.
-
-  The concordance is one tab stop with a cursor inside it, so the arrow
-  keys have to be handled here; the browser has no meaning of its own for
-  them on a button, which is why each is consumed."
+  row the cursor is in, and Escape closes the panel; each consumed, since
+  the concordance is one tab stop with a cursor inside it."
   [state k pressed]
   (let [rows (cursor-rows state)
         move (fn [cursor]
@@ -124,18 +113,12 @@
 
 (defn close
   "Dismiss the inspection panel of `state` from its own button and leave
-  focus in the concordance it describes, rather than on a token.
-
-  Focus cannot go back to a token: the panel follows focus, so focusing
-  one would open the panel again, which is what closing it from any token
-  but the cursor's used to do. It cannot stay where it is either, since
-  the button it is on is about to stop existing. So it goes to the
-  concordance itself, which is focusable because it scrolls, and a tab
-  from there reaches the cursor again. Found by its own id rather than by
-  the class the stylesheet uses, so renaming a style hook cannot quietly
-  leave focus on the body."
+  focus in the concordance it describes, rather than on a token."
   [state]
   {:state   (dissoc state :selected)
+   ;; not a token, whose focus would open the panel again, and not the
+   ;; button, which is about to go: the region, focusable since it
+   ;; scrolls, from where a tab reaches the cursor again
    :effects [[:focus concordance/region-id]]})
 
 (defn collapse
@@ -146,25 +129,21 @@
 
 (defn toggle-context
   "Expand `hit` in `state`, fetching its wider context, or collapse it
-  when it is expanded; the URL follows either way.
-
-  The loading placeholder is committed at once, so the toggle and the URL
-  reflect the click before the fetch answers and a second click does not
-  fetch twice."
+  when it is expanded; the URL follows either way."
   [state {:keys [corpus cpos matchend] :as hit}]
   (let [k (concordance/hit-key hit)]
     (if (contains? (:expanded state) k)
       {:state   (update state :expanded dissoc k)
        :effects [[:sync-url]]}
+      ;; the placeholder at once, so a second click does not fetch twice
       {:state   (assoc-in state [:expanded k] concordance/loading)
        :effects [[:fetch-context corpus cpos matchend] [:sync-url]]})))
 
 (defn context-arrived
   "`state` with `hit`, the wider context fetched for the hit keyed `k`,
-  in the expanded set, if it is still wanted there; a hit the reader
-  collapsed while the fetch was in flight, or an empty answer, collapses
-  the entry again, so a late response never revives a hit the reader
-  dismissed."
+  in the expanded set if it is still wanted there; a hit collapsed while
+  the fetch was in flight, or an empty answer, collapses the entry
+  again, so a late response never revives a dismissed hit."
   [state k hit]
   (if (and hit (contains? (:expanded state) k))
     {:state (assoc-in state [:expanded k] hit)}
@@ -260,41 +239,26 @@
   (update-in state [:tokens (dec i)] with-field field value))
 
 (defn switch-mode
-  "`state` with the form of its query changed to `mode` (see
-  dk.cst.corpus-probe.query.mode/forms) from the form's fields `live`,
-  holding in the new form as much of the query the old one holds as it
-  can, as the server does for a submitted form (see
-  dk.cst.corpus-probe.query/project and /loss), and saying the rest in
-  the form's status line.
-
-  The old form is read as it stands, not as it was served, so a word
-  typed or an option changed since the last search comes along. The
-  field's text seeds the tokens, read by its shape, and the tokens are
-  handed to the field as CQP. What the old form reads is replaced by
-  the new form's spelling of what it holds (see
-  dk.cst.corpus-probe.query/->params); what neither reads stays in the
-  params as memory.
-
-  Switching away and back loses nothing while nothing was edited: what
-  the form the last switch left held is `:remembered`, its params and
-  its token rows, and the query the switch handed the reader
-  `:projected`; a form still holding that projection gets the
-  remembered form back as it was, so that the words a reader typed come
-  back as those words and not as the CQP the tokens are, and every
-  token comes back from the field.
-
-  The result on screen is left as it is: it answers what was asked (see
-  dk.cst.corpus-probe.views.concordance/concordance-section), and the
-  form has moved on."
+  "`state` with the form of its query changed to `mode` from the form's
+  fields `live`, holding in the new form as much of the query the old
+  one holds as it can, as the server does for a submitted form (see
+  dk.cst.corpus-probe.query/arrived), and saying the rest in the form's
+  status line. Switching away and back loses nothing while nothing was
+  edited: the form the last switch left is `:remembered`."
   [{:keys [params tokens remembered projected] :as state} mode live]
   (let [from    (mode/form params)
+        ;; as the form stands, not as it was served: a word typed since
+        ;; the last search comes along
         typed   (query/of (assoc live :mode from))
+        ;; a form still holding what the last switch handed it gets the
+        ;; form that switch left back as it was, words as words
         back?   (and (= typed projected) (= mode (:form remembered)))
         target  (if (= "extended" mode) mode "cqp")
         held    (when-not back? (query/project target typed))
         spelt   (if back?
                   (:params remembered)
                   (query/->params target held))
+        ;; what neither form reads stays in the params as memory
         memory  (-> (apply dissoc params (mode/read-keys from params))
                     (merge (select-keys live
                                         (filter mode/query-key? (keys live)))))]
@@ -317,14 +281,11 @@
 
 (defn submit-on-enter
   "`state` as it is, and the search submitted from the query field when
-  `pressed` is Enter and neither `shift?` nor `composing?`.
-
-  The field is a text area, so that a list can be typed one word per
-  line, and a text area takes Enter as a line; a search box takes it as a
-  submit, which is what a reader pressing it after a word expects. So
-  Enter submits and a line is Shift+Enter, as the chat boxes have it; not
-  while an input method is composing, when Enter commits the
-  composition."
+  `pressed` is Enter and neither `shift?` nor `composing?`: the field is
+  a text area, which takes Enter as a line, where a reader pressing it
+  after a word expects a submit; so a line is Shift+Enter, as the chat
+  boxes have it, and Enter commits the composition while an input method
+  is composing."
   [state pressed shift? composing?]
   (if (and (= "Enter" pressed) (not shift?) (not composing?))
     {:state state :effects [[:prevent-default] [:resubmit url/form-id]]}
@@ -341,13 +302,9 @@
 (defn toggle-corpora
   "`state` with every corpus in `ids` selected, or all of them cleared
   when they are already selected, the change noted for the chooser (see
-  dk.cst.corpus-probe.client.lists/tick), and the metadata filters asked
-  to refresh.
-
-  One rule serves a single corpus and a whole folder alike: a box that is
-  on turns off, and a folder that is wholly selected clears, while a
-  folder that is only partly selected fills rather than clearing the part
-  of it the reader already had."
+  dk.cst.corpus-probe.client.lists/tick) and the metadata filters asked
+  to refresh: one rule for a corpus and a folder, so a folder only partly
+  selected fills rather than clearing the part the reader already had."
   [state ids]
   (let [corpus     (get-in state [:params :corpus])
         unticking? (every? (set corpus) ids)]
@@ -360,7 +317,7 @@
 (defn toggle-filter-values
   "`state` with the metadata `values` of `attr` chosen or dropped (see
   dk.cst.corpus-probe.client.lists/choose-values), the change noted for
-  the filter's list (see dk.cst.corpus-probe.client.lists/tick)."
+  the filter's list."
   [state attr values]
   (let [chosen (set (get-in state [:filter-controls :selected attr]))]
     (-> state
@@ -371,8 +328,7 @@
 
 (defn clear-filter
   "`state` with the whole metadata filter emptied, every value it held
-  noted as unticked for the filter's list (see
-  dk.cst.corpus-probe.client.lists/tick)."
+  noted as unticked for the filter's list."
   [state]
   (-> state
       (assoc-in [:filter-controls :selected] {})
@@ -383,17 +339,16 @@
 (defn refreshed
   "`state` as the step's answer, with the metadata filters asked to
   refresh when the list `k` worked is the metadata filter: what metadata
-  a selection offers is the server's to say, so it is fetched rather
-  than known, and only once a reader looks at it (see
-  dk.cst.corpus-probe.client.lists/filters-stale?)."
+  a selection offers is fetched rather than known, and only once a
+  reader looks at it."
   [k state]
   (cond-> {:state state}
     (= :values k) (assoc :effects [[:refresh-filters]])))
 
 (defn filters-due
   "Fetch the metadata filters the selection of `state` now offers, when
-  what is on screen does not describe it and the reader is looking (see
-  dk.cst.corpus-probe.client.lists/filters-stale?); nothing otherwise."
+  they are stale (see dk.cst.corpus-probe.client.lists/filters-stale?);
+  nothing otherwise."
   [state]
   (if (lists/filters-stale? state)
     {:state   (assoc state :filters-pending? true)
@@ -402,17 +357,10 @@
 
 (defn filters-arrived
   "`state` with `options`, the metadata filters fetched for `corpora`,
-  applied while they still describe the selection, keeping whatever
-  values the reader has already chosen.
-
-  Only `:attrs` and `:unlisted` are replaced. `:selected` is the reader's,
-  and a chosen value the new corpora do not offer keeps its checkbox (see
-  dk.cst.corpus-probe.views.search.filter/filter-fieldset), so narrowing
-  a selection never quietly drops part of a filter.
-
-  Applied only while the answer still describes the selection, so a slow
-  answer to a question the reader has moved on from is dropped rather
-  than overwriting the answer to the one they are asking now."
+  applied while they still describe the selection, so that a slow answer
+  to a question the reader has moved on from does not overwrite the
+  answer to the one they are asking now; `:selected` is the reader's and
+  is kept, a chosen value the new corpora do not offer keeping its box."
   [state corpora options]
   (cond-> (assoc state :filters-pending? false)
     (= corpora (lists/chosen-corpora state))
@@ -424,9 +372,8 @@
           (lists/settle :values)))))
 
 (defn counts-arrived
-  "`state` with `counted`, the count of the search on screen: the counts,
-  the size and the number of pages of the result, the page links and the
-  document title, all of which the count decides."
+  "`state` with `counted`, the count of the search on screen, and the
+  document title it decides."
   [state counted]
   {:state   (-> state
                 (update :result #(-> (merge % (select-keys counted
@@ -444,10 +391,8 @@
     (filter (comp wanted concordance/hit-key) (get-in data [:result :hits]))))
 
 (defn with-expansions
-  "`data` with the hits keyed in `wanted` seeded as loading placeholders
-  (see dk.cst.corpus-probe.views.concordance/loading), which the fetch
-  of the expansions reads (see
-  dk.cst.corpus-probe.client.effects/fetch-expansions!)."
+  "`data` with the hits keyed in `wanted` seeded as loading placeholders,
+  which the fetch of the expansions reads."
   [data wanted]
   (let [hits (wanted-hits data wanted)]
     (cond-> data
@@ -461,12 +406,8 @@
 (defn data->state
   "Server `data` as the state this client renders from at the absolute
   `href` it arrived at: marked as the client's, seeded with the
-  expansions the URL names, and with each list at rest.
-
-  The lists start at rest: what the chooser and the metadata filter show
-  of a served page is what the search read, and nothing opens or shuts
-  under the reader's hands from there (see
-  dk.cst.corpus-probe.client.lists/lists)."
+  expansions the URL names, and with each list at rest, since what a
+  served page shows of the two lists is what the search read."
   [data href]
   (let [url (js/URL. href)]
     (-> data
@@ -491,12 +432,7 @@
 
 (defn page-arrived
   "The state of the page `data` fetched from `href` and the effects of
-  arriving on it: its address in the history when `push?` (see
-  dk.cst.corpus-probe.client.router/cited-href), the document's title and
-  language, the URL mirrored and the page recorded as shown, the
-  expansions the URL names fetched, the count fetched while the result is
-  still being counted, and the reader landed (see
-  dk.cst.corpus-probe.client.effects/land!)."
+  arriving on it, its address pushed onto the history when `push?`."
   [data href push?]
   (let [cited (router/cited-href href)]
     {:state   (data->state data cited)
@@ -512,39 +448,8 @@
   "The state to keep and the effects to run, `{:state state' :effects
   [...]}`, for `action` on `state`: `[kind & args]`, a view's action with
   its placeholders filled in or one an effect dispatched; nil for a kind
-  nothing here answers.
-
-  `:inspect` fires on focus as well as on click, so the panel describes
-  whatever the cursor is on rather than waiting for a press.
-  `:move-cursor` answers a key pressed on a token, `:leave-concordance`
-  closes the panel once focus has gone elsewhere, and `:close` dismisses
-  it from its own button. `:toggle-context` expands a hit or collapses
-  it. `:set-mode` changes the form of the query to the one the reader
-  picked (see `switch-mode`); `:submit-on-enter` makes Enter in the
-  field a submit. `:apply-view` submits the search again with a result
-  control as it now stands, so choosing an order is asking for it.
-  `:add-token`, `:remove-token`, `:add-condition` and `:remove-condition`
-  edit the extended search, moving focus with them; `:set-condition` and
-  `:set-token` record a field as the reader sets it, so the CQP line
-  under the tokens follows (see dk.cst.corpus-probe.views.search/cqp-line);
-  `:set-query` records the query field likewise, so the answer can tell
-  when the form has moved on from what ran (see
-  dk.cst.corpus-probe.views.result/question). `:toggle-corpora`,
-  `:toggle-filter-values` and `:clear-filter` record the boxes of the two
-  lists, so that each list counts what its boxes say rather than what
-  the last search asked; `:engage`, `:toggle-open`, `:filter` and
-  `:leave` work the lists themselves (see
-  dk.cst.corpus-probe.client.lists), and `:swallow-enter` keeps Enter in
-  either box from submitting the search. `:set-validity` and
-  `:set-checkbox-state` are render hooks and never come this way (see
-  dk.cst.corpus-probe.client/dispatch!). The rest are what the world
-  answered: a context, the filters, a count, a page, the fragment; and
-  `:navigate` and `:set-preference` are the document listeners' asks,
-  which are effects.
-
-  Re-rendering the form does not disturb what the reader has typed: the
-  query field's value is the same in both renders, so Replicant leaves
-  the element alone."
+  nothing here answers. The render hooks never come this way (see
+  dk.cst.corpus-probe.client/dispatch!)."
   [state [kind x y z]]
   (case kind
     :set-mode             {:state (switch-mode state x y)}
@@ -552,6 +457,9 @@
     :remove-token         (remove-token state x)
     :add-condition        (add-condition state x)
     :remove-condition     (let [[i id] x] (remove-condition state i id))
+    ;; so the answer can tell when the form has moved on from what ran;
+    ;; the field keeps what was typed, since Replicant leaves an
+    ;; unchanged value alone
     :set-query            {:state (assoc-in state [:params :q] x)}
     :submit-on-enter      (submit-on-enter state x y z)
     :set-condition        {:state (set-condition state x y)}
@@ -566,6 +474,7 @@
     :filter               {:state (lists/apply-filter state x y)}
     :leave                {:state (cond-> state y (lists/leave x))}
     :swallow-enter        (swallow-enter state x)
+    ;; on focus as well as on click, so the panel follows the cursor
     :inspect              {:state (inspect state x)}
     :close                (close state)
     :move-cursor          (move-cursor state x y)

@@ -1,15 +1,9 @@
 (ns dk.cst.corpus-probe.client.router
   "Where the client is and what it takes over: the location readers, the
   rule for which links and submits stay inside the app, and the document
-  listeners, which only dispatch.
-
-  Every route the server renders it also serves as transit, from the same
-  handler, so the two can never describe different pages. A link click or
-  a GET submit is fetched as data (see
-  dk.cst.corpus-probe.client.effects/navigate!), rendered through the same
-  .cljc views, and pushed onto the history; anything that fails falls
-  back to a real navigation, which works because the server still renders
-  every page in full."
+  listeners, which only dispatch. Every route the server renders it also
+  serves as transit, so a link or a GET submit is fetched as data, and
+  anything that fails falls back to a real navigation."
   (:require [clojure.string :as str]
             [dk.cst.corpus-probe.url :as url]))
 
@@ -77,10 +71,8 @@
 
 (defn cited-href
   "Absolute `href` as the history should hold it: without the results
-  fragment, which tells a browser where to land and a reader nothing, and
-  which the client lands without (see
-  dk.cst.corpus-probe.client.effects/land!). Any other fragment is a
-  place in the page and stays."
+  fragment, which tells a browser where to land and a reader nothing;
+  any other fragment is a place in the page and stays."
   [href]
   (let [url (js/URL. href)]
     (when (= url/results-fragment (.-hash url))
@@ -89,10 +81,9 @@
 
 (defn landed-href
   "The address a routed navigation to absolute `href` lands on when its
-  answer came from `landed`: that address, which is elsewhere after a
-  redirect, with the fragment of `href`, which a fetch never sends and a
-  browser keeps across a redirect. `href` itself when the answer names
-  no address."
+  answer came from `landed`: that address, elsewhere after a redirect,
+  with the fragment of `href`, which a fetch never sends; `href` itself
+  when the answer names no address."
   [href landed]
   (if (seq landed)
     (let [url (js/URL. landed)]
@@ -101,10 +92,9 @@
     href))
 
 (def routable-paths
-  "The paths the client renders itself. Anything else stays the browser's
-  business: an export is a download rather than a page, and fetching one
-  as data would run the search a second time and then hand the reader
-  nothing."
+  "The paths the client renders itself. Anything else stays the browser's:
+  an export is a download, and fetching one as data would run the search
+  a second time and hand the reader nothing."
   #{url/home url/search url/corpora url/glossary url/cqp-guide})
 
 (defn routable?
@@ -116,8 +106,8 @@
 
 (defn in-page?
   "True when `url` names a place in the page the reader is on: an anchor
-  the browser should follow itself, as it does the bypass link, rather
-  than the page being fetched again to arrive where it already is."
+  the browser should follow itself rather than the page being fetched
+  again."
   [url]
   (and (seq (.-hash url))
        (= (.-pathname url) js/location.pathname)
@@ -148,8 +138,8 @@
 
 (defn submit-query-string
   "The query string of a submit of `form`, as the URL cites it (see
-  dk.cst.corpus-probe.url/canonical): the browser's own rules for what a
-  form submits, less empty fields and defaults, which say nothing."
+  dk.cst.corpus-probe.url/canonical): what the browser would submit, less
+  what says nothing."
   [form]
   (url/query-string (url/canonical (form-params form)
                                    (selectable-corpora form))))
@@ -171,25 +161,11 @@
 
 (defn listen!
   "Install the document's listeners, which only dispatch through
-  `dispatch!`: a click on a link this app renders itself (see `routed?`)
-  and a submit to its own origin are `[:navigate href true]`, the
-  language switch's submit `[:set-preference k v]`, a popstate to
+  `dispatch!`: a routed link click or submit `[:navigate href true]`,
+  the language switch's submit `[:set-preference k v]`, a popstate to
   another page `[:navigate href false]`, a hashchange `[:set-fragment
-  fragment]`, and a press outside the fieldset of any of the lists `ks`
-  `[:leave k true]` (see dk.cst.corpus-probe.client.lists/leave).
-
-  A fragment navigation fires popstate too, and the page it is within is
-  already on screen (see `shown`): the browser has moved to the place
-  itself, as it does for the bypass link, and fetching the page again
-  would only take the reader somewhere else.
-
-  The press outside a list is the one gesture no element of its fieldset
-  can hear, and the one a reader makes to go on to something else. A
-  press rather than a click, so that a drag begun elsewhere counts, and a
-  press rather than focus, since a label, a summary's words and the page
-  around them take no focus, and on Safari neither does a box. The
-  fieldset is named for its list in a data attribute (see
-  dk.cst.corpus-probe.views.chooser/fieldset)."
+  fragment]` and a press outside the fieldset of any of the lists `ks`
+  `[:leave k true]`."
   [dispatch! ks]
   (.addEventListener
    js/document "click"
@@ -217,6 +193,9 @@
          (routed-submit? form)
          (do (.preventDefault e)
              (dispatch! [:navigate (submit-href form) true]))))))
+  ;; a fragment navigation fires popstate too, and the browser has moved
+  ;; to the place itself: fetching the page again would only move the
+  ;; reader elsewhere
   (.addEventListener js/window "popstate"
                      (fn [_]
                        (when (not= (page-key) @shown)
@@ -226,6 +205,9 @@
   (.addEventListener js/window "hashchange"
                      (fn [_]
                        (dispatch! [:set-fragment (fragment (current-url))])))
+  ;; a press rather than a click, so that a drag begun elsewhere counts,
+  ;; and rather than focus, which a label, a summary and the page take
+  ;; none of, nor on Safari a box
   (.addEventListener
    js/document "pointerdown"
    (fn [e]

@@ -10,9 +10,7 @@
 
 (defn attribute-label
   "What the positional attribute named `attr` is called in `ui`: the
-  usual ones in the reader's words, since they stand in a sentence (see
-  dk.cst.corpus-probe.views.search/matching-fieldset), any other as its
-  corpus names it."
+  usual ones in the reader's words, any other as its corpus names it."
   [ui attr]
   (case attr
     "word"  (i18n/trx ui "attribute" "word")
@@ -24,22 +22,20 @@
 (defn attribute-options
   "The options of a select over the positional `attrs` (attribute
   keywords, word first) with `selected` (a string, word when blank)
-  chosen, each called as `ui` calls it (see `attribute-label`).
-
-  An attribute the list lacks is offered after them, so a hand-written
-  URL shows what it searches rather than something else."
+  chosen, each called as `ui` calls it."
   [ui attrs selected]
   (let [selected (if (str/blank? selected) "word" selected)
         names    (map name attrs)
+        ;; an attribute the list lacks is offered too, so a hand-written
+        ;; URL shows what it searches rather than something else
         offered  (cond-> names
                    (not (some #{selected} names)) (concat [selected]))]
     (for [n offered]
       (widgets/option selected n (attribute-label ui n)))))
 
 (defn operator-label
-  "What the operator `op` of an extended-search token is called, in `ui`
-  (see dk.cst.corpus-probe.query.tokens/operators); equality for one it
-  does not know."
+  "What the operator `op` of an extended-search token is called, in `ui`;
+  equality for one it does not know."
   [ui op]
   (case op
     "not"       (i18n/tr ui "is not")
@@ -53,16 +49,14 @@
 
 (defn value-list-id
   "The id of the datalist holding the values of positional attribute
-  `attr` (a keyword or its name), which a value field offers as
-  suggestions (see `token-fieldset`)."
+  `attr` (a keyword or its name)."
   [attr]
   (str "values-" (name attr)))
 
 (defn join-select
   "The select saying how condition `c` of `token` (its facts, see
-  `condition-row`) joins the ones before it, in `ui`: and or or, from
-  the :join of `condition`, and when it names none; dead under the
-  token's `:any?`."
+  `condition-row`) joins the ones before it, in `ui`: the :join of
+  `condition`, and when it names none; dead under the token's `:any?`."
   [ui {:keys [i any?]} c {:keys [id join]}]
   [:select.condition-join
    {:name       (tokens/token-key i c :join)
@@ -77,8 +71,7 @@
 (defn attribute-select
   "The select choosing which positional attribute condition `c` of
   `token` (its facts, see `condition-row`) names, in `ui`: the token's
-  `:attrs` (see `attribute-options`) with the :attr of `condition`
-  chosen; dead under the token's `:any?`."
+  `:attrs` with the :attr of `condition` chosen; dead under `:any?`."
   [ui {:keys [i attrs any?]} c {:keys [id attr]}]
   [:select {:name       (tokens/token-key i c :attr)
             :aria-label (i18n/tr ui "attribute")
@@ -89,9 +82,8 @@
 
 (defn operator-select
   "The select choosing the operator of condition `c` of `token` (its
-  facts, see `condition-row`), in `ui`: the operators (see
-  `operator-label`) with the :op of `condition` chosen, equality when it
-  names none, and any word offered to a token's first condition alone,
+  facts, see `condition-row`), in `ui`: the :op of `condition`, equality
+  when it names none, any word offered to the first condition alone,
   which under the token's `:any?` is the one live control."
   [ui {:keys [i any?]} c {:keys [id op]}]
   (let [first? (= 1 c)]
@@ -104,11 +96,10 @@
        (widgets/option (or op "is") o (operator-label ui o)))]))
 
 (defn value-field
-  "The field holding the value of condition `c` of `token` (its facts,
-  see `condition-row`), in `ui`: the :v of `condition`, required when
-  `required?`, suggesting the values the token's `:value-lists` hold
-  for the condition's :attr (see `value-list-id`); dead under the
-  token's `:any?`."
+  "The field holding the :v of `condition`, condition `c` of `token`
+  (its facts, see `condition-row`), in `ui`, `required?` or not,
+  suggesting the values the token's `:value-lists` hold for its :attr;
+  dead under `:any?`."
   [ui {:keys [i value-lists any?]} required? c {:keys [id attr v]}]
   (let [attr* (keyword (if (str/blank? attr) "word" attr))]
     [:input.condition-value
@@ -128,7 +119,7 @@
 (defn case-box
   "The box asking condition `c` of `token` (its facts, see
   `condition-row`) to ignore case, in `ui`, ticked when `condition` has
-  a :ci; dead under the token's `:any?`."
+  a :ci; dead under `:any?`."
   [ui {:keys [i any?]} c {:keys [id ci]}]
   [:label [:input {:type     "checkbox" :name (tokens/token-key i c :ci)
                    :value    "on"
@@ -143,24 +134,9 @@
   from one, holding `condition` (see
   dk.cst.corpus-probe.query.tokens/form-tokens), of `token`, the facts of
   the token it belongs to: its number `:i`, the `:attrs` a condition may
-  name (see `attribute-options`), the `:value-lists` some of them offer
-  (see `value-list-id`), `:any?` when the token's first condition
-  matches any word, and `:removable?` when a button may take the
-  condition away. The attribute, the operator, the value and the
-  ignore-case box (see `attribute-select`, `operator-select`,
-  `value-field` and `case-box`), headed by how it joins the conditions
-  before it when it is not the first (see `join-select`).
-
-  Its fields carry the token's number and, after the first, its own
-  (see dk.cst.corpus-probe.query.tokens/token-key). The value is required
-  when `required?`. Under `:any?` every control but that first operator
-  is disabled: an any-word token has nothing else to say, and without
-  the client they are as the search was submitted. Every control
-  dispatches `:set-condition` with its field, so the state holds the
-  condition as the reader has it: the operator and the attribute decide
-  which controls are live and which values the field suggests, and all
-  of them decide the CQP line under the tokens (see
-  dk.cst.corpus-probe.views.search/cqp-line)."
+  name, the `:value-lists` some of them offer, `:any?` when the token's
+  first condition matches any word, and `:removable?` when a button may
+  take the condition away. The value is `required?` or not."
   [ui {:keys [i removable?] :as token} required? c {:keys [id] :as condition}]
   [:li.condition (cond-> {:replicant/key id}
                    removable? (assoc :class "removable"))
@@ -183,9 +159,9 @@
 
 (defn repeat-fields
   "The repeat of token `i` of the extended search in `ui`: at least `lo`
-  and at most `hi` times, once each when nil, in a group named for what
-  the pair is, since the second number is labelled only to."
+  and at most `hi` times, once each when nil."
   [ui i lo hi]
+  ;; a named group: the second field's own label is only "to"
   [:span.token-repeat {:role "group" :aria-label (i18n/tr ui "repeat")}
    [:label (i18n/tr ui "repeat") " "
     [:input {:type "number" :name (tokens/token-key i 1 :min) :value (or lo "1")
@@ -219,10 +195,9 @@
     (i18n/tr ui "sentence end")]))
 
 (defn token-actions
-  "The buttons of token `i` of the extended search, with `id`, on a row
-  of their own so they stay together, in `ui`: one adding a condition,
-  dead under `any?`, since an any-word token has nothing else to say,
-  and one taking the token away."
+  "The buttons of token `i` of the extended search, with `id`, in `ui`:
+  one adding a condition, dead under `any?`, since an any-word token has
+  nothing else to say, and one taking the token away."
   [ui i id any?]
   [:p.token-actions
    [:button {:type     "button"
@@ -237,20 +212,10 @@
 
 (defn token-box
   "One token of the extended search in `ui`: token `i`, counted from
-  one, which is the number its fields carry in the URL, holding `token`
-  (see dk.cst.corpus-probe.query.tokens/form-tokens) over `attrs` and
-  `value-lists` (see `condition-row`). A group of its own, named by
-  number: its conditions as an ordered list, since each joins the ones
-  before it, then the repeat (see `repeat-fields`) and the edges (see
-  `edge-boxes`), and, where `client?`, the buttons adding a condition
-  and taking the token away (see `token-actions`). The repeat and the
-  edges dispatch `:set-token` with their field, as the conditions'
-  controls do theirs.
-
-  The first condition's value is required when `required?`; the others'
-  only where the client runs, which is where a condition is added, so a
-  reader without it can empty a condition to be rid of it. A condition
-  can be taken away while the token has another."
+  one, holding `token` (see dk.cst.corpus-probe.query.tokens/form-tokens)
+  over `attrs` and `value-lists`, as a group of its conditions, its
+  repeat and its edges, with the buttons editing it where `client?`
+  runs; its first condition's value `required?` or not."
   [ui attrs value-lists client? required? i
    {:keys [id conditions start end] lo :min hi :max}]
   (let [conditions (or (seq conditions) [{:id 1}])
@@ -265,6 +230,8 @@
      [:ol
       (map-indexed (fn [j condition]
                      (let [c (inc j)]
+                       ;; without the client a condition is removed by
+                       ;; emptying it, so only the first is required there
                        (condition-row ui token
                                       (and required? (or (= 1 c) client?))
                                       c condition)))
@@ -273,26 +240,12 @@
      (when client? (token-actions ui i id any?))]))
 
 (defn token-fieldset
-  "The tokens of the extended search in `ui`: one group per token of
-  `tokens` (see `token-box`) over `attrs` and `value-lists`, with the
-  buttons editing them where `client?` runs, as an ordered list inside a
-  group of their own, since a token is one of a sequence and a screen
-  reader says which, with the datalists the value fields draw on (see
-  `value-list-id`). One blank token when there are none, since the
-  client may have just switched to the mode; otherwise
-  the tokens are the search's own plus the blank one the server ends
-  them in (see dk.cst.corpus-probe.query/form-rows), so a reader
-  without the client adds a token by filling it and searching again.
-
-  When `required?`, every token must be filled but that blank last one,
-  which only a reader without the client sees: the client drops it (see
-  dk.cst.corpus-probe.query.tokens/own-rows) and adds tokens by a button,
-  so with it every token must be filled, and a token added and left empty
-  is reported rather than silently dropped. A lone token must always be,
-  or an extended search of nothing could be sent.
-
-  Each list item is keyed by the token's :id rather than its place, so
-  that taking a token away leaves what was typed in the ones after it."
+  "The tokens of the extended search in `ui`: a group per token of
+  `tokens` over `attrs` and `value-lists`, with the buttons editing them
+  where `client?` runs, as an ordered list with the datalists the value
+  fields draw on; one blank token when there are none. When `required?`
+  every token must be filled but the blank last one a reader without
+  the client ends them in (see dk.cst.corpus-probe.query/form-rows)."
   [ui attrs value-lists client? required? tokens]
   (let [rows (or (seq tokens) [(tokens/blank-token 1)])
         n    (count rows)]
@@ -303,7 +256,13 @@
      [:ol
       (map-indexed (fn [i {:keys [id] :as token}]
                      (let [i (inc i)]
+                       ;; keyed by id, not place, so taking a token away
+                       ;; keeps what was typed in the ones after it
                        [:li {:replicant/key id}
+                        ;; the client drops the blank last token and adds
+                        ;; tokens by a button, so with it every token is
+                        ;; required; a lone token always is, or a search
+                        ;; of nothing could be sent
                         (token-box ui attrs value-lists client?
                                    (and required? (or client? (= n 1) (< i n)))
                                    i token)]))
@@ -311,8 +270,7 @@
 
 (defn add-token-row
   "The row under the tokens holding `submit`, the search button, and
-  before it, where `client?` runs to answer it, the button adding a
-  token, in `ui`."
+  before it where `client?` runs, the button adding a token, in `ui`."
   [ui client? submit]
   [:p
    (when client?

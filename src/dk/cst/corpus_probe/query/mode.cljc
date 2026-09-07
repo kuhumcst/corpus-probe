@@ -1,42 +1,35 @@
 (ns dk.cst.corpus-probe.query.mode
   "The two forms of the query and the modes they are read in: which form
-  a set of search params belongs to (see `form`), which mode reads them
-  (see `mode`), what each mode reads of them (see `fields` and `reads?`)
-  and what it leaves unread (see `unread`). Shared by the query
-  (dk.cst.corpus-probe.query), the URL rule (dk.cst.corpus-probe.url)
-  and the views."
+  a set of search params belongs to (`form`), which mode reads them
+  (`mode`), what each mode reads of them (`fields` and `reads?`) and
+  what it leaves unread (`unread`)."
   (:require [clojure.string :as str]
             [dk.cst.corpus-probe.query.tokens :as tokens]))
 
 (def modes
   "The query modes, each a way the query params are read: words in order,
   a list of words, the tokens of the extended form, and CQP as the reader
-  wrote it (see dk.cst.corpus-probe.query/of). The first is the default.
-  The three that are text are read from one field, by the shape of what
-  it holds (see `shape`); no URL names a mode, and a form's radio names
-  only its form (see `forms`)."
+  wrote it. The first is the default; the three that are text are read
+  from one field by the shape of what it holds (see `shape`)."
   ["simple" "list" "extended" "cqp"])
 
 (def forms
   "The two forms of the query, in display order, each as the value of
   the form's `mode` radio: the field, named for the mode it starts in,
-  whose row of `fields` is every param the field's three modes read; and
-  the extended form of tokens (see `form`)."
+  and the extended form of tokens."
   ["simple" "extended"])
 
 (def cqp-start
   "What CQP text begins with, once trimmed: a pattern in brackets or a
   quoted form, a tag, a group, a target mark or a meet-union or table
   query. A bare word is none of these, since CQP reads one as the name
-  of a query result, which is how the field tells CQP from words (see
-  `shape`)."
+  of a query result, which is how the field tells CQP from words."
   #"^\s*(?:[\[\"'<(@]|MU\s*\(|TAB\s*\()")
 
 (defn shape
   "The mode the `text` of the query field is read in: CQP when it begins
   as CQP does (see `cqp-start`), a list when it holds a line break, and
-  words in order otherwise; a blank, whatever whitespace it holds, is
-  nothing typed, and reads as words."
+  words in order otherwise, a blank included."
   [text]
   (let [text (str text)]
     (cond
@@ -47,13 +40,10 @@
 
 (def fields
   "What each of the `modes` reads of the query params: the keys that say
-  what was asked, by the mode that reads them. The three modes of the
-  field read its text, `q`; `::tokens` stands for the fields of an
-  extended search's tokens (see dk.cst.corpus-probe.query.tokens/token-key?).
-  A param outside its mode's set says nothing to the search, so a URL
-  does not carry it (see dk.cst.corpus-probe.url/canonical), and the
-  form's control for it is not shown (see
-  dk.cst.corpus-probe.views.search/matching-fieldset)."
+  what was asked, by the mode that reads them; `::tokens` stands for the
+  fields of an extended search's tokens. A param outside its mode's set
+  says nothing to the search, so a URL does not carry it and the form
+  does not show its control."
   {"simple"   #{:q :in :ci :match :within}
    "list"     #{:q :in :ci :match}
    "extended" #{::tokens :within}
@@ -61,20 +51,18 @@
 
 (def defaults
   "What a query key means when a URL leaves it out, as the string it
-  would carry: the surface form is searched, within a sentence. The
-  `match` and `ci` keys have no value to leave out: the whole form, as
-  written, is what their absence says."
+  would carry. `match` and `ci` have no value to leave out: the whole
+  form, as written, is what their absence says."
   {:in     "word"
    :within "sentence"})
 
 (defn typed
   "The mode the query of `params` was typed in (see `modes`): the
-  extended form's when they carry the field of a token (see
-  dk.cst.corpus-probe.query.tokens/token-key?), else the shape of the
-  field's text, `q` (see `shape`); nil when they carry neither. Tokens
-  first, so that a URL carrying both is read as tokens and told of the
-  text."
+  extended form's when they carry the field of a token, else the shape
+  of the field's text, `q`; nil when they carry neither."
   [params]
+  ;; tokens first, so that a URL carrying both is read as tokens and told
+  ;; of the text
   (cond
     (some tokens/token-key? (keys params)) "extended"
     (contains? params :q)                  (shape (:q params))))
@@ -131,10 +119,9 @@
           (keys params)))
 
 (defn unread
-  "The keys of the query params among `params` that their mode (see
-  `mode`), or the mode `m` given, does not read: what the form of
-  another mode, or a hand-written URL, carried along, which the search
-  never sees."
+  "The keys of the query params among `params` that their mode, or the
+  mode `m` given, does not read: what another mode's form or a
+  hand-written URL carried along, which the search never sees."
   ([params]
    (unread params (mode params)))
   ([params m]
@@ -150,11 +137,8 @@
 (defn unread-query?
   "True when `params` carry a query their mode does not read (see
   `unread`) that says something: the field's text under the extended
-  form, or a token that asks (see dk.cst.corpus-probe.query.tokens/asks?)
-  under the field's. What the form submits when its mode radio is
-  changed before the query is retyped, and what a hand-written URL may
-  carry; a blank field or the blank trailing token every form submits
-  is no query."
+  form, or a token that asks under the field's; a blank field or the
+  blank trailing token every form submits is no query."
   [params]
   (let [unread (unread params)]
     (boolean (or (and (unread :q) (tokens/present (:q params)))

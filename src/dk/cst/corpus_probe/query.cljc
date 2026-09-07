@@ -1,20 +1,10 @@
 (ns dk.cst.corpus-probe.query
-  "The query a search asks, as one value: the tokens of an extended search
-  kept within a unit of text, which the words of a simple search and the
-  alternatives of a list are too, at their own sizes; or CQP as the
-  reader wrote it, which the app compiles into and never out of. The
-  modes and forms are dk.cst.corpus-probe.query.mode's, the fields of
-  the extended form dk.cst.corpus-probe.query.tokens' and the readers
-  and writers of the params dk.cst.corpus-probe.query.params'.
-
-  A query is read from the search params by the mode that carries them
-  (see `of`), printed back as the params of a mode (see `->params`),
-  compiled to CQP (see `->cqp`), and held by each of the two forms as
-  far as it can (see `project` and `loss`). Every word or value is
-  escaped for a double-quoted CQP literal (see dk.cst.corpus-probe.cqp).
-  Shared by the server and the client, so both can say what a form will
-  run. The commands the compiled query is run by are
-  dk.cst.corpus-probe.cwb.command's."
+  "The query a search asks, as one value: the tokens of an extended
+  search kept within a unit of text, which the words of a simple search
+  and the alternatives of a list are too; or CQP as the reader wrote it,
+  which the app compiles into and never out of. Read from the params by
+  `of`, printed back by `->params`, compiled by `->cqp` and held by a
+  form as far as it can, `project` and `loss`."
   (:require [clojure.string :as str]
             [dk.cst.corpus-probe.cqp :as cqp]
             [dk.cst.corpus-probe.query.mode :as mode]
@@ -22,10 +12,9 @@
             [dk.cst.corpus-probe.query.tokens :as tokens]))
 
 (def literal-ops
-  "The operators (see dk.cst.corpus-probe.query.tokens/operators) that
-  match a literal value, escaped, as an equality with affixes: the ones
-  a simple search or a list has, and the ones alternatives on one
-  attribute can be written as one alternation (see `alternatives?`)."
+  "The operators that match an escaped literal as an equality with
+  affixes: the ones a simple search or a list has, and the ones
+  alternatives on one attribute compile as one alternation."
   #{"is" "prefix" "suffix" "infix"})
 
 (defn affixed
@@ -39,12 +28,9 @@
     literal))
 
 (defn condition->cqp
-  "The CQP condition of extended-search `condition`: its :attr (a
-  positional attribute name, word by default) related by :op (see
-  dk.cst.corpus-probe.query.tokens/operators) to its :value, the literal
-  escaped (see dk.cst.corpus-probe.cqp/escape-value) and affixed (see
-  `affixed`) or, under a regex operator, kept as written (see
-  dk.cst.corpus-probe.cqp/regex-value), with the %c flag under :ci?.
+  "The CQP condition of extended-search `condition`: its :attr related by
+  :op to its :value, escaped and affixed as a literal or kept as written
+  under a regex operator, with the %c flag under :ci?.
 
   (condition->cqp {:attr :lemma :op \"is\" :value \"hund\" :ci? true})
   ;; => lemma = \"hund\" %c"
@@ -65,11 +51,9 @@
   [(or attr :word) (or op "is") (boolean ci?)])
 
 (defn alternatives?
-  "True when `conditions`, one group of a token (see `condition-groups`),
-  are alternatives of one literal value: two or more, all of one shape
-  (see `literal-shape`) with a literal operator (see `literal-ops`).
-  What a list is, and what compiles as one alternation (see
-  `alternation->cqp`)."
+  "True when `conditions`, one group of a token, are alternatives of one
+  literal value: two or more, all of one `literal-shape` with an operator
+  in `literal-ops`. What a list is, and what compiles as one alternation."
   [conditions]
   (let [[_ op] (literal-shape (first conditions))]
     (boolean (and (next conditions)
@@ -77,9 +61,9 @@
                   (apply = (map literal-shape conditions))))))
 
 (defn alternation->cqp
-  "The CQP condition of `conditions` that are alternatives of one literal
-  value (see `alternatives?`): the values escaped, as one alternation,
-  affixed and flagged as the one condition they amount to.
+  "The CQP condition of `conditions` that are `alternatives?` of one
+  literal value: the escaped values as one alternation, affixed and
+  flagged as the one condition they amount to.
 
   (alternation->cqp [{:attr :lemma :op \"prefix\" :value \"hund\"}
                      {:attr :lemma :op \"prefix\" :value \"kat\" :join \"or\"}])
@@ -93,10 +77,9 @@
          (when ci? " %c"))))
 
 (defn condition-groups
-  "The `conditions` of a token in the groups their :join makes (see
-  dk.cst.corpus-probe.query.tokens/joins): the first opens the first
-  group, each `or` adds an alternative to the current one and anything
-  else opens a new one."
+  "The `conditions` of a token in the groups their :join makes: the first
+  opens the first group, each `or` adds an alternative to the current one
+  and anything else opens a new one."
   [conditions]
   (reduce (fn [groups {:keys [join] :as condition}]
             (if (and (seq groups) (= "or" join))
@@ -107,10 +90,10 @@
 
 (defn group->cqp
   "The CQP of one group of `conditions` (see `condition-groups`): one
-  alternation when they are alternatives of one literal value (see
-  `alternatives?`), else each condition (see `condition->cqp`) joined by
-  |, in parentheses when `grouped?` and there are several, so that the
-  ors bind tighter than the ands they stand among."
+  alternation when they are `alternatives?`, else each condition joined
+  by |, in parentheses when `grouped?` and there are several, so that the
+  ors bind tighter than the ands, as KORP reads them and the reverse of
+  CQP's own."
   [conditions grouped?]
   (if (alternatives? conditions)
     (alternation->cqp conditions)
@@ -119,20 +102,14 @@
 
 (defn token->cqp
   "The CQP token pattern of extended-search `token`: its :conditions in
-  the groups their joins make (see `group->cqp`), the groups joined by
-  &, in parentheses where a group of several alternatives stands among
-  other groups, so that KORP's reading holds: the ors bind tighter than
-  the ands, the reverse of CQP's own. Any word when the first condition
-  is `any`. Repeated :min to :max times when that is not once, and
-  opening a sentence under :start? and closing one under :end? as `<s>`
-  tags, which each corpus then names after its own sentence attribute
-  (see dk.cst.corpus-probe.cwb.command/sentence-tags).
+  the groups their joins make (see `group->cqp`), joined by &; any word
+  when the first is `any`; repeated :min to :max times when that is not
+  once; and opening or closing a sentence under :start? and :end?.
 
-  (token->cqp {:conditions [{:attr :lemma :op \"is\" :value \"hund\"}
-                            {:join \"or\" :attr :lemma :op \"is\"
-                             :value \"kat\"}
-                            {:join \"and\" :attr :pos :op \"prefix\"
-                             :value \"N\"}]})
+  (token->cqp {:conditions
+               [{:attr :lemma :op \"is\" :value \"hund\"}
+                {:join \"or\" :attr :lemma :op \"is\" :value \"kat\"}
+                {:join \"and\" :attr :pos :op \"prefix\" :value \"N\"}]})
   ;; => [lemma = \"(hund|kat)\" & pos = \"N.*\"]
 
   (token->cqp {:conditions [{:op \"any\"}] :min 0 :max 2})
@@ -142,6 +119,8 @@
         body   (when-not (= "any" (:op (first conditions)))
                  (str/join " & " (map #(group->cqp % (boolean (next groups)))
                                       groups)))]
+    ;; each corpus renames the sentence tags after its own attribute
+    ;; (see dk.cst.corpus-probe.cwb.command/sentence-tags)
     (str (when start? "<s> ")
          "[" body "]"
          (when-not (= [1 1] [lo hi])
@@ -162,8 +141,7 @@
 
 (defn condition
   "The condition matching `word` as the options of a simple search or a
-  list say: the `in` attribute (word by default), the `match` operator
-  (see dk.cst.corpus-probe.query.params/match-op) and the `ci` flag."
+  list say: the `in` attribute, the `match` operator and the `ci` flag."
   [{:keys [in ci match]} word]
   {:attr  (keyword (or (tokens/present in) (:in mode/defaults)))
    :op    (params/match-op match)
@@ -177,9 +155,8 @@
   {:conditions (vec conditions) :min 1 :max 1 :start? false :end? false})
 
 (defn list-token
-  "The one token a list is: `conditions` as
-  alternatives of one another, each once, every one after the first
-  joined by or."
+  "The one token a list is: `conditions` as alternatives of one another,
+  each once, every one after the first joined by or."
   [conditions]
   (token (map-indexed (fn [i c] (cond-> c (pos? i) (assoc :join "or")))
                       (distinct conditions))))
@@ -191,21 +168,11 @@
   (remove str/blank? (str/split (str q) #"\s+")))
 
 (defn of
-  "The query the search `params` carry, read by their mode (see
-  dk.cst.corpus-probe.query.mode/mode): CQP as typed, `{:cqp text}`; or
-  tokens kept within a unit, `{:tokens [...] :within :sentence}`, the
-  tokens of an extended search (see
-  dk.cst.corpus-probe.query.params/token-params), the words of a simple
+  "The query the search `params` carry, read by their mode: CQP as typed,
+  `{:cqp text}`; or tokens kept within a unit, `{:tokens [...] :within
+  :sentence}`, the tokens of an extended search, the words of a simple
   search one token each, or the words of a list as one token of
-  alternatives (see `condition` and `token`), the unit the one the
-  `within` param names where the mode reads it (see
-  dk.cst.corpus-probe.query.params/within-param). Nil when nothing is
-  asked, which counts every token.
-
-  The field's text, `q`, is read by its shape (see
-  dk.cst.corpus-probe.query.mode/shape), and what a mode does not read
-  is not read (see dk.cst.corpus-probe.query.mode/fields): text under
-  the extended form, or tokens under the field's, ask nothing here."
+  alternatives. Nil when nothing is asked, which counts every token."
   [{:keys [q within] :as params}]
   (let [mode   (mode/mode params)
         unit   (params/within-param (when (mode/reads? mode :within) within))
@@ -226,27 +193,20 @@
   (or cqp (extended->cqp tokens)))
 
 (defn within
-  "The unit of text `query` (see `of`) is kept within (see
-  dk.cst.corpus-probe.cqp/units): its unit, for two or more tokens,
-  which should not be matched across a boundary, or for a token that
-  opens or closes a sentence.
-
-  Nil for one token, which cannot straddle a boundary and could only be
-  refused where it stands outside every sentence, so for a list too; and
-  nil for CQP, which says so itself."
+  "The unit of text `query` (see `of`) is kept within: its unit for two
+  or more tokens, or for a token that opens or closes a sentence; nil for
+  one token, which cannot straddle a boundary and could only be refused
+  where it stands outside every sentence, and nil for CQP, which says so
+  itself."
   [{:keys [tokens within]}]
   (when (or (next tokens) (some #(or (:start? %) (:end? %)) tokens))
     within))
 
 (defn ->params
   "The search params of `mode` that carry `query`, as the form of that
-  mode submits them and its URL cites them: the words or the lines in
-  the field with their options (see
-  dk.cst.corpus-probe.query.params/word-params), the tokens as their
-  fields (see dk.cst.corpus-probe.query.params/token->params) with the
-  unit, or the CQP text; nothing at its default, and no mode, which the
-  shape of the text says. For a query the form holds (see `project`),
-  so that reading them back (see `of`) gives the query again."
+  mode submits them and its URL cites them: nothing at its default, and
+  no mode, which the shape of the text says. The inverse of `of` for a
+  query the form holds (see `project`)."
   [mode query]
   (cond
     (nil? query)         {}
@@ -263,19 +223,16 @@
 
 (def max-alternatives
   "The most words a list is carried into the extended form as, one
-  condition each: fifty, which is as many rows of five controls as one
-  token can show before the form is a page of its own, and more than a
-  reader builds by hand. A longer list stays in the field, which holds
-  any number (see `loss`)."
+  condition each: as many rows of five controls as one token can show
+  before the form is a page of its own. A longer list stays in the
+  field, which holds any number (see `loss`)."
   50)
 
 (defn loss
-  "What the form of `mode` cannot hold of `query` (see `of`), as items
-  the interface words: nothing for no query, and nothing for the field,
-  which holds every query, as CQP if not as words (see `project`); the
-  extended form holds every query of tokens but a list past
-  `max-alternatives`, `[:list n]`, and no CQP, `[:cqp text]`, which the
-  app never reads."
+  "What the form of `mode` cannot hold of `query`, as items the interface
+  words: nothing for the field, which holds every query, as CQP if not
+  as words; for the extended form, a list past `max-alternatives`,
+  `[:list n]`, and CQP, `[:cqp text]`, which the app never reads."
   [mode {:keys [cqp tokens] :as query}]
   (cond
     (or (nil? query) (not= "extended" mode)) []
@@ -286,12 +243,10 @@
                 tokens)))
 
 (defn project
-  "`query` (see `of`) as the form of `mode` holds it, which is the query
-  itself where the form holds it whole (see `loss`): the field, under
+  "`query` as the form of `mode` holds it (see `loss`): the field, under
   the CQP mode, holds CQP as it is and the tokens compiled, kept within
-  their unit by name (see dk.cst.corpus-probe.cqp/units); the extended
-  form holds no CQP and no list past `max-alternatives`, and starts
-  blank, nil. Nil for no query."
+  their unit by name; the extended form holds no CQP and no list past
+  `max-alternatives`, and starts blank, nil. Nil for no query."
   [mode {:keys [cqp] :as query}]
   (cond
     (nil? query)        nil
@@ -304,38 +259,28 @@
 
 (defn form-rows
   "The rows of the extended form holding `query` (see `project`): its
-  tokens as their fields (see `->params`), read as the form shows them
-  (see dk.cst.corpus-probe.query.tokens/form-tokens), then one blank
-  token, which is how a reader without the client adds one, and which
-  the client drops (see dk.cst.corpus-probe.query.tokens/own-rows)."
+  tokens as the form shows them, then one blank token, which is how a
+  reader without the client adds one, and which the client drops."
   [query]
   (tokens/form-tokens (concat (tokens/token-rows (->params "extended" query))
                               [{:conditions [{}]}])))
 
 (defn arrived
   "What the search `params` of a submitted form ask, once a change of its
-  mode radio is allowed for: the `:form` shown, as the mode it reads the
-  query in, the mode the query came `:from` when the radio changed the
-  form (see dk.cst.corpus-probe.query.mode/form and /typed), the query
-  `:held` by the form (see `project`), the `:query` that runs, what the
-  form could not keep as `:loss` items (see `loss`) and, for a
-  hand-written URL, the `:unread` keys it carried (see
-  dk.cst.corpus-probe.query.mode/unread).
+  mode radio is allowed for: the `:form` shown, the mode the query came
+  `:from` when the radio changed it, the query `:held` by the form, the
+  `:query` that runs, what the form could not keep as `:loss` and, for a
+  hand-written URL, the `:unread` keys it carried.
 
-  A form whose radio was changed submits the old form's query under the
-  new radio: the field's text under the extended radio seeds the tokens,
-  read by its shape, and the tokens under the field's radio are handed
-  to the field as CQP, which holds them whole. A form that has a query
-  of its own is no switch, whatever else the params carry. A form holds
-  what it holds and runs it, unless part of the query was lost: then
-  nothing runs, the form shows what it kept and the line says the rest,
-  so that the reader is told before the loss. What arrived with a
-  switch is the switch's own business, so only a URL that names no
-  switch has unread params to report."
+  A form whose radio was changed submits the previous form's query under
+  the new radio: the field's text seeds the tokens, read by its shape,
+  and the tokens are handed to the field as CQP."
   [params]
   (let [form   (mode/form params)
         own    (of params)
         origin (mode/typed params)
+        ;; a form with a query of its own is no switch, whatever else the
+        ;; params carry
         switch (when (and (nil? own) origin (not= form (mode/form-of origin)))
                  (if (= "extended" form) :in :out))
         other  (when switch (of (dissoc params :mode)))
@@ -345,6 +290,9 @@
     {:form   mode
      :from   (when switch origin)
      :held   held
+     ;; nothing runs when part of the query was lost, so that the reader
+     ;; is told before the loss
      :query  (when (empty? loss) held)
      :loss   loss
+     ;; what arrived with a switch is the switch's own business
      :unread (if switch #{} (mode/unread params))}))

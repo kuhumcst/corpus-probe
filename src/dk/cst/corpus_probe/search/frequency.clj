@@ -5,16 +5,7 @@
   per corpus and merged into one table ordered by the collation the
   corpora are read in. A breakdown counts CQP's `group` over the matches
   of a query, or a whole corpus read from its lexicon; a filter's values
-  are counted the same way over the regions of a structural attribute,
-  which is why they share the merging and the ordering. A breakdown by a
-  structural attribute also measures the text behind each value, so
-  that its rate is per million tokens of that text rather than of the
-  corpus, and a breakdown may count one attribute against another.
-
-  Composed on dk.cst.corpus-probe.search.opts, which resolves the corpus
-  options a breakdown takes, on dk.cst.corpus-probe.search.result, which
-  counts from the saved result or afresh, and on the bounded fan-out over
-  corpora and the collator of dk.cst.corpus-probe.cwb."
+  are counted the same way over the regions of a structural attribute."
   (:require [clojure.string :as str]
             [dk.cst.corpus-probe.cwb :as cwb]
             [dk.cst.corpus-probe.cwb.command :as command]
@@ -31,9 +22,8 @@
 
 (defn groupable-attrs!
   "The attribute descriptions of `corpus` via `ctx` that a frequency
-  breakdown can group by (see
-  dk.cst.corpus-probe.cwb.corpus/countable-attr?), in registry order (a
-  CQP round trip on a cache miss)."
+  breakdown can group by, in registry order (a CQP round trip on a cache
+  miss)."
   [ctx corpus]
   (filter corpus/countable-attr? (corpus/attributes! ctx corpus)))
 
@@ -59,22 +49,14 @@
           attrs)))
 
 (defn count-sections!
-  "The output sections of the `counting` commands (see
-  dk.cst.corpus-probe.cwb.command/count-command) over the matches of
-  `query` in `corpus` via `ctx` under `opts`, with the :nqr and
-  :cache-dir of dk.cst.corpus-probe.search.opts/cache-opts!: read from
-  the saved query result when one is stored (see
-  dk.cst.corpus-probe.search.result/read-stored! and
-  dk.cst.corpus-probe.search.batch/stored-count-batch), and run afresh
-  otherwise (see dk.cst.corpus-probe.search.batch/count-batch).
+  "The output sections of the `counting` commands over the matches of
+  `query` in `corpus` via `ctx` under `opts`: read from the saved query
+  result when one is stored, and run afresh otherwise.
 
-  What the concordance saved is what the breakdown counts, so switching
-  a result to its frequency view runs no query. The stored result's size
-  is checked against the file (see
-  dk.cst.corpus-probe.search.cache/holds?), because a whole result is
-  read here and a file that has shrunk reads back short without CQP
-  saying so. A count saves nothing, so a fresh one runs the user's query
-  like any other and no more."
+  What the concordance saved is what the breakdown counts, so switching a
+  result to its frequency view runs no query. The stored result's size is
+  checked against the file, because a whole result is read here and a
+  file that has shrunk reads back short without CQP saying so."
   [ctx corpus query {:keys [nqr] :as opts} counting]
   (:count (or (result/read-stored! ctx corpus query opts
                                    #(batch/stored-count-batch %1 %2 %3 counting)
@@ -120,33 +102,15 @@
       counts)))
 
 (defn frequencies!
-  "Count the matches of CQP `query` in `corpus` by `attr` at the :at
-  position of `opts` (a dk.cst.corpus-probe.cwb.command/positions entry;
-  the start of the match by default) via the installation described by
-  `ctx`, within the :filter of `opts` when there is one, kept within its
-  :within unit (see dk.cst.corpus-probe.search.opts/within-attr!) and narrowed
-  to its :subset and :near (see dk.cst.corpus-probe.cwb.command/narrowing),
-  returning [{:values [...] :freq <n>} ...] sorted by frequency. Under
-  :docs, each map also carries the number of texts the value occurs in
-  (its document frequency, see
-  dk.cst.corpus-probe.cwb.command/count-command) as :docs, where the
-  corpus marks texts. Under :by, another attribute of the corpus, the
-  values are counted against each value of it at the match, and the
-  :values of each map are then the value of `attr` and the value of :by
-  (see dk.cst.corpus-probe.cwb.parse/group-pairs->freqs); no texts are
-  counted then, one table not holding both. Neither applies over the
-  whole match, which `count` gives no texts or pairs for.
+  "Count the matches of CQP `query` in `corpus` by `attr` via `ctx`:
+  [{:values [...] :freq <n>} ...] sorted by frequency.
 
-  When `ctx` keeps a cache and a concordance has saved these matches
-  under the :sort of `opts`, they are counted from the saved result
-  rather than queried again (see `count-sections!`); a sampled
-  concordance is never read, a count of a sample being no count.
-
-  A thin wrapper over CQP's `group`, or its `count` over the whole match
-  (see dk.cst.corpus-probe.cwb.command/count-command); `attr` and :by
-  must name the corpus's `groupable-attrs!` (see `groupable!`). A
-  narrowing of nothing is answered without CQP (see
-  dk.cst.corpus-probe.search.result/narrowing-nothing?)."
+  `opts` takes the :at position to count, a :filter, :within, :subset and
+  :near to narrow by, :docs to count the texts each value occurs in, and
+  :by, a second attribute to count against, whose value then joins
+  `attr`'s in :values; neither applies over the whole match. Matches a
+  concordance has saved unsampled are counted from the saved result
+  rather than queried again."
   ([ctx corpus query attr]
    (frequencies! ctx corpus query attr {}))
   ([ctx corpus query attr {:keys [within] :as opts}]
@@ -167,18 +131,13 @@
 
 (defn value-sizes!
   "How many tokens of `corpus` via `ctx` carry each value of `attr`,
-  within the :filter and :patterns of `opts` when there are any:
-  {<value> <tokens>}, or nil when `attr` is no annotated s-attribute of
-  the corpus (see `sized-attr?`), its values marking no regions, or has
-  too many regions to decode.
+  within the :filter and :patterns of `opts`: {<value> <tokens>}, or nil
+  when `attr` marks no regions of its own (see `sized-attr?`) or has too
+  many to decode.
 
   What the rate per million of a value is measured against: the text
-  carrying it rather than the whole corpus, so that a year with more
-  text does not look busier. The whole corpus is read from the
-  attribute's own regions (see
-  dk.cst.corpus-probe.cwb.tools/annotation-sizes!); a filtered one is
-  counted by grouping every token of the regions kept, as a blank query
-  is."
+  carrying it rather than the whole corpus, so a year with more text does
+  not look busier."
   [ctx corpus attr {:keys [filter patterns] :as opts}]
   (when (sized-attr? (corpus/attributes! ctx corpus) attr)
     (if (or (seq filter) (seq patterns))
@@ -204,18 +163,14 @@
 (defn corpus-frequencies!
   "Break the matches of CQP `query` in `corpus` down by `attr` via `ctx`
   (`opts` as for `frequencies!`) without failing: {:corpus ... :tokens
-  <corpus size> :size <matches> :freqs [...]} (the maps of
-  `frequencies!`), or {:corpus ... :error ...} when the breakdown cannot
-  be made there. Where the values the rates are measured against, those
-  of :by when there is one and of `attr` otherwise, mark text of their
-  own (see `value-sizes!`), the map also carries their :sizes.
+  <corpus size> :size <matches> :freqs [...]}, or {:corpus ... :error
+  ...} when the breakdown cannot be made there; also their :sizes where
+  the values the rates are measured against mark text of their own.
 
-  A blank `query` breaks the whole corpus down, read from its lexicon
-  (dk.cst.corpus-probe.cwb.tools/lexicon!) for a positional attribute
-  and from the sizes of its regions for a structural one, rather than by
-  matching every token. Under a :filter or :patterns it breaks down
-  every token of the filtered regions instead, and the :tokens are
-  theirs, so the rates per million stay relative to what was counted."
+  A blank `query` breaks the whole corpus down, read from its lexicon or
+  the sizes of its regions rather than by matching every token. Under a
+  :filter it breaks down every token of the filtered regions, and the
+  :tokens are theirs, so the rates stay relative to what was counted."
   [ctx corpus query attr {:keys [filter patterns at by] :as opts}]
   (cwb/attempt
    corpus
@@ -250,12 +205,11 @@
         c))))
 
 (defn frequency-rows
-  "Merge the per-corpus breakdowns `results` (as from `corpus-frequencies!`,
-  failures excluded) into the rows of one table, in no order: [{:value <s>
-  :freqs {corpus <n>} :total <n>} ...], each row also carrying :docs
-  {corpus <n>} where the breakdowns counted texts (see `frequencies!`)
-  and :tokens {corpus <n>} where they measured the text of each value
-  (see `value-sizes!`)."
+  "Merge the per-corpus breakdowns `results` (as from
+  `corpus-frequencies!`, failures excluded) into the rows of one table,
+  in no order: [{:value <s> :freqs {corpus <n>} :total <n>} ...], each
+  row also carrying :docs {corpus <n>} where the breakdowns counted texts
+  and :tokens {corpus <n>} where they measured the text of each value."
   [results]
   (->> (for [{:keys [corpus freqs sizes]} results
              {:keys [values freq docs]} freqs]
@@ -320,26 +274,17 @@
          (vec))))
 
 (defn frequency-table!
-  "Break the matches of CQP `query` in each of `corpora` (uppercase names,
-  in display order) down by `attr` via `ctx`, in parallel, and merge the
-  breakdowns into one table, in parallel (see
-  dk.cst.corpus-probe.cwb/parallelism).
+  "Break the matches of CQP `query` in each of `corpora` (uppercase
+  names, in display order) down by `attr` via `ctx`, in parallel, and
+  merge the breakdowns into one table. A blank `query` tables the whole
+  corpora, or their filtered regions under the :filter of `opts`.
 
   Returns {:query ... :filter ... :subset ... :near ... :attr ... :at ...
   :docs <whether the rows count texts too> :sized <whether they measure
-  the text of each value> :counts [{:corpus ... :tokens ... :size ...}
-  ...] :rows [{:value ... :freqs {corpus <n>} :total ...} ...]} (see
-  `frequency-rows`); a corpus whose breakdown fails carries its :error
-  instead of its counts and contributes no rows, like a failing corpus
-  of `concordance!`. A blank `query` tables the whole corpora, or their
-  filtered regions under the :filter of `opts`.
-
-  Under the :by of `opts`, an attribute the values are counted against,
-  the table is a cross-tabulation with the corpora summed: its :rows
-  are those of `pair-rows`, its :columns those of `columns`, of the
-  :column-count values there were, and :sized then says whether the
-  columns measure their text. Neither :by nor :docs applies over the
-  whole match."
+  the text of each value> :counts [...] :rows [...]}; a corpus whose
+  breakdown fails carries its :error and contributes no rows. Under the
+  :by of `opts` the table is a cross-tabulation with the corpora summed,
+  its :rows those of `pair-rows` and its :columns those of `columns`."
   ([ctx corpora query attr]
    (frequency-table! ctx corpora query attr {}))
   ([ctx corpora query attr {:keys [at docs by] :as opts}]
@@ -404,13 +349,12 @@
 
 (defn filter-options!
   "The metadata filters available over `corpora` via `ctx`, read in
-  parallel (see dk.cst.corpus-probe.cwb/parallelism): {:attrs
-  [{:name <kw> :rows [{:value <s> :freqs {corpus <n>} :total <n>} ...]}
-  ...] :unlisted [<kw> ...]}.
+  parallel: {:attrs [{:name <kw> :rows [{:value <s> :freqs {corpus <n>}
+  :total <n>} ...]} ...] :unlisted [<kw> ...]}.
 
   The attributes keep the registry order of the first corpus reporting
-  each, with the values of `filter-rows`; an attribute with too many
-  values to list in any of the corpora is named under :unlisted instead."
+  each; one with too many values to list in any of the corpora is named
+  under :unlisted instead."
   [ctx corpora]
   (let [filters  (->> (cwb/pmap-n (cwb/parallelism ctx)
                                   #(corpus-filters! ctx %) corpora)

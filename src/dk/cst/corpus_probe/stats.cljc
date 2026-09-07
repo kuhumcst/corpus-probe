@@ -12,9 +12,8 @@
     (/ (Math/round (* 10.0 (/ (* n 1000000.0) tokens))) 10.0)))
 
 (defn readable-counts
-  "The `counts` of a frequency result (see
-  dk.cst.corpus-probe.search.frequency/frequency-table!) whose corpus could be
-  counted: the ones carrying its tokens; the rest report a failure."
+  "The `counts` of a frequency result whose corpus could be counted: the
+  ones carrying its tokens; the rest report a failure."
   [counts]
   (filter :tokens counts))
 

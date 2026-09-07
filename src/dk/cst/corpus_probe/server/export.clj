@@ -27,20 +27,15 @@
                                                      attrs)))}))
 
 (defn serve-kwic-export
-  "Handle a concordance export `request` against `ctx` in `format` (a
-  key of dk.cst.corpus-probe.search.export/formats): the hits of the
-  query in the selected corpora, the first
+  "Handle a concordance export `request` against `ctx` in `format`: the
+  hits of the query in the selected corpora, the first
   dk.cst.corpus-probe.search.export/hit-limit of them in the requested
   sort, as a TSV or CSV download; 400 without a query, known corpora or
   a known format, or when no corpus could be searched.
 
-  The corpora are exported one at a time (see
-  dk.cst.corpus-probe.search/export-corpora!) and written as each
-  answers. The first corpus to answer is waited for before the download
-  starts, because a download once started can no longer be a 400: until
-  one answers, the corpora that failed are collected, and if every one
-  fails their reasons are the answer, as
-  dk.cst.corpus-probe.server.response/export-failure gives them."
+  The corpora are written as each answers. The first is waited for before
+  the download starts, because a download once started can no longer be a
+  400: if every corpus fails, their reasons are the answer."
   [ctx request format]
   (let [{:keys [params known cqp opts]} (search-server/search-request!
                                          ctx request)]
@@ -72,12 +67,11 @@
                  (.write w ^String (line row)))))))))))
 
 (defn serve-frequencies-export
-  "Handle a frequency table export `request` against `ctx` in `format`
-  (a key of dk.cst.corpus-probe.search.export/formats): every row of the
-  breakdown of the query (or of the whole corpora) by the `attr` param,
-  against the `by` param when there is one, as a TSV or CSV download;
-  400 without known corpora or a known format, or when no corpus could
-  be counted."
+  "Handle a frequency table export `request` against `ctx` in `format`:
+  every row of the breakdown of the query (or of the whole corpora) by
+  the `attr` param, against the `by` param when there is one, as a TSV or
+  CSV download; 400 without known corpora or a known format, or when no
+  corpus could be counted."
   [ctx request format]
   (let [{:keys [params known cqp opts attr at docs] :as req}
         (assoc (search-server/read-request! ctx request) :view :frequencies)]

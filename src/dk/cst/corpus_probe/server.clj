@@ -1,19 +1,12 @@
 (ns dk.cst.corpus-probe.server
   "The HTTP server: configuration, the route table with the handlers
   behind it, start/stop and the main entry point. The handlers of a
-  search (dk.cst.corpus-probe.server.search), of the corpus pages
-  (dk.cst.corpus-probe.server.corpora) and of the exports
-  (dk.cst.corpus-probe.server.export) are the server's helpers, over the
-  request readers (dk.cst.corpus-probe.server.request) and the responses
-  (dk.cst.corpus-probe.server.response); the documents, the preferences
-  and the compiled client assets are served from here. Where each of
-  these is, and how a search is spelt as a URL, is
-  dk.cst.corpus-probe.url's.
+  search, of the corpus pages and of the exports are its helpers, over
+  the request readers and the responses; the documents, the preferences
+  and the compiled client assets are served from here.
 
-  Startup vets the installation (see dk.cst.corpus-probe.server.vet):
-  the CWB programs and the sort collation before the port is bound, the
-  registry once it is open, since reading every corpus can be slow on a
-  large or ailing one. None of it stops the server."
+  Startup vets the installation before the port is bound and the registry
+  once it is open; none of it stops the server."
   (:require [clojure.edn :as edn]
             [clojure.java.io :as io]
             [clojure.string :as str]
@@ -37,15 +30,13 @@
 (defn content-security-policy
   "A single-origin CSP for `config`: the app serves its own script, style
   and assets, so host-based `'self'` replaces Pedestal's default
-  nonce-based policy (which blocks a plain script tag). The page has no
+  nonce-based policy, which blocks a plain script tag. The page has no
   inline scripts or styles, so `'unsafe-inline'` is omitted.
 
-  `:dev-client`, the origin of a shadow-cljs watch, widens it by exactly
-  what such a watch needs: `eval` for the dev module loader, and a socket
-  to the watch itself, which is where recompiled code is pushed from and
-  is a different origin from this server. Both are concessions no
-  deployment should make, so a configuration has to ask for them: without
-  one the policy is the strict one, which is what ships."
+  `:dev-client`, the origin of a shadow-cljs watch, widens it by what
+  such a watch needs: `eval` for the dev module loader and a socket to
+  the watch itself. Concessions no deployment should make, so a
+  configuration has to ask for them."
   [{:keys [dev-client]}]
   (str "default-src 'self'; "
        "script-src 'self'" (when dev-client " 'unsafe-eval'") "; "
@@ -87,16 +78,10 @@
   when there is one, and resolve the :registry and :cache-dir paths to
   absolute ones so cqp finds them regardless of working directory.
 
-  The merge is shallow, so an installation's own file need only carry what
-  it changes: the registry it serves, where the query result cache goes
-  and how large it may grow, the timeouts. What it leaves out stays as the
-  built-in file has it, the :folders tree above all, which describes the
-  corpora rather than the machine.
-
-  Without this there is nowhere to put any of that. config.edn is read
-  from the classpath, so in a packaged jar it is inside the jar, and every
-  setting would be fixed at build time. A file that is named but cannot be
-  read stops the server rather than being passed over: a configuration
+  The merge is shallow, so an installation's own file need only carry
+  what it changes; what it leaves out stays as the built-in file has it,
+  the :folders tree above all. A file that is named but cannot be read
+  stops the server rather than being passed over: a configuration
   silently ignored is the failure this exists to prevent."
   []
   (let [built-in (edn/read-string (slurp (io/resource "config.edn")))
@@ -114,11 +99,9 @@
       path                (assoc :config-file path))))
 
 (defn serve-document
-  "Handle a `request` for the document called `name` (see
-  dk.cst.corpus-probe.docs): the frontpage, where the app says what it
-  is and where a reader goes from here, the CQP guide or the glossary.
-  Served in the first language the request reads that the document has,
-  and titled as the document titles itself."
+  "Handle a `request` for the document called `name`: the frontpage, the
+  CQP guide or the glossary. Served in the first language the request
+  reads that the document has, and titled as the document titles itself."
   [_ctx name request]
   (let [langs (request/request-languages request)
         data  {:route :document
@@ -131,12 +114,9 @@
   where they were.
 
   A preference is state, so it is set with a POST and answered with a
-  redirect: the page they return to is the one they were reading, with
-  their choice applied, and a refresh does not re-submit the form they
-  came from. Cookies are the whole persistence (see
-  dk.cst.corpus-probe.server.request/preference-cookies): no URL names a
-  preference, so a link can be shared without imposing the sharer's
-  settings on whoever opens it."
+  redirect: a refresh does not re-submit the form they came from. Cookies
+  are the whole persistence: no URL names a preference, so a link can be
+  shared without imposing the sharer's settings."
   [_ctx request]
   (let [params  (:form-params request)
         cookies (request/preference-cookies params)]
@@ -205,10 +185,8 @@
   Vets the CWB programs, the sort collation and the query result cache
   first, so a broken installation is in the log before the port is bound,
   then vets the registry in the background, since reading every corpus of
-  a large one takes a while and nothing it finds stops the server. A
-  cache that cannot be written is dropped from the running configuration
-  rather than left to fail every search, and whatever an earlier run left
-  in it is swept once before the first request rather than after it."
+  a large one takes a while. A cache that cannot be written is dropped
+  from the running configuration rather than left to fail every search."
   ([]
    (start! (read-config)))
   ([{:keys [port] :as config}]

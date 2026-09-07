@@ -2,22 +2,18 @@
   "Tabular text exports of concordances and frequency tables.
 
   Each export is built as rows of strings, a header row first, with the
-  columns the corresponding HTML table shows (the hit's positions,
-  contexts, annotations; the value's counts per corpus), then rendered
-  line by line as TSV or CSV: a frequency table whole, a concordance as
-  its corpora answer. TSV is the format CQP's own `tabulate` and `dump`
-  print, but has no escaping, so the few characters that would break it
-  are replaced; CSV is quoted per RFC 4180 and keeps every value
-  intact."
+  columns the corresponding HTML table shows, then rendered line by line
+  as TSV or CSV. TSV is what CQP's own `tabulate` and `dump` print but
+  has no escaping, so the few characters that would break it are
+  replaced; CSV is quoted per RFC 4180 and keeps every value intact."
   (:require [clojure.string :as str]
             [dk.cst.corpus-probe.stats :as stats]))
 
 (def hit-limit
-  "The most hits a concordance export holds. A query over the large KU
-  corpora can match millions of tokens, and the page tells the reader
-  when the export is cut. Half a million tabulated rows were measured
-  at eight seconds and about 120 MB of heap through the driver, which
-  is what one corpus's share of an export costs while it is written."
+  "The most hits a concordance export holds: a query over the large KU
+  corpora can match millions of tokens, and half a million tabulated rows
+  cost about eight seconds and 120 MB of heap. The page tells the reader
+  when the export is cut."
   500000)
 
 (defn kwic-header
@@ -45,12 +41,11 @@
        rows))
 
 (defn frequency-lines
-  "The merged frequency `result` as rows of strings: a header, then one row
-  per value with, for every readable corpus, its frequency, its rate per
-  million tokens, those tokens when the result is `:sized` (the text of
-  the value rather than the corpus) and, when it counts `:docs`, the
-  texts it occurs in, plus the totals over several corpora, as the HTML
-  table shows them but with every row."
+  "The merged frequency `result` as rows of strings: a header, then one
+  row per value with, for every readable corpus, its frequency, its rate
+  per million tokens, those tokens when the result is `:sized` and, when
+  it counts `:docs`, the texts it occurs in, plus the totals over several
+  corpora, as the HTML table shows them but with every row."
   [{:keys [attr counts rows docs sized] :as result}]
   (let [readable (stats/readable-counts counts)
         total?   (stats/total? counts)
@@ -82,13 +77,11 @@
           rows)))
 
 (defn crosstab-lines
-  "The cross-tabulated frequency `result` (see
-  dk.cst.corpus-probe.search.frequency/frequency-table! under :by) as rows of
-  strings: a header naming the attribute, each of the `:columns` and the
-  total, then, when the result is `:sized`, a row of the tokens each
-  column measures against, then one row per value with its frequency in
-  each column and, when sized, its rate per million of the column's
-  tokens, as the HTML table shows them but with every row."
+  "The cross-tabulated frequency `result` as rows of strings: a header
+  naming the attribute, each of the `:columns` and the total, then, when
+  the result is `:sized`, a row of the tokens each column measures
+  against, then one row per value with its frequency in each column and,
+  when sized, its rate per million of the column's tokens."
   [{:keys [attr counts columns rows sized] :as result}]
   (let [tokens (stats/tokens counts)
         cells  (fn [n t]

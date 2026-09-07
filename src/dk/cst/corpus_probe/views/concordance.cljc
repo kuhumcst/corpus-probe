@@ -1,21 +1,11 @@
 (ns dk.cst.corpus-probe.views.concordance
   "Hiccup for the KWIC concordance: the table of hits, the controls that
-  resubmit it, the section that is the concordance view of a result and
-  the panel inspecting one of its tokens.
+  resubmit it, the concordance view of a result and the panel inspecting
+  one of its tokens. The pure cursor arithmetic the client moves focus
+  with lives here too.
 
-  The markup mirrors the structure CQP's own display modes imply (PLAN.md
-  §7) and carries the corpus data as machine-readable HTML: the concordance
-  is a table of hits, one row group per corpus, each row headed by its
-  corpus position and tagged with its anchors; every token carries its
-  positional annotations as `data-*` attributes and its surface form as the
-  text content; the match is a `<mark>`.
-
-  A token is a `<button>` only where the client runs, since without the
-  script nothing answers a click, and a control that announces a role it
-  cannot honour is worse than plain text. The server-side string renderer
-  drops `:on`, so the same views render as static HTML for first paint and
-  become interactive once the client mounts. The pure cursor arithmetic
-  the client moves focus with lives here too."
+  Tokens carry their annotations as `data-*` attributes and their surface
+  form as text; the match is a `<mark>`."
   (:require [clojure.string :as str]
             [dk.cst.corpus-probe.i18n :as i18n]
             [dk.cst.corpus-probe.url :as url]
@@ -74,9 +64,7 @@
 
 (defn anchored-tokens
   "Which tokens of `hit` its target and keyword anchors fall on: token
-  index to anchor name, for each anchor that is set and within the row.
-  The match anchors are not among them, the match being marked as a
-  whole."
+  index to anchor name, for each anchor set and within the row."
   [{:keys [cpos left anchors] :as hit}]
   (into {}
         (for [k     [:target :keyword]
@@ -89,9 +77,8 @@
   the left context, zero at the first token of the match, positive after
   it.
 
-  This is what lines one row up with another. A hit and its wider context
-  are the same match with more of the text around it, so the match sits at
-  offset zero in both, and moving between them lands on the same word
+  This is what lines a hit up with its wider context, the same match with
+  more text around it, so moving between them lands on the same word
   rather than on the same column."
   [hit i]
   (- i (count (:left hit))))
@@ -139,20 +126,11 @@
   "Token `i` of `hit`, the map `m`, under the concordance `opts` (see
   `concordance`): its surface form as text, its annotations as `data-*`
   attributes, and focus or a click inspecting it along with `source`, the
-  :corpus and :structs of its hit.
+  :corpus and :structs of its hit. A `<button>` under `:client?`, a plain
+  span otherwise.
 
-  A `<button>` under `:client?`, so a keyboard can inspect a token and the
-  browser announces it as the control it is; a plain span otherwise.
-
-  The concordance's tokens are one cursor rather than hundreds of tab
-  stops: only the token at `:cursor` is tabbable, and the arrow keys move
-  the cursor between neighbours, as the APG asks of a grid of controls.
-  Inspecting follows focus rather than waiting for a press, so moving the
-  cursor moves what the panel describes.
-
-  Under `:anchored` (see `anchored-tokens`), the token an anchor falls on
-  carries the anchor's name as its class (see `anchor-class`) and in its
-  title."
+  Only the token at `:cursor` is tabbable, the arrow keys moving the
+  cursor between neighbours, as the APG asks of a grid of controls."
   [{:keys [client? cursor anchored] :as opts} hit source i m]
   (let [k       [(hit-key hit) i]
         inspect [:inspect (assoc source :token m)]
@@ -173,6 +151,8 @@
               :type     "button"
               :id       (token-id hit i)
               :tabindex (if (= cursor k) "0" "-1")
+              ;; inspecting follows focus rather than waiting for a press,
+              ;; so moving the cursor moves what the panel describes
               :on       {:focus   inspect
                          :keydown [:move-cursor k :event/key]
                          :click   inspect})
@@ -230,14 +210,13 @@
        label))])
 
 (defn expand-control
-  "The corpus position of `hit` as the control revealing its wider context,
-  in `ui`, `expanded?` giving its state; the bare position where no
-  `client?` answers the click.
-
-  Its accessible name opens with the visible position, so what is said
-  matches what is seen, and while expanded it names the row it revealed."
+  "The corpus position of `hit` as the control revealing its wider
+  context, in `ui`, `expanded?` giving its state; the bare position where
+  no `client?` answers the click."
   [ui client? hit expanded?]
   (let [cpos  (str (:cpos hit))
+        ;; the accessible name opens with the visible position, so what is
+        ;; said matches what is seen
         label (str cpos " · " (i18n/tr ui "Show or hide more context"))]
     (if-not client?
       cpos
@@ -253,25 +232,23 @@
        cpos])))
 
 (defn hit-row
-  "One KWIC `hit` as a table row under the concordance `opts`, the row
-  carrying its corpus positions, its anchored tokens marked (see
-  `anchored-tokens`) and `expanded?` its disclosure state.
-
-  The corpus position is the row's header and its first cell, so every
-  other cell resolves a row header as well as a column one. The source
-  comes last: between the position and the left context it stood in the
-  middle of the line a reader is there to read. It links to the whole
-  text (see `source-cell`)."
+  "One KWIC `hit` as a table row under the concordance `opts`, with its
+  corpus positions, its anchored tokens marked (see `anchored-tokens`)
+  and `expanded?` its disclosure state."
   [{:keys [ui client?] :as opts} hit expanded?]
   (let [source (hit-source hit)
         opts   (assoc opts :anchored (anchored-tokens hit))
         {:keys [left match right structs anchors cpos]} hit
         nl     (count left)]
     [:tr.kwic-hit (position-data cpos anchors)
+     ;; the position heads the row, so every other cell resolves a row
+     ;; header as well as a column one
      [:th.kwic-cpos {:scope "row"} (expand-control ui client? hit expanded?)]
      [:td.kwic-left (tokens opts hit source 0 left)]
      [:td.kwic-match [:mark (tokens opts hit source nl match)]]
      [:td.kwic-right (tokens opts hit source (+ nl (count match)) right)]
+     ;; last: between the position and the left context it stood in the
+     ;; middle of the line a reader is there to read
      (source-cell hit)]))
 
 (defn expanded-row
@@ -295,12 +272,11 @@
 
 (defn status-row
   "A full-width row reporting `text` about an expansion in flight or
-  failed, under `role` (\"status\" while loading, \"alert\" on failure).
-
-  These are the only rows that appear without a page load, so they are the
-  only ones a live region is any use for."
+  failed, under `role` (\"status\" while loading, \"alert\" on failure)."
   [role text]
   [:tr.kwic-expanded
+   ;; the only rows that appear without a page load, so the only ones a
+   ;; live region is any use for
    [:td {:colspan column-count} [:span {:role role} text]]])
 
 (defn hit-rows
@@ -308,9 +284,7 @@
   in its `:ui`: the KWIC row, followed by its expanded-context row when
   `:expanded` holds a fetched hit under its `hit-key`, an alert row when
   the fetch `failed`, or a status row while one is pending (`loading`,
-  or anything else that is not a hit); always two children, the second
-  nil when there is no expansion, so a hit never changes how many rows
-  it contributes."
+  or anything else that is not a hit)."
   [{:keys [ui expanded] :as opts} hit]
   (let [ex  (get expanded (hit-key hit))
         row (hit-row opts hit (some? ex))]
@@ -328,18 +302,11 @@
 (defn corpus-group
   "The rows of `hits`, all from one corpus, as a row group under the
   concordance `opts` (see `concordance`): a header row naming the corpus
-  (linking to its info page in `:ui`) and, from the per-corpus `:counts`
-  of the search, how many hits it holds in all, then the hit rows with
-  their expansions. A corpus whose query failed has no count, its error
-  being reported on its own. The group carries the corpus's own language
-  from `:langs` when known, since the corpus text is in its own language
-  while the surrounding UI is not.
+  and, from the per-corpus `:counts` of the search, how many hits it
+  holds in all, then the hit rows with their expansions. A corpus whose
+  query failed has no count.
 
-  The count is beside the name it counts, so the reader is told how much
-  of a corpus is under the rows they are reading where they are reading
-  them. It is of the whole corpus rather than of the rows below it: a
-  page holds as many hits as it holds, which is not a fact about any
-  corpus."
+  The count is of the whole corpus, not of the rows below it."
   [{:keys [ui langs counts] :as opts} [{:keys [corpus]} :as hits]]
   (let [corpus-lang (get langs corpus)
         size        (some #(when (= corpus (:corpus %)) (:size %)) counts)]
@@ -356,12 +323,10 @@
      (mapcat #(hit-rows opts %) hits)]))
 
 (defn column-headers
-  "The concordance's column headings in `ui`. The three token
-  columns reuse the words the sort control already uses for them.
-
-  Each heading carries its column's class, so that a rule about a column
-  reaches the heading too rather than counting columns."
+  "The concordance's column headings in `ui`."
   [ui]
+  ;; each heading carries its column's class, so a rule about a column
+  ;; reaches the heading too rather than counting columns
   [:thead
    [:tr
     [:th.kwic-cpos {:scope "col"} (widgets/term ui :cpos false)]
@@ -376,33 +341,19 @@
 
 (def region-id
   "The id of the region the concordance scrolls in. The client focuses it
-  by this name rather than by the class the stylesheet happens to use, so
-  renaming a style hook cannot quietly break focus."
+  by this name rather than by the class the stylesheet uses, so renaming
+  a style hook cannot break focus."
   "concordance")
 
 (defn concordance
   "The KWIC `hits` of one result page as a table, one row group per corpus
   in the order the hits arrive, inside the region that scrolls it.
 
-  A KWIC line must not wrap, or the columns that make it readable stop
-  lining up, so the table scrolls sideways inside its own region rather
-  than taking the whole document with it. The region is focusable because a
-  keyboard must be able to scroll it, and named by the table's caption
-  because a focusable region needs a name.
-
-  `opts` may carry a `:caption` (hiccup or string naming the table),
-  `:ui` (the lookup context of the headings and row controls), `:langs`
-  (corpus name to the language of its own text), `:counts`, the
-  per-corpus counts of the search, which head each row group (see
-  `corpus-group`), `:expanded`, a map of `hit-key` to a wider-context
-  hit to render beneath its row, `:client?`, true where the script that
-  answers a token click is running, and `:cursor`, the [hit-key index]
-  of the one tabbable token, which falls back to the first when it names
-  no token the page still shows.
-
-  Focus leaving the region closes the inspection panel, since the panel
-  describes the token the cursor is on and there is nothing to describe
-  once the reader has gone elsewhere."
+  `opts` carries the `:caption` naming the table, the `:ui` of its
+  headings and controls, `:langs` (corpus to the language of its text),
+  the per-corpus `:counts` heading each row group, `:expanded` (hit-key
+  to a wider-context hit below its row), `:client?` where the script
+  answering a token click runs, and `:cursor`, the one tabbable token."
   [hits {:keys [caption ui] :as opts}]
   (let [{:keys [expanded cursor]} opts
         ;; a cursor left behind by a hit that has since collapsed names no
@@ -411,6 +362,10 @@
                     (< (second cursor) n))
         opts      (cond-> opts
                     (not in-range?) (assoc :cursor (default-cursor hits)))]
+    ;; a KWIC line must not wrap, or its columns stop lining up, so the
+    ;; table scrolls sideways in its own region; focusable because a
+    ;; keyboard must be able to scroll it, and named because a focusable
+    ;; region needs a name
     [:div.scroll {:id              region-id
                   :role            "region"
                   :tabindex        "0"
@@ -426,12 +381,7 @@
 (defn sort-label
   "What the sort mode `value` (see
   dk.cst.corpus-probe.cwb.command/sort-modes) is called, in `ui`; a mode
-  naming a positional attribute (see
-  dk.cst.corpus-probe.cwb.command/sort-attr) is the match by that
-  attribute.
-
-  Naming them here rather than in the commands namespace keeps the CQP
-  command table free of anything the interface decides."
+  naming a positional attribute is the match by that attribute."
   [ui value]
   (case value
     "corpus"  (i18n/tr ui "corpus order")
@@ -443,14 +393,12 @@
     (str (i18n/tr ui "match") " " value)))
 
 (defn sort-control
-  "The sort control of the concordance in `ui`: a select over
-  the `sort-modes` values (see dk.cst.corpus-probe.cwb.command/sort-modes)
-  with `sort` chosen and each named by `sort-label`.
+  "The sort control of the concordance in `ui`: a select over the
+  `sort-modes` values with `sort` chosen, each named by `sort-label`.
 
   It names the form it submits with (see
   dk.cst.corpus-probe.views.widgets/select), so it can sit beside the
-  table it reorders rather than inside the query form: ordering a result
-  is a different task from writing the query that produced it."
+  table it reorders rather than inside the query form."
   [ui sort-modes sort]
   (widgets/select url/form-id "sort" (i18n/tr ui "Sort")
                   (for [value sort-modes]
@@ -458,21 +406,16 @@
 
 (def sample-sizes
   "The sample sizes the concordance offers, in display order: as many
-  hits as a reader might work through by hand, a result larger than that
-  being read by sampling it rather than by paging to the end.
-
-  A hand-written URL may name any other size, which `sample-control`
-  then shows beside these."
+  hits as a reader might work through by hand. A hand-written URL may
+  name any other size, which `sample-control` then shows beside these."
   [50 100 500 1000])
 
 (defn sample-control
   "The sample control of the concordance in `ui`: a select over the
   `sample-sizes` with `sample` chosen, or the whole result when it names
-  none.
-
-  A size the list does not hold is offered beside them, so that a URL
-  naming one shows as the sample it is rather than as the whole result.
-  It names the form it submits with for the reason `sort-control` does."
+  none. A size the list does not hold is offered beside them, so a URL
+  naming one shows as the sample it is. It names the form it submits
+  with, as `sort-control` does."
   [ui sample]
   (let [sizes (sort (cond-> (set sample-sizes) sample (conj sample)))]
     (widgets/select url/form-id "sample" (i18n/tr ui "Sample")
@@ -484,11 +427,9 @@
 (def context-widths
   "The widths of context the concordance offers, in display order: a few
   numbers of words, then the units of text a corpus marks (see
-  dk.cst.corpus-probe.cwb.corpus/unit-attrs), one region of which is shown
-  either side. The first is the usual width (see
-  dk.cst.corpus-probe.search.batch/kwic-defaults). A hand-written URL may
-  name any other number of words, which `context-control` then shows
-  beside these."
+  dk.cst.corpus-probe.cwb.corpus/unit-attrs), one region either side. A
+  hand-written URL may name any other number of words, which
+  `context-control` then shows beside these."
   [5 10 20 :sentence :paragraph])
 
 (defn context-label
@@ -505,7 +446,7 @@
   `context-widths` with `context` (a number of words or a unit keyword)
   chosen, named by `context-label`. A number of words the list does not
   hold is offered among the numbers, in order. It names the form it
-  submits with, for the reason `sort-control` does."
+  submits with, as `sort-control` does."
   [ui context]
   (let [widths (if (or (keyword? context) (some #{context} context-widths))
                  context-widths
@@ -520,17 +461,14 @@
                                       (context-label ui width))))))
 
 (defn concordance-section
-  "The concordance view of the search in `state`: when any corpus could be
-  searched and found something, the sort, context and sample controls
-  with the near control behind its disclosure (see
-  dk.cst.corpus-probe.views.result/view-controls), the pagination above
-  and below the table, the concordance with its `:expanded` hits, its
-  `:langs` and the per-corpus counts that head its row groups, then the
-  download links (`:export-hrefs`, exports holding at most
-  `:export-limit` hits), all worded in the state's `:ui` and wrapped in
-  the shared dk.cst.corpus-probe.views.result/results-region. The result
-  answers the params the search was `:asked` with, not the form's
-  `:params`, which the client's form leaves behind at a change of mode."
+  "The concordance view of the search in `state`: its sort, context and
+  sample controls, the pagination above and below the table, the
+  concordance itself and the download links, worded in the state's `:ui`
+  and wrapped in dk.cst.corpus-probe.views.result/results-region.
+
+  The result answers the params the search was `:asked` with, not the
+  form's `:params`, which the client's form leaves behind at a change of
+  mode."
   [{:keys [ui sort-modes asked result error langs expanded client?
            export-hrefs export-limit prev-href next-href]
     :as state}]
@@ -582,9 +520,8 @@
                                                   export-limit))))))))))
 
 (def inspector-id
-  "The id of the inspection panel, by which the client finds it (see
-  dk.cst.corpus-probe.client.effects/leave-concordance!) rather than by
-  the class the stylesheet uses, as it finds the region (see `region-id`)."
+  "The id of the inspection panel, by which the client finds it rather
+  than by the class the stylesheet uses, as with `region-id`."
   "inspector")
 
 (defn detail-group
@@ -600,26 +537,13 @@
   "The token inspection panel: what the concordance's cursor is on, in
   `ui`, from `selected` (its :token, :structs, :corpus and the :cpos and
   :matchend of its hit, which the link to the whole text takes); nil
-  while nothing is selected.
-
-  Above the rail's breakpoint it takes the query column, so it sits beside
-  the hits it describes without narrowing them; below it, it is a sheet at
-  the foot of the viewport.
-
-  It is not given focus when it opens: the cursor stays on the token so
-  the arrow keys keep moving, and the panel describes whatever the
-  cursor is on. That is why it is not a popover, which would put itself
-  in the top layer, out of the grid, and want focus of its own. Escape
-  closes it from the concordance. It can take focus, so that a click
-  anywhere in it lands focus in the panel rather than on the page, and
-  it reports focus leaving it, since the client closes it once focus
-  has left both it and the concordance (see
-  dk.cst.corpus-probe.client.effects/leave-concordance!).
-
-  The group titles are in `ui`; the attribute names inside them are the
-  corpus's own."
+  while nothing is selected. The group titles are in `ui`, the attribute
+  names inside them the corpus's own."
   [ui {:keys [token structs corpus cpos matchend] :as selected}]
   (when selected
+    ;; not a popover: that would want focus and the top layer, while the
+    ;; cursor must stay on the token for the arrow keys to keep moving.
+    ;; Focus leaving it is how the client knows to close it
     [:aside.inspector {:id         inspector-id
                        :aria-label (i18n/tr ui "Token details")
                        :tabindex   "-1"

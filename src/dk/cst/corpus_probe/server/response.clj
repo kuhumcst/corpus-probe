@@ -1,17 +1,11 @@
 (ns dk.cst.corpus-probe.server.response
   "The responses the handlers answer with: a page as the HTML document
-  its route renders, or as the same view data in transit when the client
-  router asked for it, the downloads, the classpath files and the plain
-  refusals.
+  its route renders, or as the same view data in transit, the downloads,
+  the classpath files and the plain refusals.
 
-  Responses are rendered from the shared .cljc views with Replicant's
-  string renderer, so the client renders identical markup. The view data
-  is embedded in the document as transit for the client to take over
-  from. Hostile corpus content survives the round trip because each
-  channel is protected: `correct-quote-escaping` fixes the SSR body,
-  transit-JSON escapes true control bytes (a carriage return) in the
-  payload, and `script-safe` escapes `<` (which transit passes through
-  verbatim) so a token containing `</script>` cannot break out."
+  Hostile corpus content survives the round trip because each channel is
+  protected: `correct-quote-escaping` fixes the SSR body and
+  `script-safe` escapes the `<` that transit passes through verbatim."
   (:require [clojure.string :as str]
             [cognitect.transit :as transit]
             [dk.cst.corpus-probe.cwb :as cwb]
@@ -52,29 +46,12 @@
   (str/replace s "<" "\\u003c"))
 
 (defn document
-  "The complete HTML document from `opts`: its `:lang`, its `:title`, the
-  bypass link, the site header with its `:path` (the page being served,
-  which its navigation marks) and navigation `:nav` (see
-  dk.cst.corpus-probe.views/site-header), the rendered `:body` hiccup
-  (the page's <main>) in #app, and the site footer. The `:payload` is
-  the same view data as transit, embedded as the #bootstrap script the
-  client takes over from.
-
-  The masthead and the footer sit outside #app, so they are the document's
-  banner and contentinfo rather than part of the main content. Each has
-  a mount point of its own, because a routed navigation must re-render
-  it or it goes stale: the masthead's links carry the current search,
-  and the footer's words are in the UI language, which the language
-  switch changes without reloading. The plain <div> around each scopes
-  no landmark, so the <header> and <footer> inside are still the
-  document's banner and contentinfo. Every page mounts the client, so
-  every page routes: the client swaps those three regions rather than
-  reloading, and the server keeps serving the same complete page for
-  anything that does not run it. The document shell and the bootstrap
-  script are emitted as strings rather than through Replicant, so the
-  transit payload's double quotes are not mangled by the renderer bug
-  (see `correct-quote-escaping`). The document language is the UI
-  language; corpus text carries its own `lang`."
+  "The complete HTML document from `opts`: its `:lang` (the UI language;
+  corpus text carries its own), its `:title`, the bypass link, the site
+  header with its `:path` and navigation `:nav`, the rendered `:body`
+  hiccup in #app, and the site footer. The `:payload` is the same view
+  data as transit, embedded as the #bootstrap script the client takes
+  over from."
   [{:keys [lang path title body nav payload] :as opts}]
   (let [ui (i18n/->ui lang)]
     (str "<!DOCTYPE html>"
@@ -91,10 +68,14 @@
          "<link rel=\"stylesheet\" href=\"/css/tokens.css\">"
          "<link rel=\"stylesheet\" href=\"/css/style.css\">"
          ;; what the chooser hides for a client to show again is shown
-         ;; outright where no client can (see resources/public/css/noscript.css)
+         ;; outright where no client can (see public/css/noscript.css)
          "<noscript><link rel=\"stylesheet\" href=\"/css/noscript.css\"></noscript>"
          "</head><body>"
          (correct-quote-escaping (replicant/render (views/skip-link ui)))
+         ;; the masthead, #app and the footer each get a mount point of
+         ;; their own: a routed navigation must re-render all three or
+         ;; they go stale. The plain <div> scopes no landmark, so the
+         ;; <header> and <footer> inside are still banner and contentinfo
          "<div id=\"masthead\">"
          (correct-quote-escaping
           (replicant/render (views/site-header ui path nav)))
@@ -105,6 +86,8 @@
          "<div id=\"footer\">"
          (correct-quote-escaping (replicant/render (views/site-footer ui)))
          "</div>"
+         ;; a string rather than hiccup: Replicant's renderer would mangle
+         ;; the payload's double quotes (see `correct-quote-escaping`)
          (when payload
            (str "<script type=\"" url/transit-type "\" id=\"bootstrap\">"
                 (script-safe payload)
@@ -156,8 +139,7 @@
 
 (defn download-response
   "A 200 response serving `body` (text, or a function writing it to the
-  response stream as it goes) in export `format` (a key of
-  dk.cst.corpus-probe.search.export/formats) as a download named
+  response stream as it goes) in export `format` as a download named
   `filename`."
   [format filename body]
   {:status  200
@@ -193,12 +175,11 @@
 
 (defn shell-data
   "The parts of a page the masthead is built from, for `request` with
-  search `params`: the `:path` being served, which its navigation marks as
-  current and its language switch returns to, and the navigation `:nav`
-  itself.
+  search `params`: the `:path` being served, which its navigation marks
+  as current and its language switch returns to, and the `:nav` itself.
 
-  They travel in the view data because the client re-renders the masthead,
-  and the navigation depends on the search the reader is looking at."
+  They travel in the view data because the client re-renders the
+  masthead, and the navigation depends on the search being looked at."
   [request params]
   {:path (:uri request)
    :nav  (url/nav-hrefs params)})
@@ -206,12 +187,12 @@
 (defn page-response
   "Answer `request` with the page `data` describes under `title`: as
   transit when the client router asked for it, else as the document its
-  route renders from the same data (see dk.cst.corpus-probe.views/page).
+  route renders from the same data.
 
   The masthead's own parts are merged in here, built for `nav-params`,
-  the search its navigation carries. Every page is this one shape, and
-  both representations come from one place, so the page the server paints
-  and the page the client renders can never describe different things."
+  the search its navigation carries. Both representations come from one
+  place, so the page the server paints and the page the client renders
+  can never describe different things."
   ([request title data]
    (page-response request title data {}))
   ([request title data nav-params]

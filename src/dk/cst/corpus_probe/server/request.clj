@@ -14,8 +14,7 @@
 (defn multi-param?
   "True when query param key `k` may repeat: the corpus selection and the
   chosen values of the metadata filter, one param per value under the
-  value prefix, as in `f.text_year` (see
-  dk.cst.corpus-probe.url/filter-prefixes).
+  value prefix, as in `f.text_year`.
 
   A query param written without a `=` arrives under a nil key, which
   names no attribute."
@@ -45,10 +44,9 @@
 
 (defn filter-params
   "The metadata filter selected by `params`: a map of attribute name to
-  the set of non-blank values of its `f.<attribute>` params (the value
-  prefix of dk.cst.corpus-probe.url/filter-prefixes), as
-  dk.cst.corpus-probe.search/concordance! takes it; empty when nothing
-  is selected."
+  the set of non-blank values of its `f.<attribute>` params, as
+  dk.cst.corpus-probe.search/concordance! takes it; empty when nothing is
+  selected."
   [params]
   (into {} (for [[attr v] (prefixed-params params (:value url/filter-prefixes))
                  :let  [values (set (remove str/blank? (if (vector? v) v [v])))]
@@ -93,7 +91,7 @@
   "What the pattern and range fields of the metadata filter hold, from
   `params`: the `:patterns`, attribute to its `fp.` param, and the
   `:ranges`, attribute to its [`ff.` `ft.`] params, as the form shows
-  them back (see dk.cst.corpus-probe.views.search.filter/pattern-row)."
+  them back."
   [params]
   (let [from (prefixed-params params (:from url/filter-prefixes))
         to   (prefixed-params params (:to url/filter-prefixes))]
@@ -133,11 +131,9 @@
 
 (defn by-param
   "The attribute the `by` query param value `v` asks a frequency table to
-  count its values against (see
-  dk.cst.corpus-probe.search.frequency/frequency-table!), as a keyword;
-  nil when it names none, the corpora being the columns then. The
-  attribute is checked against each corpus by the breakdown, as every
-  attribute is."
+  count its values against, as a keyword; nil when it names none, the
+  corpora being the columns then. The attribute is checked against each
+  corpus by the breakdown, as every attribute is."
   [v]
   (when-not (str/blank? v) (keyword v)))
 
@@ -171,7 +167,7 @@
   nearby, at most `distance` (the query param value) words away: {:word
   ... :distance ...} as dk.cst.corpus-probe.cwb.command/near-command
   takes it, or nil for a blank word. A distance that is not a positive
-  integer is the default (see dk.cst.corpus-probe.url/defaults)."
+  integer is the default."
   [word distance]
   (when-not (str/blank? word)
     {:word     (str/trim word)
@@ -179,9 +175,8 @@
                  (if (and n (pos? n)) n url/default-distance))}))
 
 (defn view-param
-  "The result view named by the `view` query param value `v` (see
-  dk.cst.corpus-probe.url/result-views): the concordance for anything
-  that does not name another view."
+  "The result view named by the `view` query param value `v`: the
+  concordance for anything that does not name another view."
   [v]
   (or (some (fn [[k value]] (when (= v value) k)) url/result-views) :kwic))
 
@@ -209,13 +204,10 @@
   "The settings a reader may store, by the name each is stored under, with
   the predicate saying which values that setting accepts.
 
-  An allowlist rather than a free cookie jar: the endpoint behind this
-  writes cookies, and a caller who chooses both the name and the value of
-  a cookie can fill a reader's jar until their requests no longer fit in a
-  header, or shadow a cookie this app comes to rely on. A setting not
-  named here cannot be stored, and a value the predicate refuses is not
-  stored either, so whatever comes back out is a value the app has already
-  agreed to."
+  An allowlist rather than a free cookie jar: a caller who chooses both
+  the name and the value of a cookie can fill a reader's jar until their
+  requests no longer fit in a header, or shadow a cookie this app relies
+  on. Whatever comes back out is a value the app has already agreed to."
   {:lang i18n/supported?})
 
 (defn cookie-value
@@ -230,12 +222,10 @@
 
 (defn request-languages
   "The languages `request` reads, most preferred first: the one it
-  stored, then its `Accept-Language` by quality (see
-  `accepted-languages`), then Danish and English. The one negotiation:
-  the interface takes the first it has a translation for (see
-  `request-language`), a document the first it has a file in (see
-  dk.cst.corpus-probe.docs/document). Not the URL: a reader's language is
-  their preference, so a shared link does not impose the sharer's."
+  stored, then its `Accept-Language` by quality, then Danish and English.
+  The interface takes the first it has a translation for, a document the
+  first it has a file in. Not the URL: a reader's language is their
+  preference, so a shared link does not impose the sharer's."
   [request]
   (distinct (concat (some-> (cookie-value (get-in request [:headers "cookie"])
                                           :lang)
@@ -246,16 +236,14 @@
 
 (defn request-language
   "The UI language `request` is served in: the first of its
-  `request-languages` the interface has (see
-  dk.cst.corpus-probe.i18n/languages), and Danish is among them, so
+  `request-languages` the interface has, and Danish is among them, so
   there always is one."
   [request]
   (some #(when (i18n/supported? %) %) (request-languages request)))
 
 (defn preference-cookies
-  "The Set-Cookie headers (see dk.cst.corpus-probe.url/cookie) storing
-  every `preference-keys` setting that `params` names with a value that
-  setting accepts.
+  "The Set-Cookie headers storing every `preference-keys` setting that
+  `params` names with a value that setting accepts.
 
   A value the setting refuses stores nothing rather than storing a
   fallback: a reader who never asked for Danish should not be given it

@@ -1,25 +1,11 @@
 (ns dk.cst.corpus-probe.search.cache
-  "Query results kept as CQP's own saved query results, so that paging or
-  re-sorting a search does not re-run it.
-
-  `save` writes a named query result to `<data directory>/<CORPUS>:<name>`,
-  and a later process reads it back with the matches in the order they were
-  saved in, so a page costs one `cat` rather than a query and a sort. Each
-  corpus gets a directory of its own, because CQP registers every file of
-  the one it is given on every startup (docs/research/gap-nqr-persistence.md
-  section 2; dev/cache_bench.clj measures both).
-
-  Invalidation is entirely this application's job, because CQP does none of
-  it and fails silently when a file is wrong: a save file written against an
-  earlier build of a corpus crashes CQP with SIGBUS and no message at all,
-  and a half-written one is read back as garbage without an error. So the
-  name of a result carries a build stamp of the corpus, and CQP saves under
-  a name nothing looks up, the file being renamed into place afterwards.
-
-  How many matches a query has is kept in memory instead (see `count!`),
-  being one number rather than a result and the same however they are
-  ordered. Nothing here is ever run twice at once: a caller that wants what
-  another is already fetching waits for it (see `share!`)."
+  "Query results kept as CQP's own saved query results, so paging or
+  re-sorting a search does not re-run it: `save` writes a named result to
+  a file, and a later process reads it back in the order it was saved in.
+  Invalidation is this application's job, CQP failing silently on a wrong
+  file, so the name of a result carries a build stamp of the corpus, and
+  CQP saves under a name nothing looks up until the file is renamed into
+  place. Match counts are kept in memory instead."
   (:require [clojure.core.cache :as c]
             [clojure.core.cache.wrapped :as cw]
             [clojure.java.io :as io]
@@ -61,10 +47,7 @@
     (io/file cache-dir)))
 
 (defn digest
-  "The MD5 digest of `s` as lowercase hex.
-
-  A filename, never a secret: all that is asked of it is that two results
-  holding different matches cannot land on one name."
+  "The MD5 digest of `s` as lowercase hex: a filename, never a secret."
   [s]
   (->> (.getBytes (str s) "UTF-8")
        (.digest (MessageDigest/getInstance "MD5"))
@@ -73,25 +56,18 @@
 
 (defn match-key
   "What decides which matches `query` has in `corpus` under `ctx`, and so
-  how many of them: the registry, the corpus and its build stamp (see
-  dk.cst.corpus-probe.cwb.registry/build-stamp), the query itself, and
-  the metadata filter, the narrowings and the sample of `opts`.
-
-  The registry is there because two of them can define one corpus name,
-  and the filter's values are sorted because it holds them in sets, whose
-  printed order is no part of their value. The narrowings (see
-  dk.cst.corpus-probe.cwb.command/narrowing) and the sample belong here
-  rather than in `result-key` because they decide which matches there
-  are and how many, not what order they come in; the seed the sample is
-  drawn with does not, being the same one every time (see
-  dk.cst.corpus-probe.cwb.command/sample-seed). Nothing about ordering or
-  display belongs here."
+  how many of them: the registry, the corpus and its build stamp, the
+  query, and the metadata filter, the narrowings and the sample of
+  `opts`. Nothing about ordering or display belongs here."
   [ctx corpus query {filter-by :filter sample :sample near :near
                      subset :subset}]
-  [(:registry ctx)
+  [;; two registries can define one corpus name
+   (:registry ctx)
    corpus
    (registry/build-stamp ctx corpus)
    query
+   ;; the values sorted: the filter holds them in sets, whose printed
+   ;; order is no part of their value
    (mapv (fn [[attr values patterns]] [attr (vec (sort values)) patterns])
          filter-by)
    subset
@@ -101,27 +77,22 @@
 (defn result-key
   "What decides, via `ctx`, which matches the saved result of `query` in
   `corpus` under `opts` holds, and in what order: its `match-key`, the
-  sorting and the collation.
-
-  The sorting is the CQP command rather than the mode that names it, so
-  that the modes which all mean corpus order share one result, and the
-  collation is there because a result is paged in the order it was saved
-  in, which is the order :sort-locale gave it.
-
-  What the display does with the matches is deliberately absent: the
-  context width, the attributes shown and the rows asked for are all
+  sort command and the collation. What the display does with the matches
+  is absent: the context, the attributes shown and the rows asked for are
   applied when a result is read, not when it is saved."
   [ctx corpus query {sort-mode :sort :as opts}]
   (conj (match-key ctx corpus query opts)
+        ;; the command rather than the mode naming it, so that the modes
+        ;; which all mean corpus order share one result
         (command/sort-command sort-mode)
+        ;; a result is paged in the order it was saved in, which is the
+        ;; order the locale gave it
         (:sort-locale ctx)))
 
 (defn result-name
   "The name of the saved query result of `query` in `corpus` under `opts`
-  via `ctx`: `q_` followed by the digest of its `result-key`.
-
-  The `q_` prefix is what keeps the name inside CQP's rule for one (see
-  dk.cst.corpus-probe.cwb.command/valid-result-name)."
+  via `ctx`: `q_` followed by the digest of its `result-key`, the prefix
+  keeping the name inside CQP's rule for one."
   [ctx corpus query opts]
   (str "q_" (digest (pr-str (result-key ctx corpus query opts)))))
 
@@ -132,20 +103,13 @@
 
 (defn share!
   "Call no-arg `f` for key `k`, sharing the one call with every caller
-  asking for the same `k` while it runs.
-
-  A cache miss on a large corpus costs minutes, so a reader who reloads
-  while waiting would otherwise start a second one beside the first.
-
-  A failure is shared like a value: every waiter gets the exception the
-  first caller got. That is deliberate, the alternative being for each to
-  run the same failing query itself and fail the same way minutes later.
-
-  Waiters park on a promise rather than on a delay's monitor, because a
-  virtual thread blocked on a monitor holds its carrier before JDK 24 and
-  the server answers requests on virtual threads. The promise is delivered
-  from a `finally` as well, so a caller that dies frees its waiters."
+  asking for the same `k` while it runs: a cache miss on a large corpus
+  costs minutes, so a reader who reloads would otherwise start a second
+  one. A failure is shared like a value, every waiter getting the
+  exception the first caller got."
   [k f]
+  ;; a promise rather than a delay: a virtual thread blocked on a monitor
+  ;; holds its carrier before JDK 24, and requests run on virtual threads
   (let [mine  (promise)
         claim (fn [m] (if (contains? m k) m (assoc m k mine)))
         held  (get (swap! in-flight claim) k)]
@@ -186,12 +150,9 @@
 (defn count!
   "How many matches `query` has in `corpus` under `ctx` and the filter of
   `opts`: remembered from an earlier count when there is one, else counted
-  by calling no-arg `f` and remembered.
-
-  Kept without a time limit, since a count cannot go stale while the build
-  stamp in its key holds (see `match-key`), and bounded by entry count
-  instead. Kept whatever :cache-dir says, too, being memory rather than
-  disk; `forget-counts!` is what empties it."
+  by calling no-arg `f` and remembered. Kept without a time limit, since a
+  count cannot go stale while the build stamp in its key holds, and
+  whatever :cache-dir says, being memory rather than disk."
   [ctx corpus query opts f]
   (let [k (match-key ctx corpus query opts)]
     ;; lookup-or-miss guarantees one call per caller, not one per key, so
@@ -213,9 +174,11 @@
 
 (defn corpus-directory
   "The directory `ctx` keeps the saved query results of `corpus` in, or
-  nil when it keeps no cache: one directory per corpus (see the namespace
-  docstring). The corpus name is validated, since it becomes a path."
+  nil when it keeps no cache; the corpus name is validated, since it
+  becomes a path."
   ^File [ctx corpus]
+  ;; one directory per corpus: CQP registers every file of the one it is
+  ;; given on every startup
   (when-let [dir (directory ctx)]
     (io/file dir (command/valid-corpus-name corpus))))
 
@@ -229,20 +192,17 @@
 
 (defn result-file
   "The file CQP saves the query result named `nqr` of `corpus` to under
-  `ctx`, or nil when `ctx` keeps no cache.
-
-  CQP names it after the corpus and the result, separated by a colon,
-  inside the corpus's own directory."
+  `ctx`, or nil when `ctx` keeps no cache: the corpus and the result,
+  colon-separated, in the corpus's own directory."
   ^File [ctx corpus nqr]
   (when-let [dir (corpus-directory ctx corpus)]
     (io/file dir (str corpus ":" nqr))))
 
 (defn result-file?
   "True when `f` is named like a saved query result this cache wrote: a
-  corpus name, a colon and a `q_` result name.
-
-  Reaping deletes files and the configured directory is not guaranteed to
-  hold nothing else, so only the cache's own files are ever candidates."
+  corpus name, a colon and a `q_` result name. Reaping deletes files and
+  the configured directory may hold other things, so only the cache's own
+  files are ever candidates."
   [^File f]
   (let [[corpus nqr] (str/split (.getName f) #":" 2)]
     (boolean (and nqr
@@ -270,23 +230,17 @@
 
 (defn commit!
   "Give the saved query result `pending` of `corpus` under `ctx` its final
-  name `nqr`, replacing whatever was stored under it.
-
-  The rename is atomic, so a reader sees either the previous result or this
-  one and never the file CQP was writing. Failing to store a result is no
-  reason to fail the request that produced it, so a rename that cannot be
-  made is logged and left at that.
-
-  A file too small to hold `matches` is thrown away rather than named. CQP
-  does not report a save it could write only part of, so a full disk
-  otherwise leaves a short file that reads back without complaint and
-  serves zero-filled rows past the cut. Every save file carries its matches
-  as two 32-bit positions each, so anything under eight bytes a match was
-  truncated."
+  name `nqr`, replacing whatever was stored under it, atomically, so that
+  a reader sees either the previous result or this one. A rename that
+  cannot be made is logged, a failed save being no reason to fail the
+  request. A file too small to hold `matches` is thrown away rather than
+  named."
   [ctx corpus pending nqr matches]
   (let [^File from (result-file ctx corpus pending)
         ^File to   (result-file ctx corpus nqr)]
     (when (and from (.isFile from))
+      ;; two 32-bit positions a match; CQP does not report a save it could
+      ;; write only part of, and the short file reads back zero-filled
       (if (< (.length from) (* 8 (or matches 0)))
         (do (t/event! ::truncated-save
                       {:level :error
@@ -301,10 +255,8 @@
 (defn holds?
   "True when the saved query result named `nqr` of `corpus` under `ctx`
   is large enough to hold `matches` matches: the rule `commit!` applies
-  when a result is saved, applied again when one is read whole. A file
-  that has shrunk since it was written reads back zero-filled past the
-  cut without CQP saying so, and a count over it would count position
-  nought that many times."
+  when a result is saved, applied again when one is read whole, since a
+  file that has shrunk reads back zero-filled without CQP saying so."
   [ctx corpus nqr matches]
   (boolean (some-> ^File (result-file ctx corpus nqr)
                    (.length)
@@ -326,19 +278,14 @@
 
 (defn excess-files
   "The `files` to delete to bring the rest within `budget` bytes, least
-  recently read first; none when they already fit.
-
-  Least recently read rather than oldest, because the result worth keeping
-  is the one somebody is still paging through, however long ago they
-  searched: reading one touches it (see `touch!`).
-
-  A result larger than the whole budget is deleted on its own account and
-  taken out of the reckoning first. Left in, it would never fit however
-  much was deleted around it, so everything else would be evicted to make
-  room for one that cannot be kept anyway."
+  recently read first, the result worth keeping being the one somebody is
+  still paging through; none when they already fit."
   [budget files]
   (let [recent   (sort-by (fn [^File f] (.lastModified f)) > files)
         too-big? (fn [^File f] (> (.length f) budget))
+        ;; an oversize result goes on its own account and out of the
+        ;; reckoning, or everything else would be evicted to make room for
+        ;; one that cannot fit anyway
         oversize (filterv too-big? recent)
         rest*    (remove too-big? recent)
         totals   (reductions + (map (fn [^File f] (.length f)) rest*))]
@@ -349,14 +296,13 @@
 
 (defn reap!
   "Delete the saved query results under `ctx` that no longer belong there,
-  and return how many were deleted.
+  and return how many were deleted: first those nobody has read for its
+  `ttl-ms`, then as many of the rest as it takes to fit within its
+  `max-bytes`.
 
-  First those nobody has read for its `ttl-ms`, then as many of the rest as
-  it takes to fit the whole within its `max-bytes`. Age alone does not bound
-  the disk: during a busy `ttl-ms` nothing is old enough to delete, which is
-  exactly when the disk is filling. A result deleted while a request is
-  about to read it costs that request a re-run rather than a failure, so
-  nothing has to be locked."
+  Age alone does not bound the disk, a busy `ttl-ms` being when nothing
+  is old enough to delete and the disk is filling; and nothing is locked,
+  since a result deleted under a reader costs a re-run, not a failure."
   [ctx]
   (let [stale? (partial stale? (ttl-ms ctx) (System/currentTimeMillis))
         by-age (group-by stale? (result-files ctx))
@@ -365,31 +311,21 @@
     (reduce (fn [n ^File f] (if (.delete f) (inc n) n)) 0 gone)))
 
 (def reap-interval-ms
-  "How often at most the cache is reaped.
-
-  Reading every corpus directory is not free (about 50 milliseconds for
-  eight thousand results), so it does not run on every save; but it has to
-  run far more often than `ttl-ms`, or a burst of searches writes past
-  `max-bytes` faster than it can reclaim."
+  "How often at most the cache is reaped: reading every corpus directory
+  is not free, so not on every save, but far more often than `ttl-ms`, or
+  a burst of searches writes past `max-bytes` faster than it can reclaim."
   1000)
 
 (defonce ^{:doc "When the cache was last reaped, as a millisecond
-  timestamp.
-
-  Reaping is throttled through this rather than run on every save (see
-  `reap-interval-ms`)."}
+  timestamp; reaping is throttled through it (see `reap-interval-ms`)."}
   last-reap
   (atom 0))
 
 (defn reap-due!
   "Reap the cache of `ctx` (see `reap!`) when `reap-interval-ms` has
   passed since the last reaping, returning how many results were deleted;
-  nil when it was not due.
-
-  Called once a result has been saved, which already cost a whole query,
-  so the cache needs no thread of its own and a server nobody searches
-  reaps nothing. Only the caller that moves the timestamp reaps, so
-  several saves at once still reap once between them."
+  nil when it was not due. Only the caller that moves the timestamp
+  reaps, so several saves at once still reap once between them."
   [ctx]
   (let [now      (System/currentTimeMillis)
         due      (- now reap-interval-ms)

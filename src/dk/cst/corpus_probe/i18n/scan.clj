@@ -1,17 +1,13 @@
 (ns dk.cst.corpus-probe.i18n.scan
   "The gettext extraction: every UI string the source passes to
   dk.cst.corpus-probe.i18n, collected into the template a translator
-  starts a new language from.
+  starts a new language from. Regenerate it with `clojure -M:i18n`; a
+  test compares the committed template against a fresh extraction.
 
-  Regenerate it with `clojure -M:i18n`. A test compares the committed
-  template against a fresh extraction, so it cannot drift from the
-  source without the suite saying so.
-
-  Only a string literal is visible to the extraction: the scanner reads
-  the source as data and never evaluates it. That is why a view that
-  picks one string of several does so with a `case` of `tr` calls
-  rather than by looking a table up: a string that never appears as a
-  literal argument cannot reach the template."
+  Only a string literal is visible to the extraction, which reads the
+  source as data and never evaluates it. That is why a view picking one
+  string of several does so with a `case` of `tr` calls rather than by
+  looking a table up."
   (:require [clojure.java.io :as io]
             [pottery.po :as po]
             [pottery.scan :as pottery]))

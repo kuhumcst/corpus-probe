@@ -1,15 +1,10 @@
 (ns dk.cst.corpus-probe.views.result
   "What both views of a search result share: the results region with its
-  heading, the phrases under the heading naming what was asked, the
-  switch between the views, the controls over a result and the pager,
-  the download links, and the CQP error vocabulary, rendered as sections
-  headed by their names.
-
-  The markup uses the element HTML provides for each part: a named
-  region for the outcome, <nav> for pagination and for the switch,
-  headings for errors, so the document is meaningful without the
-  stylesheet. Nothing here knows the search form: the region answers the
-  params a search was asked with, which the form may have moved on from."
+  heading and the phrases naming what was asked, the switch between the
+  views, the controls over a result, the pager, the download links and
+  the error sections. Nothing here knows the search form: the region
+  answers the params a search was asked with, which the form may have
+  moved on from."
   (:require [clojure.string :as str]
             [dk.cst.corpus-probe.i18n :as i18n]
             [dk.cst.corpus-probe.query :as query]
@@ -20,11 +15,8 @@
 
 (defn query-phrase
   "The query of `params` in words for a title, in `ui`: the text as
-  typed, or, for a list, how many words it holds (see
-  dk.cst.corpus-probe.query/words), a title being one line and a list
-  not, or, for an extended search, the CQP its tokens compile to (see
-  dk.cst.corpus-probe.query/->cqp), which is what the CQP mode shows
-  too."
+  typed; for a list, how many words it holds, a title being one line;
+  for an extended search, the CQP its tokens compile to."
   [ui {:keys [q] :as params}]
   (case (mode/mode params)
     "list"     (let [n (count (query/words q))]
@@ -33,10 +25,9 @@
     q))
 
 (defn form-query
-  "The query the search form holds (see dk.cst.corpus-probe.query/of):
-  that of its `params`, or, in the extended mode, of its `tokens` as the
-  client keeps them (see dk.cst.corpus-probe.query.tokens/rows->params),
-  kept within the unit the params name."
+  "The query the search form holds: that of its `params`, or in the
+  extended mode of its `tokens` as the client keeps them, within the
+  unit the params name."
   [params tokens]
   (let [mode (mode/mode params)]
     (query/of (if (= "extended" mode)
@@ -46,9 +37,8 @@
 
 (defn match-label
   "What the `match` param value is called, in `ui`: how much of the
-  form a simple search must cover (see
-  dk.cst.corpus-probe.query.params/match-op); the whole word for a value
-  naming none."
+  form a simple search must cover; the whole word for a value naming
+  none."
   [ui match]
   (case match
     "prefix" (i18n/tr ui "start of word")
@@ -57,23 +47,20 @@
     (i18n/tr ui "whole word")))
 
 (defn asked?
-  "True when the search `params` ask for anything (see
-  dk.cst.corpus-probe.query/of). A search asking nothing counts every
-  token, which only a frequency table wants."
+  "True when the search `params` ask for anything; a search asking
+  nothing counts every token, which only a frequency table wants."
   [params]
   (some? (query/of params)))
 
 (defn counting?
-  "True while the corpora of `result` are still being counted: some of
-  them are `:remaining` (see dk.cst.corpus-probe.search/concordance!),
-  and its size is the hits counted so far."
+  "True while corpora of `result` are `:remaining` to be counted, its
+  size being the hits counted so far."
   [{:keys [remaining] :as result}]
   (boolean (seq remaining)))
 
 (defn searched?
-  "True when any corpus of `result` could be searched, or is still being
-  counted (see `counting?`), so its counts are an answer rather than a
-  report of failure."
+  "True when any corpus of `result` could be searched or is still being
+  counted, so its counts are an answer rather than a report of failure."
   [{:keys [counts] :as result}]
   (boolean (or (some :size counts) (counting? result))))
 
@@ -86,8 +73,7 @@
 (defn hits-heading
   "What a search found, as the heading of its result in `ui`: how many
   hits, `size`, at least that many while `counting?`; every token when
-  nothing was `asked?` of `params`. Not the query: the field above the
-  answer holds it (see `question` for when it does not)."
+  nothing was `asked?` of `params`."
   ([ui params size]
    (hits-heading ui params size false))
   ([ui params size counting?]
@@ -97,10 +83,9 @@
      (i18n/tr ui "All tokens"))))
 
 (defn query-mark
-  "The query of `params` as the answer names it, in `ui`: a CQP query as
-  the code it is, and so an extended search, as the CQP it compiles to
-  (see `query-phrase`), a list as how many words it holds, and a simple
-  search quoted, being a word spoken of rather than used."
+  "The query of `params` as the answer names it, in `ui`: CQP, and the
+  CQP an extended search compiles to, as code, a list as how many words
+  it holds, and a simple search quoted, a word spoken of, not used."
   [ui params]
   (let [phrase (query-phrase ui params)]
     (case (mode/mode params)
@@ -109,14 +94,10 @@
       [:q phrase])))
 
 (defn question
-  "The query the result of `state` answered, named in `ui` as
-  `query-mark` names it, once the form above has moved on from it:
-  retyped, or switched to a mode that could not keep it, so that the
-  answer still says what it is of. Its `:asked` params are the ones the
-  search ran with, kept as they were while the form moves on; the form's
-  query is read from its `:params` and `:tokens` (see `form-query`). Nil
-  while the form holds the query, which then says it, and the answer
-  names only how many."
+  "The query the result of `state` answered, in `ui`, once the form
+  above has moved on from it: its `:asked` params are the ones the
+  search ran with, the form's query is read from its `:params` and
+  `:tokens`. Nil while the form still holds the query."
   [ui {:keys [asked params tokens]}]
   (when (not= (query/of asked) (form-query params tokens))
     (query-mark ui asked)))
@@ -138,12 +119,9 @@
 
 (defn sample-phrase
   "That a result holds a random `sample` of the matches rather than all
-  of them, in `ui`, over `corpora`; nil when it holds them all.
-
-  The number is the sample asked for rather than the hits it came back
-  with, the two differing wherever a corpus had fewer matches than that,
-  and it is named as being per corpus over several, one sample being
-  drawn in each (see dk.cst.corpus-probe.search/concordance!)."
+  of them, in `ui`, over `corpora`; nil when it holds them all. The
+  number is the sample asked for, one drawn per corpus, not the hits
+  that came back."
   [ui sample corpora]
   (when sample
     (str (i18n/tr ui "a random sample of at most") " "
@@ -151,9 +129,8 @@
          (when (next corpora) (str " " (i18n/tr ui "per corpus"))))))
 
 (defn position-label
-  "What the `position` of a match (see
-  dk.cst.corpus-probe.cwb.command/positions) is called, in `ui`, worded to
-  follow an attribute name; the position itself for one nothing names."
+  "What the `position` of a match is called, in `ui`, worded to follow
+  an attribute name; the position itself for one nothing names."
   [ui position]
   (case position
     "match[-1]"       (i18n/tr ui "before the match")
@@ -165,8 +142,7 @@
 
 (defn subset-phrase
   "That a result holds only the hits whose token at the :anchor of
-  `subset` has its :value as its :attr, in `ui`, the attribute and the
-  value as the code they are; nil without one."
+  `subset` has its :value as its :attr, in `ui`; nil without one."
   [ui {:keys [anchor attr value] :as subset}]
   (when subset
     (list [:code (name attr)] " " (position-label ui anchor) " = "
@@ -204,13 +180,9 @@
 
 (defn qualifiers
   "The question a `result` answered, less the query itself, as short
-  phrases in `ui`, each naming what one control holds: the attribute a
-  simple search of `params` matched and the part of the form, when not
-  the usual ones and when the mode read them (see
-  dk.cst.corpus-probe.query.mode/reads?); the corpora searched, those still
-  being counted among them; the metadata filter; the narrowings; the
-  sample. For the line under the heading (see `results-region`), where
-  the heading says what was found and this what was asked."
+  phrases in `ui`: the attribute a simple search of `params` matched and
+  the part of the form, when not the usual ones; the corpora searched;
+  the metadata filter; the narrowings; the sample."
   [ui {:keys [in match] :as params}
    {:keys [counts size sample remaining] :as result}]
   (let [searched (concat (map :corpus (filter :size counts)) remaining)
@@ -235,10 +207,8 @@
                (sample-phrase ui sample searched))])))
 
 (defn view-label
-  "What the result view `k` is called, in `ui` (see
-  dk.cst.corpus-probe.url/result-views): the concordance is KWIC, as
-  CWB and KORP call it, expanded but not linked, since the label is
-  itself a link."
+  "What the result view `k` is called, in `ui`: the concordance is KWIC,
+  expanded but not linked, since the label is itself a link."
   [ui k]
   (case k
     :kwic        (widgets/term ui :kwic false)
@@ -246,57 +216,35 @@
     (name k)))
 
 (defn view-switch
-  "The switch between the views of one result in `ui`: each of
-  `hrefs` ([view url], see dk.cst.corpus-probe.url/view-hrefs) as a
-  link named by `view-label`, `view` marked as the one being shown; nil
-  without hrefs.
-
-  Links rather than an ARIA tablist: each view is its own URL and its own
-  question put to CQP, so following one is a navigation, which is what a
-  link means. A tablist would promise a panel that is already loaded."
+  "The switch between the views of one result in `ui`: each of `hrefs`
+  ([view url]) as a link, `view` marked as the one being shown; nil
+  without hrefs."
   [ui view hrefs]
   (when (seq hrefs)
+    ;; links, not a tablist: each view is its own URL and its own question
+    ;; to CQP, so following one is a navigation, not a panel already loaded
     [:nav.views.menu {:aria-label (i18n/tr ui "Result view")}
      (widgets/link-row (for [[k href] hrefs] [k href (view-label ui k)])
                        view)]))
 
 (defn apply-button
   "The button applying a result's controls where no `client?` runs to
-  apply them itself, in `ui`; nil where one does.
-
-  Each control applies itself on being changed where the client runs, so
-  there is no button: choosing an order is asking for it, and a control
-  that needs a second control to take effect is one the reader has to be
-  told about. Without a client nothing can act on a change, so the button
-  is what applies it there.
-
-  Inside <noscript>: the server renders every page for the reader without
-  a script, and a browser with one showed the button for the split second
-  before the client's first render took it away. Wrapped, that browser
-  never shows it, while one without a script does."
+  apply them itself, in `ui`; nil where one does."
   [ui client?]
   (when-not client?
+    ;; inside noscript: rendered bare, a scripted browser flashes it for
+    ;; the split second before the client's first render takes it away
     (list " " [:noscript
                [:button {:type "submit" :form url/form-id}
                 (i18n/tr ui "Apply")]])))
 
 (defn view-controls
   "The controls of a result in `ui`: the `reading` ones (hiccup), which
-  decide how the hits are read rather than what was searched for, and
-  behind a disclosure the `narrowing` ones (hiccup; nil for none), which
-  keep only some of the hits, `open?` saying whether that disclosure
-  starts open. Nil without either.
-
-  They live with the result rather than in the query form, so re-ordering
-  a concordance costs a click instead of a scroll back past the form.
-  Narrowing one is here for the same reason though it runs the query
-  again: which of the hits to keep is a question the reader has on
-  seeing them. It is behind a disclosure because it is the rarer
-  question, and a row of six controls reads as a form to fill in; the
-  disclosure is open whenever a narrowing is in force, so what narrows a
-  result is never hidden from the reader it narrows it for.
-
-  Each row carries the `apply-button` where no `client?` runs."
+  decide how the hits are read, and behind a disclosure the `narrowing`
+  ones (hiccup; nil for none), which keep only some of them, `open?`
+  saying whether that disclosure starts open, as it must while a
+  narrowing is in force; each row with the `apply-button` where no
+  `client?` runs. Nil without either."
   [ui client? reading narrowing open?]
   (when (or reading narrowing)
     [:div.view-controls
@@ -313,22 +261,16 @@
 
 (defn near-control
   "The proximity control of a result in `ui`: the word every hit must
-  have nearby and how many words away it may be, from `near` (the :word
-  and :distance in force, if any) and the `near-distances`.
-
-  The word is typed rather than chosen, so it applies once the reader is
-  done with it: a text field reports a change on Enter and on focus
-  leaving it, and the change applies the view as a select's does. Enter
-  alone could not be relied on: implicit submission does not reach a
-  form from a field that only names it. The distance applies itself as
-  the sort does. A distance the list does not hold is offered beside
-  them, as a sample size is."
+  have nearby and how many words away it may be, from the :word and
+  :distance of `near`, over the `near-distances`."
   [ui {:keys [word distance]}]
   (let [distance (or distance url/default-distance)
         words    (fn [n] (str n " " (i18n/trn ui "word" "words" n)))]
     (list
      [:label {:for "near"} (i18n/tr ui "Near")]
      " "
+     ;; applies on change, not on Enter alone: implicit submission does
+     ;; not reach a form from a field that only names it
      [:input {:id           "near"
               :name         "near"
               :type         "search"
@@ -343,9 +285,8 @@
 
 (defn pager-links
   "The page links of a result around `position` (where in the sequence
-  the reader is), labelled in `ui` (see
-  dk.cst.corpus-probe.views.widgets/pager); nil when neither `prev-href`
-  nor `next-href` is in range."
+  the reader is), labelled in `ui`; nil when neither `prev-href` nor
+  `next-href` is in range."
   [ui prev-href next-href position]
   (widgets/pager (when prev-href
                    [prev-href (str "← " (i18n/tr ui "previous"))])
@@ -355,22 +296,17 @@
 
 (defn pagination
   "The `pager-links` around `position` from `prev-href` and `next-href`,
-  as a navigation landmark named in `ui`.
-
-  Only one of a result's two pagers is a landmark: the APG asks each
-  landmark of a repeated role to carry a name of its own, and two named
-  Pagination cannot be told apart. The repeat below the table is the bare
-  list, whose links stay operable and stay in the tab order."
+  as a navigation landmark named in `ui`."
   [ui prev-href next-href position]
   (when-let [links (pager-links ui prev-href next-href position)]
+    ;; the one pager that is a landmark: two landmarks named Pagination
+    ;; cannot be told apart, so the repeat below the table is the bare list
     [:nav.pagination.menu {:aria-label (i18n/tr ui "Pagination")} links]))
 
 (defn download-links
   "Links downloading the current table in each format of `hrefs` (format
   keyword to URL), with `note` (when given) qualifying what the download
-  holds; nil without hrefs, worded in `ui`. The response itself
-  asks to be saved (its Content-Disposition), so the links carry no
-  download attribute."
+  holds; nil without hrefs, worded in `ui`."
   [ui hrefs note]
   (when (seq hrefs)
     [:p.downloads (i18n/tr ui "Download")
@@ -378,6 +314,8 @@
      ": "
      (interpose " · "
                 (for [[format href] (sort hrefs)]
+                  ;; no download attribute: the response's own
+                  ;; Content-Disposition asks to be saved
                   [:a {:href href} (str/upper-case (name format))]))]))
 
 (defn error-groups
@@ -426,10 +364,9 @@
   (boolean (re-find #"Corpus ``.*'' is undefined" (str message))))
 
 (defn error-body
-  "The parts of an `error` under its heading in `ui`: the
-  `corpora` it concerns, the explanation of a type that carries no message,
-  what a bare word in CQP gets told (see `bare-word-error?`), and cqp's
-  own message verbatim, its `<--` position pointer included, as the
+  "The parts of an `error` under its heading in `ui`: the `corpora` it
+  concerns, the explanation of a type that carries no message, what a
+  bare word in CQP gets told, and CQP's own message verbatim as the
   sample output of another program."
   [ui {:keys [type message]} corpora]
   (list
@@ -448,51 +385,32 @@
    (when message [:pre {:tabindex "0"} [:samp message]])))
 
 (defn cqp-error-section
-  "An `error` map under a heading of its own in `ui` (see
-  dk.cst.corpus-probe.views.widgets/error-section), naming the `corpora`
-  it concerns when given. The reader reaches the error because the
-  search lands on it (see `results-region`)."
+  "An `error` map as an error section in `ui`, naming the `corpora` it
+  concerns when given."
   [ui error corpora]
   (widgets/error-section (error-heading ui error)
                          (error-body ui error corpora)))
 
 (defn result-heading
-  "The heading naming the results region in `ui`: what the concordance
-  `result` of the search `params` describe found (see `hits-heading`)
-  when any corpus could be searched, else the name of the error that
-  came instead, so a search that failed everywhere is not announced as a
-  count of nothing."
+  "The heading naming the results region in `ui`: what the `result` of
+  the search `params` describe found when any corpus could be searched,
+  else the name of the `error` that came instead, so a search that
+  failed everywhere is not announced as a count of nothing."
   [ui params {:keys [counts size] :as result} error]
   (if (searched? result)
     (hits-heading ui params size (counting? result))
     (error-heading ui (or error (some :error counts)))))
 
 (defn results-region
-  "The outcome of a search in `state` under `heading`, as a region named by
-  that heading and focusable, so a GET search can land on it.
-
-  Every view of a result shares this: a header holding the heading, the
-  `subheading` phrases (see `qualifiers`) under it and the switch
-  between the views at its end; a status line while the result is still
-  being counted (see `counting?`); the error that replaced the result or
-  the errors of individual corpora; and then `body`, the view's own
-  content. The two views differ only in what they say about the same
-  hits, so they differ only in what they pass here.
-
-  The heading is the page's h1: the search page has no other, so what a
-  search found, or why it found nothing, is what the page is about. It
-  is the answer alone, how many: the query is in the field above, which
-  is the page's headline, and the answer repeats it only once the form
-  has moved on from it (see `question`), at the head of the line under
-  the heading. That line is the rest of the question, grouped with the
-  heading as heading and subheading, and the region is named by the
-  heading alone, so a screen reader landing here hears the count and not
-  the whole question, which the controls below restate anyway.
-
-  Marked busy while a navigation is `pending?`, since until that one
-  lands what this holds is the answer to the question before it."
+  "The outcome of a search in `state` under `heading`, as a region named
+  by that heading and focusable, so a GET search can land on it: a
+  header of the heading, the `subheading` phrases and the view switch;
+  a status line while the result is still being counted; the errors;
+  then `body`, the view's own content."
   [{:keys [ui view view-hrefs result error pending?] :as state}
    heading subheading body]
+  ;; named by the heading alone: a screen reader landing here hears the
+  ;; count, not the whole question, which the controls below restate
   [:section.result (cond-> {:id              url/results-id
                             :tabindex        "-1"
                             :aria-labelledby "results-heading"}
@@ -502,6 +420,8 @@
                      pending? (assoc :aria-busy "true"))
    [:header.result-head
     [:hgroup
+     ;; the page's h1: the search page has no other, so what a search
+     ;; found is what the page is about
      [:h1 {:id "results-heading"} heading]
      (when-let [phrases (seq (remove nil? (cons (question ui state)
                                                 subheading)))]

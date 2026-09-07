@@ -1,24 +1,19 @@
 (ns dk.cst.corpus-probe.cwb.corpus
   "What CQP reports about a corpus, memoised per corpus until it is
   re-encoded: its attributes from `show cd;`, its facts from `info;` and
-  the overview the corpus index shows; the context a corpus's batches run
-  under; the predicates over its attribute descriptions; and the registry
-  organised for display, its corpora summarised and grouped in folders.
-
-  The registry itself is read by dk.cst.corpus-probe.cwb.registry, so no
-  corpus configuration is duplicated in the application: everything the
-  UI knows about a corpus derives from its entry there plus these two
-  CQP commands."
+  the overview the corpus index shows; the predicates over its attribute
+  descriptions; and the registry organised for display. Everything the UI
+  knows about a corpus derives from its registry entry plus these two CQP
+  commands."
   (:require [clojure.string :as str]
             [dk.cst.corpus-probe.cwb :as cwb]
             [dk.cst.corpus-probe.cwb.command :as command]
             [dk.cst.corpus-probe.cwb.parse :as parse]
             [dk.cst.corpus-probe.cwb.registry :as registry]))
 
-(defonce ^{:doc "Cache of per-corpus facts: a delay per key
-  [registry corpus label build-stamp]. The stamp keys stale entries out
-  when a corpus is re-encoded under a running JVM (see
-  dk.cst.corpus-probe.cwb.registry/build-stamp)."}
+(defonce ^{:doc "Cache of per-corpus facts: a delay per key [registry
+  corpus label build-stamp], the stamp keying stale entries out when a
+  corpus is re-encoded under a running JVM."}
   facts-cache
   (atom {}))
 
@@ -32,16 +27,10 @@
 
 (defn facts!
   "Return the cached facts of `corpus` in `ctx` under cache key part
-  `label` (a keyword or vector of this namespace's or the caller's own,
-  so that two callers cannot share a fact by accident), computing them
-  with no-arg `f` on a miss.
-
-  Concurrent misses share one computation: the cache holds a delay per key,
-  so the first caller runs `f` while the others wait for its value. A
-  computation that throws is forgotten again, so the next caller retries.
-  Entries live until the corpus is re-encoded or its registry entry
-  changes (see dk.cst.corpus-probe.cwb.registry/build-stamp); the entry
-  they supersede is dropped then."
+  `label` (a keyword or vector of the caller's own, so that two callers
+  cannot share a fact by accident), computing them with no-arg `f` on a
+  miss. Concurrent misses share one computation, and one that throws is
+  forgotten so the next caller retries."
   [{:keys [registry] :as ctx} corpus label f]
   (let [k [registry corpus label (registry/build-stamp ctx corpus)]
         d (get (swap! facts-cache
@@ -58,11 +47,9 @@
            (throw e)))))
 
 (defn corpus-ctx
-  "Return `ctx` configured for `corpus`: validates the corpus name (it is
-  spliced into commands outside the QueryLock sandbox, see
-  dk.cst.corpus-probe.cwb.command/valid-corpus-name) and sets the corpus's
-  own charset for the round trip (see
-  dk.cst.corpus-probe.cwb.registry/charset)."
+  "Return `ctx` configured for `corpus`: the name validated (it is spliced
+  into commands outside the QueryLock sandbox) and the corpus's own
+  :charset set for the round trip."
   [ctx corpus]
   (command/valid-corpus-name corpus)
   (assoc ctx :charset (registry/charset ctx corpus)))
@@ -70,11 +57,7 @@
 (defn cqp-facts!
   "Run CQP `command` against activated `corpus` (an uppercase CQP corpus
   name) via `ctx` and parse its output lines with `parse-fn`, cached per
-  registry + corpus + command until the corpus is re-encoded.
-
-  The corpus name is validated first, since it is spliced into the
-  activation command; the batch runs in the corpus's own charset (see
-  `corpus-ctx`), read on a miss along with the facts."
+  registry, corpus and command until the corpus is re-encoded."
   [ctx corpus command parse-fn]
   (command/valid-corpus-name corpus)
   (facts! ctx corpus [::cqp command]
@@ -86,17 +69,15 @@
 
 (defn attributes!
   "Return the attribute descriptions of `corpus` as reported by `show cd;`
-  via the installation in `ctx`, cached until the corpus is re-encoded.
-
-  Unlike the registry, this marks which s-attributes carry annotation values
-  (:values?), which decides what `tabulate` can extract per hit."
+  via `ctx`, cached until the corpus is re-encoded. Unlike the registry,
+  this marks which s-attributes carry annotation values (:values?)."
   [ctx corpus]
   (cqp-facts! ctx corpus "show cd;" parse/show-cd->attributes))
 
 (defn info!
-  "Return the corpus facts of `corpus` as reported by `info;` via the
-  installation in `ctx` (see dk.cst.corpus-probe.cwb.parse/info->map),
-  cached until the corpus is re-encoded."
+  "Return the corpus facts of `corpus` as reported by `info;` via `ctx`
+  (see dk.cst.corpus-probe.cwb.parse/info->map), cached until the corpus
+  is re-encoded."
   [ctx corpus]
   (cqp-facts! ctx corpus "info;" parse/info->map))
 
@@ -112,10 +93,7 @@
 (defn phantom?
   "True when exception `e` says CWB has no data for a registry entry: CQP
   reporting the corpus as undefined, or a cwb-* tool reporting its data as
-  missing (`:phantom?` in the ex-data).
-
-  The two tools say it differently and mean the same thing, and it stays
-  true until the entry changes."
+  missing (`:phantom?` in the ex-data)."
   [e]
   (let [{:keys [error phantom?]} (ex-data e)]
     (boolean (or phantom?
@@ -123,19 +101,15 @@
 
 (defn overview!
   "The `overview` of registry entry map `m` plus its :size in tokens via
-  `ctx`, cached until the entry changes.
-
-  The size is nil for a phantom entry (see `phantom?`), an outcome cached
-  like any other so a phantom costs one process rather than one per
-  request; any other failure to read the size propagates uncached, so a
-  transient one is retried.
-
-  The cache key follows the registry entry, not the corpus data, so
-  restoring the data of a phantom takes a restart to be noticed."
+  `ctx`, cached until the entry changes; the size is nil for a phantom
+  entry (see `phantom?`)."
   [ctx m]
   (let [{:keys [id] :as summary} (overview m)]
     (facts! ctx id ::overview
             (fn []
+              ;; a phantom is cached like any outcome, costing one process
+              ;; rather than one per request; any other failure propagates
+              ;; uncached, so a transient one is retried
               (assoc summary
                      :size (try (:size (info! ctx id))
                                 (catch clojure.lang.ExceptionInfo e
@@ -165,9 +139,8 @@
   (or (positional? m) (annotated-s-attr? m)))
 
 (defn attribute
-  "The description among `attributes` (as `attributes!` reports them, or
-  the per-attribute statistics of a cwb-* tool) of the attribute named
-  `attr`, a keyword or string; nil when the corpus lacks it."
+  "The description among `attributes` of the attribute named `attr`, a
+  keyword or string; nil when the corpus lacks it."
   [attributes attr]
   (let [attr (keyword attr)]
     (some #(when (= attr (:name %)) %) attributes)))
@@ -175,8 +148,7 @@
 (def unit-attrs
   "The names a unit of text goes by among a corpus's s-attributes, in the
   order they are looked for: a sentence is `s` in CWB's own corpora and
-  `sentence` in the KU ones, a paragraph `p` or `paragraph`. The units
-  themselves are dk.cst.corpus-probe.cqp/units."
+  `sentence` in the KU ones, a paragraph `p` or `paragraph`."
   {:sentence  [:s :sentence]
    :paragraph [:p :paragraph]
    :text      [:text]})
@@ -191,8 +163,7 @@
 
 (defn corpus-lang
   "The language code of the corpus named `corpus` among the registry
-  `entries`, when its entry records a plausible one (see
-  dk.cst.corpus-probe.cwb.registry/language)."
+  `entries`, when its entry records a plausible one."
   [entries corpus]
   (some (fn [{:keys [id] :as m}]
           (when (= corpus (str/upper-case id))
@@ -201,20 +172,15 @@
 
 (defn split-known
   "Split the `selected` corpus names into [known unknown] by the registry
-  `entries`, so that only names the registry has reach a command and the
-  rest are reported without spawning anything."
+  `entries`, so that only names the registry has reach a command."
   [entries selected]
   (let [known? (set (map (comp str/upper-case :id) entries))]
     [(filterv known? selected) (vec (remove known? selected))]))
 
 (defn readable-corpora!
   "The names of the registry `entries` CWB can read right now, via `ctx`,
-  in registry order.
-
-  This is what a request that names no corpus searches: exactly the set
-  the chooser would let a reader tick, since it disables the rest. The
-  overviews are cached, and the chooser asks for the same ones on every
-  page, so this costs nothing on a warm cache."
+  in registry order: what a request that names no corpus searches, and
+  exactly the set the chooser lets a reader tick."
   [ctx entries]
   (into []
         (comp (filter :size) (map (comp str/upper-case :id)))
@@ -223,11 +189,9 @@
                     entries)))
 
 (defn corpus-tree!
-  "The registry `entries` (maps as from
-  dk.cst.corpus-probe.cwb.registry/entries) summarized via `ctx`, in
-  parallel since each summary is a CQP round trip on a cache miss, and
-  grouped by its configured folder tree (see
-  dk.cst.corpus-probe.cwb.registry/grouped-corpora). An entry whose size
+  "The registry `entries` summarized via `ctx`, in parallel, and grouped
+  by the configured folder tree (see
+  dk.cst.corpus-probe.cwb.registry/grouped-corpora); an entry whose size
   cannot be read right now is summarized sizeless, and uncached."
   [ctx entries]
   (registry/grouped-corpora
