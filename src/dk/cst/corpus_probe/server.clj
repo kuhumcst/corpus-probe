@@ -247,8 +247,8 @@
 (defn stop!
   "Stop the web server when it is running."
   []
-  (when-let [s @server]
-    (conn/stop! s)
+  (when-let [connector @server]
+    (conn/stop! connector)
     (reset! server nil)))
 
 (defn -main

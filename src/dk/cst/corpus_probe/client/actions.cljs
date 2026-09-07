@@ -13,7 +13,7 @@
             [dk.cst.corpus-probe.url :as url]
             [dk.cst.corpus-probe.views.chooser :as chooser]
             [dk.cst.corpus-probe.views.concordance :as concordance]
-            [dk.cst.corpus-probe.views.search.filter :as filter]))
+            [dk.cst.corpus-probe.views.search.filter :as filter-views]))
 
 (def arrow-keys
   "How each key moves the concordance's cursor: [rows tokens], a step
@@ -316,8 +316,8 @@
            :projected  (query/of (assoc spelt :mode mode)))))
 
 (defn submit-on-enter
-  "Submit the search from the query field when `pressed` is Enter and
-  neither `shift?` nor `composing?`.
+  "`state` as it is, and the search submitted from the query field when
+  `pressed` is Enter and neither `shift?` nor `composing?`.
 
   The field is a text area, so that a list can be typed one word per
   line, and a text area takes Enter as a line; a search box takes it as a
@@ -331,9 +331,9 @@
     {:state state}))
 
 (defn swallow-enter
-  "Keep `pressed` from submitting the search when it is Enter: a text
-  field in a form submits it on Enter, and a reader finding something to
-  tick is not asking for an answer yet."
+  "`state` as it is, with `pressed` kept from submitting the search when
+  it is Enter: a text field in a form submits it on Enter, and a reader
+  finding something to tick is not asking for an answer yet."
   [state pressed]
   (cond-> {:state state}
     (= "Enter" pressed) (assoc :effects [[:prevent-default]])))
@@ -376,7 +376,7 @@
   [state]
   (-> state
       (assoc-in [:filter-controls :selected] {})
-      (lists/tick :values (filter/filter-pairs
+      (lists/tick :values (filter-views/filter-pairs
                            (get-in state [:filter-controls :selected]))
                   true)))
 

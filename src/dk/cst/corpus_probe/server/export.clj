@@ -26,7 +26,7 @@
      :struct-attrs (vec (distinct (corpus/attr-names corpus/annotated-s-attr?
                                                      attrs)))}))
 
-(defn export-kwic
+(defn serve-kwic-export
   "Handle a concordance export `request` against `ctx` in `format` (a
   key of dk.cst.corpus-probe.search.export/formats): the hits of the
   query in the selected corpora, the first
@@ -71,7 +71,7 @@
                        row    (export/kwic-rows p-attrs struct-attrs export)]
                  (.write w ^String (line row)))))))))))
 
-(defn export-frequencies
+(defn serve-frequencies-export
   "Handle a frequency table export `request` against `ctx` in `format`
   (a key of dk.cst.corpus-probe.search.export/formats): every row of the
   breakdown of the query (or of the whole corpora) by the `attr` param,
@@ -109,6 +109,6 @@
   (let [[_ view format] (re-matches export-file
                                     (str (get-in request [:path-params :file])))]
     (case view
-      "kwic"        (export-kwic ctx request format)
-      "frequencies" (export-frequencies ctx request format)
+      "kwic"        (serve-kwic-export ctx request format)
+      "frequencies" (serve-frequencies-export ctx request format)
       response/not-found)))

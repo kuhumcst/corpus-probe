@@ -17,7 +17,7 @@
 
 (defn within-attr!
   "The s-attribute of `corpus` via `ctx` that a search kept within `unit`
-  (see dk.cst.corpus-probe.cwb.corpus/units) is restricted to; nil for no
+  (see dk.cst.corpus-probe.cwb.corpus/unit-attrs) is restricted to; nil for no
   unit, and for a corpus that does not mark it, where the search runs
   unrestricted rather than not at all."
   [ctx corpus unit]
@@ -38,7 +38,7 @@
         (command/sentence-tags (attr :sentence))
         (command/within-clause (into {}
                                      (map (juxt identity attr))
-                                     (keys corpus/units)))
+                                     (keys corpus/unit-attrs)))
         (command/within-query (attr unit)))))
 
 (defn corpus-subset!
@@ -73,7 +73,7 @@
   "The width of context a corpus with `attributes` shows for `context`
   (see dk.cst.corpus-probe.search.batch/context-spec): a number of words
   as it is, and a unit of text (a key of
-  dk.cst.corpus-probe.cwb.corpus/units) as the corpus's own attribute for
+  dk.cst.corpus-probe.cwb.corpus/unit-attrs) as the corpus's own attribute for
   it, or as the default width where the corpus marks no such unit, since
   a hit shown with the usual context beats one not shown at all."
   [attributes context]
@@ -126,8 +126,8 @@
     opts))
 
 (defn kwic-opts!
-  "The options one KWIC batch for `corpus` needs, from the `opts` of
-  dk.cst.corpus-probe.search/kwic! via `ctx`.
+  "The options one KWIC batch of `query` in `corpus` needs, from the
+  `opts` of dk.cst.corpus-probe.search/kwic! via `ctx`.
 
   The KWIC defaults, the corpus's positional attributes and the structural
   attributes to fetch per hit, its context width as the corpus shows it

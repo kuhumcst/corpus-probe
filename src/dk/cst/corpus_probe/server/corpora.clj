@@ -19,7 +19,8 @@
   [ctx request]
   (let [data {:route :corpora
               :lang  (request/request-language request)
-              :data  {:folders (corpus/corpus-tree! ctx (registry/entries ctx))}}]
+              :data  {:folders (corpus/corpus-tree! ctx
+                                                    (registry/entries ctx))}}]
     (response/page-response request (views/title data) data)))
 
 (defn serve-corpus

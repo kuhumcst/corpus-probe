@@ -377,36 +377,6 @@
       (is (some #{"sætning" "5 ord" "Kontekst"}
                 (deep (concordance/context-control da 5)))))))
 
-(deftest near-control-test
-  (testing "no word in force: an empty field and the default distance"
-    (let [html (concordance/near-control en nil)]
-      (is (some #(and (map? %) (= "near" (:name %)) (= "" (:value %))
-                      (= url/form-id (:form %)))
-                (deep html)))
-      (is (some #(and (map? %)
-                      (= (parse-long (:distance url/defaults)) (:value %))
-                      (:selected %))
-                (deep html)))))
-  (testing "the word and distance in force, the distance applying itself"
-    (let [html (concordance/near-control en {:word "kat" :distance 3})]
-      (is (some #(and (map? %) (= "near" (:name %)) (= "kat" (:value %)))
-                (deep html)))
-      (is (some #(and (map? %) (= 3 (:value %)) (:selected %)) (deep html)))
-      (is (some #(and (map? %) (= "distance" (:name %))
-                      (= [:apply-view] (get-in % [:on :change])))
-                (deep html))))
-    (testing "and so does the word, once the reader is done typing it"
-      (is (some #(and (map? %) (= "near" (:name %))
-                      (= [:apply-view] (get-in % [:on :change])))
-                (deep (concordance/near-control en {:word "kat" :distance 3}))))))
-  (testing "a distance the list lacks is offered beside them, in order"
-    (is (= [1 2 3 4 5 10]
-           (keep #(when (number? (:value %)) (:value %))
-                 (deep (concordance/near-control en {:word "kat" :distance 4}))))))
-  (testing "in Danish"
-    (is (some #{"Sammen med"} (deep (concordance/near-control da nil))))
-    (is (some #{"1 ord"} (deep (concordance/near-control da nil))))))
-
 (def example-result
   {:size 6 :page 0 :page-size 25 :pages 1
    :counts [{:corpus "PROBE" :size 5}

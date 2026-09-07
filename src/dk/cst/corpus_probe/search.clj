@@ -233,7 +233,7 @@
   neither. Nil when no text holds the position.
 
   A text is a region of the corpus's own text attribute (see
-  dk.cst.corpus-probe.cwb.corpus/units), read as one match with no
+  dk.cst.corpus-probe.cwb.corpus/unit-attrs), read as one match with no
   context (see dk.cst.corpus-probe.search.batch/text-batch); a corpus
   marking no texts has none to read, and says so with a :no-texts error.
   Throws ex-info when CQP reports an error, times out or dies."
@@ -335,8 +335,8 @@
                                   (- limit (count (:rows res))) opts))))))
 
 (defn fill-page!
-  "Query `corpora` one at a time via `ctx` until the `rows` [from to] of
-  the combined result are filled or `deadline` passes.
+  "Run `query` in `corpora` one at a time via `ctx` until the `rows`
+  [from to] of the combined result are filled or `deadline` passes.
 
   Each corpus contributes the rows of its own result that fall in the
   range, offset by the sizes of the corpora before it, and its count map

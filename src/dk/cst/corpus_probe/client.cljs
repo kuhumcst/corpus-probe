@@ -31,7 +31,10 @@
             [dk.cst.corpus-probe.views :as views]
             [replicant.dom :as r]))
 
-(defonce state
+(defonce ^{:doc "The application state, which every render reads and
+  `dispatch!` writes (see dk.cst.corpus-probe.client.actions/data->state
+  for its shape)."}
+  state
   (atom nil))
 
 (defn focus-left?
@@ -105,7 +108,7 @@
   ;; in 2026.07.1 (upstream issue 53 is open); if one arrives it has to
   ;; be a new entry point. The cheap mitigation, should the window ever
   ;; matter, is to read #q's live value here before rendering.
-  (let [{:keys [lang path nav] :as state} @state
+  (let [{:keys [lang path nav] :as current} @state
         ui (i18n/->ui lang)]
     ;; the masthead's links carry the current search, so it re-renders
     ;; with the page rather than keeping whatever the first server render
@@ -113,7 +116,7 @@
     ;; switch that does not reload the document has to re-render it too
     (r/render (.getElementById js/document "masthead")
               (views/site-header ui path nav))
-    (r/render (.getElementById js/document "app") (views/page state))
+    (r/render (.getElementById js/document "app") (views/page current))
     (r/render (.getElementById js/document "footer") (views/site-footer ui))))
 
 (defn dispatch!

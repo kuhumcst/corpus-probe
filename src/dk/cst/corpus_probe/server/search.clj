@@ -283,8 +283,8 @@
                  (public-counts))}))
 
 (defn run-view!
-  "The outcome of the search `req` (see `read-request!`) asks, in its
-  `:view`: {:result ...} or {:error ...} from `frequency-outcome!` or
+  "The outcome of the search `req` (see `read-request!`) asks of `ctx`,
+  in its `:view`: {:result ...} or {:error ...} from `frequency-outcome!` or
   `search-outcome!`, with the rows of a frequency table linked (see
   `linked-rows`); nil when nothing runs (see `runs?`)."
   [ctx {:keys [view params known unknown cqp opts attr at docs page transit?]
@@ -380,7 +380,7 @@
   (let [result  (:result outcome)
         exports (fn [view params]
                   (when result
-                    (url/export-hrefs view (keys export/formats) params)))]
+                    (url/export-hrefs view url/export-formats params)))]
     (if (= :frequencies view)
       {:view-hrefs   (url/view-hrefs cited)
        :export-hrefs (exports :frequencies
@@ -434,7 +434,8 @@
   citation (see `citation!`) is answered with a redirect to it, so that
   the address bar of a submit without the client shows the one URL the
   search has, as a routed submit does (see
-  dk.cst.corpus-probe.client.router/form-query). Not for a form submitted
+  dk.cst.corpus-probe.client.router/submit-query-string). Not for a form
+  submitted
   with its mode changed, whose citation is what the form holds rather
   than what it was given, and which runs nothing until sent again.
 
@@ -537,21 +538,21 @@
                         (assoc opts :sample (request/sample-param
                                              (:sample params))))
                        (into (unknown-counts unknown)))
-            result (public-result (assoc batch/page-defaults
-                                         :page   page
-                                         :counts counts
-                                         :size   (reduce + (keep :size counts))))]
+            result (public-result
+                    (assoc batch/page-defaults
+                           :page   page
+                           :counts counts
+                           :size   (reduce + (keep :size counts))))
+            ;; titled as the page is, the filter it was kept within named
+            ;; beside the count (see dk.cst.corpus-probe.views/search-title)
+            title  (views/title
+                    {:route  :search
+                     :lang   lang
+                     :view   :kwic
+                     :params (assoc params :corpus selected)
+                     :result (merge result
+                                    (select-keys opts [:filter :patterns]))})]
         (response/transit-response
          (merge (select-keys result [:counts :size :pages])
                 (url/page-hrefs (citation! ctx req) page result)
-                ;; titled as the page is, the filter it was kept within
-                ;; named beside the count (see
-                ;; dk.cst.corpus-probe.views/search-title)
-                {:title (views/title
-                         {:route  :search
-                          :lang   lang
-                          :view   :kwic
-                          :params (assoc params :corpus selected)
-                          :result (merge result
-                                         (select-keys opts [:filter
-                                                            :patterns]))})}))))))
+                {:title title}))))))

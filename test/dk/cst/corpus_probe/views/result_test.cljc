@@ -337,11 +337,36 @@
   (is (= "CQP error" (result/error-heading en {:type :cqp})))
   (is (= "The search did not finish in time" (result/error-heading en {:type :timeout})))
   (is (= "Søgningen tog for lang tid"
-         (result/error-heading da {:type :timeout})))
-  (testing "a stored result read back damaged is CQP output that could
-            not be read"
-    (is (= (result/error-heading en {:type :misaligned})
-           (result/error-heading en {:type :damaged})))))
+         (result/error-heading da {:type :timeout}))))
+
+(deftest near-control-test
+  (testing "no word in force: an empty field and the default distance"
+    (let [html (result/near-control en nil)]
+      (is (some #(and (map? %) (= "near" (:name %)) (= "" (:value %))
+                      (= url/form-id (:form %)))
+                (deep html)))
+      (is (some #(and (map? %) (= url/default-distance (:value %))
+                      (:selected %))
+                (deep html)))))
+  (testing "the word and distance in force, the distance applying itself"
+    (let [html (result/near-control en {:word "kat" :distance 3})]
+      (is (some #(and (map? %) (= "near" (:name %)) (= "kat" (:value %)))
+                (deep html)))
+      (is (some #(and (map? %) (= 3 (:value %)) (:selected %)) (deep html)))
+      (is (some #(and (map? %) (= "distance" (:name %))
+                      (= [:apply-view] (get-in % [:on :change])))
+                (deep html))))
+    (testing "and so does the word, once the reader is done typing it"
+      (is (some #(and (map? %) (= "near" (:name %))
+                      (= [:apply-view] (get-in % [:on :change])))
+                (deep (result/near-control en {:word "kat" :distance 3}))))))
+  (testing "a distance the list lacks is offered beside them, in order"
+    (is (= [1 2 3 4 5 10]
+           (keep #(when (number? (:value %)) (:value %))
+                 (deep (result/near-control en {:word "kat" :distance 4}))))))
+  (testing "in Danish"
+    (is (some #{"Sammen med"} (deep (result/near-control da nil))))
+    (is (some #{"1 ord"} (deep (result/near-control da nil))))))
 
 (deftest bare-word-error-test
   (testing "a bare word in a CQP query is refused as a corpus, which the

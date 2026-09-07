@@ -4,23 +4,23 @@
 
 (deftest definition-list-test
   (testing "a term ending in a colon, its definition indented under it"
-    (is (= [:div [:dl [:dt "term"] [:dd "definition"]]]
+    (is (= [:div [:dl.terms [:dt "term"] [:dd "definition"]]]
            (markdown/->hiccup "term:\n  definition"))))
   (testing "pair after pair is one list, and so are lists a blank line apart"
-    (is (= [:div [:dl [:dt "a"] [:dd "1"] [:dt "b"] [:dd "2"]]]
+    (is (= [:div [:dl.terms [:dt "a"] [:dd "1"] [:dt "b"] [:dd "2"]]]
            (markdown/->hiccup "a:\n  1\nb:\n  2")))
-    (is (= [:div [:dl [:dt "a"] [:dd "1"] [:dt "b"] [:dd "2"]]]
+    (is (= [:div [:dl.terms [:dt "a"] [:dd "1"] [:dt "b"] [:dd "2"]]]
            (markdown/->hiccup "a:\n  1\n\nb:\n  2"))))
   (testing "a definition may run over lines, and both parts take inline markup"
-    (is (= [:div [:dl [:dt [:code "x"] " or " [:em "y"]] [:dd "one" " " "two"]]]
+    (is (= [:div [:dl.terms [:dt [:code "x"] " or " [:em "y"]] [:dd "one" " " "two"]]]
            (markdown/->hiccup "`x` or *y*:\n  one\n  two")))
-    (is (= [:div [:dl [:dt "a"] [:dd "one" " " "two" " " "three" " " "four"]]]
+    (is (= [:div [:dl.terms [:dt "a"] [:dd "one" " " "two" " " "three" " " "four"]]]
            (markdown/->hiccup "a:\n  one\n  two\n  three\n  four"))))
   (testing "a term may hold a colon of its own; the last one is the mark"
-    (is (= [:div [:dl [:dt [:code "a:[] :: b"]] [:dd "labels"]]]
+    (is (= [:div [:dl.terms [:dt [:code "a:[] :: b"]] [:dd "labels"]]]
            (markdown/->hiccup "`a:[] :: b`:\n  labels"))))
   (testing "the list ends at a blank line"
-    (is (= [:div [:dl [:dt "a"] [:dd "1"]] [:p "after"]]
+    (is (= [:div [:dl.terms [:dt "a"] [:dd "1"]] [:p "after"]]
            (markdown/->hiccup "a:\n  1\n\nafter"))))
   (testing "a paragraph is all pairs or no list: a stray line, or a term
             without a definition, leaves the prose it was"
@@ -29,7 +29,7 @@
     (is (= [:div [:p "a:" " " "1" " " "b:"]]
            (markdown/->hiccup "a:\n  1\nb:"))))
   (testing "inside a list item, indentation counts from the item"
-    (is (= [:div [:ul [:li [:dl [:dt "a"] [:dd "1"]]]]]
+    (is (= [:div [:ul [:li [:dl.terms [:dt "a"] [:dd "1"]]]]]
            (markdown/->hiccup "- a:\n    1")))))
 
 (deftest prose-test

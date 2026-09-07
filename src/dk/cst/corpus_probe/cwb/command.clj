@@ -53,7 +53,7 @@
   tokens, named after s-attribute `attr`: a compiled extended search
   opens and closes a sentence by CWB's usual name for one (see
   dk.cst.corpus-probe.query/token->cqp), which is not every corpus's (see
-  dk.cst.corpus-probe.cwb.corpus/units). `query` itself when `attr` is
+  dk.cst.corpus-probe.cwb.corpus/unit-attrs). `query` itself when `attr` is
   nil or `s`. A tag inside a quoted literal is left alone, standing after
   a quote rather than a space.
 

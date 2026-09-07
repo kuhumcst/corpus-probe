@@ -109,26 +109,25 @@
       [:q phrase])))
 
 (defn question
-  "The query the result of `state` answered, named as `query-mark` names
-  it, once the form above has moved on from it: retyped, or switched to
-  a mode that could not keep it, so that the answer still says what it
-  is of. Its `:asked` params are what ran (see
-  dk.cst.corpus-probe.server.search/search-view-data); the form's query
-  is read
-  from its `:params` and `:tokens` (see `form-query`). Nil while the
-  form holds the query, which then says it, and the answer names only
-  how many."
+  "The query the result of `state` answered, named in `ui` as
+  `query-mark` names it, once the form above has moved on from it:
+  retyped, or switched to a mode that could not keep it, so that the
+  answer still says what it is of. Its `:asked` params are the ones the
+  search ran with, kept as they were while the form moves on; the form's
+  query is read from its `:params` and `:tokens` (see `form-query`). Nil
+  while the form holds the query, which then says it, and the answer
+  names only how many."
   [ui {:keys [asked params tokens]}]
   (when (not= (query/of asked) (form-query params tokens))
     (query-mark ui asked)))
 
 (defn corpora-phrase
-  "The corpus `names` in words in `ui`: the one name, or how
-  many there were."
-  [ui names]
-  (if (= 1 (count names))
-    (first names)
-    (str (count names) " " (i18n/tr ui "corpora"))))
+  "The names of `corpora` in words in `ui`: the one name, or how many
+  there were."
+  [ui corpora]
+  (if (= 1 (count corpora))
+    (first corpora)
+    (str (count corpora) " " (i18n/tr ui "corpora"))))
 
 (defn page-phrase
   "Where in a paged `result` the reader is, in `ui`: the page, and of how
@@ -308,6 +307,40 @@
         [:summary (i18n/tr ui "Narrow the result")]
         [:p narrowing (apply-button ui client?)]])]))
 
+(def near-distances
+  "The distances the near control offers, in display order."
+  [1 2 3 5 10])
+
+(defn near-control
+  "The proximity control of a result in `ui`: the word every hit must
+  have nearby and how many words away it may be, from `near` (the :word
+  and :distance in force, if any) and the `near-distances`.
+
+  The word is typed rather than chosen, so it applies once the reader is
+  done with it: a text field reports a change on Enter and on focus
+  leaving it, and the change applies the view as a select's does. Enter
+  alone could not be relied on: implicit submission does not reach a
+  form from a field that only names it. The distance applies itself as
+  the sort does. A distance the list does not hold is offered beside
+  them, as a sample size is."
+  [ui {:keys [word distance]}]
+  (let [distance (or distance url/default-distance)
+        words    (fn [n] (str n " " (i18n/trn ui "word" "words" n)))]
+    (list
+     [:label {:for "near"} (i18n/tr ui "Near")]
+     " "
+     [:input {:id           "near"
+              :name         "near"
+              :type         "search"
+              :form         url/form-id
+              :value        (or word "")
+              :autocomplete "off"
+              :on           {:change [:apply-view]}}]
+     " "
+     (widgets/select url/form-id "distance" (i18n/tr ui "within")
+                     (for [n (sort (conj (set near-distances) distance))]
+                       (widgets/option distance n (words n)))))))
+
 (defn pager-links
   "The page links of a result around `position` (where in the sequence
   the reader is), labelled in `ui` (see
@@ -321,7 +354,8 @@
                  position))
 
 (defn pagination
-  "`pager-links` as a navigation landmark named in `ui`.
+  "The `pager-links` around `position` from `prev-href` and `next-href`,
+  as a navigation landmark named in `ui`.
 
   Only one of a result's two pagers is a landmark: the APG asks each
   landmark of a repeated role to carry a name of its own, and two named
@@ -358,11 +392,7 @@
 (defn error-heading
   "What `error` is called, in `ui`, by its type: the types this project
   reports itself, and CQP's own error for anything else, which is headed
-  as such and carries its message.
-
-  TODO: a stored result read back damaged (see
-  dk.cst.corpus-probe.search.result/read-stored!) is headed as CQP output
-  that could not be read, which it is; it may want words of its own."
+  as such and carries its message."
   [ui {:keys [type] :as error}]
   (case type
     :timeout        (i18n/tr ui "The search did not finish in time")
@@ -370,7 +400,7 @@
     :no-texts       (i18n/tr ui "The corpus marks no texts")
     :unknown-corpus (i18n/tr ui "Unknown corpus")
     :rejected       (i18n/tr ui "Request rejected")
-    (:misaligned :damaged) (i18n/tr ui "Unreadable CQP output")
+    :misaligned     (i18n/tr ui "Unreadable CQP output")
     :internal       (i18n/tr ui "Unexpected error")
     (i18n/tr ui "CQP error")))
 

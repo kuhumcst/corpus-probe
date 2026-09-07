@@ -2,11 +2,11 @@
   (:require [clojure.test :refer [deftest is testing]]
             [dk.cst.corpus-probe.hiccup :refer [deep]]
             [dk.cst.corpus-probe.test.hiccup :refer [da en open-states]]
-            [dk.cst.corpus-probe.views.search.filter :as filter]))
+            [dk.cst.corpus-probe.views.search.filter :as filter-views]))
 
 (deftest pattern-row-test
   (let [years [{:value "1583"} {:value "1591"}]
-        html  (filter/pattern-row en :text_year years "15.." ["1583" nil] false)]
+        html  (filter-views/pattern-row en :text_year years "15.." ["1583" nil] false)]
     (testing "a pattern field under the attribute's pattern param, holding
               what is in force"
       (is (= :p.pattern (first html)))
@@ -29,22 +29,22 @@
                        (deep html))))))
     (testing "and no range over values that are not"
       (is (not (some #(and (map? %) (= "ff.text_title" (:name %)))
-                     (deep (filter/pattern-row en :text_title
+                     (deep (filter-views/pattern-row en :text_title
                                                [{:value "Havfruens sang"}]
                                                nil nil false)))))
-      (is (not (filter/numeric-values? []))))
+      (is (not (filter-views/numeric-values? []))))
     (testing "hidden at rest, the row stays in the document"
       (is (= {:hidden true}
-             (second (filter/pattern-row en :text_year years nil nil true)))))
+             (second (filter-views/pattern-row en :text_year years nil nil true)))))
     (testing "in Danish"
       (is (some #{"mønster" "fra" "til" "et helt tal"}
-                (deep (filter/pattern-row da :text_year years nil nil false)))))))
+                (deep (filter-views/pattern-row da :text_year years nil nil false)))))))
 
 (deftest filter-tree-test
   (testing "the pairs a selection names"
     (is (= #{[:a "1"] [:a "2"] [:b "x"]}
-           (filter/filter-pairs {:a #{"1" "2"} :b #{"x"}}))))
-  (let [[a b] (filter/filter-tree {:attrs    [{:name :a :rows [{:value "1" :total 2}]}]
+           (filter-views/filter-pairs {:a #{"1" "2"} :b #{"x"}}))))
+  (let [[a b] (filter-views/filter-tree {:attrs    [{:name :a :rows [{:value "1" :total 2}]}]
                                    :unlisted [:b]
                                    :patterns {:b "x."}}
                                   #{[:a "9"]})]
@@ -64,17 +64,17 @@
 (deftest filter-fieldset-test
   (testing "no metadata renders nothing, which is what the client asks
             before deciding whether fresh filters are worth fetching"
-    (is (nil? (filter/filter-fieldset en nil {})))
-    (is (nil? (filter/filter-fieldset en {:attrs    []
+    (is (nil? (filter-views/filter-fieldset en nil {})))
+    (is (nil? (filter-views/filter-fieldset en {:attrs    []
                                           :unlisted []
                                           :selected {}}
                                       {})))
-    (is (false? (filter/filterable? {:attrs [] :unlisted [] :selected {}})))
-    (is (true? (filter/filterable? {:attrs [] :unlisted [:text_title] :selected {}})))
-    (is (true? (filter/filterable? {:attrs [] :unlisted [] :selected {:a #{"1"}}}))))
+    (is (false? (filter-views/filterable? {:attrs [] :unlisted [] :selected {}})))
+    (is (true? (filter-views/filterable? {:attrs [] :unlisted [:text_title] :selected {}})))
+    (is (true? (filter-views/filterable? {:attrs [] :unlisted [] :selected {:a #{"1"}}}))))
   (let [selected {:text_year  #{"1591" "1600"}
                   :text_title #{"Havfruens sang"}}
-        html (filter/filter-fieldset
+        html (filter-views/filter-fieldset
               "en"
               {:attrs    [{:name :text_year
                            :rows [{:value "1583" :total 1}
@@ -109,7 +109,7 @@
               attribute's: part of the values chosen and the rest not is
               the one state the count cannot show (see `open-at-rest`)"
       (is (= [true true]
-             (open-states (filter/filter-fieldset
+             (open-states (filter-views/filter-fieldset
                            "en" {:attrs    [{:name :text_year
                                              :rows  [{:value "1591"}
                                                      {:value "1592"}]}]
@@ -117,7 +117,7 @@
                                  :selected {:text_year #{"1591"}}}
                            {}))))
       (is (= [false false]
-             (open-states (filter/filter-fieldset
+             (open-states (filter-views/filter-fieldset
                            "en" {:attrs    [{:name :text_year
                                              :rows  [{:value "1591"}]}]
                                  :unlisted []
@@ -129,7 +129,7 @@
     (testing "given the set of what is open, that decides it, whatever is
               chosen: the view never opens or shuts anything itself"
       (let [open* (fn [chosen opts]
-                    (open-states (filter/filter-fieldset
+                    (open-states (filter-views/filter-fieldset
                                   "en" {:attrs [{:name :a
                                                  :rows [{:value "1"}
                                                         {:value "2"}]}]
@@ -145,7 +145,7 @@
     (testing "what is held stays in view at rest, and the pattern row only
               while something is in force in it"
       (let [hidden (fn [filters opts]
-                     (->> (deep (filter/filter-fieldset
+                     (->> (deep (filter-views/filter-fieldset
                                  "en" (merge {:attrs    [{:name :a
                                                           :rows [{:value "1"}
                                                                  {:value "2"}
@@ -168,7 +168,7 @@
         (testing "and while the reader is choosing nothing is hidden"
           (is (= [] (hidden {:selected {}} {:choosing? true}))))))
     (testing "it is marked busy while its attributes are being fetched"
-      (let [busy (fn [opts] (->> (deep (filter/filter-fieldset
+      (let [busy (fn [opts] (->> (deep (filter-views/filter-fieldset
                                         "en" {:attrs [{:name :a :rows []}]
                                               :unlisted [] :selected {}}
                                         opts))
@@ -177,7 +177,7 @@
         (is (= "true" (busy {:pending? true})))
         (is (nil? (busy {})))))
     (testing "each attribute carries a control over the values it shows"
-      (let [alls (->> (deep (filter/filter-fieldset
+      (let [alls (->> (deep (filter-views/filter-fieldset
                              "en"
                              {:attrs    [{:name :text_year
                                           :rows [{:value "1583"}
@@ -191,7 +191,7 @@
         (is (= [[:clear-filter] [:toggle-filter-values [:text_year ["1583" "1591"]]]]
                (map #(get-in % [:on :change]) alls)))))
     (testing "and takes only the values the filter box leaves showing"
-      (let [alls (->> (deep (filter/filter-fieldset
+      (let [alls (->> (deep (filter-views/filter-fieldset
                              "en"
                              {:attrs    [{:name :text_year
                                           :rows [{:value "1583"}
@@ -202,7 +202,7 @@
         (is (= [[:clear-filter] [:toggle-filter-values [:text_year ["1591"]]]]
                (map #(get-in % [:on :change]) alls))))
       ;; and the value it hid keeps its box, so the filter is not narrowed
-      (let [html (deep (filter/filter-fieldset
+      (let [html (deep (filter-views/filter-fieldset
                         "en" {:attrs    [{:name :text_year
                                           :rows [{:value "1583"}
                                                  {:value "1591"}]}]
@@ -212,7 +212,7 @@
         (is (some #{{:hidden true}} html))))
     (testing "the region saying nothing was found is there before it says it"
       (let [region (fn [opts]
-                     (->> (filter/filter-fieldset
+                     (->> (filter-views/filter-fieldset
                            "en" {:attrs    [{:name :text_year
                                              :rows [{:value "1591"}]}]
                                  :unlisted [] :selected {}}
@@ -228,7 +228,7 @@
                 "No values found."]
                (region {:filter "zzz"})))))
     (testing "the filter box is there only with a client, and submits nothing"
-      (let [box (fn [opts] (->> (deep (filter/filter-fieldset
+      (let [box (fn [opts] (->> (deep (filter-views/filter-fieldset
                                        "en" {:attrs [{:name :a :rows []}]
                                              :unlisted [] :selected {}}
                                        opts))
@@ -242,7 +242,7 @@
         (is (= "Filter" (:placeholder (box {:client? true}))))
         (is (= "Filter" (:aria-label (box {:client? true}))))
         (is (= :input.chooser-find
-               (first (nth (get-in (filter/filter-fieldset
+               (first (nth (get-in (filter-views/filter-fieldset
                                     "en" {:attrs    [{:name :a :rows []}]
                                           :unlisted [] :selected {}}
                                     {:client? true})
@@ -251,7 +251,7 @@
         (is (nil? (:name (box {:client? true}))))))
     (testing "the fieldset's own control is the chooser's, minus one half"
       (let [root (fn [selected]
-                   (->> (deep (filter/filter-fieldset
+                   (->> (deep (filter-views/filter-fieldset
                                "en" {:attrs    [{:name :a :rows [{:value "1"}
                                                                  {:value "2"}]}]
                                      :unlisted [] :selected selected}
@@ -274,7 +274,7 @@
           (is (false? (:disabled (root {:a #{"1" "2"}})))))))
     (testing "and it answers for the whole filter, not the part on show"
       ;; emptying by halves would leave a constraint the box is hiding
-      (let [root (->> (deep (filter/filter-fieldset
+      (let [root (->> (deep (filter-views/filter-fieldset
                              "en" {:attrs    [{:name :a :rows [{:value "1"}]}
                                               {:name :b :rows [{:value "2"}]}]
                                    :unlisted [] :selected {:b #{"2"}}}

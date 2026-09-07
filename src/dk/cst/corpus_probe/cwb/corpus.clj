@@ -172,7 +172,7 @@
   (let [attr (keyword attr)]
     (some #(when (= attr (:name %)) %) attributes)))
 
-(def units
+(def unit-attrs
   "The names a unit of text goes by among a corpus's s-attributes, in the
   order they are looked for: a sentence is `s` in CWB's own corpora and
   `sentence` in the KU ones, a paragraph `p` or `paragraph`. The units
@@ -183,11 +183,11 @@
 
 (defn unit-attr
   "The s-attribute among `attributes` (descriptions as `attributes!`
-  reports them) marking `unit`, a key of `units`; nil when the corpus
-  marks none."
+  reports them) marking `unit`, a key of `unit-attrs`; nil when the
+  corpus marks none."
   [attributes unit]
   (some (set (attr-names #(= :structural (:type %)) attributes))
-        (units unit)))
+        (unit-attrs unit)))
 
 (defn corpus-lang
   "The language code of the corpus named `corpus` among the registry

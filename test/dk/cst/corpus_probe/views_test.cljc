@@ -358,6 +358,14 @@
              (views/result-title en :frequencies (assoc params :q "")
                                  result))))))
 
+(deftest document-title-test
+  (is (= "Query help"
+         (views/document-title [[:p "x"] [:h1 {:id "a"} "Query help"]])))
+  (is (= "The cpos column"
+         (views/document-title
+          [[:h2 {:id "a"} "The " [:code "cpos"] " column"]])))
+  (is (nil? (views/document-title [[:p "x"]]))))
+
 (deftest title-test
   (testing "every route titles itself, in the language of the state"
     (is (= "hund · PROBE · corpus-probe"

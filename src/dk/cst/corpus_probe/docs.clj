@@ -53,12 +53,6 @@
   (walk/postwalk (fn [x] (if (nameable? x) (name-node x) x))
                  (rest (markdown/->hiccup s))))
 
-(defn title
-  "The text of the first heading among the hiccup `blocks`, which is what
-  a document calls itself; nil without one."
-  [blocks]
-  (some #(when (hiccup/heading? %) (hiccup/heading-text %)) blocks))
-
 (defn document
   "The hiccup blocks of document `name` in the first language of `langs`
   that has a file (see `resource`), or nil without one.
@@ -78,5 +72,5 @@
   ;; => ([:h2 {:id "kwic"} "Konkordans"])
 
   (blocks "KWIC {#kwic}:\n  key word in context")
-  ;; => ([:dl [:dt {:id "kwic"} "KWIC"] [:dd "key word in context"]])
+  ;; => ([:dl.terms [:dt {:id "kwic"} "KWIC"] [:dd "key word in context"]])
   #_.)

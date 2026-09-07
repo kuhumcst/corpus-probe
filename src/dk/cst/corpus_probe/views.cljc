@@ -59,10 +59,10 @@
    "en" "English"})
 
 (defn language-switch
-  "The language switch: every supported language named in itself, the one
-  in use as plain text and each other as a button that stores it,
-  submitting to dk.cst.corpus-probe.url/preferences and returning to
-  `path`.
+  "The language switch in `ui`: every supported language named in
+  itself, the one in use as plain text and each other as a button that
+  stores it, submitting to dk.cst.corpus-probe.url/preferences and
+  returning to `path`.
 
   The language in use is shown but is not a control, because choosing it
   would do nothing and a control that can do nothing is one a reader has

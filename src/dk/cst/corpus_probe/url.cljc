@@ -68,6 +68,18 @@
   changes state and sends the reader back where they were."
   "/preferences")
 
+(def cookie-max-age
+  "How long a stored preference outlives the visit that set it, in
+  seconds: a year, so a reader states it once."
+  31536000)
+
+(defn cookie
+  "The Set-Cookie string storing `v` under setting `k` for
+  `cookie-max-age`, site-wide and on same-site requests only, as the
+  server writes it in a header and the client to the document."
+  [k v]
+  (str (name k) "=" v ";Path=/;Max-Age=" cookie-max-age ";SameSite=Lax"))
+
 (def context-api
   "The data behind one hit shown with wider context, for the client."
   "/api/context")
@@ -120,20 +132,24 @@
   dk.cst.corpus-probe.search.export/formats, which renders each)."
   ["tsv" "csv"])
 
+(def default-distance
+  "How many words away a nearby word may stand when no URL says: the
+  manual's own example (section 3.7) and the window a collocation is
+  usually counted in."
+  5)
+
 (def defaults
   "What each param means when a URL leaves it out, so the value no URL
   carries. Each is the default its reader in
   dk.cst.corpus-probe.server.request, .cwb.command or .query.params
-  applies, restated as the string a URL would
-  carry, but for the query keys' (see
-  dk.cst.corpus-probe.query.mode/defaults) and the distance a nearby
-  word may stand at, which is the manual's own example (section 3.7) and
-  the window a collocation is usually counted in; `defaults-test` holds
-  each reader to its default."
+  applies, restated as the string a URL would carry, but for the query
+  keys' (see dk.cst.corpus-probe.query.mode/defaults) and the distance
+  (see `default-distance`); `defaults-test` holds each reader to its
+  default."
   (merge mode/defaults
          {:sort        "corpus"
           :context     "5"
-          :distance    "5"
+          :distance    (str default-distance)
           :subset-at   "match"
           :subset-attr "word"
           :view        "kwic"
@@ -346,8 +362,8 @@
     (cond-> search (seq qs) (str "?" qs))))
 
 (defn results-href
-  "`search-href` ending in the `results-fragment`: the URL of a result,
-  which a link should land on."
+  "The `search-href` of `params` ending in the `results-fragment`: the
+  URL of a result, which a link should land on."
   [params]
   (str (search-href params) results-fragment))
 

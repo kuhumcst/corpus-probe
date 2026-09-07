@@ -50,13 +50,20 @@
   "A select named `id` over `options` (see `option`), its `label` before
   it, bound by `form-id` to the form it submits with, so it can stand
   beside the result it acts on rather than inside the query form, and
-  applying itself as it is changed: choosing is asking."
-  [form-id id label options]
-  (list
-   [:label {:for id} label]
-   " "
-   [:select {:id id :name id :form form-id :on {:change [:apply-view]}}
-    options]))
+  applying itself as it is changed: choosing is asking.
+
+  The label is `visible?` unless told otherwise: a control standing in a
+  phrase that already reads as its label is named for a screen reader
+  alone, and the phrase says it for everyone else."
+  ([form-id id label options]
+   (select form-id id label options true))
+  ([form-id id label options visible?]
+   (let [control [:select {:id id :name id :form form-id
+                           :on {:change [:apply-view]}}
+                  options]]
+     (if visible?
+       (list [:label {:for id} label] " " control)
+       (assoc-in control [1 :aria-label] label)))))
 
 (defn status
   "A live region holding `content`, rendered whether or not there is

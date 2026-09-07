@@ -239,10 +239,11 @@
 
 (def renderers
   "The hiccup renderers: the library's own, the definition list as the
-  elements HTML has for it, the keys and the labels as theirs, and raw
-  HTML as nothing rather than the library's error message."
+  elements HTML has for it, classed as the terms it lists, the keys and
+  the labels as theirs, and raw HTML as nothing rather than the
+  library's error message."
   (assoc transform/default-hiccup-renderers
-         :definition-list   (partial transform/into-markup [:dl])
+         :definition-list   (partial transform/into-markup [:dl.terms])
          :definition-term   (partial transform/into-markup [:dt])
          :definition-detail (partial transform/into-markup [:dd])
          :kbd               keys->hiccup
@@ -257,8 +258,8 @@
 
 (comment
   (->hiccup "term:\n  definition\n\nother:\n  with `code`")
-  ;; => [:div [:dl [:dt "term"] [:dd "definition"]
-  ;;           [:dt "other"] [:dd "with " [:code "code"]]]]
+  ;; => [:div [:dl.terms [:dt "term"] [:dd "definition"]
+  ;;                 [:dt "other"] [:dd "with " [:code "code"]]]]
 
   (->hiccup "For example:\n\n```\nx\n```")
   ;; => [:div [:p "For example:"] [:pre [:code "x\n"]]]

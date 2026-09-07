@@ -9,7 +9,7 @@
             [dk.cst.corpus-probe.i18n :as i18n]
             [dk.cst.corpus-probe.views.chooser :as chooser]
             [dk.cst.corpus-probe.views.corpus :as corpus-views]
-            [dk.cst.corpus-probe.views.search.filter :as filter]))
+            [dk.cst.corpus-probe.views.search.filter :as filter-views]))
 
 (def lists
   "The two lists by the name their controls send, each with what the
@@ -32,9 +32,10 @@
                                                  (:folders state)))
              :chosen (fn [state] (set (get-in state [:params :corpus])))}
    :values  {:tree   (fn [state held]
-                       (filter/filter-tree (:filter-controls state) held))
+                       (filter-views/filter-tree (:filter-controls state)
+                                                 held))
              :chosen (fn [state]
-                       (filter/filter-pairs
+                       (filter-views/filter-pairs
                         (get-in state [:filter-controls :selected])))}})
 
 (defn held
@@ -190,6 +191,6 @@
   answers for none is nothing, which would only take the fieldset away."
   [{:keys [filters-for filter-controls] :as state}]
   (and (or (contains? (get-in state [:lists :values :open]) :root)
-           (not (filter/filterable? filter-controls)))
+           (not (filter-views/filterable? filter-controls)))
        (seq (chosen-corpora state))
        (not= (chosen-corpora state) filters-for)))

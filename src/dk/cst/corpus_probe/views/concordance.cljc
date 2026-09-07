@@ -231,8 +231,8 @@
 
 (defn expand-control
   "The corpus position of `hit` as the control revealing its wider context,
-  in `ui`, `expanded?` giving its state; the bare position where
-  no client answers the click.
+  in `ui`, `expanded?` giving its state; the bare position where no
+  `client?` answers the click.
 
   Its accessible name opens with the visible position, so what is said
   matches what is seen, and while expanded it names the row it revealed."
@@ -275,10 +275,10 @@
      (source-cell hit)]))
 
 (defn expanded-row
-  "A full-width row showing hit `ex` (fetched with wider context, so
-  without metadata of its own) as flowing text, the match marked; its
-  tokens are inspected with the source of `hit`, the row it expands, whose
-  disclosure names it."
+  "A full-width row under the concordance `opts` showing hit `ex`
+  (fetched with wider context, so without metadata of its own) as
+  flowing text, the match marked; its tokens are inspected with the
+  source of `hit`, the row it expands, whose disclosure names it."
   [opts hit ex]
   (let [source (hit-source hit)
         ;; numbered past the row it expands: the two rows share a hit, so
@@ -484,7 +484,7 @@
 (def context-widths
   "The widths of context the concordance offers, in display order: a few
   numbers of words, then the units of text a corpus marks (see
-  dk.cst.corpus-probe.cwb.corpus/units), one region of which is shown
+  dk.cst.corpus-probe.cwb.corpus/unit-attrs), one region of which is shown
   either side. The first is the usual width (see
   dk.cst.corpus-probe.search.batch/kwic-defaults). A hand-written URL may
   name any other number of words, which `context-control` then shows
@@ -519,40 +519,6 @@
                       (widgets/option (value context) (value width)
                                       (context-label ui width))))))
 
-(def near-distances
-  "The distances the near control offers, in display order."
-  [1 2 3 5 10])
-
-(defn near-control
-  "The proximity control of a result in `ui`: the word every hit must
-  have nearby and how many words away it may be, from `near` (the :word
-  and :distance in force, if any) and the `near-distances`.
-
-  The word is typed rather than chosen, so it applies once the reader is
-  done with it: a text field reports a change on Enter and on focus
-  leaving it, and the change applies the view as a select's does. Enter
-  alone could not be relied on: implicit submission does not reach a
-  form from a field that only names it. The distance applies itself as
-  the sort does. A distance the list does not hold is offered beside
-  them, as a sample size is."
-  [ui {:keys [word distance]}]
-  (let [distance (or distance (parse-long (:distance url/defaults)))
-        words    (fn [n] (str n " " (i18n/trn ui "word" "words" n)))]
-    (list
-     [:label {:for "near"} (i18n/tr ui "Near")]
-     " "
-     [:input {:id           "near"
-              :name         "near"
-              :type         "search"
-              :form         url/form-id
-              :value        (or word "")
-              :autocomplete "off"
-              :on           {:change [:apply-view]}}]
-     " "
-     (widgets/select url/form-id "distance" (i18n/tr ui "within")
-                     (for [n (sort (conj (set near-distances) distance))]
-                       (widgets/option distance n (words n)))))))
-
 (defn concordance-section
   "The concordance view of the search in `state`: when any corpus could be
   searched and found something, the sort, context and sample controls
@@ -584,7 +550,7 @@
          (list
           (when (:near result)
             (result/view-controls ui client? nil
-                                  (near-control ui (:near result))
+                                  (result/near-control ui (:near result))
                                   true))
           [:p (i18n/tr ui "No hits.")])
          (list
@@ -594,7 +560,7 @@
                                       (context-control ui (:context result))
                                       " "
                                       (sample-control ui (:sample result)))
-                                (near-control ui (:near result))
+                                (result/near-control ui (:near result))
                                 (:near result))
           (result/pagination ui prev-href next-href position)
           (concordance hits {:caption  (widgets/term ui :kwic false)

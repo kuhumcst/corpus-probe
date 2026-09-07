@@ -14,20 +14,22 @@
             [dk.cst.corpus-probe.url :as url]
             [dk.cst.corpus-probe.views.concordance :as concordance]))
 
-(defonce pending-timer
-  ;; the wait before a routed navigation is worth reporting, so that an
-  ;; answer arriving at once is not announced and then unannounced
+(defonce ^{:doc "The wait before a routed navigation is worth reporting,
+  so that an answer arriving at once is not announced and then
+  unannounced."}
+  pending-timer
   (atom nil))
 
-(defonce filters-timer
-  ;; the pending debounce of a metadata filter refresh, so that a reader
-  ;; ticking their way through a folder asks for one set of filters at the
-  ;; end rather than one per box
+(defonce ^{:doc "The pending debounce of a metadata filter refresh, so
+  that a reader ticking their way through a folder asks for one set of
+  filters at the end rather than one per box."}
+  filters-timer
   (atom nil))
 
-(defonce in-flight
-  ;; the AbortController of the routed navigation being fetched, if there
-  ;; is one, so that starting another can call off the one it replaces
+(defonce ^{:doc "The AbortController of the routed navigation being
+  fetched, if there is one, so that starting another can call off the one
+  it replaces."}
+  in-flight
   (atom nil))
 
 (def pending-delay-ms
@@ -195,11 +197,11 @@
                     (set! (.-href js/location) href)))))))
 
 (defn set-cookie!
-  "Store `v` under setting `k` in the cookie the server reads, so a
-  reload and every later visit carry the setting too."
+  "Store `v` under setting `k` in the cookie the server reads (see
+  dk.cst.corpus-probe.url/cookie), so a reload and every later visit
+  carry the setting too."
   [k v]
-  (set! (.-cookie js/document)
-        (str k "=" v ";Path=/;Max-Age=31536000;SameSite=Lax")))
+  (set! (.-cookie js/document) (url/cookie k v)))
 
 (defn set-preference!
   "Store `v` under setting `k` (see `set-cookie!`) and fetch this page

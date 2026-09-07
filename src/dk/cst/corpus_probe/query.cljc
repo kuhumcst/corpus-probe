@@ -129,8 +129,10 @@
   (see dk.cst.corpus-probe.cwb.command/sentence-tags).
 
   (token->cqp {:conditions [{:attr :lemma :op \"is\" :value \"hund\"}
-                            {:join \"or\" :attr :lemma :op \"is\" :value \"kat\"}
-                            {:join \"and\" :attr :pos :op \"prefix\" :value \"N\"}]})
+                            {:join \"or\" :attr :lemma :op \"is\"
+                             :value \"kat\"}
+                            {:join \"and\" :attr :pos :op \"prefix\"
+                             :value \"N\"}]})
   ;; => [lemma = \"(hund|kat)\" & pos = \"N.*\"]
 
   (token->cqp {:conditions [{:op \"any\"}] :min 0 :max 2})

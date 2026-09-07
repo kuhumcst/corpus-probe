@@ -11,7 +11,6 @@
   (:require [dk.cst.corpus-probe.i18n :as i18n]
             [dk.cst.corpus-probe.stats :as stats]
             [dk.cst.corpus-probe.url :as url]
-            [dk.cst.corpus-probe.views.concordance :as concordance]
             [dk.cst.corpus-probe.views.result :as result]
             [dk.cst.corpus-probe.views.widgets :as widgets]))
 
@@ -51,16 +50,17 @@
 (defn position-control
   "The control choosing where in the match the table counts, in `ui`: a
   select over the `positions` (see
-  dk.cst.corpus-probe.cwb.command/positions),
-  each named by dk.cst.corpus-probe.views.result/position-label, with `at`
-  chosen. It follows the attribute it qualifies and names the form it
-  submits with, as `attr-control` does."
+  dk.cst.corpus-probe.cwb.command/positions), each named by
+  dk.cst.corpus-probe.views.result/position-label, with `at` chosen. It
+  follows the attribute it qualifies as a phrase, so it is named for a
+  screen reader alone (see dk.cst.corpus-probe.views.widgets/select), and
+  names the form it submits with, as `attr-control` does."
   [ui positions at]
-  [:select {:id         "at" :name "at" :form url/form-id
-            :aria-label (i18n/tr ui "Position")
-            :on         {:change [:apply-view]}}
-   (for [position positions]
-     (widgets/option at position (result/position-label ui position)))])
+  (widgets/select url/form-id "at" (i18n/tr ui "Position")
+                  (for [position positions]
+                    (widgets/option at position
+                                    (result/position-label ui position)))
+                  false))
 
 (defn by-control
   "The control choosing what the columns of the table are, in `ui`: the
@@ -279,7 +279,7 @@
   column controls, with the text count where the columns are the corpora
   (a cross-tabulation counts no texts), the near control behind their
   disclosure (see dk.cst.corpus-probe.views.result/view-controls and
-  dk.cst.corpus-probe.views.concordance/near-control) and the table,
+  dk.cst.corpus-probe.views.result/near-control) and the table,
   cross-tabulated when the result is counted `:by` a second attribute,
   then the download links (`:export-hrefs`, exports holding every row),
   in the state's `:ui`, wrapped in the shared
@@ -307,7 +307,7 @@
                                     (when-not (:by result)
                                       (list " "
                                             (docs-control ui (:docs result)))))
-                              (concordance/near-control ui (:near result))
+                              (result/near-control ui (:near result))
                               (:near result))
         (if (:by result)
           (crosstab-table ui result)

@@ -58,6 +58,86 @@
   [attr]
   (str "values-" (name attr)))
 
+(defn join-select
+  "The select saying how condition `c` of `token` (its facts, see
+  `condition-row`) joins the ones before it, in `ui`: and or or, from
+  the :join of `condition`, and when it names none; dead under the
+  token's `:any?`."
+  [ui {:keys [i any?]} c {:keys [id join]}]
+  [:select.condition-join
+   {:name       (tokens/token-key i c :join)
+    :aria-label (i18n/tr ui "joined by")
+    :disabled   any?
+    :on         {:change [:set-condition [i id :join] :event.target/value]}}
+   (for [j tokens/joins]
+     (widgets/option (or join "and") j (case j
+                                         "or" (i18n/tr ui "or")
+                                         (i18n/tr ui "and"))))])
+
+(defn attribute-select
+  "The select choosing which positional attribute condition `c` of
+  `token` (its facts, see `condition-row`) names, in `ui`: the token's
+  `:attrs` (see `attribute-options`) with the :attr of `condition`
+  chosen; dead under the token's `:any?`."
+  [ui {:keys [i attrs any?]} c {:keys [id attr]}]
+  [:select {:name       (tokens/token-key i c :attr)
+            :aria-label (i18n/tr ui "attribute")
+            :disabled   any?
+            :on         {:change [:set-condition [i id :attr]
+                                  :event.target/value]}}
+   (attribute-options ui attrs attr)])
+
+(defn operator-select
+  "The select choosing the operator of condition `c` of `token` (its
+  facts, see `condition-row`), in `ui`: the operators (see
+  `operator-label`) with the :op of `condition` chosen, equality when it
+  names none, and any word offered to a token's first condition alone,
+  which under the token's `:any?` is the one live control."
+  [ui {:keys [i any?]} c {:keys [id op]}]
+  (let [first? (= 1 c)]
+    [:select {:name       (tokens/token-key i c :op)
+              :aria-label (i18n/tr ui "operator")
+              :disabled   (and any? (not first?))
+              :on         {:change [:set-condition [i id :op]
+                                    :event.target/value]}}
+     (for [o (cond->> tokens/operators (not first?) (remove #{"any"}))]
+       (widgets/option (or op "is") o (operator-label ui o)))]))
+
+(defn value-field
+  "The field holding the value of condition `c` of `token` (its facts,
+  see `condition-row`), in `ui`: the :v of `condition`, required when
+  `required?`, suggesting the values the token's `:value-lists` hold
+  for the condition's :attr (see `value-list-id`); dead under the
+  token's `:any?`."
+  [ui {:keys [i value-lists any?]} required? c {:keys [id attr v]}]
+  (let [attr* (keyword (if (str/blank? attr) "word" attr))]
+    [:input.condition-value
+     (cond-> {:type         "text"
+              :name         (tokens/token-key i c :v)
+              :value        (or v "")
+              :aria-label   (i18n/trx ui "field" "value")
+              :autocomplete "off"
+              :spellcheck   "false"
+              :required     (and required? (not any?))
+              :disabled     any?
+              :on           {:input [:set-condition [i id :v]
+                                     :event.target/value]}}
+       (contains? value-lists attr*)
+       (assoc :list (value-list-id attr*)))]))
+
+(defn case-box
+  "The box asking condition `c` of `token` (its facts, see
+  `condition-row`) to ignore case, in `ui`, ticked when `condition` has
+  a :ci; dead under the token's `:any?`."
+  [ui {:keys [i any?]} c {:keys [id ci]}]
+  [:label [:input {:type     "checkbox" :name (tokens/token-key i c :ci)
+                   :value    "on"
+                   :checked  (some? ci)
+                   :disabled any?
+                   :on       {:change [:set-condition [i id :ci]
+                                       :event.target/checked]}}]
+   (i18n/tr ui "ignore case")])
+
 (defn condition-row
   "One condition of the extended search in `ui`: condition `c`, counted
   from one, holding `condition` (see
@@ -67,8 +147,9 @@
   (see `value-list-id`), `:any?` when the token's first condition
   matches any word, and `:removable?` when a button may take the
   condition away. The attribute, the operator, the value and the
-  ignore-case box, headed by how it joins the conditions before it when
-  it is not the first.
+  ignore-case box (see `attribute-select`, `operator-select`,
+  `value-field` and `case-box`), headed by how it joins the conditions
+  before it when it is not the first (see `join-select`).
 
   Its fields carry the token's number and, after the first, its own
   (see dk.cst.corpus-probe.query.tokens/token-key). The value is required
@@ -80,80 +161,91 @@
   which controls are live and which values the field suggests, and all
   of them decide the CQP line under the tokens (see
   dk.cst.corpus-probe.views.search/cqp-line)."
-  [ui {:keys [i attrs value-lists any? removable?]} required? c
-   {:keys [id attr op v ci join]}]
-  (let [param  (fn [field] (tokens/token-key i c field))
-        first? (= 1 c)
-        op     (or op "is")
-        dead?  (and any? (not first?))
-        attr*  (keyword (if (str/blank? attr) "word" attr))
-        joined (fn [j] (case j "or" (i18n/tr ui "or") (i18n/tr ui "and")))]
-    [:li.condition (cond-> {:replicant/key id}
-                     removable? (assoc :class "removable"))
-     (when-not first?
-       (list [:select.condition-join
-              {:name       (param :join)
-               :aria-label (i18n/tr ui "joined by")
-               :disabled   dead?
-               :on         {:change [:set-condition [i id :join]
-                                     :event.target/value]}}
-              (for [j tokens/joins]
-                (widgets/option (or join "and") j (joined j)))]
-             " "))
-     [:select {:name       (param :attr)
-               :aria-label (i18n/tr ui "attribute")
-               :disabled   any?
-               :on         {:change [:set-condition [i id :attr]
-                                     :event.target/value]}}
-      (attribute-options ui attrs attr)]
-     " "
-     [:select {:name       (param :op)
-               :aria-label (i18n/tr ui "operator")
-               :disabled   dead?
-               :on         {:change [:set-condition [i id :op]
-                                     :event.target/value]}}
-      (for [o (cond->> tokens/operators (not first?) (remove #{"any"}))]
-        (widgets/option op o (operator-label ui o)))]
-     " "
-     [:input.condition-value
-      (cond-> {:type         "text"
-               :name         (param :v)
-               :value        (or v "")
-               :aria-label   (i18n/trx ui "field" "value")
-               :autocomplete "off"
-               :spellcheck   "false"
-               :required     (and required? (not any?))
-               :disabled     any?
-               :on           {:input [:set-condition [i id :v]
-                                      :event.target/value]}}
-        (contains? value-lists attr*)
-        (assoc :list (value-list-id attr*)))]
-     " "
-     [:label [:input {:type     "checkbox" :name (param :ci) :value "on"
-                      :checked  (some? ci)
-                      :disabled any?
-                      :on       {:change [:set-condition [i id :ci]
-                                          :event.target/checked]}}]
-      (i18n/tr ui "ignore case")]
-     (when removable?
-       (list " "
-             [:button.condition-remove
-              {:type       "button"
-               :aria-label (str (i18n/tr ui "Remove condition") " " c)
-               :on         {:click [:remove-condition [i id]]}}
-              "×"]))]))
+  [ui {:keys [i removable?] :as token} required? c {:keys [id] :as condition}]
+  [:li.condition (cond-> {:replicant/key id}
+                   removable? (assoc :class "removable"))
+   (when-not (= 1 c)
+     (list (join-select ui token c condition) " "))
+   (attribute-select ui token c condition)
+   " "
+   (operator-select ui token c condition)
+   " "
+   (value-field ui token required? c condition)
+   " "
+   (case-box ui token c condition)
+   (when removable?
+     (list " "
+           [:button.condition-remove
+            {:type       "button"
+             :aria-label (str (i18n/tr ui "Remove condition") " " c)
+             :on         {:click [:remove-condition [i id]]}}
+            "×"]))])
 
-(defn token-row
+(defn repeat-fields
+  "The repeat of token `i` of the extended search in `ui`: at least `lo`
+  and at most `hi` times, once each when nil, in a group named for what
+  the pair is, since the second number is labelled only to."
+  [ui i lo hi]
+  [:span.token-repeat {:role "group" :aria-label (i18n/tr ui "repeat")}
+   [:label (i18n/tr ui "repeat") " "
+    [:input {:type "number" :name (tokens/token-key i 1 :min) :value (or lo "1")
+             :min  0 :max 99
+             :on   {:input [:set-token [i :min] :event.target/value]}}]]
+   " "
+   [:label (i18n/tr ui "to") " "
+    [:input {:type "number" :name (tokens/token-key i 1 :max) :value (or hi "1")
+             :min  0 :max 99
+             :on   {:input [:set-token [i :max] :event.target/value]}}]]])
+
+(defn edge-boxes
+  "The boxes asking token `i` of the extended search to open a sentence,
+  ticked under `start`, and to close one, ticked under `end`, in `ui`."
+  [ui i start end]
+  (list
+   [:label.token-edges
+    [:input {:type    "checkbox" :name (tokens/token-key i 1 :start)
+             :value   "on"
+             :checked (some? start)
+             :on      {:change [:set-token [i :start]
+                                :event.target/checked]}}]
+    (i18n/tr ui "sentence start")]
+   " "
+   [:label.token-edges
+    [:input {:type    "checkbox" :name (tokens/token-key i 1 :end)
+             :value   "on"
+             :checked (some? end)
+             :on      {:change [:set-token [i :end]
+                                :event.target/checked]}}]
+    (i18n/tr ui "sentence end")]))
+
+(defn token-actions
+  "The buttons of token `i` of the extended search, with `id`, on a row
+  of their own so they stay together, in `ui`: one adding a condition,
+  dead under `any?`, since an any-word token has nothing else to say,
+  and one taking the token away."
+  [ui i id any?]
+  [:p.token-actions
+   [:button {:type     "button"
+             :disabled any?
+             :on       {:click [:add-condition i]}}
+    (i18n/tr ui "Add condition")]
+   " "
+   [:button {:type       "button"
+             :aria-label (str (i18n/tr ui "Remove token") " " i)
+             :on         {:click [:remove-token id]}}
+    "×"]])
+
+(defn token-box
   "One token of the extended search in `ui`: token `i`, counted from
   one, which is the number its fields carry in the URL, holding `token`
   (see dk.cst.corpus-probe.query.tokens/form-tokens) over `attrs` and
   `value-lists` (see `condition-row`). A group of its own, named by
   number: its conditions as an ordered list, since each joins the ones
-  before it, then the repeat as least and most, in a group named for
-  what the pair is, whether it opens or closes a sentence, and, where
-  `client?`, buttons adding a condition and taking the token away. The
-  repeat and the edges dispatch `:set-token` with their field, as the
-  conditions' controls do theirs.
+  before it, then the repeat (see `repeat-fields`) and the edges (see
+  `edge-boxes`), and, where `client?`, the buttons adding a condition
+  and taking the token away (see `token-actions`). The repeat and the
+  edges dispatch `:set-token` with their field, as the conditions'
+  controls do theirs.
 
   The first condition's value is required when `required?`; the others'
   only where the client runs, which is where a condition is added, so a
@@ -161,8 +253,7 @@
   can be taken away while the token has another."
   [ui attrs value-lists client? required? i
    {:keys [id conditions start end] lo :min hi :max}]
-  (let [param      (fn [field] (tokens/token-key i 1 field))
-        conditions (or (seq conditions) [{:id 1}])
+  (let [conditions (or (seq conditions) [{:id 1}])
         any?       (= "any" (:op (first conditions)))
         token      {:i           i
                     :attrs       attrs
@@ -178,53 +269,17 @@
                                       (and required? (or (= 1 c) client?))
                                       c condition)))
                    conditions)]
-     [:p
-      ;; the second number is labelled "to", which says nothing on its
-      ;; own; the group says what the pair is
-      [:span.token-repeat {:role "group" :aria-label (i18n/tr ui "repeat")}
-       [:label (i18n/tr ui "repeat") " "
-        [:input {:type "number" :name (param :min) :value (or lo "1")
-                 :min  0 :max 99
-                 :on   {:input [:set-token [i :min] :event.target/value]}}]]
-       " "
-       [:label (i18n/tr ui "to") " "
-        [:input {:type "number" :name (param :max) :value (or hi "1")
-                 :min  0 :max 99
-                 :on   {:input [:set-token [i :max] :event.target/value]}}]]]
-      " "
-      [:label.token-edges
-       [:input {:type    "checkbox" :name (param :start) :value "on"
-                :checked (some? start)
-                :on      {:change [:set-token [i :start]
-                                   :event.target/checked]}}]
-       (i18n/tr ui "sentence start")]
-      " "
-      [:label.token-edges
-       [:input {:type    "checkbox" :name (param :end) :value "on"
-                :checked (some? end)
-                :on      {:change [:set-token [i :end]
-                                   :event.target/checked]}}]
-       (i18n/tr ui "sentence end")]]
-     ;; the token's own actions on a row of their own, so they stay together
-     (when client?
-       [:p.token-actions
-        [:button {:type     "button"
-                  :disabled any?
-                  :on       {:click [:add-condition i]}}
-         (i18n/tr ui "Add condition")]
-        " "
-        [:button {:type       "button"
-                  :aria-label (str (i18n/tr ui "Remove token") " " i)
-                  :on         {:click [:remove-token id]}}
-         "×"]])]))
+     [:p (repeat-fields ui i lo hi) " " (edge-boxes ui i start end)]
+     (when client? (token-actions ui i id any?))]))
 
 (defn token-fieldset
   "The tokens of the extended search in `ui`: one group per token of
-  `tokens` (see `token-row`) over `attrs` and `value-lists`, as an
-  ordered list inside a group of their own, since a token is one of a
-  sequence and a screen reader says which, with the datalists the value
-  fields draw on (see `value-list-id`). One blank token when there are
-  none, since the client may have just switched to the mode; otherwise
+  `tokens` (see `token-box`) over `attrs` and `value-lists`, with the
+  buttons editing them where `client?` runs, as an ordered list inside a
+  group of their own, since a token is one of a sequence and a screen
+  reader says which, with the datalists the value fields draw on (see
+  `value-list-id`). One blank token when there are none, since the
+  client may have just switched to the mode; otherwise
   the tokens are the search's own plus the blank one the server ends
   them in (see dk.cst.corpus-probe.query/form-rows), so a reader
   without the client adds a token by filling it and searching again.
@@ -249,7 +304,7 @@
       (map-indexed (fn [i {:keys [id] :as token}]
                      (let [i (inc i)]
                        [:li {:replicant/key id}
-                        (token-row ui attrs value-lists client?
+                        (token-box ui attrs value-lists client?
                                    (and required? (or client? (= n 1) (< i n)))
                                    i token)]))
                    rows)]]))

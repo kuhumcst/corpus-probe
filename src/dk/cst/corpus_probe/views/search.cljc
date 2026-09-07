@@ -19,7 +19,7 @@
             [dk.cst.corpus-probe.query.tokens :as tokens]
             [dk.cst.corpus-probe.url :as url]
             [dk.cst.corpus-probe.views.result :as result]
-            [dk.cst.corpus-probe.views.search.filter :as filter]
+            [dk.cst.corpus-probe.views.search.filter :as filter-views]
             [dk.cst.corpus-probe.views.search.tokens :as tokens-views]
             [dk.cst.corpus-probe.views.widgets :as widgets]))
 
@@ -129,11 +129,14 @@
   "The control choosing the unit of text a search of several tokens is
   kept within, in `ui`: a select over the dk.cst.corpus-probe.cqp/units
   with `within` chosen, the sentence when it names none (see
-  dk.cst.corpus-probe.query/within)."
+  dk.cst.corpus-probe.query/within), under the label that reads it into
+  the sentence of its box (see `matching-fieldset`)."
   [ui within]
-  [:select {:name "within" :id "within"}
-   (for [unit (map (comp name first) cqp/units)]
-     (widgets/option (or within "sentence") unit (unit-label ui unit)))])
+  (list
+   [:label {:for "within"} (i18n/tr ui "in")]
+   [:select {:name "within" :id "within"}
+    (for [unit (map (comp name first) cqp/units)]
+      (widgets/option (or within "sentence") unit (unit-label ui unit)))]))
 
 (defn match-option-label
   "What the `match` param value is called as the option of
@@ -344,8 +347,7 @@
           (when (live? :match) (match-control ui match))
           (when (live? :in) (attribute-control ui attrs in))])
        (when (live? :within)
-         [:p.matching-within [:label {:for "within"} (i18n/tr ui "in")]
-          (within-control ui within)])
+         [:p.matching-within (within-control ui within)])
        (when (live? :ci)
          [:p.matching-case
           [:label [:input {:type    "checkbox" :name "ci" :value "on"
@@ -403,7 +405,7 @@
         {:keys [values]} lists
         extended? (= "extended" (mode/form params))
         button    [:button {:type "submit"} (i18n/trx ui "button" "Search")]
-        held      (into (filter/filter-pairs (:selected filter-controls))
+        held      (into (filter-views/filter-pairs (:selected filter-controls))
                         (:unticked values))]
     [:search
      [:form.search-form {:id url/form-id :method "get" :action action}
@@ -438,11 +440,11 @@
        chooser
        ;; the list's state is named for the chooser's options, and what
        ;; it holds beyond them the chooser ignores
-       (filter/filter-fieldset ui filter-controls
-                               (assoc values
-                                      :held     held
-                                      :pending? filters-pending?
-                                      :client?  client?))]]
+       (filter-views/filter-fieldset ui filter-controls
+                                     (assoc values
+                                            :held     held
+                                            :pending? filters-pending?
+                                            :client?  client?))]]
      ;; only where the client runs: every other navigation is the
      ;; browser's own, and the browser reports those itself
      (when client? (navigation-status ui pending?))]))

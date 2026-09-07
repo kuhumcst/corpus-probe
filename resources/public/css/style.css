@@ -623,7 +623,7 @@ kbd, kbd samp { font-family: inherit; }
 
 /* a glossary's terms stay bold, since they are its content, and each
    entry steps down from the one before */
-.document dt { font-weight: bold; }
-.document dd + dt { margin-block-start: 0.75rem; }
+.terms dt { font-weight: bold; }
+.terms dd + dt { margin-block-start: 0.75rem; }
 /* the element a link named, for the reader without a script */
 .document :target { background: var(--mark); }

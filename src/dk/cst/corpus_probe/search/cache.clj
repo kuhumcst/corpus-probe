@@ -99,9 +99,9 @@
    sample])
 
 (defn result-key
-  "What decides which matches the saved result of `query` in `corpus` under
-  `opts` holds, and in what order: its `match-key`, the sorting and the
-  collation.
+  "What decides, via `ctx`, which matches the saved result of `query` in
+  `corpus` under `opts` holds, and in what order: its `match-key`, the
+  sorting and the collation.
 
   The sorting is the CQP command rather than the mode that names it, so
   that the modes which all mean corpus order share one result, and the
@@ -256,9 +256,9 @@
   (boolean (some-> ^File (result-file ctx corpus nqr) (.isFile))))
 
 (defn touch!
-  "Record that the saved query result named `nqr` of `corpus` was read
-  just now, so that reaping expires the results nobody is paging through
-  rather than the ones that are merely old."
+  "Record via `ctx` that the saved query result named `nqr` of `corpus`
+  was read just now, so that reaping expires the results nobody is paging
+  through rather than the ones that are merely old."
   [ctx corpus nqr]
   (some-> ^File (result-file ctx corpus nqr)
           (.setLastModified (System/currentTimeMillis))))

@@ -13,10 +13,10 @@
   (:require [clojure.string :as str]
             [dk.cst.corpus-probe.url :as url]))
 
-(defonce shown
-  ;; the path and query of the page on screen, so that a popstate leaving
-  ;; them as they are, which is a jump to a fragment, is not taken for a
-  ;; page to fetch again
+(defonce ^{:doc "The path and query of the page on screen, so that a
+  popstate leaving them as they are, which is a jump to a fragment, is
+  not taken for a page to fetch again."}
+  shown
   (atom nil))
 
 (defn current-url
@@ -146,7 +146,7 @@
         (map #(.-value %))
         (.querySelectorAll form "input[name=corpus]:not(:disabled)")))
 
-(defn form-query
+(defn submit-query-string
   "The query string of a submit of `form`, as the URL cites it (see
   dk.cst.corpus-probe.url/canonical): the browser's own rules for what a
   form submits, less empty fields and defaults, which say nothing."
@@ -156,10 +156,10 @@
 
 (defn submit-href
   "The address a GET submit of `form` asks for: its action with the query
-  string of its fields (see `form-query`)."
+  string of its fields (see `submit-query-string`)."
   [form]
   (let [url (js/URL. (.-action form))]
-    (set! (.-search url) (form-query form))
+    (set! (.-search url) (submit-query-string form))
     (.-href url)))
 
 (defn routed-submit?

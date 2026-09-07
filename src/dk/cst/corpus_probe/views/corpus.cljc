@@ -251,10 +251,10 @@
         [:tr [:th {:scope "row"} [:code (name attr)]]
          (stat-cell ui blocks)])]]))
 
-(defn info-text
+(defn info-section
   "The free-text content of the corpus's .info file, verbatim from the
   :info key of `info` (the parsed `info;` output), in the corpus's own
-  `corpus-lang`; its heading is in `ui`."
+  `corpus-lang`, as a section headed in `ui`."
   [ui info corpus-lang]
   (when-let [text (:info info)]
     [:section.about
@@ -311,7 +311,7 @@
       (p-attr-table ui stats)
       (s-attr-table ui stats)
       (a-attr-table ui stats)
-      (info-text ui info corpus-lang)))
+      (info-section ui info corpus-lang)))
    ;; where this page leads: the two things a reader does with a corpus
    ;; once they have read about it. A <nav> like the site's and the result
    ;; views', and named like them, since a page with two navigations owes

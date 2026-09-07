@@ -17,7 +17,8 @@
     (is (= [[:h2 {:id "cpos"} [:code "cpos"] ""]]
            (docs/blocks "## `cpos` {#cpos}")))
     (testing "and so may the term of a definition list"
-      (is (= [[:dl [:dt {:id "kwic"} "KWIC"] [:dd "key word in context"]]]
+      (is (= [[:dl.terms [:dt {:id "kwic"} "KWIC"]
+               [:dd "key word in context"]]]
              (docs/blocks "KWIC {#kwic}:\n  key word in context")))))
   (testing "raw HTML renders as nothing, not as markup or an error"
     (let [html (docs/blocks "# A\n\n<!-- note -->\n\n<div>x</div>\n\nb <b>c</b>")]
@@ -37,13 +38,6 @@
   (testing "no file in any language, nothing"
     (is (nil? (docs/document "help" ["xx"])))
     (is (nil? (docs/document "nonesuch" ["en"])))))
-
-(deftest title-test
-  (is (= "Query help" (docs/title [[:p "x"] [:h1 {:id "a"} "Query help"]])))
-  (is (= "The cpos column"
-         (docs/title [[:h2 {:id "a"} "The " [:code "cpos"] " column"]])))
-  (is (nil? (docs/title [[:p "x"]]))))
-
 
 (def documents
   "The name of every document the app serves."
@@ -90,7 +84,7 @@
   (testing "the glossary is one definition list, and every term the
             interface links has an entry in every language"
     (doseq [lang i18n/languages]
-      (is (= 1 (count (filter #(= :dl (first %))
+      (is (= 1 (count (filter #(= :dl.terms (first %))
                               (docs/document "glossary" [lang])))))
       (doseq [id ["kwic" "concordance" "cqp" "cpos" "match" "frequency"
                   "hit" "metadata" "positional-attributes"

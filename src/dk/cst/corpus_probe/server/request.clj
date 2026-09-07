@@ -156,15 +156,15 @@
 (defn context-param
   "The width of context the `context` query param value `v` asks for: a
   positive number of words, or the unit of text it names (a key of
-  dk.cst.corpus-probe.cwb.corpus/units); the default width for anything
-  else."
+  dk.cst.corpus-probe.cwb.corpus/unit-attrs); the default width for
+  anything else."
   [v]
   (let [n (some-> v parse-long)]
     (cond
-      (and n (pos? n))                             n
-      (and v (contains? corpus/units (keyword v))) (keyword v)
-      :else                                        (:context
-                                                    batch/kwic-defaults))))
+      (and n (pos? n))                                  n
+      (and v (contains? corpus/unit-attrs (keyword v))) (keyword v)
+      :else                                             (:context
+                                                         batch/kwic-defaults))))
 
 (defn near-param
   "The word the `near` query param value `word` asks every hit to have
@@ -176,9 +176,7 @@
   (when-not (str/blank? word)
     {:word     (str/trim word)
      :distance (let [n (some-> distance parse-long)]
-                 (if (and n (pos? n))
-                   n
-                   (parse-long (:distance url/defaults))))}))
+                 (if (and n (pos? n)) n url/default-distance))}))
 
 (defn view-param
   "The result view named by the `view` query param value `v` (see
@@ -254,14 +252,10 @@
   [request]
   (some #(when (i18n/supported? %) %) (request-languages request)))
 
-(def cookie-max-age
-  "How long a stored preference outlives the visit that set it: a year, so
-  a reader states it once."
-  31536000)
-
 (defn preference-cookies
-  "The Set-Cookie headers storing every `preference-keys` setting that
-  `params` names with a value that setting accepts.
+  "The Set-Cookie headers (see dk.cst.corpus-probe.url/cookie) storing
+  every `preference-keys` setting that `params` names with a value that
+  setting accepts.
 
   A value the setting refuses stores nothing rather than storing a
   fallback: a reader who never asked for Danish should not be given it
@@ -271,8 +265,7 @@
         (keep (fn [[k valid?]]
                 (let [v (get params k)]
                   (when (and (some? v) (valid? v))
-                    (str (name k) "=" v ";Path=/;Max-Age=" cookie-max-age
-                         ";SameSite=Lax")))))
+                    (url/cookie k v)))))
         preference-keys))
 
 (defn safe-return

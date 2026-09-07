@@ -104,10 +104,6 @@ msgid "Context"
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/concordance.cljc
-msgid "Near"
-msgstr ""
-
-#: src/dk/cst/corpus_probe/views/concordance.cljc
 msgid "No hits."
 msgstr ""
 
@@ -380,6 +376,10 @@ msgid "Narrow the result"
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/result.cljc
+msgid "Near"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/result.cljc
 msgid "previous"
 msgstr ""
 
@@ -495,6 +495,10 @@ msgstr ""
 msgid "sentence"
 msgstr ""
 
+#: src/dk/cst/corpus_probe/views/corpus.cljc src/dk/cst/corpus_probe/views/result.cljc src/dk/cst/corpus_probe/views/search.cljc
+msgid "in"
+msgstr ""
+
 #: src/dk/cst/corpus_probe/views/search.cljc
 msgid "start of"
 msgstr ""
@@ -547,7 +551,7 @@ msgstr ""
 msgid "the query"
 msgstr ""
 
-#: src/dk/cst/corpus_probe/views/concordance.cljc src/dk/cst/corpus_probe/views/result.cljc src/dk/cst/corpus_probe/views/search.cljc
+#: src/dk/cst/corpus_probe/views/result.cljc src/dk/cst/corpus_probe/views/search.cljc
 msgid "within"
 msgstr ""
 
@@ -569,10 +573,6 @@ msgstr ""
 
 #: src/dk/cst/corpus_probe/views/search.cljc
 msgid "find"
-msgstr ""
-
-#: src/dk/cst/corpus_probe/views/corpus.cljc src/dk/cst/corpus_probe/views/result.cljc src/dk/cst/corpus_probe/views/search.cljc
-msgid "in"
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/search.cljc
@@ -662,15 +662,15 @@ msgid "is"
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/search/tokens.cljc
+msgid "joined by"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/search/tokens.cljc
 msgid "or"
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views.cljc src/dk/cst/corpus_probe/views/frequency.cljc src/dk/cst/corpus_probe/views/search/tokens.cljc
 msgid "and"
-msgstr ""
-
-#: src/dk/cst/corpus_probe/views/search/tokens.cljc
-msgid "joined by"
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/corpus.cljc src/dk/cst/corpus_probe/views/result.cljc src/dk/cst/corpus_probe/views/search.cljc src/dk/cst/corpus_probe/views/search/tokens.cljc
@@ -691,10 +691,6 @@ msgstr ""
 
 #: src/dk/cst/corpus_probe/views/search/tokens.cljc
 msgid "Remove condition"
-msgstr ""
-
-#: src/dk/cst/corpus_probe/views/concordance.cljc src/dk/cst/corpus_probe/views/search/tokens.cljc
-msgid "Token"
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/search/tokens.cljc
@@ -719,6 +715,10 @@ msgstr ""
 
 #: src/dk/cst/corpus_probe/views/search/tokens.cljc
 msgid "Remove token"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/concordance.cljc src/dk/cst/corpus_probe/views/search/tokens.cljc
+msgid "Token"
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/search/tokens.cljc

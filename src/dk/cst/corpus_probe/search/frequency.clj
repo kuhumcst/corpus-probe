@@ -392,12 +392,12 @@
       nil)))
 
 (defn filter-rows
-  "The values of metadata attribute `attr` among the `entries` of
+  "The values of metadata attribute `attr` among the `filters` of
   `corpus-filters!`, merged over their corpora like a frequency table
   (the counts are regions) and sorted by value in the collation of
   `collator` (see dk.cst.corpus-probe.cwb/->collator)."
-  [collator attr entries]
-  (->> (filter #(= attr (:attr %)) entries)
+  [collator attr filters]
+  (->> (filter #(= attr (:attr %)) filters)
        (frequency-rows)
        (sort-by :value collator)
        (vec)))
@@ -412,12 +412,12 @@
   each, with the values of `filter-rows`; an attribute with too many
   values to list in any of the corpora is named under :unlisted instead."
   [ctx corpora]
-  (let [entries  (->> (cwb/pmap-n (cwb/parallelism ctx)
+  (let [filters  (->> (cwb/pmap-n (cwb/parallelism ctx)
                                   #(corpus-filters! ctx %) corpora)
                       (apply concat))
-        attrs    (distinct (map :attr entries))
-        unlisted (set (map :attr (remove :freqs entries)))
+        attrs    (distinct (map :attr filters))
+        unlisted (set (map :attr (remove :freqs filters)))
         collator (cwb/->collator ctx)]
     {:attrs    (vec (for [attr (remove unlisted attrs)]
-                      {:name attr :rows (filter-rows collator attr entries)}))
+                      {:name attr :rows (filter-rows collator attr filters)}))
      :unlisted (vec (filter unlisted attrs))}))
