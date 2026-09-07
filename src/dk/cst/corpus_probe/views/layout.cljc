@@ -36,15 +36,11 @@
   {"da" "Dansk"
    "en" "English"})
 
-(def preferences-path
-  "Where a setting is stored: a preference is not a place, so choosing one
-  changes state and sends the reader back where they were."
-  "/preferences")
-
 (defn language-switch
   "The language switch: every supported language named in itself, the one
   in use as plain text and each other as a button that stores it,
-  submitting to `preferences-path` and returning to `path`.
+  submitting to dk.cst.corpus-probe.url/preferences and returning to
+  `path`.
 
   The language in use is shown but is not a control, because choosing it
   would do nothing and a control that can do nothing is one a reader has
@@ -65,7 +61,7 @@
   page around it."
   [ui path]
   [:form.languages {:method     "post"
-                    :action     preferences-path
+                    :action     url/preferences
                     :aria-label (i18n/tr ui "Language")}
    [:input {:type "hidden" :name "return" :value path}]
    [:p (interpose

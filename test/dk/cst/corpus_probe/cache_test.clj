@@ -5,32 +5,10 @@
   (:require [babashka.fs :as fs]
             [clojure.string :as str]
             [clojure.test :refer [deftest is testing use-fixtures]]
-            [dk.cst.corpus-probe.cache :as cache]))
+            [dk.cst.corpus-probe.cache :as cache]
+            [dk.cst.corpus-probe.test.cwb :refer [cache-ctx! reset-cache!]]))
 
-(defn temp-ctx
-  "A context over a fresh cache directory and a registry holding an entry
-  for PROBE and one for VISER, so that `build-stamp` has something to read
-  for each and two corpora differ by more than a missing entry."
-  []
-  (let [registry (fs/create-temp-dir)]
-    (doseq [id ["probe" "viser"]]
-      (spit (fs/file registry id)
-            (str "NAME \"\"\nID " id "\nHOME /nowhere\nATTRIBUTE word\n")))
-    {:registry  (str registry)
-     :cache-dir (str (fs/create-temp-dir))}))
-
-(use-fixtures :each
-  ;; all three are process-wide: a test that moves the reaping timestamp
-  ;; would otherwise silence the reaping of every test after it, and a
-  ;; remembered count would outlive the corpus it was counted from
-  (fn [f]
-    (reset! cache/last-reap 0)
-    (reset! cache/in-flight {})
-    (cache/forget-counts!)
-    (f)
-    (reset! cache/last-reap 0)
-    (reset! cache/in-flight {})
-    (cache/forget-counts!)))
+(use-fixtures :each reset-cache!)
 
 (deftest directory-test
   (testing "no cache directory configured means no cache"
@@ -41,7 +19,7 @@
          (str (cache/directory {:cache-dir "/var/cache/probe"})))))
 
 (deftest result-name-test
-  (let [ctx  (temp-ctx)
+  (let [ctx  (cache-ctx!)
         nqr  (fn [query opts] (cache/result-name ctx "PROBE" query opts))]
     (testing "a name CQP can parse: a letter first, and hex after"
       (is (re-matches #"q_[0-9a-f]{32}" (nqr "[]" {}))))
@@ -79,7 +57,7 @@
         (is (not= before (nqr "[]" {})))))))
 
 (deftest corpus-directory-test
-  (let [ctx (temp-ctx)]
+  (let [ctx (cache-ctx!)]
     (testing "each corpus gets a directory of its own, created on demand"
       (is (= "PROBE" (str (fs/file-name (cache/corpus-directory ctx "PROBE")))))
       (is (not (fs/exists? (cache/corpus-directory ctx "PROBE"))))
@@ -93,7 +71,7 @@
       (is (nil? (cache/corpus-directory {} "PROBE"))))))
 
 (deftest match-key-test
-  (let [ctx (temp-ctx)
+  (let [ctx (cache-ctx!)
         k   (fn [query opts] (cache/match-key ctx "PROBE" query opts))]
     (testing "what changes which matches there are changes the key"
       (is (not= (k "[]" {}) (k "\"hund\"" {})))
@@ -125,7 +103,7 @@
                 (cache/result-key ctx "PROBE" "[]" {:sort "left"}))))))
 
 (deftest count!-test
-  (let [ctx  (temp-ctx)
+  (let [ctx  (cache-ctx!)
         runs (atom 0)
         n    (fn [query opts]
                (cache/count! ctx "PROBE" query opts
@@ -177,7 +155,7 @@
       (is (empty? @cache/in-flight)))))
 
 (deftest count!-invalidation-test
-  (let [ctx  (temp-ctx)
+  (let [ctx  (cache-ctx!)
         home (fs/create-temp-dir)]
     (spit (fs/file (:registry ctx) "probe")
           (str "NAME \"\"\nID probe\nHOME " home "\nATTRIBUTE word\n"))
@@ -211,7 +189,7 @@
     (is (not (cache/result-file? (fs/file "q_0f3a"))))))
 
 (deftest stored?-test
-  (let [ctx (temp-ctx)]
+  (let [ctx (cache-ctx!)]
     (cache/corpus-directory! ctx "PROBE")
     (is (not (cache/stored? ctx "PROBE" "q_abc")))
     (spit (cache/result-file ctx "PROBE" "q_abc") "x")
@@ -220,7 +198,7 @@
       (is (not (cache/stored? {} "PROBE" "q_abc"))))))
 
 (deftest commit!-test
-  (let [ctx (temp-ctx)]
+  (let [ctx (cache-ctx!)]
     (cache/corpus-directory! ctx "PROBE")
     (spit (cache/result-file ctx "PROBE" "q_abc_pending") "saved")
     (cache/commit! ctx "PROBE" "q_abc_pending" "q_abc" 0)
@@ -237,7 +215,7 @@
       (is (= "newer" (slurp (cache/result-file ctx "PROBE" "q_abc")))))))
 
 (deftest commit!-truncated-test
-  (let [ctx (temp-ctx)]
+  (let [ctx (cache-ctx!)]
     (cache/corpus-directory! ctx "PROBE")
     (spit (cache/result-file ctx "PROBE" "q_short_pending") "far too small")
     (cache/commit! ctx "PROBE" "q_short_pending" "q_short" 1000)
@@ -247,14 +225,14 @@
       (is (not (cache/stored? ctx "PROBE" "q_short_pending"))))))
 
 (deftest discard!-test
-  (let [ctx (temp-ctx)]
+  (let [ctx (cache-ctx!)]
     (cache/corpus-directory! ctx "PROBE")
     (spit (cache/result-file ctx "PROBE" "q_abc") "x")
     (cache/discard! ctx "PROBE" "q_abc")
     (is (not (cache/stored? ctx "PROBE" "q_abc")))))
 
 (deftest reap!-test
-  (let [ctx     (assoc (temp-ctx) :cache-ttl-ms 1000)
+  (let [ctx     (assoc (cache-ctx!) :cache-ttl-ms 1000)
         _       (cache/corpus-directory! ctx "PROBE")
         stale   (cache/result-file ctx "PROBE" "q_stale")
         fresh   (cache/result-file ctx "VISER" "q_fresh")
@@ -283,7 +261,7 @@
     (.setLastModified read-at)))
 
 (deftest excess-files-test
-  (let [ctx (temp-ctx)
+  (let [ctx (cache-ctx!)
         a   (result-of ctx "PROBE" "q_a" 100 3000000)
         b   (result-of ctx "PROBE" "q_b" 100 2000000)
         c   (result-of ctx "PROBE" "q_c" 100 1000000)]
@@ -300,7 +278,7 @@
 
 (deftest reap-budget-test
   (let [now  (System/currentTimeMillis)
-        ctx  (assoc (temp-ctx) :cache-ttl-ms 600000 :cache-max-bytes 250)
+        ctx  (assoc (cache-ctx!) :cache-ttl-ms 600000 :cache-max-bytes 250)
         old  (result-of ctx "PROBE" "q_old" 100 (- now 3000))
         mid  (result-of ctx "VISER" "q_mid" 100 (- now 2000))
         new* (result-of ctx "PROBE" "q_new" 100 (- now 1000))]
@@ -315,7 +293,7 @@
       (is (= 0 (cache/reap! (dissoc ctx :cache-max-bytes)))))))
 
 (deftest reap-due!-test
-  (let [ctx (assoc (temp-ctx) :cache-ttl-ms 1000)]
+  (let [ctx (assoc (cache-ctx!) :cache-ttl-ms 1000)]
     (cache/corpus-directory! ctx "PROBE")
     (doto (cache/result-file ctx "PROBE" "q_stale")
       (spit "x")

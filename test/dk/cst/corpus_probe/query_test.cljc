@@ -12,23 +12,6 @@
   [params]
   (query/within (query/of params)))
 
-(deftest escape-literal-test
-  (testing "PCRE metacharacters are backslash-escaped"
-    (is (= "a\\.b\\*c" (query/escape-literal "a.b*c")))
-    (is (= "\\[\\]\\{\\}\\(\\)\\^\\$\\|\\?\\+\\\\"
-           (query/escape-literal "[]{}()^$|?+\\"))))
-  (testing "quotes are doubled, CQP-style"
-    (is (= "12\"\"-screen" (query/escape-literal "12\"-screen"))))
-  (testing "ordinary text passes through"
-    (is (= "København" (query/escape-literal "København")))))
-
-(deftest escape-value-test
-  (testing "the control characters a command line cannot carry become
-            regex escapes"
-    (is (= "a\\tb\\nc\\rd" (query/escape-value "a\tb\nc\rd"))))
-  (testing "over the literal escaping"
-    (is (= "a\\.b\"\"" (query/escape-value "a.b\"")))))
-
 (deftest extended->cqp-test
   (testing "each operator against the attribute, the literal escaped"
     (is (= "word = \"hund\"" (query/condition->cqp {:value "hund"})))
@@ -102,18 +85,6 @@
              {:conditions [{:attr :word :op "is" :value "hund"}]}])))
     (is (nil? (query/extended->cqp [])))))
 
-(deftest match-op-test
-  (testing "one param says how much of the form the query must cover"
-    (is (= "is" (query/match-op nil)))
-    (is (= "is" (query/match-op "")))
-    (is (= "prefix" (query/match-op "prefix")))
-    (is (= "suffix" (query/match-op "suffix")))
-    (is (= "infix" (query/match-op "infix"))))
-  (testing "so a query may fall anywhere in the form without two params
-            both set having to mean that"
-    (is (= "[word = \".*hund.*\"]" (cqp-of {:q "hund" :match "infix"})))
-    (is (= "[word = \".*hund\"]" (cqp-of {:q "hund" :match "suffix"})))))
-
 (deftest of-test
   (testing "words in order, one token each, with the options every word
             shares, kept within the unit named"
@@ -166,7 +137,10 @@
   (is (= "[word = \"lille\" %c] [word = \"hund\" %c]"
          (cqp-of {:q " lille  hund " :ci "on"})))
   (is (= "[word = \"hund.*\"]" (cqp-of {:q "hund" :match "prefix"})))
-  (is (= "[word = \".*hund.*\"]" (cqp-of {:q "hund" :match "infix"})))
+  (is (= "[word = \".*hund\"]" (cqp-of {:q "hund" :match "suffix"})))
+  (testing "one param says how much of the form the query must cover, so
+            it may fall anywhere without two params both set meaning that"
+    (is (= "[word = \".*hund.*\"]" (cqp-of {:q "hund" :match "infix"}))))
   (testing "any positional attribute can be the one matched, word when blank"
     (is (= "[lemma = \"hund\"]" (cqp-of {:q "hund" :in "lemma"})))
     (is (= "[word = \"hund\"]" (cqp-of {:q "hund" :in ""})))
@@ -193,7 +167,14 @@
       (is (= "[word = \"(hund|kat|mus)\"]" (cqp-of {:q "hund kat\nmus"}))))
     (testing "a list of one word is that word"
       (is (= "[word = \"hund\"]" (cqp-of {:q "hund\n"}))))
-    (is (nil? (cqp-of {:q "\n \n"})))))
+    (is (nil? (cqp-of {:q "\n \n"}))))
+  (testing "the tokens of an extended search compile as its params say,
+            and text under its radio is not read"
+    (is (= "[lemma = \"hund\" %c] []{0,2} </s>"
+           (cqp-of {:mode "extended" :t1.attr "lemma" :t1.v "hund"
+                    :t1.ci "on" :t2.op "any" :t2.min "0" :t2.max "2"
+                    :t2.end "on"})))
+    (is (nil? (cqp-of {:mode "extended" :q "hund"})))))
 
 (deftest within-test
   (testing "a simple search of several words is kept within a sentence,
@@ -219,31 +200,6 @@
                                  :t1.start "on"}))))
   (testing "CQP says so itself"
     (is (nil? (within-of {:q "[] []"})))))
-
-(deftest token-params-test
-  (testing "the tokens compile to CQP, defaults applied and bad values read
-            as them"
-    (is (= [{:conditions [{:attr :lemma :op "is" :value "hund" :ci? true}]
-             :min 1 :max 1 :start? false :end? false}
-            {:conditions [{:attr :word :op "any" :value "" :ci? false}]
-             :min 0 :max 2 :start? false :end? true}]
-           (query/token-params {:t1.attr "lemma" :t1.v "hund" :t1.ci "on"
-                                :t2.op   "any" :t2.min "0" :t2.max "2"
-                                :t2.end  "on"
-                                :t3.attr "pos" :t3.op "prefix"})))
-    (is (= [{:conditions [{:attr :word :op "is" :value "x" :ci? false}
-                          {:attr :pos :op "is" :value "N" :ci? false
-                           :join "and"}]
-             :min 2 :max 2 :start? false :end? false}]
-           (query/token-params {:t1.v "x" :t1.attr "no such" :t1.op "nope"
-                                :t1.min "2" :t1.max "1"
-                                :t1.2.attr "pos" :t1.2.v "N" :t1.2.join "nor"
-                                :t1.3.attr "pos" :t1.3.join "or"})))
-    (is (= "[lemma = \"hund\" %c] []{0,2} </s>"
-           (cqp-of {:mode "extended" :t1.attr "lemma" :t1.v "hund"
-                    :t1.ci "on" :t2.op "any" :t2.min "0" :t2.max "2"
-                    :t2.end "on"})))
-    (is (nil? (cqp-of {:mode "extended" :q "hund"})))))
 
 (deftest compiled-golden-test
   (testing "the CQP and the unit each query compiles to, pinned"
@@ -305,11 +261,11 @@
                           :t1.ci "on"}]
              ["cqp" {:q "[] []"}]]]
       (let [query (query/of params)]
-        (is (= params (query/params mode query)) mode)
-        (is (= query (query/of (query/params mode query))) mode))))
+        (is (= params (query/->params mode query)) mode)
+        (is (= query (query/of (query/->params mode query))) mode))))
   (testing "no query prints as no params"
-    (is (= {} (query/params "simple" nil)))
-    (is (= {} (query/params "list" nil)))))
+    (is (= {} (query/->params "simple" nil)))
+    (is (= {} (query/->params "list" nil)))))
 
 (deftest project-test
   (let [extended (query/of {:mode "extended" :t1.attr "lemma" :t1.v "hund"
@@ -353,7 +309,7 @@
       (doseq [mode  ["extended" "cqp"]
               query [extended simple list cqp]]
         (let [held (query/project mode query)]
-          (is (= held (query/of (query/params mode held)))
+          (is (= held (query/of (query/->params mode held)))
               [mode (query/->cqp query)]))))
     (testing "no query is held by no form, and loses nothing"
       (is (nil? (query/project "cqp" nil)))
@@ -385,7 +341,7 @@
         runs?   (fn [params] (some? (:query (query/arrived params))))
         held-as (fn [params]
                   (let [{:keys [form held]} (query/arrived params)]
-                    (query/params form held)))]
+                    (query/->params form held)))]
     (testing "no switch: the form holds what its mode reads and runs it,
               naming what a hand-written URL carried that it does not read"
       (is (= {:form "simple" :from nil :loss [] :unread #{}}

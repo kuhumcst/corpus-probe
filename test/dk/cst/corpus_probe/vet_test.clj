@@ -3,20 +3,8 @@
   the registry's corpora actually read as."
   (:require [babashka.fs :as fs]
             [clojure.test :refer [deftest is testing]]
-            [dk.cst.corpus-probe.corpus-test :refer [fixture]]
-            [dk.cst.corpus-probe.cqp-test :refer [ctx temp-registry when-cwb]]
+            [dk.cst.corpus-probe.test.cwb :refer [ctx phantom-ctx! when-cwb]]
             [dk.cst.corpus-probe.vet :as vet]))
-
-(defn phantom-ctx
-  "A context over a fresh registry holding one entry whose HOME points at
-  data that is not there, which is what the three phantom KU entries look
-  like.
-
-  Fresh per call: the per-corpus facts cache is keyed by the registry path
-  and the entry's mtime, so two checks of one registry would share the
-  first one's outcome."
-  []
-  {:registry (temp-registry fixture {})})
 
 (deftest installed?-test
   (is (vet/installed? "echo"))
@@ -99,9 +87,9 @@
    (testing "a corpus CWB can read vets clean"
      (is (nil? (vet/corpus! ctx {:id "probe"}))))
    (testing "an entry CWB has no data for is named, uppercase, as undefined"
-     (is (= ["PROBE" :undefined] (vet/corpus! (phantom-ctx) {:id "probe"}))))
+     (is (= ["PROBE" :undefined] (vet/corpus! (phantom-ctx!) {:id "probe"}))))
    (testing "another failure carries its type, which names no server path"
-     (let [[id reason] (vet/corpus! (assoc (phantom-ctx) :cqp "no-such-cqp")
+     (let [[id reason] (vet/corpus! (assoc (phantom-ctx!) :cqp "no-such-cqp")
                                     {:id "probe"})]
        (is (= "PROBE" id))
        (is (contains? #{:unreadable :timeout :cqp :misaligned} reason))
@@ -110,7 +98,7 @@
 (deftest registry!-test
   (when-cwb
    (testing "a registry of nothing but a phantom reports it"
-     (is (= [["PROBE" :undefined]] (vet/registry! (phantom-ctx)))))
+     (is (= [["PROBE" :undefined]] (vet/registry! (phantom-ctx!)))))
    (testing "the dev corpora read clean"
      ;; naming them, since the gitignored dev registry may hold more
      (let [broken (set (map first (vet/registry! ctx)))]

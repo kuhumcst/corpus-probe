@@ -1,12 +1,68 @@
-(ns dk.cst.corpus-probe.tools-test
-  "Integration tests for the cwb-* tool wrappers; skipped when CWB or the
-  dev corpora are missing."
+(ns dk.cst.corpus-probe.cwb.tools-test
+  "Golden-file tests of the tool parsers, and integration tests of the
+  cwb-* tool wrappers, skipped when CWB or the dev corpora are missing."
   (:require [babashka.fs :as fs]
             [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]
-            [dk.cst.corpus-probe.corpus :as corpus]
-            [dk.cst.corpus-probe.cqp-test :refer [ctx when-cwb]]
-            [dk.cst.corpus-probe.tools :as tools]))
+            [dk.cst.corpus-probe.cwb.corpus :as corpus]
+            [dk.cst.corpus-probe.cwb.tools :as tools]
+            [dk.cst.corpus-probe.test.cwb
+             :refer [ctx golden-lines when-cwb with-value-limit]]))
+
+(deftest describe->stats-test
+  (let [stats (tools/describe->stats (golden-lines "describe.txt"))]
+    (is (= "PROBE" (:name stats)))
+    (is (= 47 (:size stats)))
+    (is (= "utf8" (:charset stats)))
+    (testing "an empty description is absent, not blank"
+      (is (not (contains? stats :description))))
+    (testing "per-attribute statistics keep registry order"
+      (is (= [{:name :word :tokens 47 :types 36}
+              {:name :pos :tokens 47 :types 15}
+              {:name :lemma :tokens 47 :types 32}]
+             (:p-attrs stats)))
+      (is (= {:name :s :regions 6 :values? false}
+             (first (:s-attrs stats))))
+      (is (= [:s_id :text_id :text_title :text_year]
+             (->> (:s-attrs stats) (filter :values?) (map :name)))))
+    (is (= [] (:a-attrs stats))))
+  (testing "an attribute without data keeps its name and no counts"
+    (is (= [{:name :lemma}]
+           (:p-attrs (tools/describe->stats
+                      ["p-ATT lemma                       NO DATA"])))))
+  (testing "a description and alignment attributes are captured"
+    (let [stats (tools/describe->stats
+                 ["description:    Danske folkeviser (dev)"
+                  "a-ATT viser_probe               3 alignment blocks"])]
+      (is (= "Danske folkeviser (dev)" (:description stats)))
+      (is (= [{:name :viser_probe :blocks 3}] (:a-attrs stats))))))
+
+(deftest lexdecode->freqs-test
+  (let [freqs (tools/lexdecode->freqs (golden-lines "lexdecode.tsv"))]
+    (testing "entries come out sorted by frequency, in the group shape"
+      (is (= [{:values ["."] :freq 6} {:values ["hund"] :freq 5}]
+             (take 2 freqs)))
+      (is (= 32 (count freqs)))
+      (is (apply >= (map :freq freqs))))))
+
+(deftest s-decode->freqs-test
+  (testing "values come out sorted by value with their region counts"
+    (is (= [{:values ["Hverdag"] :freq 1}
+            {:values ["Samtale"] :freq 1}
+            {:values ["Vejret"] :freq 1}]
+           (tools/s-decode->freqs (golden-lines "s-decode.txt")))))
+  (testing "repeated values are counted and blank lines skipped"
+    (is (= [{:values ["S"] :freq 2} {:values ["V"] :freq 1}]
+           (tools/s-decode->freqs ["S" "V" "S" ""])))))
+
+(deftest s-decode->sizes-test
+  (testing "each value gets the tokens of its regions"
+    (is (= {"Hverdag" 20 "Vejret" 19 "Samtale" 8}
+           (tools/s-decode->sizes (golden-lines "s-decode-regions.txt")))))
+  (testing "repeated values add up, blank values and lines are skipped"
+    (is (= {"S" 5 "V" 1}
+           (tools/s-decode->sizes ["0\t2\tS" "3\t3\tV" "4\t5\tS" "6\t7\t"
+                                   ""])))))
 
 (deftest describe-corpus-test
   (testing "a hostile corpus name is rejected before any command is built"
@@ -72,15 +128,6 @@
    (testing "the lexicon comes sorted by frequency in the group shape"
      (is (= {:values ["."] :freq 6} (first (tools/lexicon! ctx "TALER" :word))))
      (is (= 33 (count (tools/lexicon! ctx "TALER" :word)))))))
-
-(defmacro with-value-limit
-  "Run `body` with dk.cst.corpus-probe.tools/value-limit bound to `n`
-  and the facts cache emptied before and after: the value lists decoded
-  under one limit are cached, and would be served under another."
-  [n & body]
-  `(with-redefs [tools/value-limit ~n]
-     (reset! corpus/facts-cache {})
-     (try ~@body (finally (reset! corpus/facts-cache {})))))
 
 (deftest annotation-values-test
   (testing "a hostile corpus name is rejected before any command is built"

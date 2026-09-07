@@ -6,9 +6,9 @@
   is its own key, so a view reads as the sentence it renders and a
   string no translation covers falls back to readable English rather
   than to an identifier. The translations live in resources/i18n/*.po
-  (see dk.cst.corpus-probe.translations), which Poedit and Weblate read
+  (see dk.cst.corpus-probe.i18n.po), which Poedit and Weblate read
   directly; the template a translator starts from is regenerated from
-  the source by dk.cst.corpus-probe.i18n-scan.
+  the source by dk.cst.corpus-probe.i18n.scan.
 
   A `ui` is the context the lookups take: the chosen language and its
   table. dk.cst.corpus-probe.views.app derives it once per render and
@@ -21,9 +21,9 @@
   own language. So are the TSV and CSV exports, whose column names are
   CWB's own and are read by other programs."
   (:require [clojure.string :as str]
-            #?(:clj [dk.cst.corpus-probe.translations :as translations]))
+            #?(:clj [dk.cst.corpus-probe.i18n.po :as po]))
   #?(:cljs (:require-macros
-            [dk.cst.corpus-probe.translations :refer [inline-tables]])))
+            [dk.cst.corpus-probe.i18n.po :refer [inline-tables]])))
 
 (def source-language
   "The language the msgids are written in, which therefore needs no
@@ -34,7 +34,7 @@
   "The translation tables by language code. Read from the classpath on
   the server and inlined at compile time in the browser, which has no
   filesystem to read them from."
-  #?(:clj  (translations/tables)
+  #?(:clj  (po/tables)
      :cljs (inline-tables)))
 
 (def languages

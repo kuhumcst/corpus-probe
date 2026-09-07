@@ -1,7 +1,12 @@
 (ns dk.cst.corpus-probe.export-test
   (:require [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]
-            [dk.cst.corpus-probe.export :as export]))
+            [dk.cst.corpus-probe.export :as export]
+            [dk.cst.corpus-probe.url :as url]))
+
+(deftest formats-test
+  (testing "every format the URL names is rendered, and no other"
+    (is (= (set url/export-formats) (set (keys export/formats))))))
 
 (deftest kwic-header-test
   (is (= ["corpus" "cpos" "matchend" "left" "match" "right" "match pos"

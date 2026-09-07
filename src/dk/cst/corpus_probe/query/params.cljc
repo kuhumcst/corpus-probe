@@ -1,0 +1,153 @@
+(ns dk.cst.corpus-probe.query.params
+  "The readers and writers of the query params: each `-param` reads one
+  param's value into what the query holds, `token-params` reads the
+  tokens of an extended search out of them, and the `->params` print a
+  condition, a token or the words of a query back as the params its form
+  submits, nothing at its default. The query itself is
+  dk.cst.corpus-probe.query's."
+  (:require [clojure.string :as str]
+            [dk.cst.corpus-probe.cqp :as cqp]
+            [dk.cst.corpus-probe.query.mode :as mode]
+            [dk.cst.corpus-probe.query.tokens :as tokens]))
+
+(defn match-op
+  "The operator the `match` query param value `v` gives every word of a
+  simple search or a list (see dk.cst.corpus-probe.query.tokens/match-ops):
+  the start of the form matched for prefix, the end for suffix, either
+  for infix, and equality for the whole form, which is what a URL leaves
+  out.
+
+  One param rather than one per end, because a query that may fall at
+  either end may fall anywhere, and two params both set said so to
+  nobody."
+  [v]
+  (if (some #{v} (remove str/blank? tokens/match-ops)) v "is"))
+
+(defn repeat-param
+  "The repeat query param value `v` as a number of tokens: an integer
+  from 0 to 99, else `default`."
+  [v default]
+  (let [n (some-> v str parse-long)]
+    (if (and n (<= 0 n 99)) n default)))
+
+(defn within-param
+  "The unit of text the `within` query param value `v` names (see
+  dk.cst.corpus-probe.cqp/units): the sentence unless it names another."
+  [v]
+  (if (some #{v} (map (comp name first) cqp/units)) (keyword v) :sentence))
+
+(defn condition-params
+  "The condition `row` of an extended-search token (see
+  dk.cst.corpus-probe.query.tokens/token-rows) as
+  dk.cst.corpus-probe.query/condition->cqp takes it: its :attr (a
+  keyword; word unless the name is a plausible attribute name, since it
+  is spliced into the query), its :op (one of
+  dk.cst.corpus-probe.query.tokens/operators, equality otherwise), its
+  :value as typed, :ci? for its ignore-case box and its :join as typed,
+  which `joined` reads by its place among its token's conditions."
+  [{:keys [attr op v ci join]}]
+  {:attr  (keyword (if (cqp/name? (str attr)) attr "word"))
+   :op    (if (some #{op} tokens/operators) op "is")
+   :value (str v)
+   :ci?   (some? ci)
+   :join  join})
+
+(defn joined
+  "`conditions` (see `condition-params`) with the :join of each after the
+  first read from its `join` field: one of
+  dk.cst.corpus-probe.query.tokens/joins, and otherwise; the first has
+  none, since it joins nothing."
+  [conditions]
+  (into []
+        (map-indexed (fn [i {:keys [join] :as condition}]
+                       (if (zero? i)
+                         (dissoc condition :join)
+                         (assoc condition
+                                :join (if (some #{join} tokens/joins)
+                                        join
+                                        "and")))))
+        conditions))
+
+(defn token-params
+  "The tokens of the extended search `params` describe, as
+  dk.cst.corpus-probe.query/extended->cqp takes them: each token asking
+  for anything (see dk.cst.corpus-probe.query.tokens/asks?), in order,
+  with the :conditions of it that ask (see
+  dk.cst.corpus-probe.query.tokens/condition-asks?, `condition-params`
+  and `joined`), its repeat as :min and :max (see `repeat-param`), the
+  most never below the least, and :start? and :end? for the sentence
+  edges it stands at."
+  [params]
+  (into []
+        (comp (filter tokens/asks?)
+              (map (fn [{:keys [conditions start end] lo :min hi :max}]
+                     (let [lo (repeat-param lo 1)]
+                       {:conditions (joined
+                                     (map condition-params
+                                          (filter tokens/condition-asks?
+                                                  conditions)))
+                        :min        lo
+                        :max        (max lo (repeat-param hi lo))
+                        :start?     (some? start)
+                        :end?       (some? end)}))))
+        (tokens/token-rows params)))
+
+(defn condition->params
+  "The fields of `condition`, the `c`th of token `n`, as the extended
+  form submits them and its URL carries them (see
+  dk.cst.corpus-probe.query.tokens/token-key), nothing at its default."
+  [n c {:keys [attr op value ci? join]}]
+  (let [k (fn [field] (keyword (tokens/token-key n c field)))]
+    (cond-> {}
+      (not= (:attr tokens/token-defaults) (name attr))
+      (assoc (k :attr) (name attr))
+
+      (not= (:op tokens/token-defaults) op)
+      (assoc (k :op) op)
+
+      (not (str/blank? value))
+      (assoc (k :v) value)
+
+      ci?
+      (assoc (k :ci) "on")
+
+      (and (> c 1) (not= (:join tokens/token-defaults) join))
+      (assoc (k :join) join))))
+
+(defn token->params
+  "The fields of `token`, the `n`th of an extended search, as its form
+  submits them and its URL carries them: those of its conditions (see
+  `condition->params`), its repeat and its sentence edges, nothing at
+  its default."
+  [n {:keys [conditions start? end?] lo :min hi :max}]
+  (let [k (fn [field] (keyword (tokens/token-key n 1 field)))]
+    (cond-> (into {}
+                  (map-indexed (fn [i c]
+                                 (condition->params n (inc i) c)))
+                  conditions)
+      (not= 1 lo) (assoc (k :min) (str lo))
+      (not= 1 hi) (assoc (k :max) (str hi))
+      start?      (assoc (k :start) "on")
+      end?        (assoc (k :end) "on"))))
+
+(defn word-params
+  "The params of the words of `query` as a simple search or a list
+  spells them, by `mode`: the values of its tokens in order, or of its
+  one token's alternatives, in the field, one line each for a list,
+  with the first condition's attribute, operator and case flag as the
+  options every word shares (see dk.cst.corpus-probe.query/condition).
+  For a query the form holds (see dk.cst.corpus-probe.query/project)."
+  [mode {:keys [tokens within]}]
+  (let [{:keys [attr op ci?] :or {attr :word op "is"}}
+        (first (:conditions (first tokens)))
+
+        list?  (= "list" mode)
+        values (if list?
+                 (map :value (:conditions (first tokens)))
+                 (map (comp :value first :conditions) tokens))]
+    (cond-> {:q (str/join (if list? "\n" " ") values)}
+      (not= (:in mode/defaults) (name attr)) (assoc :in (name attr))
+      (not= "is" op)                         (assoc :match op)
+      ci?                                    (assoc :ci "on")
+      (and (not list?) (not= :sentence within))
+      (assoc :within (name within)))))

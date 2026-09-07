@@ -11,12 +11,13 @@
 
   A corpus that cannot be read is not dropped. The registry says it
   exists, so the chooser keeps it, disabled, and its info page says CWB
-  has no data for it (see dk.cst.corpus-probe.corpus/phantom?)."
+  has no data for it (see dk.cst.corpus-probe.cwb.corpus/phantom?)."
   (:require [clojure.string :as str]
             [dk.cst.corpus-probe.cache :as cache]
-            [dk.cst.corpus-probe.corpus :as corpus]
-            [dk.cst.corpus-probe.cqp :as cqp]
-            [dk.cst.corpus-probe.search :as search]
+            [dk.cst.corpus-probe.cwb :as cwb]
+            [dk.cst.corpus-probe.cwb.corpus :as corpus]
+            [dk.cst.corpus-probe.cwb.registry :as registry]
+            [dk.cst.corpus-probe.cwb.tools :as tools]
             [taoensso.telemere :as t])
   (:import [java.io File]))
 
@@ -33,30 +34,27 @@
   launchable at all does."
   [command]
   (try
-    (not= ::cqp/timeout (cqp/run-process! [command "-h"] timeout-ms {}))
+    (not (cwb/timeout? (cwb/run! [command "-h"] timeout-ms {})))
     (catch Exception _ false)))
-
-(def cwb-tools
-  "The CWB programs the app runs besides cqp. Each is invoked by bare
-  name, so the PATH that reaches cqp has to reach these too."
-  ["cwb-describe-corpus" "cwb-lexdecode" "cwb-s-decode"])
 
 (defn tools!
   "Log the CWB programs `ctx` drives that this machine cannot launch, and
-  return them: its :cqp (default cqp) and the `cwb-tools`.
+  return them: its :cqp (default cqp) and the cwb-* tools (see
+  dk.cst.corpus-probe.cwb.tools/tool-names).
 
   A PATH reaching cqp need not reach the rest, and the failure is quiet:
   search keeps working while corpus pages, frequency lists and metadata
   filters all fail. Logs the CQP version too, since the app generates the
   subset that is safe on the oldest supported one."
   [ctx]
-  (let [missing (vec (remove installed? (cons (:cqp ctx "cqp") cwb-tools)))]
+  (let [missing (vec (remove installed?
+                             (cons (:cqp ctx "cqp") tools/tool-names)))]
     (doseq [command missing]
       (t/event! ::tool-missing {:level :warn :data {:command command}}))
     (when (empty? missing)
       ;; the app's own timeout is for a query; a banner answers at once
       (t/event! ::cwb-version
-                {:data {:cqp (try (cqp/version! (assoc ctx
+                {:data {:cqp (try (cwb/version! (assoc ctx
                                                        :timeout-ms timeout-ms))
                                   (catch Exception _ nil))}}))
     missing))
@@ -107,13 +105,13 @@
   pipeline itself is broken."
   [sort-locale]
   (try
-    (let [res   (cqp/run-process!
+    (let [res   (cwb/run!
                  ["sh" "-c" "sort -k 2 -k 1n | gawk '{print $1}'"]
                  timeout-ms
                  {:in      probe-input
                   :charset (probe-charset sort-locale)
                   :env     {"LC_ALL" (str sort-locale)}})
-          order (when (not= ::cqp/timeout res)
+          order (when-not (cwb/timeout? res)
                   (str/split-lines (str/trim (:out res))))]
       (when (= (set order) (set (vals probe-line)))
         order))
@@ -122,9 +120,9 @@
 (defn collator-order
   "The line numbers `sort-locale`'s collator puts `collation-probe` in:
   how the app itself orders metadata and frequency values (see
-  dk.cst.corpus-probe.search/->collator)."
+  dk.cst.corpus-probe.cwb/->collator)."
   [sort-locale]
-  (mapv probe-line (sort (search/->collator {:sort-locale sort-locale})
+  (mapv probe-line (sort (cwb/->collator {:sort-locale sort-locale})
                          collation-probe)))
 
 (defn collation-problems
@@ -215,7 +213,7 @@
   CWB can read its corpus, else [id reason] saying why it cannot.
 
   The reason is :undefined when CWB has no data for the entry (see
-  dk.cst.corpus-probe.corpus/phantom?), else the type of the failure
+  dk.cst.corpus-probe.cwb.corpus/phantom?), else the type of the failure
   (:timeout, :cqp, :misaligned) or :unreadable when it carries none. The
   type is safe to log; the message it comes with can name server paths."
   [ctx m]
@@ -236,11 +234,11 @@
   before the first request."
   [ctx]
   (let [started (System/nanoTime)
-        corpora (corpus/corpora ctx)
+        corpora (registry/entries ctx)
         broken  (vec (keep identity
-                           (search/pmap-n (search/parallelism ctx)
-                                          #(corpus! ctx %)
-                                          corpora)))]
+                           (cwb/pmap-n (cwb/parallelism ctx)
+                                       #(corpus! ctx %)
+                                       corpora)))]
     (doseq [[id reason] broken]
       (t/event! ::corpus-unreadable
                 {:level :warn :data {:corpus id :reason reason}}))

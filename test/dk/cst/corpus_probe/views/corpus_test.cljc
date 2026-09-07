@@ -1,6 +1,7 @@
 (ns dk.cst.corpus-probe.views.corpus-test
   (:require [clojure.test :refer [deftest is testing]]
-            [dk.cst.corpus-probe.views.hiccup :refer [da deep en]]
+            [dk.cst.corpus-probe.hiccup :refer [deep]]
+            [dk.cst.corpus-probe.test.hiccup :refer [da en open-states]]
             [dk.cst.corpus-probe.views.corpus :as corpus]
             [dk.cst.corpus-probe.views.layout :as layout]))
 
@@ -102,19 +103,15 @@
               is chosen and the rest is not: [chooser Litteratur
               Folkeviser Folketinget]"
       (is (= [true false false false]
-             (->> (deep (corpus/chooser en folders {:selected #{"VISER"}}))
-                  (filter #(and (map? %) (contains? % :open)))
-                  (map :open)))))
+             (open-states (corpus/chooser en folders {:selected #{"VISER"}})))))
     (testing "a corpus that cannot be read cannot be chosen, so a folder
               holding one is not partly chosen for ever"
       (let [unreadable [{:label   "Litteratur"
                          :corpora [{:id "VISER" :size 48} {:id "GONE"}]
                          :folders []}]]
         (is (= [false false]
-               (->> (deep (corpus/chooser en unreadable
-                                          {:selected #{"VISER"}}))
-                    (filter #(and (map? %) (contains? % :open)))
-                    (map :open))))))
+               (open-states (corpus/chooser en unreadable
+                                            {:selected #{"VISER"}}))))))
     (testing "the summary counts the selection rather than naming it: two
               figures read the same way in every such list, where a
               sentence about corpora is one more thing to learn"
@@ -230,9 +227,6 @@
     (testing "a registry without folders is one list under the heading"
       (is (= [:main :h1 :ul.index :li :a :data.size]
              (tags (corpus/index-view en {:folders [(second folders)]})))))
-    (testing "a folder nested too deep for HTML's headings keeps the last"
-      (is (= :h6 (corpus/heading 7)))
-      (is (= :h2 (corpus/heading 2))))
     (testing "in Danish"
       (is (some #{[:h2 "Andre"]}
                 (deep (corpus/index-view da {:folders folders})))))))

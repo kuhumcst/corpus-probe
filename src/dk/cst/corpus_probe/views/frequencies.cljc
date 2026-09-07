@@ -41,7 +41,7 @@
     (list
      [:label {:for "attr"} (i18n/tr ui "Group by")]
      " "
-     [:select {:id   "attr" :name "attr" :form page/form-id
+     [:select {:id   "attr" :name "attr" :form url/form-id
                :on   {:change [:apply-view]}}
       (when (seq p)
         [:optgroup {:label (i18n/tr ui "positional attributes")}
@@ -52,12 +52,13 @@
 
 (defn position-control
   "The control choosing where in the match the table counts, in `ui`: a
-  select over the `positions` (see dk.cst.corpus-probe.commands/positions),
+  select over the `positions` (see
+  dk.cst.corpus-probe.cwb.command/positions),
   each named by dk.cst.corpus-probe.views.page/position-label, with `at`
   chosen. It follows the attribute it qualifies and names the form it
   submits with, as `attr-control` does."
   [ui positions at]
-  [:select {:id         "at" :name "at" :form page/form-id
+  [:select {:id         "at" :name "at" :form url/form-id
             :aria-label (i18n/tr ui "Position")
             :on         {:change [:apply-view]}}
    (for [position positions]
@@ -78,7 +79,7 @@
     (list
      [:label {:for "by"} (i18n/tr ui "columns")]
      " "
-     [:select {:id   "by" :name "by" :form page/form-id
+     [:select {:id   "by" :name "by" :form url/form-id
                :on   {:change [:apply-view]}}
       [:option {:value "" :selected (nil? by)} (i18n/tr ui "corpora")]
       (when (seq s)
@@ -137,7 +138,7 @@
   [:label
    [:input {:type    "checkbox" :name "docs" :value "on"
             :checked docs?
-            :form    page/form-id
+            :form    url/form-id
             :on      {:change [:apply-view]}}]
    " " (i18n/tr ui "count texts")])
 
@@ -172,9 +173,9 @@
   CWB's own word for what `group` and cwb-lexdecode report; the headings
   are in `ui`."
   [ui {:keys [attr counts rows docs sized] :as result}]
-  (let [readable (filter :tokens counts)
-        total?   (boolean (next readable))
-        tokens   (reduce + (map :tokens readable))
+  (let [readable (stats/readable-counts counts)
+        total?   (stats/total? counts)
+        tokens   (stats/tokens counts)
         shown    (take row-limit rows)
         groups   (cond-> readable total? (concat [:total]))
         span     (cond-> 2 sized inc docs inc)]
@@ -198,20 +199,19 @@
                (when sized [:th {:scope "col"} (i18n/tr ui "tokens")])
                (when docs [:th {:scope "col"} (i18n/tr ui "texts")])))]]
      [:tbody
-      (for [{:keys [value freqs total href]
-             doc-freqs :docs row-tokens :tokens} shown]
+      (for [{:keys [value freqs total href] :as row} shown]
         [:tr
          (value-cell attr value href)
          (for [{:keys [corpus tokens]} readable]
            (frequency-cells ui (get freqs corpus 0)
-                            (if sized (get row-tokens corpus 0) tokens)
+                            (stats/row-tokens sized tokens corpus row)
                             sized
-                            (when docs (get doc-freqs corpus 0))))
+                            (when docs (stats/row-docs corpus row))))
          (when total?
            (frequency-cells ui total
-                            (if sized (reduce + (vals row-tokens)) tokens)
+                            (stats/row-tokens sized tokens row)
                             sized
-                            (when docs (reduce + (vals doc-freqs)))))])]]))
+                            (when docs (stats/row-docs row))))])]]))
 
 (defn crosstab-table
   "The cross-tabulated frequency `result` (see
@@ -228,7 +228,7 @@
   Inside the region that scrolls it: a column per year is wider than the
   page, which must not scroll sideways with it."
   [ui {:keys [attr by counts columns rows sized] :as result}]
-  (let [tokens (reduce + (map :tokens (filter :tokens counts)))
+  (let [tokens (stats/tokens counts)
         cell   (fn [n t]
                  (let [rate (when (and sized t (pos? n))
                               (stats/per-million n t))]

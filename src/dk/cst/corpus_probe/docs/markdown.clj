@@ -1,4 +1,4 @@
-(ns dk.cst.corpus-probe.markdown
+(ns dk.cst.corpus-probe.docs.markdown
   "Markdown for the documents under resources/docs: nextjournal's
   markdown library (commonmark-java underneath) plus a definition list,
   which CommonMark lacks, and notations for keys and for the labels on

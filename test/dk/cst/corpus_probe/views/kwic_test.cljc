@@ -1,5 +1,5 @@
 (ns dk.cst.corpus-probe.views.kwic-test
-  (:require [dk.cst.corpus-probe.views.hiccup :refer [da en]]
+  (:require [dk.cst.corpus-probe.test.hiccup :refer [da en]]
             [clojure.test :refer [deftest is testing]]
             [dk.cst.corpus-probe.views.kwic :as kwic]))
 

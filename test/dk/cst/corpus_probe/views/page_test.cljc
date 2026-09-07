@@ -1,18 +1,13 @@
 (ns dk.cst.corpus-probe.views.page-test
   (:require [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]
-            [dk.cst.corpus-probe.views.hiccup :refer [da deep en]]
-            [dk.cst.corpus-probe.commands :as commands]
+            [dk.cst.corpus-probe.hiccup :refer [deep]]
+            [dk.cst.corpus-probe.test.hiccup :refer [da en open-states text]]
+            [dk.cst.corpus-probe.cwb.command :as command]
+            [dk.cst.corpus-probe.query.mode :as mode]
             [dk.cst.corpus-probe.url :as url]
             [dk.cst.corpus-probe.views.layout :as layout]
             [dk.cst.corpus-probe.views.page :as page]))
-
-(defn text
-  "The strings of hiccup `x`, joined: what it reads as. An attribute
-  map is not read."
-  [x]
-  (apply str (filter string? (tree-seq #(and (coll? %) (not (map? %)))
-                                       seq x))))
 
 (deftest search-form-test
   (let [state {:lang         "en"
@@ -95,8 +90,8 @@
         (is (= ["match" "in" "ci"] (offered (texts "list"))))
         (is (= ["within"] (offered (texts "extended"))))
         (is (empty? (offered (texts "cqp"))))
-        (doseq [mode url/modes]
-          (is (= (filter #(url/reads? mode (keyword %))
+        (doseq [mode mode/modes]
+          (is (= (filter #(mode/reads? mode (keyword %))
                          ["match" "in" "within" "ci"])
                  (offered (texts mode)))
               mode))))
@@ -456,7 +451,7 @@
       (is (nil? (page/view-controls en false nil nil false))))
     (testing "a control that acts on a result submits the form that made it"
       (let [html (page/view-controls en false (sort* "en") nil false)]
-        (is (some #(and (map? %) (= page/form-id (:form %))) (deep html)))))
+        (is (some #(and (map? %) (= url/form-id (:form %))) (deep html)))))
     (testing "without a client, a button is what applies it, one a browser
               with a script never shows"
       (is (some #{"Apply"} (deep (page/view-controls en false (sort* "en")
@@ -515,7 +510,7 @@
     (let [html (page/sample-control en 100)]
       (is (some #(and (map? %) (= 100 (:value %)) (:selected %)) (deep html)))
       (is (some #(and (map? %) (= "sample" (:name %))
-                      (= page/form-id (:form %))
+                      (= url/form-id (:form %))
                       (= [:apply-view] (get-in % [:on :change])))
                 (deep html)))))
   (testing "a size the list does not hold is offered beside them, in
@@ -539,7 +534,7 @@
              (values (page/context-control en 7)))))
     (testing "it submits the query form as the sort control does"
       (is (some #(and (map? %) (= "context" (:name %))
-                      (= page/form-id (:form %))
+                      (= url/form-id (:form %))
                       (= [:apply-view] (get-in % [:on :change])))
                 (deep (page/context-control en 5)))))
     (testing "in Danish"
@@ -550,9 +545,11 @@
   (testing "no word in force: an empty field and the default distance"
     (let [html (page/near-control en nil)]
       (is (some #(and (map? %) (= "near" (:name %)) (= "" (:value %))
-                      (= page/form-id (:form %)))
+                      (= url/form-id (:form %)))
                 (deep html)))
-      (is (some #(and (map? %) (= page/near-distance (:value %)) (:selected %))
+      (is (some #(and (map? %)
+                      (= (parse-long (:distance url/defaults)) (:value %))
+                      (:selected %))
                 (deep html)))))
   (testing "the word and distance in force, the distance applying itself"
     (let [html (page/near-control en {:word "kat" :distance 3})]
@@ -612,8 +609,8 @@
     ;; in Danish, where no label can coincide with the param value
     (is (= ["korpusrækkefølge" "match" "match bagfra" "venstre kontekst"
             "højre kontekst" "tilfældig"]
-           (map (comp (partial page/sort-label da) first) commands/sort-modes)))
-    (doseq [[value] commands/sort-modes]
+           (map (comp (partial page/sort-label da) first) command/sort-modes)))
+    (doseq [[value] command/sort-modes]
       (is (not (str/blank? (page/sort-label en value)))
           (str "sort mode " value " has no label"))))
   (testing "a mode naming an attribute is the match by that attribute"
@@ -742,37 +739,33 @@
     (testing "and so is what is open, the fieldset's disclosure and each
               attribute's: part of the values chosen and the rest not is
               the one state the count cannot show (see `open-at-rest`)"
-      (is (= [true true] (->> (deep (page/filter-fieldset
-                                     "en" {:attrs    [{:name :text_year
-                                                       :rows  [{:value "1591"}
-                                                               {:value "1592"}]}]
-                                           :unlisted []
-                                           :selected {:text_year #{"1591"}}}
-                                     {}))
-                              (filter #(and (map? %) (contains? % :open)))
-                              (map :open))))
-      (is (= [false false] (->> (deep (page/filter-fieldset
-                                       "en" {:attrs    [{:name :text_year
-                                                         :rows  [{:value "1591"}]}]
-                                             :unlisted []
-                                             :selected {:text_year #{"1591"}}}
-                                       {}))
-                                (filter #(and (map? %) (contains? % :open)))
-                                (map :open)))))
+      (is (= [true true]
+             (open-states (page/filter-fieldset
+                           "en" {:attrs    [{:name :text_year
+                                             :rows  [{:value "1591"}
+                                                     {:value "1592"}]}]
+                                 :unlisted []
+                                 :selected {:text_year #{"1591"}}}
+                           {}))))
+      (is (= [false false]
+             (open-states (page/filter-fieldset
+                           "en" {:attrs    [{:name :text_year
+                                             :rows  [{:value "1591"}]}]
+                                 :unlisted []
+                                 :selected {:text_year #{"1591"}}}
+                           {})))))
     (testing "the attributes not on offer are a caveat, so small print"
       (is (some #(and (vector? %) (= :small (first %))) (deep html)))
       (is (some #{[:code "text_title"]} (deep html))))
     (testing "given the set of what is open, that decides it, whatever is
               chosen: the view never opens or shuts anything itself"
       (let [open* (fn [chosen opts]
-                    (->> (deep (page/filter-fieldset
-                                "en" {:attrs [{:name :a
-                                               :rows [{:value "1"}
-                                                      {:value "2"}]}]
-                                      :unlisted [] :selected chosen}
-                                opts))
-                         (filter #(and (map? %) (contains? % :open)))
-                         (map :open)))]
+                    (open-states (page/filter-fieldset
+                                  "en" {:attrs [{:name :a
+                                                 :rows [{:value "1"}
+                                                        {:value "2"}]}]
+                                        :unlisted [] :selected chosen}
+                                  opts)))]
         (is (= [false false] (open* {} {})))
         (is (= [true true] (open* {:a #{"1"}} {})))
         ;; every value chosen is as settled as none, and says so itself
@@ -1176,12 +1169,12 @@
       (is (some #{:table.kwic} (deep html))))
     (testing "the sort travels with the result, not with the query form"
       (is (some #{"corpus order"} (deep html)))
-      (is (some #(and (map? %) (= "sort" (:id %)) (= page/form-id (:form %)))
+      (is (some #(and (map? %) (= "sort" (:id %)) (= url/form-id (:form %)))
                 (deep html))))
     (testing "and so does the sample, which is a question the reader has
               on seeing how many hits there are"
       (is (some #(and (map? %) (= "sample" (:id %))
-                      (= page/form-id (:form %)))
+                      (= url/form-id (:form %)))
                 (deep html))))
     (testing "the page links are rendered above the table as well as below"
       (is (= 2 (count (filter #(and (vector? %) (= :ul.row.pager (first %)))

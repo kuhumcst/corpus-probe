@@ -1,10 +1,11 @@
 (ns dk.cst.corpus-probe.url-test
-  (:require [clojure.test :refer [deftest is testing]]
+  (:require [clojure.string :as str]
+            [clojure.test :refer [deftest is testing]]
             [dk.cst.corpus-probe.api :as api]
-            [dk.cst.corpus-probe.commands :as commands]
-            [dk.cst.corpus-probe.query :as query]
-            [dk.cst.corpus-probe.url :as url]
-            [dk.cst.corpus-probe.views.page :as page]))
+            [dk.cst.corpus-probe.cwb.command :as command]
+            [dk.cst.corpus-probe.query.params :as params]
+            [dk.cst.corpus-probe.search.batch :as batch]
+            [dk.cst.corpus-probe.url :as url]))
 
 (deftest paths-test
   (is (= "/" url/home))
@@ -18,6 +19,10 @@
   (testing "an export is the view of a result as a file under the search"
     (is (= "/search/kwic.tsv" (url/export :kwic "tsv")))
     (is (= "/search/frequencies.csv" (url/export "frequencies" :csv))))
+  (testing "the data the client fetches is under one prefix, apart from
+            the pages"
+    (is (every? #(str/starts-with? % "/api/")
+                [url/context-api url/filters-api url/counts-api])))
   (testing "the fragment names the results region"
     (is (= (str "#" url/results-id) url/results-fragment))))
 
@@ -39,6 +44,31 @@
     (is (= {:q "hund"} (url/canonical {:q "hund" :mode "simple"})))
     (testing "and the field's line breaks are one character each"
       (is (= {:q "a\nb"} (url/canonical {:q "a\r\nb"})))))
+  (testing "what the mode does not read is not carried"
+    (is (= {:q "[]"}
+           (url/canonical {:q "[]" :in "lemma" :ci "on" :match "prefix"})))
+    (is (= {:t1.v "kat"}
+           (url/canonical {:q "hund" :mode "extended" :t1.v "kat"})))
+    (is (= {:t1.v "kat" :t1.attr "lemma"}
+           (url/canonical {:q "hund" :t1.v "kat" :t1.attr "lemma"})))
+    (is (= {:q "hund"}
+           (url/canonical {:q "hund" :t1.v "kat" :mode "simple"})))
+    (is (= {:q "a\nb"}
+           (url/canonical {:q "a\nb" :within "text"})))
+    (testing "while what it reads stays, and what every mode shares"
+      (is (= {:q "a b" :within "text" :sort "word"}
+             (url/canonical {:q "a b" :within "text" :sort "word"})))))
+  (testing "the URL drops a token's field at its default, a token asking
+            nothing and a condition asking nothing"
+    (is (= {:t1.v "hund" :t1.3.v "kat" :t2.op "any" :t2.max "3"}
+           (url/canonical {:mode "extended"
+                           :t1.attr "word" :t1.op "is" :t1.v "hund"
+                           :t1.min "1" :t1.max "1"
+                           :t1.2.attr "pos" :t1.2.join "or"
+                           :t1.3.v "kat" :t1.3.join "and"
+                           :t2.op "any" :t2.min "1" :t2.max "3"
+                           :t3.attr "lemma" :t3.op "prefix" :t3.v ""
+                           :t3.ci "on"}))))
   (testing "the corpora are one param, uppercased, deduplicated, in order"
     (is (= {:q "hund" :corpus "PROBE,VISER"}
            (url/canonical {:q "hund" :corpus ["probe" "VISER" "PROBE"]})))
@@ -82,127 +112,32 @@
 
 (deftest defaults-test
   (testing "each default is the one its reader applies to a URL without it"
-    (is (= (:context url/defaults) (str (:context commands/kwic-defaults))))
-    (is (= (:sort url/defaults) (ffirst commands/sort-modes)))
-    (is (= (:distance url/defaults) (str page/near-distance)))
-    (is (= (:view url/defaults) (second (first api/result-views))))
+    (is (= (:context url/defaults) (str (:context batch/kwic-defaults))))
+    (is (= (:sort url/defaults) (ffirst command/sort-modes)))
+    (is (= (:distance url/defaults)
+           (str (:distance (api/near-param "kat" nil)))))
+    (is (= (:view url/defaults) (second (first url/result-views))))
+    (is (= (api/view-param nil) (api/view-param (:view url/defaults))))
     (is (= (:attr url/defaults) (api/attr-param nil)))
     (is (= (:in url/defaults) (api/attr-param nil)))
-    (is (= (:within url/defaults) (name (query/within-param nil))))
+    (is (= (:within url/defaults) (name (params/within-param nil))))
     (is (= (:subset-attr url/defaults) (api/attr-param nil)))
     (is (= (:at url/defaults) (api/position-param nil)))
     (is (= (:subset-at url/defaults) (api/position-param nil)))
-    (is (= 0 (api/page-param (:page url/defaults))))
-    (is (= (first url/modes) (url/mode {})))))
+    (is (= 0 (api/page-param (:page url/defaults))))))
 
-(deftest modes-test
-  (testing "every mode has its row of fields, and no row lacks its mode"
-    (is (= (set url/modes) (set (keys url/fields)))))
-  (testing "a submitted form's radio names the form; the text says its
-            mode by its shape, tokens before text; and nothing is simple"
-    (is (= "simple" (url/mode {})))
-    (is (= "simple" (url/mode {:mode "nonesuch"})))
-    (is (= "simple" (url/mode {:mode "cqp"})))
-    (is (= "cqp" (url/mode {:mode "simple" :q "[]"})))
-    (is (= "simple" (url/mode {:q "x"})))
-    (is (= "list" (url/mode {:q "x\ny"})))
-    (is (= "cqp" (url/mode {:q "\"x\""})))
-    (is (= "extended" (url/mode {:t1.v "x"})))
-    (is (= "extended" (url/mode {:t1.v "x" :q "y"})))
-    (is (= "extended" (url/mode {:mode "extended" :q "y"})))
-    (is (= "simple" (url/mode {:mode "simple" :t1.v "x"})))
-    (is (nil? (url/typed {:in "lemma"})))
-    (is (= "cqp" (url/typed {:q "[]" :mode "extended"})))
-    (is (= "extended" (url/typed {:t1.v "x" :mode "simple"}))))
-  (testing "the shape of the field's text: CQP by its first character, a
-            list by a line break, words otherwise"
-    (is (= "simple" (url/shape nil)))
-    (is (= "simple" (url/shape "")))
-    (is (= "simple" (url/shape " \n\r\n ")))
-    (is (= "simple" (url/shape "lille hund")))
-    (is (= "list" (url/shape "hund\nkat")))
-    (is (= "list" (url/shape "hund\r\nkat")))
-    (is (= "cqp" (url/shape "[lemma = \"hund\"]")))
-    (is (= "cqp" (url/shape "  \"hund\" \"kat\"")))
-    (is (= "cqp" (url/shape "'hund'")))
-    (is (= "cqp" (url/shape "<s> []")))
-    (is (= "cqp" (url/shape "(\"a\" \"b\")+")))
-    (is (= "cqp" (url/shape "@[pos = \"N\"]")))
-    (is (= "cqp" (url/shape "MU(meet \"a\" \"b\" 1 2)")))
-    (is (= "cqp" (url/shape "[lemma = \"hund\"]\n[]")))
-    (is (= "simple" (url/shape "hund.*")))
-    (is (= "simple" (url/shape "MU"))))
-  (testing "the form: the radio when it names one, else the form of the
-            mode the query was typed in"
-    (is (= "simple" (url/form {})))
-    (is (= "simple" (url/form {:q "[]"})))
-    (is (= "extended" (url/form {:t1.v "x"})))
-    (is (= "extended" (url/form {:mode "extended"})))
-    (is (= "simple" (url/form {:mode "simple" :t1.v "x"})))
-    (is (= "extended" (url/form {:mode "nonesuch" :t1.v "x"})))
-    (is (= "simple" (url/form-of "cqp")))
-    (is (= "extended" (url/form-of "extended"))))
-  (testing "a mode reads the mode, its own keys and, given tokens, their
-            fields, nothing else"
-    (is (url/reads? "simple" :within))
-    (is (url/reads? "extended" :t2.3.v))
-    (is (url/reads? "cqp" :mode))
-    (is (not (url/reads? "cqp" :in)))
-    (is (not (url/reads? "list" :within)))
-    (is (not (url/reads? "simple" :t1.v)))
-    (testing "the marker standing for the tokens is no key"
-      (is (not (url/reads? "extended" ::url/tokens)))
-      (is (not (url/query-key? ::url/tokens)))))
-  (testing "a query key is one some mode reads; the rest say where and how"
-    (is (every? url/query-key? [:q :mode :in :ci :match :within
-                                :t1.v :t2.3.join]))
-    (is (not-any? url/query-key? [:corpus :sort :f.text_year :page :from :cqp
-                                  nil])))
-  (testing "what the mode does not read is unread, and no URL carries it"
-    (is (= #{:in :ci :match}
-           (url/unread {:q "[]" :in "lemma" :ci "on" :match "prefix"})))
-    (is (= {:q "[]"}
-           (url/canonical {:q "[]" :in "lemma" :ci "on" :match "prefix"})))
-    (is (= {:t1.v "kat"}
-           (url/canonical {:q "hund" :mode "extended" :t1.v "kat"})))
-    (is (= {:t1.v "kat" :t1.attr "lemma"}
-           (url/canonical {:q "hund" :t1.v "kat" :t1.attr "lemma"})))
-    (is (= {:q "hund"}
-           (url/canonical {:q "hund" :t1.v "kat" :mode "simple"})))
-    (is (= {:q "a\nb"}
-           (url/canonical {:q "a\nb" :within "text"})))
-    (testing "while what it reads stays, and what every mode shares"
-      (is (= {:q "a b" :within "text" :sort "word"}
-             (url/canonical {:q "a b" :within "text" :sort "word"}))))))
-
-(deftest read-keys-test
-  (testing "what a form holds of the query params: the keys its mode reads,
-            the mode itself aside"
-    (is (= #{:q :in :within}
-           (set (url/read-keys "simple" {:q "x" :in "lemma" :within "text"
-                                         :t1.v "y" :mode "simple"
-                                         :corpus "A"}))))
-    (is (= #{:t1.v :within}
-           (set (url/read-keys "extended" {:q "x" :in "lemma" :within "text"
-                                           :t1.v "y" :corpus "A"}))))
-    (is (= #{:q} (set (url/read-keys "cqp" {:q "x" :in "lemma"}))))))
-
-(deftest unread-query?-test
-  (testing "a query the mode does not read is the form submitted with its
-            radio changed, or a hand-written URL"
-    (is (url/unread-query? {:q "hund" :mode "extended"}))
-    (is (url/unread-query? {:q "[]" :mode "extended"}))
-    (is (url/unread-query? {:t1.v "hund" :mode "simple"}))
-    (is (url/unread-query? {:t1.v "hund" :mode "simple" :corpus "PROBE"})))
-  (testing "not a query in its own form, nor an option carried along"
-    (is (not (url/unread-query? {:q "hund"})))
-    (is (not (url/unread-query? {:q "[]" :in "lemma"})))
-    (is (not (url/unread-query? {:mode "extended"}))))
-  (testing "nor the blank field or the blank trailing token every form
-            submits"
-    (is (not (url/unread-query? {:q "" :mode "extended" :in "word"})))
-    (is (not (url/unread-query? {:t1.attr "word" :t1.op "is" :t1.v ""
-                                 :t1.min "1" :t1.max "1" :mode "simple"})))))
+(deftest pairs-test
+  (testing "a token's fields are known, and sort together after the mode;
+            the filter's params sort by name among themselves"
+    (is (url/known? :t1.attr))
+    (is (not (url/known? :lang)))
+    (is (= ["t1.attr" "t1.v" "t2.op" "within" "corpus" "f.text_author"
+            "f.text_year" "ff.text_year" "page"]
+           (map first (url/pairs {:corpus "A" :t2.op "any" :t1.v "x"
+                                  :within "paragraph" :page "2"
+                                  :ff.text_year "1590" :f.text_year "1591"
+                                  :f.text_author "x"
+                                  :t1.attr "lemma"}))))))
 
 (deftest query-string-test
   (testing "what was asked, where, which hits, how shown, where in them"
@@ -244,6 +179,119 @@
     (is (= "/search/frequencies.csv?q=hund&attr=lemma"
            (url/export-href :frequencies "csv" {:q "hund" :attr "lemma"})))))
 
+(deftest search-params-test
+  (testing "the filter params identify a search along with the query"
+    (is (= {:q "hund" :corpus ["A"] :f.text_year ["1591"]}
+           (url/search-params {:q "hund" :corpus ["A"] :page "2" :sort "word"
+                               :f.text_year ["1591"]})))
+    (testing "and so do its patterns and ranges"
+      (is (= {:q "hund" :fp.text_title "Hav.*" :ff.text_year "1590"
+              :ft.text_year "1592"}
+             (url/search-params {:q "hund" :fp.text_title "Hav.*"
+                                 :ff.text_year "1590" :ft.text_year "1592"
+                                 :page "2"})))))
+  (testing "so does the sample, which decides which hits there are; the
+            sort, which only decides their order, still does not"
+    (is (= {:q "hund" :sample "100"}
+           (url/search-params {:q "hund" :sample "100" :sort "word"}))))
+  (testing "and so does the unit the words are kept within"
+    (is (= {:q "lille hund" :within "text"}
+           (url/search-params {:q "lille hund" :within "text" :sort "word"}))))
+  (testing "the tokens identify the search, as the query does"
+    (is (= {:mode "extended" :t1.v "a" :t2.op "any"}
+           (url/search-params {:mode "extended" :t1.v "a" :t2.op "any"
+                               :page "2"})))))
+
+(deftest page-href-test
+  (let [href (url/page-href {:corpus "PROBE" :q "hund" :page "1"} 2)]
+    (is (str/starts-with? href "/search?"))
+    (is (str/includes? href "corpus=PROBE"))
+    (testing "a page turn lands on the results, not the top of the form"
+      (is (str/ends-with? href "#results")))
+    (testing "the URL counts pages from one, as the page does"
+      (is (str/includes? href "page=3"))
+      (is (not (str/includes? (url/page-href {:q "hund"} 0) "page="))))
+    (testing "the query is URL-encoded"
+      (is (str/includes? (url/page-href {:q "[lemma=\"a\"]"} 1) "%5B")))
+    (testing "the per-page expand parameter is dropped"
+      (is (not (str/includes? (url/page-href {:corpus "PROBE" :expand "9"} 1)
+                              "expand"))))))
+
+(deftest page-hrefs-test
+  (let [params {:q "hund"}]
+    (testing "the first page links onward only when the hits reach past it"
+      (is (= {:prev-href nil :next-href nil}
+             (url/page-hrefs params 0 {:size 25 :page-size 25})))
+      (is (str/ends-with? (:next-href (url/page-hrefs params 0 {:size      26
+                                                                :page-size 25}))
+                          "page=2#results")))
+    (testing "a result still being counted links onward on what it has so far"
+      (is (some? (:next-href (url/page-hrefs params 0 {:size      26
+                                                       :page-size 25
+                                                       :remaining ["X"]}))))
+      (is (nil? (:next-href (url/page-hrefs params 0 {:size      10
+                                                      :page-size 25
+                                                      :remaining ["X"]})))))
+    (testing "and back from any page but the first, result or no result"
+      (is (str/ends-with? (:prev-href (url/page-hrefs params 2 nil))
+                          "page=2#results"))
+      (is (nil? (:next-href (url/page-hrefs params 2 nil)))))
+    (testing "a result of no hits is one page"
+      (is (= 1 (url/page-count {:size 0 :page-size 25})))
+      (is (= 2 (url/page-count {:size 26 :page-size 25}))))))
+
+(deftest view-hrefs-test
+  (let [hrefs (url/view-hrefs {:q "hund" :corpus ["PROBE"] :lang "da"})]
+    (testing "one entry per view, in display order"
+      (is (= [:kwic :frequencies] (map first hrefs))))
+    (testing "every view of one search shares its URL but for the view param"
+      (doseq [[_ href] hrefs]
+        (is (str/starts-with? href "/search?q=hund&corpus=PROBE"))
+        (is (str/ends-with? href "#results")))
+      (testing "and the concordance, being the default, goes unnamed"
+        (is (not (str/includes? (last (first hrefs)) "view=")))
+        (is (str/includes? (last (second hrefs)) "view=frequencies"))))
+    (testing "no URL names a language: that is the reader's own preference"
+      (is (not (some #(str/includes? (last %) "lang") hrefs)))))
+  (testing "the second attribute of a table travels between the views"
+    (is (every? #(str/includes? (second %) "by=text_year")
+                (url/view-hrefs {:q "hund" :attr "lemma" :by "text_year"})))))
+
+(deftest subset-href-test
+  (let [href (url/subset-href {:q "hund" :corpus ["PROBE"] :attr "lemma"
+                               :at "match[-1]" :sort "word"}
+                              :lemma "match[-1]" "en kat")]
+    (testing "the concordance of the same search, kept to the row's hits"
+      (is (str/starts-with? href "/search?"))
+      (is (str/includes? href "subset=en+kat"))
+      (is (str/includes? href "subset-at=match%5B-1%5D"))
+      (is (str/includes? href "subset-attr=lemma"))
+      (is (str/ends-with? href "#results")))
+    (testing "the concordance is the default view, so it goes unnamed"
+      (is (not (str/includes? href "view="))))
+    (testing "the grouping and the order are the table's, not the hits'"
+      (is (not (str/includes? href "attr=lemma&")))
+      (is (not (str/includes? href "sort="))))))
+
+(deftest export-hrefs-test
+  (testing "the view of the search as a file, one URL per format"
+    (is (= {:csv "/search/kwic.csv?q=hund&corpus=PROBE"
+            :tsv "/search/kwic.tsv?q=hund&corpus=PROBE"}
+           (url/export-hrefs :kwic url/export-formats
+                             {:corpus ["PROBE"] :q "hund"})))
+    (is (= "/search/frequencies.tsv?q=hund&attr=lemma"
+           (:tsv (url/export-hrefs :frequencies ["tsv"]
+                                   {:q "hund" :attr "lemma"}))))))
+
+(deftest nav-hrefs-test
+  (testing "the search keeps the current query, the rest are their pages"
+    (is (= {:search          "/search?q=hund&corpus=PROBE#results"
+            :corpora-heading "/corpora"
+            :glossary        "/glossary"}
+           (url/nav-hrefs {:q "hund" :corpus ["PROBE"] :sort "word"}))))
+  (testing "and is the bare page when nothing was asked"
+    (is (= "/search" (:search (url/nav-hrefs {:sort "word"}))))))
+
 (deftest corpora-param-test
   (testing "one, repeated and comma-joined values all select corpora"
     (is (= ["PROBE"] (url/corpora-param "PROBE")))
@@ -254,71 +302,19 @@
     (is (= ["PROBE"] (url/corpora-param ["probe" "PROBE" ""]))))
   (is (= [] (url/corpora-param nil))))
 
-(deftest tokens-test
-  (testing "a token's fields are known, and sort together after the mode"
-    (is (= [2 1 :v] (url/token-field :t2.v)))
-    (is (= [2 3 :join] (url/token-field :t2.3.join)))
-    (is (nil? (url/token-field :t2.x)))
-    (is (nil? (url/token-field :tv)))
-    (is (url/known? :t1.attr))
-    (is (= ["t1.attr" "t1.v" "t2.op" "within" "corpus"]
-           (map first (url/pairs {:corpus "A" :t2.op "any" :t1.v "x"
-                                  :within "paragraph"
-                                  :t1.attr "lemma"})))))
-  (testing "a key is built as it is read"
-    (is (= "t2.v" (url/token-key 2 1 :v)))
-    (is (= "t2.3.join" (url/token-key 2 3 :join)))
-    (is (= [2 3 :join] (url/token-field (keyword (url/token-key 2 3 :join)))))
-    (is (= {:id 4 :conditions [{:id 1}]} (url/blank-token 4))))
-  (testing "the tokens in order, each with its own fields and its
-            conditions in order"
-    (is (= [{:n 1 :conditions [{:c 1 :v "hund" :ci "on"}]}
-            {:n 3 :max "2" :start "on" :conditions [{:c 1 :op "any"}]}]
-           (url/token-rows {:t3.op "any" :t1.v "hund" :t3.max "2" :t3.start "on"
-                            :t1.ci "on" :q "x"})))
-    (is (= [{:n 1 :conditions [{:c 1 :v "a"} {:c 2 :v "b" :join "or"}]}]
-           (url/token-rows {:t1.2.join "or" :t1.v "a" :t1.2.v "b"}))))
-  (testing "a token asks for something when one of its conditions does:
-            with a value, or as any word"
-    (is (url/asks? {:conditions [{:v "hund"}]}))
-    (is (url/asks? {:conditions [{:op "any"}]}))
-    (is (url/asks? {:conditions [{:v ""} {:v "b" :join "or"}]}))
-    (is (not (url/asks? {:conditions [{:op "prefix" :ci "on"}]})))
-    (is (not (url/asks? {:conditions [{:v ""}]}))))
-  (testing "the URL drops a field at its default, a token asking nothing
-            and a condition asking nothing"
-    (is (= {:t1.v "hund" :t1.3.v "kat" :t2.op "any" :t2.max "3"}
-           (url/canonical {:mode "extended"
-                           :t1.attr "word" :t1.op "is" :t1.v "hund"
-                           :t1.min "1" :t1.max "1"
-                           :t1.2.attr "pos" :t1.2.join "or"
-                           :t1.3.v "kat" :t1.3.join "and"
-                           :t2.op "any" :t2.min "1" :t2.max "3"
-                           :t3.attr "lemma" :t3.op "prefix" :t3.v ""
-                           :t3.ci "on"}))))
-  (testing "the rows print as the params the form submits, and read back
-            as themselves"
-    (let [rows [{:id 1 :conditions [{:id 1 :v "a"}
-                                    {:id 2 :v "c" :join "or" :attr "pos"}]}
-                {:id 2 :max "2" :start "on" :conditions [{:id 1 :op "any"}]}]]
-      (is (= {:t1.v "a" :t1.2.v "c" :t1.2.join "or" :t1.2.attr "pos"
-              :t2.max "2" :t2.start "on" :t2.op "any"}
-             (url/rows->params rows)))
-      (is (= rows (url/form-tokens (url/token-rows (url/rows->params rows)))))
-      (is (= {} (url/rows->params [])))))
-  (testing "the defaults are the compiler's"
-    (is (= "[word = \"x\"]"
-           (query/extended->cqp
-            [{:conditions [{:attr  (keyword (:attr url/token-defaults))
-                            :op    (:op url/token-defaults)
-                            :value "x"}]
-              :min        (parse-long (:min url/token-defaults))
-              :max        (parse-long (:max url/token-defaults))}])))
-    (is (= "[a = \"x\" & b = \"y\"]"
-           (query/token->cqp
-            {:conditions [{:attr :a :value "x"}
-                          {:attr :b :value "y"
-                           :join (:join url/token-defaults)}]})))))
+(deftest expand-test
+  (testing "the expanded hits as the URL names them"
+    (is (= #{["PROBE" 9] ["VISER" 12]} (url/expand-param "PROBE:9,VISER:12")))
+    (is (= #{["PROBE" 9]} (url/expand-param ["PROBE:9" "x" "PROBE:"])))
+    (is (nil? (url/expand-param nil)))
+    (is (nil? (url/expand-param ""))))
+  (testing "and back, in order, or not at all"
+    (let [hits #{["PROBE" 12] ["PROBE" 9]}]
+      (is (= {:q "hund" :expand "PROBE:9,PROBE:12"}
+             (url/with-expanded {:q "hund"} hits)))
+      (is (= hits (url/expand-param (:expand (url/with-expanded {} hits)))))
+      (is (= {:q "hund"}
+             (url/with-expanded {:q "hund" :expand "PROBE:9"} nil))))))
 
 (deftest metadata-key?-test
   (is (url/metadata-key? :f.text_year))
@@ -329,7 +325,10 @@
     (is (not (url/metadata-key? :f.)))
     (is (not (url/metadata-key? :fx.text_year)))
     (is (not (url/metadata-key? :format)))
-    (is (not (url/metadata-key? nil)))))
+    (is (not (url/metadata-key? nil))))
+  (testing "every prefix of the table is one, followed by an attribute"
+    (is (every? #(url/metadata-key? (keyword (str % "text_year")))
+                (vals url/filter-prefixes)))))
 
 (deftest text-test
   (is (= "/corpora/probe/text?cpos=9#hit" (url/text "PROBE" 9 9)))

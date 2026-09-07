@@ -24,8 +24,9 @@
             [clojure.core.cache.wrapped :as cw]
             [clojure.java.io :as io]
             [clojure.string :as str]
-            [dk.cst.corpus-probe.corpus :as corpus]
-            [dk.cst.corpus-probe.commands :as commands]
+            [dk.cst.corpus-probe.cqp :as cqp]
+            [dk.cst.corpus-probe.cwb.command :as command]
+            [dk.cst.corpus-probe.cwb.registry :as registry]
             [taoensso.telemere :as t])
   (:import [java.io File]
            [java.nio.file CopyOption Files StandardCopyOption]
@@ -73,24 +74,23 @@
 (defn match-key
   "What decides which matches `query` has in `corpus` under `ctx`, and so
   how many of them: the registry, the corpus and its build stamp (see
-  dk.cst.corpus-probe.corpus/build-stamp), the
-  query itself, and the metadata filter, the narrowings and the sample
-  of `opts`.
+  dk.cst.corpus-probe.cwb.registry/build-stamp), the query itself, and
+  the metadata filter, the narrowings and the sample of `opts`.
 
   The registry is there because two of them can define one corpus name,
   and the filter's values are sorted because it holds them in sets, whose
   printed order is no part of their value. The narrowings (see
-  dk.cst.corpus-probe.commands/narrowing) and the sample belong here rather
-  than in `result-key` because they decide which matches there are and
-  how many, not what order they come in; the seed the sample is drawn
-  with does not, being the same one every time (see
-  dk.cst.corpus-probe.commands/sample-seed). Nothing about ordering or
+  dk.cst.corpus-probe.cwb.command/narrowing) and the sample belong here
+  rather than in `result-key` because they decide which matches there
+  are and how many, not what order they come in; the seed the sample is
+  drawn with does not, being the same one every time (see
+  dk.cst.corpus-probe.cwb.command/sample-seed). Nothing about ordering or
   display belongs here."
   [ctx corpus query {filter-by :filter sample :sample near :near
                      subset :subset}]
   [(:registry ctx)
    corpus
-   (corpus/build-stamp ctx corpus)
+   (registry/build-stamp ctx corpus)
    query
    (mapv (fn [[attr values patterns]] [attr (vec (sort values)) patterns])
          filter-by)
@@ -113,7 +113,7 @@
   applied when a result is read, not when it is saved."
   [ctx corpus query {sort-mode :sort :as opts}]
   (conj (match-key ctx corpus query opts)
-        (commands/sort-command sort-mode)
+        (command/sort-command sort-mode)
         (:sort-locale ctx)))
 
 (defn result-name
@@ -121,7 +121,7 @@
   via `ctx`: `q_` followed by the digest of its `result-key`.
 
   The `q_` prefix is what keeps the name inside CQP's rule for one (see
-  dk.cst.corpus-probe.commands/valid-result-name)."
+  dk.cst.corpus-probe.cwb.command/valid-result-name)."
   [ctx corpus query opts]
   (str "q_" (digest (pr-str (result-key ctx corpus query opts)))))
 
@@ -217,7 +217,7 @@
   docstring). The corpus name is validated, since it becomes a path."
   ^File [ctx corpus]
   (when-let [dir (directory ctx)]
-    (io/file dir (commands/valid-corpus-name corpus))))
+    (io/file dir (command/valid-corpus-name corpus))))
 
 (defn corpus-directory!
   "`corpus-directory`, created if it is not there yet: CQP given a data
@@ -244,7 +244,11 @@
   Reaping deletes files and the configured directory is not guaranteed to
   hold nothing else, so only the cache's own files are ever candidates."
   [^File f]
-  (boolean (re-matches #"[A-Z][A-Z0-9_-]*:q_[A-Za-z0-9_-]+" (.getName f))))
+  (let [[corpus nqr] (str/split (.getName f) #":" 2)]
+    (boolean (and nqr
+                  (cqp/corpus-name? corpus)
+                  (str/starts-with? nqr "q_")
+                  (cqp/name? nqr)))))
 
 (defn stored?
   "True when `ctx` holds a saved query result named `nqr` for `corpus`."
@@ -433,7 +437,7 @@
                                    "/dev/corpus/registry-big")
             :sort-locale      "da_DK.UTF-8"
             ;; as the app runs a batch that sorts (see
-            ;; dk.cst.corpus-probe.search/running-ctx)
+            ;; dk.cst.corpus-probe.cwb/running-ctx)
             :query-timeout-ms 900000})
 
   (defn page-ms

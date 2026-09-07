@@ -57,7 +57,7 @@ is hidden, so that the contexts have room.
 
 ### Simple search
 
-The search field reads its text by its shape (`url/shape`): text that
+The search field reads its text by its shape (`query.mode/shape`): text that
 begins as CQP does, with a bracket, a quotation mark, a tag or a group,
 runs as CQP; text with a line break is a list, one word per line, which
 finds any one of the words; anything else is words in order. The field
@@ -143,7 +143,7 @@ accepts Danish gets Danish before English. Raw HTML in a file renders
 as nothing.
 
 The Markdown is CommonMark plus a definition list of this app's own
-(`dk.cst.corpus-probe.markdown`). A term is a line that ends in a
+(`dk.cst.corpus-probe.docs.markdown`). A term is a line that ends in a
 colon. Its definition is indented under it. The glossary, the help and
 the examples of the CQP guide are written in this form:
 
@@ -318,7 +318,7 @@ them with [pottery](https://github.com/brightin/pottery). Each interface
 string is written in the source in English, and that English is its
 key. Thus a view reads as the sentence that it renders, and a string
 without a translation falls back to English. To add a language, add a
-`.po` file and name it in `dk.cst.corpus-probe.translations/po-files`.
+`.po` file and name it in `dk.cst.corpus-probe.i18n.po/po-files`.
 Translators work in Poedit or Weblate with [the
 template](resources/i18n/template.pot). The template is extracted from
 the source, and the test suite makes sure that it does not drift.

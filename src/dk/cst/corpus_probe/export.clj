@@ -52,9 +52,9 @@
   texts it occurs in, plus the totals over several corpora, as the HTML
   table shows them but with every row."
   [{:keys [attr counts rows docs sized] :as result}]
-  (let [readable (filter :tokens counts)
-        total?   (boolean (next readable))
-        tokens   (reduce + (map :tokens readable))
+  (let [readable (stats/readable-counts counts)
+        total?   (stats/total? counts)
+        tokens   (stats/tokens counts)
         cells    (fn [n t d]
                    (cond-> [(str n) (str (stats/per-million n t))]
                      sized (conj (str t))
@@ -67,22 +67,18 @@
     (into [(-> [(name attr)]
                (into (mapcat (comp heads :corpus)) readable)
                (cond-> total? (into (heads "total"))))]
-          (map (fn [{:keys [value freqs total]
-                     doc-freqs :docs row-tokens :tokens}]
+          (map (fn [{:keys [value freqs total] :as row}]
                  (-> [value]
                      (into (mapcat (fn [{:keys [corpus tokens]}]
                                      (cells (get freqs corpus 0)
-                                            (if sized
-                                              (get row-tokens corpus 0)
-                                              tokens)
-                                            (get doc-freqs corpus 0))))
+                                            (stats/row-tokens sized tokens
+                                                              corpus row)
+                                            (stats/row-docs corpus row))))
                            readable)
                      (cond-> total?
                        (into (cells total
-                                    (if sized
-                                      (reduce + (vals row-tokens))
-                                      tokens)
-                                    (reduce + (vals doc-freqs))))))))
+                                    (stats/row-tokens sized tokens row)
+                                    (stats/row-docs row)))))))
           rows)))
 
 (defn crosstab-table
@@ -94,7 +90,7 @@
   each column and, when sized, its rate per million of the column's
   tokens, as the HTML table shows them but with every row."
   [{:keys [attr counts columns rows sized] :as result}]
-  (let [tokens (reduce + (map :tokens (filter :tokens counts)))
+  (let [tokens (stats/tokens counts)
         cells  (fn [n t]
                  (cond-> [(str n)]
                    sized (conj (str (stats/per-million n t)))))
@@ -160,9 +156,9 @@
   (str bom (apply str (map csv-line rows))))
 
 (def formats
-  "The export formats by their `format` parameter value: what the text
-  opens with, how to render one row as a line and a whole table of
-  rows, and the media type to serve."
+  "The export formats by name (see dk.cst.corpus-probe.url/export-formats,
+  which names each): what the text opens with, how to render one row as
+  a line and a whole table of rows, and the media type to serve."
   {"tsv" {:preamble     ""
           :line         tsv-line
           :render       tsv

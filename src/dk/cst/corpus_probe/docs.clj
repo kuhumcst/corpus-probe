@@ -4,26 +4,18 @@
   under resources/docs (`help.da.md` beside `help.en.md`), parsed on the
   server into the hiccup the views render, so the client needs no
   parser. CommonMark plus a definition list (see
-  dk.cst.corpus-probe.markdown); raw HTML renders as nothing."
+  dk.cst.corpus-probe.docs.markdown); raw HTML renders as nothing."
   (:require [clojure.java.io :as io]
             [clojure.string :as str]
             [clojure.walk :as walk]
-            [dk.cst.corpus-probe.markdown :as markdown]))
+            [dk.cst.corpus-probe.docs.markdown :as markdown]
+            [dk.cst.corpus-probe.hiccup :as hiccup]))
 
 (defn resource
   "The Markdown file of document `name` on the classpath in the first of
   the language codes `langs` that has one; nil when none has."
   [name langs]
   (some #(io/resource (str "docs/" name "." % ".md")) langs))
-
-(def headings
-  "The heading tags, outermost first."
-  [:h1 :h2 :h3 :h4 :h5 :h6])
-
-(defn heading?
-  "True when hiccup `x` is a heading."
-  [x]
-  (and (vector? x) (boolean (some #{(first x)} headings))))
 
 (def explicit-id
   "How a heading or a term names its own id, at the end of its text:
@@ -37,7 +29,7 @@
   "True when hiccup `x` may name its own id: a heading, or the term of a
   definition list."
   [x]
-  (or (heading? x) (and (vector? x) (= :dt (first x)))))
+  (or (hiccup/heading? x) (and (vector? x) (= :dt (first x)))))
 
 (defn name-node
   "The hiccup `h` with the id its text names (see `explicit-id`) in place
@@ -54,7 +46,7 @@
             (concat (butlast children) [(str/replace text explicit-id "")]))
       h)))
 
-(defn ->hiccup
+(defn blocks
   "Markdown text `s` as hiccup blocks, each heading and each term of a
   definition list carrying the id it names (see `name-node`)."
   [s]
@@ -65,29 +57,26 @@
   "The text of the first heading among the hiccup `blocks`, which is what
   a document calls itself; nil without one."
   [blocks]
-  (some (fn [[_ _ & children :as x]]
-          (when (heading? x)
-            (apply str (filter string? (tree-seq coll? seq children)))))
-        blocks))
+  (some #(when (hiccup/heading? %) (hiccup/heading-text %)) blocks))
 
-(defn hiccup
-  "The hiccup of document `name` in the first language of `langs` that
-  has a file (see `resource`), or nil without one.
+(defn document
+  "The hiccup blocks of document `name` in the first language of `langs`
+  that has a file (see `resource`), or nil without one.
 
   Read on every call, so an edited file is served as edited; parsing
   costs about a millisecond."
   [name langs]
-  (some-> (resource name langs) slurp ->hiccup))
+  (some-> (resource name langs) slurp blocks))
 
 (comment
-  (hiccup "help" ["da"])
-  (hiccup "cqp-guide" ["xx" "en"])
-  (->hiccup "# A\n\n<!-- dropped -->\n\nsome *prose*")
+  (document "help" ["da"])
+  (document "cqp-guide" ["xx" "en"])
+  (blocks "# A\n\n<!-- dropped -->\n\nsome *prose*")
   ;; => ([:h1 {:id "a"} "A"] [:p "some " [:em "prose"]])
 
-  (->hiccup "## Konkordans {#kwic}")
+  (blocks "## Konkordans {#kwic}")
   ;; => ([:h2 {:id "kwic"} "Konkordans"])
 
-  (->hiccup "KWIC {#kwic}:\n  key word in context")
+  (blocks "KWIC {#kwic}:\n  key word in context")
   ;; => ([:dl [:dt {:id "kwic"} "KWIC"] [:dd "key word in context"]])
   #_.)

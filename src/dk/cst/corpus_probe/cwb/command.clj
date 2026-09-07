@@ -1,86 +1,36 @@
-(ns dk.cst.corpus-probe.commands
-  "CQP command generation: the hardened display profile, the guards on
-  what is spliced into a command, the queries built around a compiled
-  one (a metadata filter, a position, the QueryLock), the commands that
-  narrow, sample, sort and count a result, and the batches a search
-  runs. The compilers of what a reader asked are
-  dk.cst.corpus-probe.query's.
+(ns dk.cst.corpus-probe.cwb.command
+  "The CQP commands a search is built from: the guards on what is spliced
+  into a command, the queries built around a compiled one (a metadata
+  filter, a position, the QueryLock), and the commands that narrow,
+  sample, sort, count and load a result. The batches a search runs are
+  dk.cst.corpus-probe.search.batch's; the compilers of what a reader asked
+  are dk.cst.corpus-probe.query's.
 
   The commands are generated for CWB 3.5.0, the version the app ships
   with in its own container (PLAN.md section 2); appendix B there records
   the 3.4.27-safe subset for reference."
   (:require [clojure.string :as str]
-            [dk.cst.corpus-probe.query :as query]))
-
-(def hardened-profile
-  "Display settings making KWIC output unambiguously parseable: every
-  separator becomes a TAB-framed marker letter, and TAB can never occur
-  inside a positional-attribute value. Inline annotation values are never
-  shown (ShowTagAttributes off), since they are unescaped, may contain TAB,
-  and can crash CQP (docs/research/gap-kwic-parsing.md)."
-  (str "set AttributeSeparator \"\tA\t\"; "
-       "set TokenSeparator \"\tT\t\"; "
-       "set LeftKWICDelim \"\tL\t\"; "
-       "set RightKWICDelim \"\tR\t\"; "
-       "set StructureDelimiter \"\tS\t\"; "
-       "set ShowTagAttributes off;"))
-
-(def page-defaults
-  "Default concordance paging: the first page of 25 hits."
-  {:page 0 :page-size 25})
-
-(def max-row
-  "The highest row CQP can address: its range bounds are C ints, and a
-  larger number wraps negative, which CQP reads as the entire result."
-  Integer/MAX_VALUE)
-
-(defn page-rows
-  "The row range [from to] of page `page` with `page-size` hits per page:
-  0-based and inclusive, as `cat` and `dump` take it.
-
-  Negative or zero values are clamped to the first page of one row, and
-  the page to the last one below `max-row`, since CQP treats a negative
-  range bound as the entire result."
-  [page page-size]
-  (let [size (max 1 page-size)
-        from (* (min (max 0 page) (quot (- max-row size) size)) size)]
-    [from (dec (+ from size))]))
-
-(def kwic-defaults
-  "Default KWIC display options, shared by `kwic-batch` and
-  dk.cst.corpus-probe.search so the two cannot disagree: five tokens of
-  context and the rows of the default page."
-  {:context 5
-   :rows    (page-rows (:page page-defaults) (:page-size page-defaults))})
-
-(defn corpus-name?
-  "True when `s` is a syntactically valid uppercase CQP corpus name.
-
-  Used as an interpolation guard: corpus names are spliced into command
-  strings outside the QueryLock sandbox, so anything else must be rejected."
-  [s]
-  (boolean (re-matches #"[A-Z][A-Z0-9_-]*" (str s))))
+            [dk.cst.corpus-probe.cqp :as cqp]))
 
 (defn valid-corpus-name
-  "Return `corpus` when it is a valid corpus name (see `corpus-name?`),
-  else throw; the guard every command builder applies before splicing a
-  corpus name into a command."
+  "Return `corpus` when it is a valid corpus name (see
+  dk.cst.corpus-probe.cqp/corpus-name?), else throw; the guard every
+  command builder applies before splicing a corpus name into a command."
   [corpus]
-  (when-not (corpus-name? corpus)
+  (when-not (cqp/corpus-name? corpus)
     (throw (ex-info "Invalid corpus name" {:corpus corpus})))
   corpus)
 
 (defn valid-result-name
-  "Return `nqr` when it is a name CQP accepts for a query result, else
-  throw: a letter or underscore followed by letters, digits, underscores
-  and hyphens, which is CQP's own lexer rule for one.
+  "Return `nqr` when it is a name CQP accepts for a query result (see
+  dk.cst.corpus-probe.cqp/name?), else throw.
 
   The guard every command builder applies before splicing a result name
   into a command, as `valid-corpus-name` does for a corpus name. CQP also
   rejects a name that is exactly one of its keywords, which the underscore
   every generated name carries rules out."
   [nqr]
-  (when-not (re-matches #"[a-zA-Z_][a-zA-Z0-9_-]*" (str nqr))
+  (when-not (cqp/name? nqr)
     (throw (ex-info "Invalid query result name" {:nqr nqr})))
   nqr)
 
@@ -103,9 +53,9 @@
   tokens, named after s-attribute `attr`: a compiled extended search
   opens and closes a sentence by CWB's usual name for one (see
   dk.cst.corpus-probe.query/token->cqp), which is not every corpus's (see
-  dk.cst.corpus-probe.search/units). `query` itself when `attr` is nil
-  or `s`. A tag inside a quoted literal is left alone, standing after a
-  quote rather than a space.
+  dk.cst.corpus-probe.cwb.corpus/units). `query` itself when `attr` is
+  nil or `s`. A tag inside a quoted literal is left alone, standing after
+  a quote rather than a space.
 
   (sentence-tags \"<s> [word = \\\"x\\\"] </s>\" :sentence)
   ;; => <sentence> [word = \"x\"] </sentence>"
@@ -116,22 +66,29 @@
         (str/replace #"(?<=\s)</s>(?=\s|$)" (str "</" (name attr) ">")))
     query))
 
+(def within-pattern
+  "A query ending in a `within` clause that names a unit of text by its
+  CQP name (see dk.cst.corpus-probe.cqp/units): the query before the
+  clause, then the name."
+  (re-pattern (str "(?s)(.*\\S)\\s+within\\s+("
+                   (str/join "|" (map second cqp/units))
+                   ")\\s*;?")))
+
 (defn within-clause
   "`query` with a `within` clause at its end naming a unit of text by
-  CWB's usual name for it (see dk.cst.corpus-probe.query/unit-names)
-  renamed after the s-attribute `attrs` gives that unit (unit to
-  attribute), or dropped where it gives none, so that a query kept
-  within a unit runs in each corpus as far as the corpus marks it, as
-  `sentence-tags` does for the tags: the CQP a switch to that mode holds
-  (see dk.cst.corpus-probe.query/project), and a reader's own that says
-  the same. `query` itself without such a clause.
+  CWB's usual name for it (see dk.cst.corpus-probe.cqp/units) renamed
+  after the s-attribute `attrs` gives that unit (unit to attribute), or
+  dropped where it gives none, so that a query kept within a unit runs
+  in each corpus as far as the corpus marks it, as `sentence-tags` does
+  for the tags: the CQP a switch to that mode holds (see
+  dk.cst.corpus-probe.query/project), and a reader's own that says the
+  same. `query` itself without such a clause.
 
   (within-clause \"[] [] within s\" {:sentence :sentence})
   ;; => [] [] within sentence"
   [query attrs]
-  (let [units (zipmap (vals query/unit-names) (keys query/unit-names))]
-    (if-let [[_ head unit] (re-matches #"(?s)(.*\S)\s+within\s+(s|p|text)\s*;?"
-                                       query)]
+  (let [units (into {} (map (fn [[unit s]] [s unit])) cqp/units)]
+    (if-let [[_ head unit] (re-matches within-pattern query)]
       (if-let [attr (get attrs (get units unit))]
         (str head " within " (name attr))
         head)
@@ -165,17 +122,10 @@
   neither."
   [query]
   (let [key   (inc (rand-int 999999))
-        query (-> (query/flatten-whitespace query)
+        query (-> (cqp/flatten-whitespace query)
                   (str/trim)
                   (str/replace #";+\s*$" ""))]
     (str "set QueryLock " key ";\n" query "\n;\nunlock " key ";")))
-
-(defn escape-pattern
-  "Escape `pattern`, a regex a reader wrote, for a double-quoted CQP
-  string: its quotes doubled, which is all it needs, its metacharacters
-  being the point of it."
-  [pattern]
-  (str/replace pattern "\"" "\"\""))
 
 (defn filter-query
   "The CQP query matching every region accepted by `filter`: triples of
@@ -185,8 +135,9 @@
   [[:text_year #{\"1591\" \"1583\"}]] matches the texts of either year,
   and [[:text_year #{} [\"15..\"]]] those of any year the pattern
   matches; several attributes must all hold. The values are escaped and
-  matched literally, the patterns as the regexes they are, each in a
-  group of its own, all of one attribute as an alternation. The match is
+  matched literally, the patterns as the regexes they are (see
+  dk.cst.corpus-probe.cqp/regex-value), each in a group of its own, all
+  of one attribute as an alternation. The match is
   anchored at a region start of the first attribute, tests the others at
   that token (their regions containing it, hence the first attribute must
   have the finest regions) and expands to the first attribute's region, so
@@ -197,10 +148,10 @@
   ;; => <s_id = \"2\"> [_.text_year = \"1591|(16..)\"] expand to s_id"
   [filter]
   (let [[[attr values patterns] & more] filter
-        group    (fn [pattern] (str "(" (escape-pattern pattern) ")"))
+        group    (fn [pattern] (str "(" (cqp/regex-value pattern) ")"))
         accepted (fn [values patterns]
                    (str "\""
-                        (str/join "|" (concat (map query/escape-value
+                        (str/join "|" (concat (map cqp/escape-value
                                                    (sort values))
                                               (map group patterns)))
                         "\""))]
@@ -284,14 +235,14 @@
   match left without a keyword is deleted. The word is matched literally
   and regardless of case, as a simple search matches one. Both commands
   run outside the QueryLock, being no queries, so the word is escaped as
-  every spliced value is (see dk.cst.corpus-probe.query/escape-value).
+  every spliced value is (see dk.cst.corpus-probe.cqp/escape-value).
 
   (near-command {:word \"kat\" :distance 5})
   ;; => set Last keyword nearest [word = \"kat\" %c] within 5 words from
   ;;    match; delete Last without keyword;"
   [{:keys [word distance]}]
   (when-not (str/blank? word)
-    (str "set Last keyword nearest [word = \"" (query/escape-value word)
+    (str "set Last keyword nearest [word = \"" (cqp/escape-value word)
          "\" %c] within " (long distance) " words from match;"
          " delete Last without keyword;")))
 
@@ -321,8 +272,8 @@
 (defn count-command
   "The command counting the values of `attr` at `position` (see
   `positions`) over the matches of Last: CQP's `count` over the whole
-  match, whose output dk.cst.corpus-probe.parse/count->freqs reads, and
-  its `group` at one token, read by group->freqs.
+  match, whose output dk.cst.corpus-probe.cwb.parse/count->freqs reads,
+  and its `group` at one token, read by group->freqs.
 
   Given the s-attribute `:within` of `opts`, `group` counts the regions
   of it each value occurs in rather than the matches (manual section
@@ -359,7 +310,7 @@
   QueryLock but the sequence query, so `attr` is checked against the
   corpus by the caller and `value` escaped here."
   [{:keys [anchor attr value]}]
-  (let [pattern (str "[_." (name attr) " = \"" (query/escape-value value)
+  (let [pattern (str "[_." (name attr) " = \"" (cqp/escape-value value)
                      "\"]")
         beside  (fn [side from]
                   (str "set Last keyword nearest " pattern " within " side
@@ -367,7 +318,7 @@
         ;; not `pattern`: CQP refuses the this label in query-initial
         ;; position, and the sequence query opens with its first token
         token   (fn [s]
-                  (str "[" (name attr) " = \"" (query/escape-value s) "\"]"))]
+                  (str "[" (name attr) " = \"" (cqp/escape-value s) "\"]"))]
     (case (valid-position anchor)
       "match"       (str "Last = subset Last where match: " pattern ";")
       "matchend"    (str "Last = subset Last where matchend: " pattern ";")
@@ -412,14 +363,14 @@
 (defn sort-attr
   "The positional attribute the sort mode `mode` orders the matches by:
   a keyword when `mode` is an attribute name (see
-  dk.cst.corpus-probe.query/attribute-name?) rather than one of the
-  `sort-modes`; nil otherwise.
+  dk.cst.corpus-probe.cqp/name?) rather than one of the `sort-modes`;
+  nil otherwise.
 
   (sort-attr \"lemma\")
   ;; => :lemma"
   [mode]
   (when (and (not (some #{mode} (map first sort-modes)))
-             (query/attribute-name? mode))
+             (cqp/name? mode))
     (keyword mode)))
 
 (defn sort-command
@@ -436,204 +387,15 @@
         (str "set ExternalSort on; sort Last by " (name attr) ";"))
       "sort Last;"))
 
-(defn context-spec
-  "The width of context as CQP's Context option takes it: `context` as a
-  number of words either side of the match, or as an s-attribute
-  keyword, one region of which is shown either side.
-
-  (context-spec 5)
-  ;; => 5 words
-
-  (context-spec :s)
-  ;; => 1 s"
-  [context]
-  (if (keyword? context)
-    (str "1 " (name context))
-    (str (long context) " words")))
-
-(defn setup-command
-  "The command configuring one KWIC batch: the hardened display profile,
-  `context` (see `context-spec`) either side of the match and, when
-  `cache-dir` is given, the directory CQP reads and writes saved query
-  results in.
-
-  DataDirectory is set here rather than beside the query because setting
-  it rescans the corpus list, resetting the active corpus, so it has to
-  come before the activation (docs/research/gap-nqr-persistence.md
-  section 1)."
-  [context cache-dir]
-  (str (when cache-dir
-         (str "set DataDirectory \"" (valid-data-directory cache-dir) "\"; "))
-       hardened-profile " set Context " (context-spec context) ";"))
-
-(defn page-commands
-  "The [section command] pairs displaying the rows `[from to]` of the
-  query result named `nqr`: a `:cat` section, the `:dump` anchors of the
-  same rows and one `:tabulate` section per entry of `struct-attrs`.
-
-  `p-attrs` are the corpus's positional attributes (registry order) to
-  show. Each structural attribute gets its own single-column `tabulate`
-  command so that a whole output line is one annotation value: annotation
-  values may legally contain TAB, so packing them into one TAB-separated
-  row would misalign the columns. `cat` clamps the range to the result
-  silently, so a range past the last row needs no check."
-  [nqr [from to] p-attrs struct-attrs]
-  (let [span (str nqr " " from " " to)
-        show (when (next p-attrs)
-               (str "show " (str/join " " (map #(str "+" (name %))
-                                               (rest p-attrs))) "; "))]
-    (into [[:cat (str show "cat " span ";")]
-           [:dump (str "dump " span ";")]]
-          (map (fn [attr]
-                 [:tabulate (str "tabulate " span " match " (name attr) ";")]))
-          struct-attrs)))
-
-(defn result-batch
-  "The batch producing the result Last of `query` (raw CQP) in `corpus`:
-  [section command] pairs, the setup with `context` and `cache-dir` (see
-  `setup-command`), the activation, the query within `filter` (see
-  `restricted-query`), the narrowings of `opts` (see `narrowing`), the
-  `sample` (see `sample-command`), the size, the `sort` (see
-  `sort-command`) and, given `nqr`, the save. What reads the result
-  follows: a page of it (see `kwic-batch`) or every row (see
-  `export-batch`).
-
-  The narrowings and the sample come before anything is counted or
-  ordered, so that the size reported and the rows read are those of
-  the hits kept. The result is named only after being sorted, since the
-  sort order travels with it into the save file, which is what makes a
-  stored result worth having."
-  [corpus query {:keys [context filter sample cache-dir nqr sort]
-                 :or   {context (:context kwic-defaults)}
-                 :as   opts}]
-  (let [sampling (sample-command sample)]
-    (-> [[:setup  (setup-command context cache-dir)]
-         [:corpus (str corpus ";")]
-         [:query  (restricted-query query filter)]]
-        (into (narrowing opts))
-        (cond-> sampling (conj [:sample sampling]))
-        (into [[:size "size Last;"]
-               [:sort (sort-command sort)]])
-        (cond-> nqr (conj (let [nqr (valid-result-name nqr)]
-                            [:save (str nqr " = Last; save " nqr ";")]))))))
-
-(defn kwic-batch
-  "The batch running `query` (raw CQP) against `corpus` and returning the
-  rows `:rows` of its result: the `result-batch` of `opts` followed by
-  the `page-commands` of the rows, [section command] pairs, each
-  section naming what its command's output holds (see `batch-sections`).
-
-  `rows` is the [from to] row range (see `page-rows`), `p-attrs` and
-  `struct-attrs` are as `page-commands` takes them, and the rest of
-  `opts` are `result-batch`'s. Given `nqr`, the result is also saved
-  under that name for `stored-kwic-batch` to page later."
-  [corpus query {:keys [p-attrs struct-attrs rows]
-                 :or   {rows (:rows kwic-defaults)}
-                 :as   opts}]
-  (into (result-batch corpus query opts)
-        (page-commands "Last" rows p-attrs struct-attrs)))
-
-(defn tabulate-commands
-  "The [section command] pairs printing the rows `[from to]` of the
-  query result named `nqr` for an export, one line per hit: a :tabulate
-  of the columns no TAB can occur in (the match's positions, `context`
-  words either side of it, its words and its values of each of the
-  `p-attrs` but word), then one :tabulate per entry of `struct-attrs`,
-  since an annotation value may hold a TAB (see `page-commands`).
-  `tabulate` clamps the range to the result as `cat` does, and prints a
-  position outside the corpus as an empty word."
-  [nqr [from to] context p-attrs struct-attrs]
-  (let [span (str nqr " " from " " to)]
-    (into [[:tabulate
-            (str "tabulate " span " match, matchend, "
-                 "match[-" (long context) "]..match[-1] word, "
-                 "match..matchend word, "
-                 "matchend[1]..matchend[" (long context) "] word"
-                 (str/join (map #(str ", match..matchend " (name %))
-                                (remove #{:word} p-attrs)))
-                 ";")]]
-          (map (fn [attr]
-                 [:tabulate (str "tabulate " span " match " (name attr) ";")]))
-          struct-attrs)))
-
-(defn export-batch
-  "The batch running `query` (raw CQP) against `corpus` and printing the
-  first `limit` rows of its result for an export: the `result-batch` of
-  `opts` followed by the `tabulate-commands` of the rows, with `context`
-  a number of words either side, since `tabulate` takes token offsets
-  only, and `p-attrs` and `struct-attrs` as they take them."
-  [corpus query {:keys [context p-attrs struct-attrs limit] :as opts}]
-  (into (result-batch corpus query opts)
-        (tabulate-commands "Last" [0 (dec limit)] context p-attrs
-                           struct-attrs)))
-
-(defn text-batch
-  "The batch reading one whole region of `corpus` as a KWIC row with no
-  context: [section command] pairs as `kwic-batch` returns them, for
-  `query` (raw CQP, whose one match is the region, see `position-query`
-  and CQP's `expand to`), showing the p-attributes `p-attrs`, tagging
-  the regions of the s-attributes `shown` inline, where the row is
-  split into the blocks it is read in, and fetching the `struct-attrs`
-  as `page-commands` does."
-  [corpus query {:keys [p-attrs struct-attrs shown]}]
-  (-> [[:setup  (setup-command 0 nil)]
-       [:corpus (str corpus ";")]
-       [:query  (locked-query query)]]
-      (cond-> (seq shown)
-        (conj [:show (str "show "
-                          (str/join " " (map #(str "+" (name %)) shown))
-                          ";")]))
-      (into (page-commands "Last" [0 0] p-attrs struct-attrs))))
-
-(defn stored-kwic-batch
-  "The batch returning the rows `:rows` of the saved query result named
-  `nqr` of `corpus`: [section command] pairs, as `kwic-batch` returns.
-
-  No query runs and nothing is sorted, the matches and their order both
-  coming from the save file, so the options that decided them (the query,
-  `sort`, `filter`, `subset`, `near` and `sample`) are none of this one's
-  business."
-  [corpus nqr {:keys [p-attrs struct-attrs context rows cache-dir]
-               :or   {context (:context kwic-defaults)
-                      rows    (:rows kwic-defaults)}}]
-  (into [[:setup  (setup-command context cache-dir)]
-         [:corpus (str corpus ";")]
-         [:size   (str "size " (valid-result-name nqr) ";")]]
-        (page-commands nqr rows p-attrs struct-attrs)))
-
-(defn stored-export-batch
-  "The batch printing the first `limit` rows of the saved query result
-  named `nqr` of `corpus` for an export, as `export-batch` prints a
-  fresh one's; no query runs and nothing is sorted, as with
-  `stored-kwic-batch`."
-  [corpus nqr {:keys [context p-attrs struct-attrs cache-dir limit]}]
-  (into [[:setup  (setup-command context cache-dir)]
-         [:corpus (str corpus ";")]
-         [:size   (str "size " (valid-result-name nqr) ";")]]
-        (tabulate-commands nqr [0 (dec limit)] context p-attrs struct-attrs)))
-
 (defn load-command
   "The command making the saved query result named `nqr` of `corpus` in
   `cache-dir` its result Last, for commands that count one: the
   directory first, since setting it rescans the corpus list (see
-  `setup-command`), then the activation, then the copy, which is what
-  reads the file.
+  dk.cst.corpus-probe.search.batch/setup-command), then the activation,
+  then the copy, which is what reads the file.
 
   (load-command \"PROBE\" \"q_1\" \"/cache/PROBE\")
   ;; => set DataDirectory \"/cache/PROBE\"; PROBE; Last = q_1;"
   [corpus nqr cache-dir]
   (str "set DataDirectory \"" (valid-data-directory cache-dir) "\"; "
        corpus "; Last = " (valid-result-name nqr) ";"))
-
-(defn batch-sections
-  "Group the output `results` of `batch` (its [section command] pairs) by
-  section: a map of section key to the vector of that section's output
-  line vectors, in batch order.
-
-  A section key repeats, `:tabulate` doing so once per structural
-  attribute, so every key holds a vector of sections rather than one."
-  [batch results]
-  (reduce (fn [m [[section _] lines]]
-            (update m section (fnil conj []) lines))
-          {}
-          (map vector batch results)))

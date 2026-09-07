@@ -1,12 +1,16 @@
 (ns dk.cst.corpus-probe.url
-  "The app's URLs: the path of each page, and the one query string a
-  search has.
+  "The app's URLs: the path of each page, the ids a page lands on and its
+  form carries, and the one query string a search has.
 
   A result URL is a citation, so the server and the client build it by
   the same rule, `canonical` then `query-string`: the params in a fixed
   order, every default left out, the corpora as one comma-joined param,
-  and no corpus named when every readable one is chosen."
-  (:require [clojure.string :as str])
+  and no corpus named when every readable one is chosen. Every link of a
+  result (see `page-hrefs`, `view-hrefs`, `export-hrefs`, `subset-href`
+  and `nav-hrefs`) is built from its params by that rule."
+  (:require [clojure.string :as str]
+            [dk.cst.corpus-probe.query.mode :as mode]
+            [dk.cst.corpus-probe.query.tokens :as tokens])
   #?(:clj (:import [java.net URLEncoder])))
 
 (def home
@@ -59,6 +63,24 @@
   [view format]
   (str search "/" (name view) "." (name format)))
 
+(def preferences
+  "Where a setting is stored: a preference is not a place, so choosing one
+  changes state and sends the reader back where they were."
+  "/preferences")
+
+(def context-api
+  "The data behind one hit shown with wider context, for the client."
+  "/api/context")
+
+(def filters-api
+  "The metadata filters the chosen corpora offer, for the client."
+  "/api/filters")
+
+(def counts-api
+  "The counts of a search still being counted when its page was served,
+  for the client."
+  "/api/counts")
+
 (def results-id
   "The id of the results region a search lands on."
   "results")
@@ -70,239 +92,85 @@
   region they name cannot drift apart."
   (str "#" results-id))
 
+(def form-id
+  "The id of the search form, so a control that acts on a result can sit
+  beside the result and still submit the search that produced it."
+  "search-form")
+
+(def transit-type
+  "The content type the client asks a route for and is answered with:
+  the data behind the page rather than the document."
+  "application/transit+json")
+
+(def result-views
+  "The views a search result can be shown in, in display order: the
+  keyword naming each and its `view` param value. What each is called is
+  the interface's business (see
+  dk.cst.corpus-probe.views.page/view-label).
+
+  A frequency table is not another page, it is the same search counted
+  rather than listed, so it is a view of the result rather than a place of
+  its own."
+  [[:kwic "kwic"]
+   [:frequencies "frequencies"]])
+
+(def export-formats
+  "The formats a view of a result is exported in, in display order, each
+  as the extension of its `export` path (see
+  dk.cst.corpus-probe.export/formats, which renders each)."
+  ["tsv" "csv"])
+
 (def defaults
   "What each param means when a URL leaves it out, so the value no URL
-  carries. Each is the default its reader in dk.cst.corpus-probe.api or
-  .query applies, restated as the string a URL would carry;
-  `defaults-test` holds the two together."
-  {:in          "word"
-   :within      "sentence"
-   :sort        "corpus"
-   :context     "5"
-   :distance    "5"
-   :subset-at   "match"
-   :subset-attr "word"
-   :view        "kwic"
-   :attr        "word"
-   :at          "match"
-   :page        "1"})
+  carries. Each is the default its reader in dk.cst.corpus-probe.api,
+  .commands or .query.params applies, restated as the string a URL would
+  carry, but for the query keys' (see
+  dk.cst.corpus-probe.query.mode/defaults) and the distance a nearby
+  word may stand at, which is the manual's own example (section 3.7) and
+  the window a collocation is usually counted in; `defaults-test` holds
+  each reader to its default."
+  (merge mode/defaults
+         {:sort        "corpus"
+          :context     "5"
+          :distance    "5"
+          :subset-at   "match"
+          :subset-attr "word"
+          :view        "kwic"
+          :attr        "word"
+          :at          "match"
+          :page        "1"}))
 
-(def modes
-  "The query modes, each a way the query params are read: words in order,
-  a list of words, the tokens of the extended form, and CQP as the reader
-  wrote it (see dk.cst.corpus-probe.query/of). The first is the default.
-  The three that are text are read from one field, by the shape of what
-  it holds (see `shape`); no URL names a mode, and a form's radio names
-  only its form (see `forms`)."
-  ["simple" "list" "extended" "cqp"])
+(def filter-prefixes
+  "The query param prefixes of the metadata filter, each followed by the
+  attribute name, as in `f.text_year`: a chosen value, one param per
+  value; a pattern the values must match; and the bounds of a range of
+  them."
+  {:value   "f."
+   :pattern "fp."
+   :from    "ff."
+   :to      "ft."})
 
-(def forms
-  "The two forms of the query, in display order, each as the value of
-  the form's `mode` radio: the field, named for the mode it starts in,
-  whose row of `fields` is every param the field's three modes read; and
-  the extended form of tokens (see `form`)."
-  ["simple" "extended"])
-
-(def cqp-start
-  "What CQP text begins with, once trimmed: a pattern in brackets or a
-  quoted form, a tag, a group, a target mark or a meet-union or table
-  query. A bare word is none of these, since CQP reads one as the name
-  of a query result, which is how the field tells CQP from words (see
-  `shape`)."
-  #"^\s*(?:[\[\"'<(@]|MU\s*\(|TAB\s*\()")
-
-(defn shape
-  "The mode the `text` of the query field is read in: CQP when it begins
-  as CQP does (see `cqp-start`), a list when it holds a line break, and
-  words in order otherwise; a blank, whatever whitespace it holds, is
-  nothing typed, and reads as words."
-  [text]
-  (let [text (str text)]
-    (cond
-      (str/blank? text)        "simple"
-      (re-find cqp-start text) "cqp"
-      (re-find #"[\r\n]" text) "list"
-      :else                    "simple")))
-
-(def fields
-  "What each of the `modes` reads of the query params: the keys that say
-  what was asked, by the mode that reads them. The three modes of the
-  field read its text, `q`; `::tokens` stands for the fields of an
-  extended search's tokens (see `token-key?`). A param outside its
-  mode's set says nothing to the search, so a URL does not carry it (see
-  `canonical`), and the form's control for it is not shown (see
-  dk.cst.corpus-probe.views.page/search-form)."
-  {"simple"   #{:q :in :ci :match :within}
-   "list"     #{:q :in :ci :match}
-   "extended" #{::tokens :within}
-   "cqp"      #{:q}})
-
-(def operators
-  "The operators of an extended-search condition, in display order: how
-  the value of the condition's attribute must relate to what the reader
-  typed, each as its `op` param value. `any`, which matches any word, is
-  a token's first condition or none of them. Compiled by
-  dk.cst.corpus-probe.query/condition->cqp; what each is called is the
-  interface's business (see
-  dk.cst.corpus-probe.views.page/operator-label)."
-  ["is" "not" "prefix" "suffix" "infix" "regex" "not-regex" "any"])
-
-(def joins
-  "How a condition after a token's first joins the ones before it: `and`
-  opens a new group, `or` adds an alternative to the current one, as
-  KORP's builder has it (see dk.cst.corpus-probe.query/token->cqp)."
-  ["and" "or"])
-
-(def units
-  "The units of text a search of several tokens can be kept within, in
-  display order, each as its `within` param value (see
-  dk.cst.corpus-probe.search/units)."
-  ["sentence" "paragraph" "text"])
-
-(def token-defaults
-  "What each field of an extended-search token means when a URL leaves it
-  out: the surface form, equality, a new group, once."
-  {:attr "word" :op "is" :join "and" :min "1" :max "1"})
-
-(def own-fields
-  "The fields of an extended-search token that belong to the token
-  itself rather than to one of its conditions: its repeat, and whether
-  it must open or close a sentence."
-  #{:min :max :start :end})
-
-(defn token-field
-  "The [n c field] an extended-search token param key `k` names, `t2.v`
-  being [2 1 :v] and `t2.3.v` [2 3 :v]: the token's number, the number
-  of the condition among its conditions (the first when the key names
-  none) and one of :attr, :op, :v, :ci and :join of a condition, or
-  :min, :max, :start and :end of the token. nil for any other key."
+(defn metadata-key?
+  "True when param key `k` names part of the metadata filter: one of the
+  `filter-prefixes` followed by an attribute name."
   [k]
-  (when k
-    (when-let [[_ n c field]
-               (re-matches #"t(\d+)(?:\.(\d+))?\.(attr|op|v|ci|join|min|max|start|end)"
-                           (name k))]
-      [(parse-long n) (if c (parse-long c) 1) (keyword field)])))
-
-(defn token-key
-  "The param key of `field` of condition `c` of token `n`, the inverse of
-  `token-field`: `t2.v` for a first condition, `t2.3.v` for a third, and
-  the token's own fields under the first."
-  [n c field]
-  (str "t" n (when (> c 1) (str "." c)) "." (name field)))
-
-(defn token-key?
-  "True when param key `k` names a field of an extended-search token (see
-  `token-field`)."
-  [k]
-  (some? (token-field k)))
-
-(defn condition-asks?
-  "True when extended-search `condition` (see `token-rows`) asks for
-  anything: an any-word one, or one with a value."
-  [{:keys [op v]}]
-  (or (= "any" op) (not (str/blank? (str v)))))
-
-(defn asks?
-  "True when extended-search token `row` (see `token-rows`) asks for
-  anything: one of its conditions does (see `condition-asks?`). A token
-  without any is the blank one the form ends in for a reader without the
-  client."
-  [{:keys [conditions]}]
-  (boolean (some condition-asks? conditions)))
-
-(defn token-rows
-  "The extended-search tokens among `params`, one map per numbered token
-  in numeric order: its :n, its own fields (see `own-fields`) and its
-  :conditions, one map per numbered condition in numeric order with its
-  :c and its fields, all as strings (see `token-field`)."
-  [params]
-  (->> params
-       (keep (fn [[k v]]
-               (when-let [[n c field] (token-field k)]
-                 [n c field v])))
-       (reduce (fn [m [n c field v]]
-                 (update m n (fnil assoc-in (sorted-map)) [c field] v))
-               (sorted-map))
-       (mapv (fn [[n conditions]]
-               (-> (select-keys (get conditions 1) own-fields)
-                   (assoc :n n
-                          :conditions
-                          (mapv (fn [[c fields]]
-                                  (assoc (apply dissoc fields own-fields)
-                                         :c c))
-                                conditions)))))))
-
-(defn numbered
-  "`rows` with :id 1, 2 and so on in order, their `key` (:n of a token,
-  :c of a condition) dropped."
-  [rows key]
-  (into []
-        (map-indexed (fn [i row] (assoc (dissoc row key) :id (inc i))))
-        rows))
-
-(defn blank-token
-  "The blank token numbered `id` the form starts with and ends in: one
-  condition asking nothing (see `form-tokens`)."
-  [id]
-  {:id id :conditions [{:id 1}]})
-
-(defn form-tokens
-  "Token `rows` (see `token-rows`) as the
-  extended-search form shows them: tokens and their conditions numbered
-  afresh under :id (see `numbered`), which the client keeps them apart
-  by as they are added and taken away."
-  [rows]
-  (numbered (map #(update % :conditions numbered :c) rows) :n))
-
-(defn rows->params
-  "The params of the extended form's `rows` (see `form-tokens`), as the
-  form would submit them, the inverse of `token-rows` for rows numbered
-  by their place: each condition's fields under its token's number and
-  its own, and the token's own fields (see `own-fields`) under its first
-  condition, present fields only."
-  [rows]
-  (into {}
-        (mapcat (fn [n {:keys [conditions] :as row}]
-                  (concat (for [[field v] (select-keys row own-fields)
-                                :when (some? v)]
-                            [(keyword (token-key n 1 field)) v])
-                          (mapcat (fn [c condition]
-                                    (for [[field v] (dissoc condition :id)
-                                          :when (some? v)]
-                                      [(keyword (token-key n c field)) v]))
-                                  (map inc (range))
-                                  conditions)))
-                (map inc (range))
-                rows)))
-
-(defn default
-  "The value param key `k` has when a URL leaves it out (see `defaults`,
-  and `token-defaults` for the field of a token); nil for a key that has
-  none."
-  [k]
-  (if-let [[_ _ field] (token-field k)]
-    (get token-defaults field)
-    (get defaults k)))
+  (boolean (when k
+             (let [s (name k)]
+               (some #(and (str/starts-with? s %) (not= s %))
+                     (vals filter-prefixes))))))
 
 (def param-order
   "Every param a search URL may carry, in the order it carries them: what
   was asked, where, which hits were kept, how they are shown, the page.
   A param not named here is dropped from every URL the app builds.
-  `::tokens` stands for the fields of an extended search's tokens (see
-  `token-key?`) and `::filter` for the metadata filter's params (see
-  `metadata-key?`)."
-  [:q ::tokens :within :in :ci :match
+  `::mode/tokens` stands for the fields of an extended search's tokens
+  (see dk.cst.corpus-probe.query.tokens/token-key?) and `::filter` for
+  the metadata filter's params (see `metadata-key?`)."
+  [:q ::mode/tokens :within :in :ci :match
    :corpus :scope ::filter
    :near :distance :subset :subset-at :subset-attr :sample
    :view :sort :context :attr :at :by :docs
    :page :expand])
-
-(defn metadata-key?
-  "True when param key `k` names part of the metadata filter: a chosen
-  value (`f.text_year`), a pattern (`fp.`) or a bound of a range (`ff.`
-  and `ft.`), each followed by the attribute name."
-  [k]
-  (boolean (and k (re-matches #"f[pft]?\..+" (name k)))))
 
 (defn rank
   "Where param key `k` sorts in a query string: its place in
@@ -311,9 +179,9 @@
   order lacks, which `known?` refuses."
   [k]
   (let [k* (cond
-             (metadata-key? k) ::filter
-             (token-key? k)    ::tokens
-             :else             k)]
+             (metadata-key? k)     ::filter
+             (tokens/token-key? k) ::mode/tokens
+             :else                 k)]
     [(.indexOf param-order k*) (name k)]))
 
 (defn known?
@@ -336,13 +204,30 @@
        (distinct)
        (vec)))
 
-(defn present
-  "Param value `v` with what says nothing taken out: a blank string is
-  nil, a vector keeps its non-blank strings and is nil without any."
+(defn expand-param
+  "The hits the `expand` query param value `v` names, as a set of
+  [corpus cpos] keys: `CORPUS:cpos` items, comma-joined or repeated,
+  an item naming no position ignored. nil for none."
   [v]
-  (if (vector? v)
-    (not-empty (filterv (complement str/blank?) (map str v)))
-    (when-not (str/blank? (str v)) (str v))))
+  (when-let [items (tokens/present v)]
+    (into #{}
+          (comp (mapcat #(str/split % #","))
+                (keep (fn [item]
+                        (let [[corpus cpos] (str/split item #":" 2)]
+                          (when-let [n (some-> cpos parse-long)]
+                            [corpus n])))))
+          (if (vector? items) items [items]))))
+
+(defn with-expanded
+  "The search `params` with the `expand` param naming the `hits` shown
+  expanded ([corpus cpos] keys) as `CORPUS:cpos` items in order, the
+  inverse of `expand-param`; without it when there are none."
+  [params hits]
+  (if (seq hits)
+    (assoc params :expand (str/join "," (map (fn [[corpus cpos]]
+                                               (str corpus ":" cpos))
+                                             (sort hits))))
+    (dissoc params :expand)))
 
 (defn with-corpora
   "The search `params` with their corpus selection as one param: the
@@ -366,114 +251,32 @@
   "Canonical `params` less a param that only qualifies one that is not
   there: a distance without a word to be near, the anchor and attribute
   of a subset without a value, and the fields of an extended-search
-  token that asks for nothing (see `asks?`) or of a condition that does
-  not (see `condition-asks?`)."
+  token that asks for nothing (see dk.cst.corpus-probe.query.tokens/asks?)
+  or of a condition that does not (see
+  dk.cst.corpus-probe.query.tokens/condition-asks?)."
   [params]
-  (let [rows (token-rows params)
-        idle (into #{} (comp (remove asks?) (map :n)) rows)
+  (let [rows (tokens/token-rows params)
+        idle (into #{} (comp (remove tokens/asks?) (map :n)) rows)
         ;; a condition asking nothing, of a token that asks
         blank (into #{} (for [{:keys [n conditions]} rows
                               {:keys [c] :as condition} conditions
-                              :when (not (condition-asks? condition))]
+                              :when (not (tokens/condition-asks? condition))]
                           [n c]))
         orphan? (fn [[k _]]
-                  (when-let [[n c] (token-field k)]
+                  (when-let [[n c] (tokens/token-field k)]
                     (or (idle n) (blank [n c]))))]
     (cond-> (into {} (remove orphan?) params)
       (nil? (:near params))   (dissoc :distance)
       (nil? (:subset params)) (dissoc :subset-at :subset-attr))))
 
-(defn typed
-  "The mode the query of `params` was typed in (see `modes`): the
-  extended form's when they carry the field of a token (see
-  `token-key?`), else the shape of the field's text, `q` (see `shape`);
-  nil when they carry neither. Tokens first, so that a URL carrying both
-  is read as tokens and told of the text."
-  [params]
-  (cond
-    (some token-key? (keys params)) "extended"
-    (contains? params :q)           (shape (:q params))))
-
-(defn form-of
-  "The form (see `forms`) query `mode` is read from: the extended form
-  for its tokens, the field for the rest, nil included."
-  [mode]
-  (if (= "extended" mode) "extended" "simple"))
-
-(defn form
-  "The form of the search `params` (see `forms`): the one their `mode`
-  param names, when it is a form, which is what a submitted form's radio
-  says; else the form of the mode their query was `typed` in."
-  [params]
-  (let [m (:mode params)]
-    (if (some #{m} forms) m (form-of (typed params)))))
-
-(defn mode
-  "The mode the search `params` are read in (see `modes`): the extended
-  form's tokens when that is their `form`, else the shape of the field's
-  text (see `shape`), words in order when there is none."
-  [params]
-  (if (= "extended" (form params))
-    "extended"
-    (shape (:q params))))
-
-(defn query-key?
-  "True when param key `k` says what was asked: the mode, a key some mode
-  reads (see `fields`) or the field of a token."
+(defn default
+  "The value param key `k` has when a URL leaves it out (see `defaults`,
+  and dk.cst.corpus-probe.query.tokens/token-defaults for the field of a
+  token); nil for a key that has none."
   [k]
-  (boolean (and k (not= ::tokens k)
-                (or (= :mode k)
-                    (some #(contains? % k) (vals fields))
-                    (token-key? k)))))
-
-(defn reads?
-  "True when mode `m` reads param key `k` (see `fields`): the mode itself,
-  one of the mode's keys or, where it reads tokens, the field of one.
-  The marker standing for the tokens is no key of its own."
-  [m k]
-  (let [own (get fields m)]
-    (boolean (and (not= ::tokens k)
-                  (or (= :mode k)
-                      (contains? own k)
-                      (and (contains? own ::tokens) (token-key? k)))))))
-
-(defn read-keys
-  "The query params among `params` that the form of mode `m` reads (see
-  `reads?`), as keys, the mode itself aside: what a form holds of a
-  query, and so what its query replaces when it changes."
-  [m params]
-  (filter #(and (query-key? %) (not= :mode %) (reads? m %))
-          (keys params)))
-
-(defn unread
-  "The keys of the query params among `params` that their mode (see
-  `mode`), or the mode `m` given, does not read: what the form of
-  another mode, or a hand-written URL, carried along, which the search
-  never sees."
-  ([params]
-   (unread params (mode params)))
-  ([params m]
-   (into #{}
-         (filter #(and (query-key? %) (not (reads? m %))))
-         (keys params))))
-
-(defn without-unread
-  "`params` less what the mode `m` does not read (see `unread`)."
-  [params m]
-  (apply dissoc params (unread params m)))
-
-(defn unread-query?
-  "True when `params` carry a query their mode does not read (see
-  `unread`) that says something: the field's text under the extended
-  form, or a token that asks (see `asks?`) under the field's. What the
-  form submits when its mode radio is changed before the query is
-  retyped, and what a hand-written URL may carry; a blank field or the
-  blank trailing token every form submits is no query."
-  [params]
-  (let [unread (unread params)]
-    (boolean (or (and (unread :q) (present (:q params)))
-                 (and (some token-key? unread)
-                      (some asks? (token-rows params)))))))
+  (if-let [[_ _ field] (tokens/token-field k)]
+    (get tokens/token-defaults field)
+    (get defaults k)))
 
 (defn canonical
   "The search `params` (param keys to their string or vector values, as a
@@ -481,9 +284,10 @@
   `all` of every corpus that can be searched: nothing nil, blank or
   default (see `defaults`), nothing that qualifies an absent param (see
   `without-orphans`), nothing the mode does not read (see
-  `without-unread`), nothing the app does not read (see `known?`), the
-  corpora as one param (see `with-corpora`) and the field's line breaks
-  as one character each, where a text area submits two.
+  dk.cst.corpus-probe.query.mode/without-unread), nothing the app does
+  not read (see `known?`), the corpora as one param (see `with-corpora`)
+  and the field's line breaks as one character each, where a text area
+  submits two.
 
   Applying it to its own result changes nothing, so a link can be built
   from canonical params and canonicalised again."
@@ -494,16 +298,16 @@
    ;; and the text's shape say and no URL carries: what the trimmed
    ;; params say once the radio is gone is what was kept, so a second
    ;; pass reads the same
-   (let [m (mode params)]
+   (let [m (mode/mode params)]
      (-> (into {}
                (keep (fn [[k v]]
-                       (let [v (present v)]
+                       (let [v (tokens/present v)]
                          (when (and (known? k) v (not= v (default k)))
                            [k (cond-> v
                                 (= :q k) (str/replace "\r\n" "\n"))]))))
                (with-corpora params all))
          (without-orphans)
-         (without-unread m)))))
+         (mode/without-unread m)))))
 
 (defn pairs
   "Canonical `params` as [name value] string pairs in `param-order`, a
@@ -553,6 +357,109 @@
   (let [qs (query-string params)]
     (cond-> (export view format) (seq qs) (str "?" qs))))
 
+(defn search-params
+  "The `params` that identify a search: its corpora, its query as any
+  mode reads it (see dk.cst.corpus-probe.query.mode/query-key?; what the
+  mode does not read, `canonical` drops from a link), the metadata
+  filter, the narrowings of its hits and the sample of them, for linking
+  the views of the same hits. The interface language is not among them:
+  it is the reader's preference, not part of the search.
+
+  The narrowings and the sample are here and the sort is not, because
+  which hits there are is part of the search while the order they are
+  read in is not. The frequency view draws no sample, but carries the
+  param so that returning to the concordance returns to the sample it
+  was left in."
+  [params]
+  (into (select-keys params [:corpus :subset :subset-at :subset-attr
+                             :near :distance :sample])
+        (filter (comp (some-fn mode/query-key? metadata-key?) key))
+        params))
+
+(defn page-href
+  "The URL of page `page` of the search `params` cite, counted from
+  nought here and from one in the URL.
+
+  Ends in the results fragment, so a page turn lands on the hits rather
+  than at the top of the query form. Drops `expand`, which names corpus
+  positions on the current page and does not carry to another page's
+  hits."
+  [params page]
+  (results-href (assoc (dissoc params :expand) :page (inc page))))
+
+(defn page-count
+  "The number of pages a `result` of `size` hits spans."
+  [{:keys [size page-size]}]
+  (max 1 (long (Math/ceil (/ size (double page-size))))))
+
+(defn page-hrefs
+  "The links from page `page` of the concordance `result` of the search
+  `params` cite to the pages before and after it, as `:prev-href` and
+  `:next-href`, nil where there is none.
+
+  A result still being counted (see
+  dk.cst.corpus-probe.search/concordance!) has no last page yet, but the
+  hits counted so far may already reach past this page, and then the
+  next one is there whatever the rest turn out to hold."
+  [params page result]
+  {:prev-href (when (pos? page) (page-href params (dec page)))
+   :next-href (when (and result (< (inc page) (page-count result)))
+                (page-href params (inc page)))})
+
+(defn export-hrefs
+  "The URLs of the exports of `view` (`:kwic` or `:frequencies`) of the
+  search described by `params` in each of the `formats` (see
+  `export-formats`), by format keyword."
+  [view formats params]
+  (into {} (for [format formats]
+             [(keyword format) (export-href view format params)])))
+
+(defn subset-href
+  "The URL of the concordance of the search described by `params` kept to
+  the hits whose token at `anchor` has `value` as its `attr`: what one
+  row of the frequency table grouped by `attr` at `anchor` counted."
+  [params attr anchor value]
+  (results-href (assoc (search-params params)
+                       :view        "kwic"
+                       :subset      value
+                       :subset-at   anchor
+                       :subset-attr (name attr))))
+
+(defn view-hrefs
+  "Each result view (see `result-views`) of the search described by
+  `params`, for the switch at the top of the results region: [view
+  keyword url], in display order.
+
+  Every view of one search shares its URL but for the `view` param, so
+  moving between them keeps the query, the corpora and the filter by
+  construction rather than by carrying them across."
+  [params]
+  (for [[k value] result-views]
+    [k (results-href (assoc (search-params params)
+                            :view    value
+                            :attr    (:attr params)
+                            :at      (:at params)
+                            :by      (:by params)
+                            :docs    (:docs params)
+                            :sort    (:sort params)
+                            :context (:context params)))]))
+
+(defn nav-hrefs
+  "The URL of each top-level page for `params`.
+
+  No URL names a language: which language a reader reads in is their own
+  preference, so none of these carries one. The search keeps the current
+  query, so returning to it from the corpus index does not lose it. The
+  frequency table is not here: it is a view of a search result, reached by
+  the switch at the top of the results region (see `view-hrefs`)."
+  [params]
+  (let [asked (search-params params)]
+    {:search          (if (seq asked)
+                        (results-href asked)
+                        search)
+     :corpora-heading corpora
+     :glossary        glossary}))
+
 (comment
   (canonical {:q "hund" :mode "simple" :in "word" :corpus ["PROBE" "VISER"]
               :scope "chosen" :sort "corpus" :sample "" :distance "5"}
@@ -562,6 +469,6 @@
   (results-href {:q "[lemma = \"hund\"]" :corpus ["PROBE" "VISER"]})
   ;; => "/search?q=%5Blemma+%3D+%22hund%22%5D&corpus=PROBE,VISER#results"
 
-  (map shape ["hund" "lille hund" "hund\nkat" "[lemma = \"hund\"]" "\"hund\""])
-  ;; => ("simple" "simple" "list" "cqp" "cqp")
+  (expand-param "PROBE:9,PROBE:12")
+  ;; => #{["PROBE" 9] ["PROBE" 12]}
   #_.)

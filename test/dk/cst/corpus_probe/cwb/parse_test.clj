@@ -1,14 +1,14 @@
-(ns dk.cst.corpus-probe.parse-test
+(ns dk.cst.corpus-probe.cwb.parse-test
   "Golden-file tests: every parser runs against byte-exact CQP output
   captured by dev/capture-golden.sh."
-  (:require [clojure.string :as str]
-            [clojure.test :refer [deftest is testing]]
-            [dk.cst.corpus-probe.parse :as parse]))
+  (:require [clojure.test :refer [deftest is testing]]
+            [dk.cst.corpus-probe.cwb.parse :as parse]
+            [dk.cst.corpus-probe.test.cwb :refer [golden-lines]]))
 
-(defn golden-lines
-  "The lines of golden file `filename` under test/resources/golden/."
-  [filename]
-  (str/split (slurp (str "test/resources/golden/" filename)) #"\n"))
+(deftest markers-test
+  (testing "the letters the golden files were captured with"
+    (is (= {:attribute "A" :token "T" :left "L" :right "R" :structure "S"}
+           parse/markers))))
 
 (deftest kwic-line->hit-test
   (testing "hardened-profile KWIC lines parse into complete hits"
@@ -55,6 +55,19 @@
     (is (= 5 (count anchors)))
     (is (= {:match 9 :matchend 9 :target nil :keyword nil} (second anchors)))))
 
+(deftest size->n-test
+  (is (= 47 (parse/size->n ["47"]))))
+
+(deftest tabulate->rows-test
+  (testing "one section per attribute, one line per hit, into a row per hit"
+    (is (= [["t1" "2023"] ["t2" "2024"]]
+           (parse/tabulate->rows [["t1" "t2"] ["2023" "2024"]]))))
+  (testing "a TAB inside a value survives, since nothing is split"
+    (is (= [["bad\ttitle"]] (parse/tabulate->rows [["bad\ttitle"]]))))
+  (testing "no sections, no rows"
+    (is (= [] (parse/tabulate->rows [])))
+    (is (= [] (parse/tabulate->rows nil)))))
+
 (deftest group->freqs-test
   (is (= {:values ["hund"] :freq 5}
          (first (parse/group->freqs (golden-lines "group.txt")))))
@@ -65,52 +78,6 @@
 (deftest count->freqs-test
   (is (= [{:values ["en hund"] :freq 3} {:values ["en lille hund"] :freq 1}]
          (parse/count->freqs ["3\t0\ten hund" "1\t3\ten lille hund"]))))
-
-(deftest lexicon->freqs-test
-  (let [freqs (parse/lexicon->freqs (golden-lines "lexdecode.tsv"))]
-    (testing "entries come out sorted by frequency, in the group shape"
-      (is (= [{:values ["."] :freq 6} {:values ["hund"] :freq 5}]
-             (take 2 freqs)))
-      (is (= 32 (count freqs)))
-      (is (apply >= (map :freq freqs))))))
-
-(deftest s-decode->freqs-test
-  (testing "values come out sorted by value with their region counts"
-    (is (= [{:values ["Hverdag"] :freq 1}
-            {:values ["Samtale"] :freq 1}
-            {:values ["Vejret"] :freq 1}]
-           (parse/s-decode->freqs (golden-lines "s-decode.txt")))))
-  (testing "repeated values are counted and blank lines skipped"
-    (is (= [{:values ["S"] :freq 2} {:values ["V"] :freq 1}]
-           (parse/s-decode->freqs ["S" "V" "S" ""])))))
-
-(deftest describe->map-test
-  (let [stats (parse/describe->map (golden-lines "describe.txt"))]
-    (is (= "PROBE" (:name stats)))
-    (is (= 47 (:size stats)))
-    (is (= "utf8" (:charset stats)))
-    (testing "an empty description is absent, not blank"
-      (is (not (contains? stats :description))))
-    (testing "per-attribute statistics keep registry order"
-      (is (= [{:name :word :tokens 47 :types 36}
-              {:name :pos :tokens 47 :types 15}
-              {:name :lemma :tokens 47 :types 32}]
-             (:p-attrs stats)))
-      (is (= {:name :s :regions 6 :values? false}
-             (first (:s-attrs stats))))
-      (is (= [:s_id :text_id :text_title :text_year]
-             (->> (:s-attrs stats) (filter :values?) (map :name)))))
-    (is (= [] (:a-attrs stats))))
-  (testing "an attribute without data keeps its name and no counts"
-    (is (= [{:name :lemma}]
-           (:p-attrs (parse/describe->map
-                      ["p-ATT lemma                       NO DATA"])))))
-  (testing "a description and alignment attributes are captured"
-    (let [stats (parse/describe->map
-                 ["description:    Danske folkeviser (dev)"
-                  "a-ATT viser_probe               3 alignment blocks"])]
-      (is (= "Danske folkeviser (dev)" (:description stats)))
-      (is (= [{:name :viser_probe :blocks 3}] (:a-attrs stats))))))
 
 (deftest info->map-test
   (let [info (parse/info->map (golden-lines "info.txt"))]
@@ -143,12 +110,3 @@
   (testing "a TAB inside the value counted against stays intact"
     (is (= [{:values ["hund" "bad\ttitle"] :freq 7}]
            (parse/group-pairs->freqs ["bad\ttitle\thund\t7"])))))
-
-(deftest s-decode->sizes-test
-  (testing "each value gets the tokens of its regions"
-    (is (= {"Hverdag" 20 "Vejret" 19 "Samtale" 8}
-           (parse/s-decode->sizes (golden-lines "s-decode-regions.txt")))))
-  (testing "repeated values add up, blank values and lines are skipped"
-    (is (= {"S" 5 "V" 1}
-           (parse/s-decode->sizes ["0\t2\tS" "3\t3\tV" "4\t5\tS" "6\t7\t"
-                                   ""])))))

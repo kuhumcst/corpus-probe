@@ -1,10 +1,10 @@
-(ns dk.cst.corpus-probe.i18n-scan-test
+(ns dk.cst.corpus-probe.i18n.scan-test
   "Guards that the committed template and the bundled translations still
   describe the strings the source actually shows."
   (:require [clojure.test :refer [deftest is testing]]
             [dk.cst.corpus-probe.i18n :as i18n]
-            [dk.cst.corpus-probe.i18n-scan :as scan]
-            [dk.cst.corpus-probe.translations :as translations]))
+            [dk.cst.corpus-probe.i18n.po :as po]
+            [dk.cst.corpus-probe.i18n.scan :as scan]))
 
 (def extracted
   "Every UI string the source names, scanned once: reading and parsing
@@ -31,7 +31,7 @@
 
 (deftest template-drift-test
   (is (= @extracted
-         (set (keys (translations/read-po "i18n/template.pot"))))
+         (set (keys (po/read-po "i18n/template.pot"))))
       "the template is stale; regenerate it with: clojure -M:i18n"))
 
 (deftest translations-complete-test

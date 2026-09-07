@@ -1,11 +1,13 @@
 (ns dk.cst.corpus-probe.views.layout-test
   (:require [clojure.test :refer [deftest is testing]]
+            [dk.cst.corpus-probe.hiccup :refer [deep]]
             [dk.cst.corpus-probe.i18n :as i18n]
-            [dk.cst.corpus-probe.views.hiccup :refer [da deep en]]
+            [dk.cst.corpus-probe.test.hiccup :refer [da en]]
+            [dk.cst.corpus-probe.url :as url]
             [dk.cst.corpus-probe.views.layout :as layout]))
 
 (def nav
-  "The site navigation of a search page, as api/nav-hrefs builds it."
+  "The site navigation of a search page, as url/nav-hrefs builds it."
   {:search          "/search?q=hund#results"
    :corpora-heading "/corpora"
    :glossary        "/glossary"})
@@ -20,7 +22,7 @@
     (testing "a preference is set, not navigated to: no URL names a language"
       (is (= :form.languages (first html)))
       (is (= "post" (:method (second html))))
-      (is (= layout/preferences-path (:action (second html))))
+      (is (= url/preferences (:action (second html))))
       (is (not (some #(and (string? %) (.contains ^String % "lang="))
                      (deep html)))))
     (testing "the language in use is shown, so the reader can see it"

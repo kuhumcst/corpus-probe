@@ -13,8 +13,11 @@
   errors and an <aside> for the inspector, so the document is meaningful
   without the stylesheet."
   (:require [clojure.string :as str]
+            [dk.cst.corpus-probe.cqp :as cqp]
             [dk.cst.corpus-probe.i18n :as i18n]
             [dk.cst.corpus-probe.query :as query]
+            [dk.cst.corpus-probe.query.mode :as mode]
+            [dk.cst.corpus-probe.query.tokens :as tokens]
             [dk.cst.corpus-probe.url :as url]
             [dk.cst.corpus-probe.views.controls :as controls]
             [dk.cst.corpus-probe.views.corpus :as corpus-views]
@@ -22,15 +25,12 @@
             [dk.cst.corpus-probe.views.layout :as layout]
             [dk.cst.corpus-probe.views.tree :as tree]))
 
-(def form-id
-  "The id of the search form, so a control that acts on a result can sit
-  beside the result and still submit the search that produced it."
-  "search-form")
-
 (defn sort-label
-  "What the sort mode `value` (see dk.cst.corpus-probe.commands/sort-modes)
-  is called, in `ui`; a mode naming a positional attribute (see
-  dk.cst.corpus-probe.commands/sort-attr) is the match by that attribute.
+  "What the sort mode `value` (see
+  dk.cst.corpus-probe.cwb.command/sort-modes) is called, in `ui`; a mode
+  naming a positional attribute (see
+  dk.cst.corpus-probe.cwb.command/sort-attr) is the match by that
+  attribute.
 
   Naming them here rather than in the commands namespace keeps the CQP
   command table free of anything the interface decides."
@@ -46,7 +46,7 @@
 
 (defn sort-control
   "The sort control of the concordance in `ui`: a select over
-  the `sort-modes` values (see dk.cst.corpus-probe.commands/sort-modes)
+  the `sort-modes` values (see dk.cst.corpus-probe.cwb.command/sort-modes)
   with `sort` chosen and each named by `sort-label`.
 
   It names the form it submits with, so it can sit beside the table it
@@ -56,7 +56,7 @@
   (list
    [:label {:for "sort"} (i18n/tr ui "Sort")]
    " "
-   [:select {:id   "sort" :name "sort" :form form-id
+   [:select {:id   "sort" :name "sort" :form url/form-id
              :on   {:change [:apply-view]}}
     (for [value sort-modes]
       [:option {:value value :selected (= value sort)}
@@ -83,7 +83,7 @@
   (list
    [:label {:for "sample"} (i18n/tr ui "Sample")]
    " "
-   [:select {:id   "sample" :name "sample" :form form-id
+   [:select {:id   "sample" :name "sample" :form url/form-id
              :on   {:change [:apply-view]}}
     [:option {:value "" :selected (nil? sample)} (i18n/tr ui "all hits")]
     (for [n (sort (cond-> (set sample-sizes) sample (conj sample)))]
@@ -93,9 +93,9 @@
 (def context-widths
   "The widths of context the concordance offers, in display order: a few
   numbers of words, then the units of text a corpus marks (see
-  dk.cst.corpus-probe.search/units), one region of which is shown either
-  side. The first is the usual width (see
-  dk.cst.corpus-probe.commands/kwic-defaults). A hand-written URL may name
+  dk.cst.corpus-probe.cwb.corpus/units), one region of which is shown
+  either side. The first is the usual width (see
+  dk.cst.corpus-probe.search.batch/kwic-defaults). A hand-written URL may name
   any other number of words, which `context-control` then shows beside
   these."
   [5 10 20 :sentence :paragraph])
@@ -124,18 +124,12 @@
     (list
      [:label {:for "context"} (i18n/tr ui "Context")]
      " "
-     [:select {:id   "context" :name "context" :form form-id
+     [:select {:id   "context" :name "context" :form url/form-id
                :on   {:change [:apply-view]}}
       (for [width widths]
         [:option {:value    (if (keyword? width) (name width) width)
                   :selected (= width context)}
          (context-label ui width)])])))
-
-(def near-distance
-  "How many words away a nearby word may be unless the reader says: the
-  distance of the manual's own example (section 3.7), and the window a
-  collocation is usually counted in."
-  5)
 
 (def near-distances
   "The distances the near control offers, in display order."
@@ -154,21 +148,21 @@
   the sort does. A distance the list does not hold is offered beside
   them, as a sample size is."
   [ui {:keys [word distance]}]
-  (let [distance (or distance near-distance)]
+  (let [distance (or distance (parse-long (:distance url/defaults)))]
     (list
      [:label {:for "near"} (i18n/tr ui "Near")]
      " "
      [:input {:id           "near"
               :name         "near"
               :type         "search"
-              :form         form-id
+              :form         url/form-id
               :value        (or word "")
               :autocomplete "off"
               :on           {:change [:apply-view]}}]
      " "
      [:label {:for "distance"} (i18n/tr ui "within")]
      " "
-     [:select {:id   "distance" :name "distance" :form form-id
+     [:select {:id   "distance" :name "distance" :form url/form-id
                :on   {:change [:apply-view]}}
       (for [n (sort (conj (set near-distances) distance))]
         [:option {:value n :selected (= n distance)}
@@ -191,7 +185,8 @@
   [ui client?]
   (when-not client?
     (list " " [:noscript
-               [:button {:type "submit" :form form-id} (i18n/tr ui "Apply")]])))
+               [:button {:type "submit" :form url/form-id}
+                (i18n/tr ui "Apply")]])))
 
 (defn view-controls
   "The controls of a result in `ui`: the `reading` ones (hiccup), which
@@ -220,11 +215,6 @@
          [:summary (i18n/tr ui "Narrow the result")]
          [:p narrowing (apply-button ui client?)]])]))
 
-(def filter-prefix
-  "The query param prefix naming a metadata filter: the prefix followed by
-  the attribute name, as in `f.text_year`, one param per chosen value."
-  "f.")
-
 (defn filter-phrase
   "The metadata `filter` (a map of attribute to the set of values
   accepted) and the `patterns` beside it (a map of attribute to the
@@ -250,7 +240,7 @@
 
 (defn position-label
   "What the `position` of a match (see
-  dk.cst.corpus-probe.commands/positions) is called, in `ui`, worded to
+  dk.cst.corpus-probe.cwb.command/positions) is called, in `ui`, worded to
   follow an attribute name; the position itself for one nothing names."
   [ui position]
   (case position
@@ -301,7 +291,7 @@
   [:li (cond-> {} hidden? (assoc :hidden true))
    [:label
     [:input {:type    "checkbox"
-             :name    (str filter-prefix (name attr))
+             :name    (str (:value url/filter-prefixes) (name attr))
              :value   value
              :checked (contains? selected id)
              :on      {:change [:toggle-filter-values [attr [value]]]}}]
@@ -346,12 +336,15 @@
                         :pattern   "-?[0-9]*"
                         :title     (i18n/tr ui "a whole number")}))]
     [:p.pattern (cond-> {} hidden? (assoc :hidden true))
-     [:label (i18n/tr ui "pattern") " " (field "fp." pattern {:type "search"})]
+     [:label (i18n/tr ui "pattern") " "
+      (field (:pattern url/filter-prefixes) pattern {:type "search"})]
      (when (numeric-values? rows)
        (list " "
-             [:label (i18n/tr ui "from") " " (bound "ff." from)]
+             [:label (i18n/tr ui "from") " "
+              (bound (:from url/filter-prefixes) from)]
              " "
-             [:label (i18n/tr ui "to") " " (bound "ft." to)]))]))
+             [:label (i18n/tr ui "to") " "
+              (bound (:to url/filter-prefixes) to)]))]))
 
 (defn pairs
   "`selected`, each metadata attribute mapped to the values chosen under
@@ -498,7 +491,7 @@
   dk.cst.corpus-probe.query/->cqp), which is what the CQP mode shows
   too."
   [ui {:keys [q] :as params}]
-  (case (url/mode params)
+  (case (mode/mode params)
     "list"     (let [n (count (query/words q))]
                  (str n " " (i18n/trn ui "word" "words" n)))
     "extended" (query/->cqp (query/of params))
@@ -516,7 +509,7 @@
   more for every line break in the text, the empty line a Shift+Enter
   has just opened included, up to eight, and by nothing else (the
   stylesheet takes the handle away); the text is read by its shape
-  (see dk.cst.corpus-probe.url/shape and `reading-line`). On the client
+  (see dk.cst.corpus-probe.query.mode/shape and `reading-line`). On the client
   Enter submits the form and Shift+Enter starts a line (see
   dk.cst.corpus-probe.ui/handle!). No visible label: a field with a
   search button beside it needs
@@ -572,7 +565,7 @@
                 [:p.cqp {:id reading-id} reading " · " (i18n/tr ui "As CQP")
                  ": " [:code (query/->cqp query)]])
         n     (fn [xs] (i18n/group-digits ui (count xs)))]
-    (case (url/mode params)
+    (case (mode/mode params)
       "cqp"  [:p.cqp {:id reading-id} (i18n/tr ui "Read as CQP")]
       "list" (let [words (:conditions (first (:tokens query)))]
                (when (next words)
@@ -619,7 +612,7 @@
 
 (defn operator-label
   "What the operator `op` of an extended-search token is called, in `ui`
-  (see dk.cst.corpus-probe.url/operators); equality for one it does not
+  (see dk.cst.corpus-probe.query.tokens/operators); equality for one it does not
   know."
   [ui op]
   (case op
@@ -642,7 +635,7 @@
 (defn condition-row
   "One condition of the extended search in `ui`: condition `c`, counted
   from one, holding `condition` (see
-  dk.cst.corpus-probe.url/form-tokens), of `token`, the facts of the
+  dk.cst.corpus-probe.query.tokens/form-tokens), of `token`, the facts of the
   token it belongs to: its number `:i`, the `:attrs` a condition may
   name (see `attribute-options`), the `:value-lists` some of them offer
   (see `value-list-id`), `:any?` when the token's first condition
@@ -652,7 +645,7 @@
   it is not the first.
 
   Its fields carry the token's number and, after the first, its own
-  (see dk.cst.corpus-probe.url/token-key). The value is required when
+  (see dk.cst.corpus-probe.query.tokens/token-key). The value is required when
   `required?`. Under `:any?` every control but that first operator is
   disabled: an any-word token has nothing else to say, and without the
   client they are as the search was submitted. Every control dispatches
@@ -662,7 +655,7 @@
   them decide the CQP line under the tokens (see `cqp-line`)."
   [ui {:keys [i attrs value-lists any? removable?]} required? c
    {:keys [id attr op v ci join]}]
-  (let [param  (fn [field] (url/token-key i c field))
+  (let [param  (fn [field] (tokens/token-key i c field))
         first? (= 1 c)
         op     (or op "is")
         dead?  (and any? (not first?))
@@ -673,7 +666,7 @@
                        :aria-label (i18n/tr ui "joined by")
                        :disabled   dead?
                        :on         {:change [:set-condition [i id :join]]}}
-              (for [j url/joins]
+              (for [j tokens/joins]
                 [:option {:value j :selected (= j (or join "and"))}
                  (case j "or" (i18n/tr ui "or") (i18n/tr ui "and"))])]
              " "))
@@ -687,7 +680,7 @@
                :aria-label (i18n/tr ui "operator")
                :disabled   dead?
                :on         {:change [:set-condition [i id :op]]}}
-      (for [o (cond->> url/operators (not first?) (remove #{"any"}))]
+      (for [o (cond->> tokens/operators (not first?) (remove #{"any"}))]
         [:option {:value o :selected (= o op)} (operator-label ui o)])]
      " "
      [:input (cond-> {:type         "text"
@@ -717,7 +710,7 @@
 (defn token-row
   "One token of the extended search in `ui`: token `i`, counted from
   one, which is the number its fields carry in the URL, holding `token`
-  (see dk.cst.corpus-probe.url/form-tokens) over `attrs` and
+  (see dk.cst.corpus-probe.query.tokens/form-tokens) over `attrs` and
   `value-lists` (see `condition-row`). A group of its own, named by
   number: its conditions as an ordered list, since each joins the ones
   before it, then the repeat as least and most, in a group named for
@@ -732,7 +725,7 @@
   can be taken away while the token has another."
   [ui attrs value-lists client? required? i
    {:keys [id conditions start end] lo :min hi :max}]
-  (let [param      (fn [field] (url/token-key i 1 field))
+  (let [param      (fn [field] (tokens/token-key i 1 field))
         conditions (or (seq conditions) [{:id 1}])
         any?       (= "any" (:op (first conditions)))
         token      {:i           i
@@ -798,15 +791,15 @@
 
   When `required?`, every token must be filled but that blank last one,
   which only a reader without the client sees: the client drops it (see
-  dk.cst.corpus-probe.ui/own-rows) and adds tokens by a button, so with
-  it every token must be filled, and a token added and left empty is
-  reported rather than silently dropped. A lone token must always be, or
-  an extended search of nothing could be sent.
+  dk.cst.corpus-probe.query.tokens/own-rows) and adds tokens by a button,
+  so with it every token must be filled, and a token added and left empty
+  is reported rather than silently dropped. A lone token must always be,
+  or an extended search of nothing could be sent.
 
   Each list item is keyed by the token's :id rather than its place, so
   that taking a token away leaves what was typed in the ones after it."
   [ui attrs value-lists client? required? tokens]
-  (let [rows (or (seq tokens) [(url/blank-token 1)])
+  (let [rows (or (seq tokens) [(tokens/blank-token 1)])
         n    (count rows)]
     [:fieldset.tokens {:aria-label (i18n/tr ui "Extended search")}
      (for [[attr values] (sort value-lists)]
@@ -823,7 +816,7 @@
 
 (defn unit-label
   "What the unit of text `unit` a search is kept within is called, in
-  `ui` (see dk.cst.corpus-probe.url/units)."
+  `ui` (see dk.cst.corpus-probe.cqp/units)."
   [ui unit]
   (case unit
     "paragraph" (i18n/tr ui "paragraph")
@@ -832,12 +825,12 @@
 
 (defn within-control
   "The control choosing the unit of text a search of several tokens is
-  kept within, in `ui`: a select over the dk.cst.corpus-probe.url/units
+  kept within, in `ui`: a select over the dk.cst.corpus-probe.cqp/units
   with `within` chosen, the sentence when it names none (see
   dk.cst.corpus-probe.query/within)."
   [ui within]
   [:select {:name "within" :id "within"}
-   (for [unit url/units]
+   (for [unit (map (comp name first) cqp/units)]
      [:option {:value unit :selected (= unit (or within "sentence"))}
       (unit-label ui unit)])])
 
@@ -855,7 +848,7 @@
 (defn match-label
   "What the `match` param value is called, in `ui`: how much of the
   form a simple search must cover (see
-  dk.cst.corpus-probe.query/match-op); the whole word for a value
+  dk.cst.corpus-probe.query.params/match-op); the whole word for a value
   naming none."
   [ui match]
   (case match
@@ -864,14 +857,10 @@
     "infix"  (i18n/tr ui "part of word")
     (i18n/tr ui "whole word")))
 
-(def match-values
-  "The values of the match param, in display order: the whole form
-  first, which is the one no URL carries."
-  ["" "prefix" "suffix" "infix"])
-
 (defn match-control
   "The control choosing how much of the form a simple search must
-  cover, in `ui`: a select over the `match-values`, each named by
+  cover, in `ui`: a select over
+  dk.cst.corpus-probe.query.tokens/match-ops, each named by
   `match-option-label`, with `match` chosen and the whole form when it
   names none; named for a screen reader only, since it stands in a
   sentence (see `search-form`).
@@ -880,7 +869,7 @@
   meant any part of the form, and nothing said so."
   [ui match]
   [:select {:name "match" :aria-label (i18n/tr ui "match")}
-   (for [value match-values]
+   (for [value tokens/match-ops]
      [:option {:value value :selected (= value (or match ""))}
       (match-option-label ui value)])])
 
@@ -930,12 +919,12 @@
 (defn form-query
   "The query the search form holds (see dk.cst.corpus-probe.query/of):
   that of its `params`, or, in the extended mode, of its `tokens` as the
-  client keeps them (see dk.cst.corpus-probe.url/rows->params), kept
+  client keeps them (see dk.cst.corpus-probe.query.tokens/rows->params), kept
   within the unit the params name."
   [params tokens]
-  (let [mode (url/mode params)]
+  (let [mode (mode/mode params)]
     (query/of (if (= "extended" mode)
-                (assoc (url/rows->params tokens)
+                (assoc (tokens/rows->params tokens)
                        :mode mode :within (:within params))
                 params))))
 
@@ -956,7 +945,7 @@
     [:p.cqp (i18n/tr ui "As CQP") ": " [:code cqp]]))
 
 (defn mode-label
-  "What the query `mode` (see dk.cst.corpus-probe.url/modes) is called,
+  "What the query `mode` (see dk.cst.corpus-probe.query.mode/modes) is called,
   in `ui`, as a word."
   [ui mode]
   (case mode
@@ -983,7 +972,7 @@
   the query, the tokens, or the option's own label; nil for a key with
   no name."
   [ui k]
-  (if (url/token-key? k)
+  (if (tokens/token-key? k)
     (i18n/tr ui "the tokens")
     (case k
       :q      (i18n/tr ui "the query")
@@ -1039,8 +1028,8 @@
 
   The form radios dispatch `:set-mode`, so choosing the extended form
   swaps the field for the tokens without a round trip. Which options are
-  offered at all is the row of dk.cst.corpus-probe.url/fields for the
-  mode the text is read in (see dk.cst.corpus-probe.url/shape), on both
+  offered at all is the row of dk.cst.corpus-probe.query.mode/fields for the
+  mode the text is read in (see dk.cst.corpus-probe.query.mode/shape), on both
   sides; without the client all of it is as the search was submitted.
 
   The query is required, except when the form is submitted from the
@@ -1072,8 +1061,8 @@
    action extra]
   (let [{:keys [corpus q in ci match within]} params
         {:keys [corpora values]} lists
-        form    (url/form params)
-        mode    (url/mode params)
+        form    (mode/form params)
+        mode    (mode/mode params)
         ;; a control the mode does not read is taken away rather than
         ;; shown dead: a row of greyed controls is something to read past
         ;; before reaching one that can be used, and nothing is lost by
@@ -1081,10 +1070,10 @@
         ;; params and comes back with the mode that reads it. A control
         ;; that is not there is not submitted either, so nothing about a
         ;; simple search rides along with a CQP one
-        live?   (fn [k] (url/reads? mode k))
+        live?   (fn [k] (mode/reads? mode k))
         button  [:button {:type "submit"} (i18n/trx ui "button" "Search")]]
     [:search
-     [:form.search {:id form-id :method "get" :action action}
+     [:form.search {:id url/form-id :method "get" :action action}
       extra
       ;; the query row: the field or the tokens, and the button, which
       ;; belongs against the field it submits rather than at the foot of
@@ -1116,7 +1105,7 @@
        [:fieldset.modes
         [:legend (i18n/trx ui "legend" "Query type")]
         [:p (interpose " "
-                       (for [m url/forms]
+                       (for [m mode/forms]
                          [:label [:input {:type    "radio" :name "mode"
                                           :value   m
                                           :checked (= m form)
@@ -1220,7 +1209,7 @@
   search quoted, being a word spoken of rather than used."
   [ui params]
   (let [phrase (query-phrase ui params)]
-    (case (url/mode params)
+    (case (mode/mode params)
       ("cqp" "extended") [:code phrase]
       "list"             phrase
       [:q phrase])))
@@ -1270,7 +1259,7 @@
   phrases in `ui`, each naming what one control holds: the attribute a
   simple search of `params` matched and the part of the form, when not
   the usual ones and when the mode read them (see
-  dk.cst.corpus-probe.url/reads?); the corpora searched, those still
+  dk.cst.corpus-probe.query.mode/reads?); the corpora searched, those still
   being counted among them; the metadata filter; the narrowings; the
   sample. For the line under the heading (see `results-region`), where
   the heading says what was found and this what was asked."
@@ -1280,7 +1269,7 @@
         ;; an option the mode does not read may still ride in the params,
         ;; as memory for the form's disabled control; the search never saw
         ;; it, so the line must not say it did
-        reads?   (partial url/reads? (url/mode params))]
+        reads?   (partial mode/reads? (mode/mode params))]
     (remove nil?
             [(when (and (reads? :in) (not (contains? #{nil "" "word"} in)))
                (list (i18n/tr ui "attribute") " " [:code in]))
@@ -1441,7 +1430,7 @@
 
 (defn view-label
   "What the result view `k` is called, in `ui` (see
-  dk.cst.corpus-probe.api/result-views): the concordance is KWIC, as
+  dk.cst.corpus-probe.url/result-views): the concordance is KWIC, as
   CWB and KORP call it, expanded but not linked, since the label is
   itself a link."
   [ui k]
@@ -1452,7 +1441,7 @@
 
 (defn view-switch
   "The switch between the views of one result in `ui`: each of
-  `hrefs` ([view url], see dk.cst.corpus-probe.api/view-hrefs) as a
+  `hrefs` ([view url], see dk.cst.corpus-probe.url/view-hrefs) as a
   link named by `view-label`, `view` marked as the one being shown; nil
   without hrefs.
 

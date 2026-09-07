@@ -4,27 +4,15 @@
   (:require [babashka.fs :as fs]
             [clojure.test :refer [deftest is testing use-fixtures]]
             [dk.cst.corpus-probe.cache :as cache]
-            [dk.cst.corpus-probe.cqp :as cqp]
-            [dk.cst.corpus-probe.cqp-test :refer [ctx when-cwb]]
+            [dk.cst.corpus-probe.cwb :as cwb]
+            [dk.cst.corpus-probe.cwb.command :as command]
             [dk.cst.corpus-probe.frequency :as frequency]
-            [dk.cst.corpus-probe.commands :as commands]
             [dk.cst.corpus-probe.query :as query]
             [dk.cst.corpus-probe.search :as search]
-            [taoensso.telemere :as t]
-            [dk.cst.corpus-probe.tools-test :refer [with-value-limit]]))
+            [dk.cst.corpus-probe.test.cwb
+             :refer [ctx reset-cache! when-cwb]]))
 
-(use-fixtures :each
-  ;; the count memo and the reaping timestamp are both process-wide: one
-  ;; test's count would otherwise answer the next one's question, and a
-  ;; test that reaps would silence the reaping of every test after it
-  (fn [f]
-    (cache/forget-counts!)
-    (reset! cache/last-reap 0)
-    (reset! cache/in-flight {})
-    (f)
-    (cache/forget-counts!)
-    (reset! cache/last-reap 0)
-    (reset! cache/in-flight {})))
+(use-fixtures :each reset-cache!)
 
 (deftest kwic-test
   (when-cwb
@@ -61,17 +49,6 @@
      (is (= "[] []" (search/corpus-query! ctx "PROBE" "[] [] within p" nil)))
      (is (= "[] [] within text"
             (search/corpus-query! ctx "PROBE" "[] []" :text))))))
-
-(deftest unit-attr-test
-  (let [attrs (fn [& names]
-                (mapv (fn [n] {:type :structural :name n}) names))]
-    (testing "a sentence is s in CWB's own corpora, sentence at KU"
-      (is (= :s (search/unit-attr (attrs :text :s) :sentence)))
-      (is (= :sentence (search/unit-attr (attrs :sentence :text) :sentence))))
-    (testing "a corpus marking no sentences restricts nothing"
-      (is (nil? (search/unit-attr (attrs :text) :sentence))))
-    (testing "a positional attribute by the same name does not count"
-      (is (nil? (search/unit-attr [{:type :positional :name :s}] :sentence))))))
 
 (deftest within-test
   (when-cwb
@@ -290,7 +267,7 @@
 (deftest context-expansion-test
   (when-cwb
    (testing "a hit re-fetched by position returns wider context"
-     (let [q (commands/position-query 9 9)
+     (let [q (command/position-query 9 9)
            {:keys [hits size]} (search/kwic! ctx "PROBE" q
                                              {:context      50
                                               :rows         [0 0]
@@ -309,7 +286,7 @@
    (testing "corpus-sizes! keeps the order and stops at the deadline"
      (is (= ["VISER" "PROBE"]
             (map :corpus (search/corpus-sizes! ctx ["VISER" "PROBE"] "[]"
-                                               (search/deadline ctx) {}))))
+                                               (cwb/deadline ctx) {}))))
      (is (= [:timeout :timeout]
             (map (comp :type :error)
                  (search/corpus-sizes! ctx ["VISER" "PROBE"] "[]" 0 {})))))))
@@ -367,30 +344,6 @@
        (let [table (frequency/frequency-table! ctx ["VISER"] "" :lemma
                                             {:filter {:text_year #{"1591"}}})]
          (is (= [{:corpus "VISER" :tokens 19 :size 19}] (:counts table))))))))
-
-(deftest error-map-test
-  (testing "a CQP error travels as it is"
-    (is (= {:type :cqp :message "x"}
-           (search/error-map (ex-info "failed" {:error {:type :cqp
-                                                        :message "x"}})))))
-  (testing "one of our own guards is a rejection with its message"
-    (is (= {:type :rejected :message "Invalid corpus name"}
-           (search/error-map (ex-info "Invalid corpus name" {})))))
-  (testing "any other exception is internal, its message withheld"
-    (is (= {:type :internal}
-           (t/with-min-level :fatal
-             (search/error-map (java.io.IOException. "/srv/secret")))))))
-
-(deftest pmap-n-test
-  (is (= [1 2 3 4 5] (search/pmap-n 2 inc (range 5))))
-  (testing "at most n calls run at once"
-    (let [running (atom 0) peak (atom 0)]
-      (dorun (search/pmap-n 3 (fn [_]
-                                (swap! peak max (swap! running inc))
-                                (Thread/sleep 20)
-                                (swap! running dec))
-                            (range 40)))
-      (is (<= @peak 3)))))
 
 (deftest concordance-test
   (when-cwb
@@ -471,28 +424,6 @@
          (is (= 0 (search/size! ctx "PROBE" "\"nonesuch\"" opts)))
          (is (= 0 (search/known-size ctx "PROBE" "\"nonesuch\"" opts))))))))
 
-(def da-collator
-  "The collator of a Danish installation, as the handlers build it."
-  (delay (search/->collator {:sort-locale "da_DK.UTF-8"})))
-
-(deftest locale-test
-  (testing "an LC_ALL value names its language and territory"
-    (is (= "da" (.getLanguage (search/locale "da_DK.UTF-8"))))
-    (is (= "DK" (.getCountry (search/locale "da_DK.UTF-8"))))
-    (is (= "en" (.getLanguage (search/locale "en_US")))))
-  (testing "a value naming no locale is the root one"
-    (is (= java.util.Locale/ROOT (search/locale "C")))
-    (is (= java.util.Locale/ROOT (search/locale "")))
-    (is (= java.util.Locale/ROOT (search/locale nil)))))
-
-(deftest collator-test
-  (testing "Danish sorts æ, ø and å after z, not among the vowels"
-    (is (= ["and" "brød" "zoo" "ægte" "øl" "århus"]
-           (sort @da-collator
-                 ["øl" "ægte" "zoo" "århus" "and" "brød"]))))
-  (testing "an installation with no sort locale still sorts"
-    (is (= ["a" "z"] (sort (search/->collator {}) ["z" "a"])))))
-
 (deftest error-reporting-test
   (when-cwb
    (testing "a bad query throws with the CQP error attached"
@@ -514,9 +445,9 @@
 (deftest interpolation-guard-test
   (testing "hostile corpus names are rejected before any command is built"
     (is (thrown-with-msg? Exception #"Invalid corpus name"
-                          (search/corpus-ctx {} "PROBE; exit")))
+                          (search/size! {} "PROBE; exit" "[]")))
     (is (thrown-with-msg? Exception #"Invalid corpus name"
-                          (search/corpus-ctx {} "probe"))))
+                          (search/kwic! {} "probe" "[]"))))
   (when-cwb
    (testing "attribute names outside the corpus inventory are rejected"
      (let [canary "/tmp/corpus-probe-pwned-attr"]
@@ -585,37 +516,6 @@
          (is (= 5 (:size (search/kwic! broken "PROBE"
                                        "\"hund.*\" %c" {})))))))))
 
-(deftest running-ctx-test
-  (testing "a batch that runs the query gets the longer timeout"
-    (is (= 900000
-           (:timeout-ms (search/running-ctx {:timeout-ms       60000
-                                             :query-timeout-ms 900000})))))
-  (testing "with none configured, every batch keeps the ordinary timeout"
-    (is (= 60000 (:timeout-ms (search/running-ctx {:timeout-ms 60000}))))
-    (is (nil? (:timeout-ms (search/running-ctx {}))))))
-
-(deftest within-deadline-test
-  (let [soon (+ (System/currentTimeMillis) 5000)
-        ctx  (search/within-deadline {:timeout-ms       60000
-                                      :query-timeout-ms 300000}
-                                     soon)]
-    (testing "no batch may outlive the budget the search was given"
-      (is (<= (:timeout-ms ctx) 5000))
-      (is (<= (:query-timeout-ms ctx) 5000))))
-  (testing "a deadline further off than the timeouts leaves them alone"
-    (let [far (+ (System/currentTimeMillis) 600000)
-          ctx (search/within-deadline {:timeout-ms       60000
-                                       :query-timeout-ms 300000} far)]
-      (is (= 60000 (:timeout-ms ctx)))
-      (is (= 300000 (:query-timeout-ms ctx)))))
-  (testing "a deadline already past still leaves a floor to fail in"
-    (let [ctx (search/within-deadline {:timeout-ms 60000}
-                                      (- (System/currentTimeMillis) 10000))]
-      (is (= 1000 (:timeout-ms ctx)))))
-  (testing "timeouts that were never configured are not invented"
-    (let [soon (+ (System/currentTimeMillis) 5000)]
-      (is (= {} (search/within-deadline {} soon))))))
-
 (deftest size-memo-test
   (when-cwb
    (let [q "\"hund.*\" %c"]
@@ -679,8 +579,8 @@
    (let [seen (atom [])
          ctx  (assoc (cache-ctx) :timeout-ms 60000 :query-timeout-ms 300000)
          q    "\"hund.*\" %c"]
-     (with-redefs [cqp/run-batch!
-                   (let [f cqp/run-batch!]
+     (with-redefs [cwb/run-batch!
+                   (let [f cwb/run-batch!]
                      (fn [c cmds] (swap! seen conj (:timeout-ms c))
                        (f c cmds)))]
        (search/kwic! ctx "PROBE" q {})
@@ -964,7 +864,7 @@
 (deftest export-corpora-test
   (when-cwb
    (let [exports (search/export-corpora! ctx ["PROBE" "NOSUCH" "VISER"]
-                                         "\"hund.*\" %c" (search/deadline ctx)
+                                         "\"hund.*\" %c" (cwb/deadline ctx)
                                          6 {})]
      (testing "corpus by corpus, a failing one carrying its error"
        (is (= ["PROBE" "NOSUCH" "VISER"] (map :corpus exports)))
@@ -974,7 +874,7 @@
        (is (= 1 (count (:rows (nth exports 2)))))
        (is (= 1 (count (search/export-corpora! ctx ["PROBE" "VISER"]
                                                "\"hund.*\" %c"
-                                               (search/deadline ctx) 5 {})))))
+                                               (cwb/deadline ctx) 5 {})))))
      (testing "and none once the deadline has passed"
        (is (= [{:type :timeout}]
               (map :error (search/export-corpora! ctx ["PROBE"] "[]" 0 5

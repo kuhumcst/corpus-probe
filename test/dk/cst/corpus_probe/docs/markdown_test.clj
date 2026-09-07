@@ -1,6 +1,6 @@
-(ns dk.cst.corpus-probe.markdown-test
+(ns dk.cst.corpus-probe.docs.markdown-test
   (:require [clojure.test :refer [deftest is testing]]
-            [dk.cst.corpus-probe.markdown :as markdown]))
+            [dk.cst.corpus-probe.docs.markdown :as markdown]))
 
 (deftest definition-list-test
   (testing "a term ending in a colon, its definition indented under it"

@@ -1,16 +1,7 @@
 (ns dk.cst.corpus-probe.i18n-test
   (:require [clojure.test :refer [deftest is testing]]
             [dk.cst.corpus-probe.i18n :as i18n]
-            #?(:clj [dk.cst.corpus-probe.translations :as translations])))
-
-(def en
-  "The lookup context of the source language, in which every string is
-  its own msgid."
-  (i18n/->ui "en"))
-
-(def da
-  "The lookup context of the bundled Danish translation."
-  (i18n/->ui "da"))
+            [dk.cst.corpus-probe.test.hiccup :refer [da en]]))
 
 (deftest tr-test
   (testing "the source language is the msgid, so it needs no table"
@@ -74,14 +65,7 @@
     (doseq [[lang table] i18n/tables
             [msgid msgstr] table
             s (if (vector? msgstr) msgstr [msgstr])]
-      (is (not= "" s) (str lang " leaves " (pr-str msgid) " empty"))))
-  #?(:clj
-     (testing "a msgid holding a quote survives the PO round trip, which
-               the reader unescapes (see
-               dk.cst.corpus-probe.translations/unescape)"
-       (is (= "\"x\" eller [lemma = \"x\"]"
-              (get (translations/read-po "dk/cst/corpus_probe/quoted.po")
-                   "\"x\" or [lemma = \"x\"]"))))))
+      (is (not= "" s) (str lang " leaves " (pr-str msgid) " empty")))))
 
 (deftest group-digits-test
   (testing "English groups with a comma and points its decimals"

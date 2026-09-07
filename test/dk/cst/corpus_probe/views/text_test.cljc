@@ -1,6 +1,7 @@
 (ns dk.cst.corpus-probe.views.text-test
   (:require [clojure.test :refer [deftest is testing]]
-            [dk.cst.corpus-probe.views.hiccup :refer [da deep en]]
+            [dk.cst.corpus-probe.hiccup :refer [deep]]
+            [dk.cst.corpus-probe.test.hiccup :refer [da en]]
             [dk.cst.corpus-probe.views.text :as text]))
 
 (def hverdag

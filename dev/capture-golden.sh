@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Capture byte-exact cqp outputs from the dev corpus into test/resources/golden/.
-# The parsers in dk.cst.corpus-probe.parse are tested against these files, so
-# re-run only deliberately (and re-run dev/encode.sh first). Separator strings
-# contain literal TAB bytes, produced here via printf '%b'.
+# The parsers in dk.cst.corpus-probe.cwb.parse and dk.cst.corpus-probe.cwb.tools
+# are tested against these files, so re-run only deliberately (and re-run
+# dev/encode.sh first). Separator strings contain literal TAB bytes, produced
+# here via printf '%b'; the letters are dk.cst.corpus-probe.cwb.parse/markers.
 set -euo pipefail
 cd "$(dirname "$0")"
 REG="$PWD/corpus/registry"

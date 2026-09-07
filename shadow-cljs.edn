@@ -7,4 +7,4 @@
           ;; host: `shadow-cljs compile test`, then `node target/test.js`
           :test {:target    :node-test
                  :output-to "target/test.js"
-                 :ns-regexp "query-test$"}}}
+                 :ns-regexp "(cqp|hiccup|stats|query.*)-test$"}}}

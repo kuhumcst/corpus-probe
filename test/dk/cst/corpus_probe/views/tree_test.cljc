@@ -2,7 +2,9 @@
   "The chooser both fieldsets are: its rules over a small tree, and the
   markup of one node and of the whole."
   (:require [clojure.test :refer [deftest is testing]]
-            [dk.cst.corpus-probe.views.hiccup :refer [deep en]]
+            [dk.cst.corpus-probe.hiccup :refer [deep]]
+            [dk.cst.corpus-probe.test.hiccup
+             :refer [en hidden-ids open-states summary-texts]]
             [dk.cst.corpus-probe.views.tree :as tree]))
 
 (def nodes
@@ -25,27 +27,6 @@
   [{:keys [id hidden?]}]
   [:li (cond-> {} hidden? (assoc :hidden true))
    [:label [:input {:type "checkbox" :name "x" :value id}]]])
-
-(defn opens
-  "The open state of every disclosure in hiccup `html`, in order."
-  [html]
-  (->> (deep html)
-       (filter #(and (map? %) (contains? % :open)))
-       (map :open)))
-
-(defn hidden-leaves
-  "The ids of the leaves hidden in hiccup `html`."
-  [html]
-  (->> (deep html)
-       (filter #(and (vector? %) (= :li (first %)) (:hidden (second %))))
-       (map #(get-in % [2 1 1 :value]))))
-
-(defn summaries
-  "The text of every disclosure summary in hiccup `html`, in order."
-  [html]
-  (->> (deep html)
-       (filter #(and (vector? %) (= :summary (first %))))
-       (map #(apply str (filter string? (tree-seq coll? seq (rest %)))))))
 
 (deftest narrow-test
   (let [[litteratur folketinget] nodes]
@@ -145,7 +126,7 @@
                  (nth 2) (second) (:on)))))
     (testing "the summary is computed, so a shut node can still count"
       (is (= ["Litteratur (1/4)" "Folkeviser (0/2)"]
-             (summaries (tree/node-view
+             (summary-texts (tree/node-view
                          (assoc opts :summary (partial tree/node-summary
                                                        #{"VISER"}))
                          litteratur)))))
@@ -186,26 +167,31 @@
     (testing "without a set of what is open it rests: part chosen opens
               the root and the node, whole and nothing shut them
               [root Litteratur Folkeviser Folketinget]"
-      (is (= [true true false false] (opens (chooser {:selected #{"VISER"}}))))
-      (is (= [false false false false] (opens (chooser {:selected #{}}))))
+      (is (= [true true false false]
+             (open-states (chooser {:selected #{"VISER"}}))))
       (is (= [false false false false]
-             (opens (chooser {:selected #{"VISER" "ANDEN" "DIGTE" "VERS"
-                                          "TALER"}})))))
+             (open-states (chooser {:selected #{}}))))
+      (is (= [false false false false]
+             (open-states (chooser {:selected #{"VISER" "ANDEN" "DIGTE" "VERS"
+                                                "TALER"}})))))
     (testing "given the set, it is that and nothing else, whatever is
               chosen and whether or not the reader is choosing"
       (is (= [true false true false]
-             (opens (chooser {:selected #{} :open #{:root ["Litteratur" "Folkeviser"]}}))))
+             (open-states
+              (chooser {:selected #{}
+                        :open     #{:root ["Litteratur" "Folkeviser"]}}))))
       (is (= [false false false false]
-             (opens (chooser {:selected #{"VISER"} :open #{} :choosing? true})))))
+             (open-states
+              (chooser {:selected #{"VISER"} :open #{} :choosing? true})))))
     (testing "at rest only what is held is shown, a node held whole as
               one row; while choosing nothing is hidden"
       (is (= ["ANDEN" "DIGTE" "VERS" "TALER" "GONE"]
-             (hidden-leaves (chooser {:selected #{"VISER"}}))))
+             (hidden-ids (chooser {:selected #{"VISER"}}))))
       ;; ANDEN unticked at rest and held: its row stays
       (is (= ["DIGTE" "VERS" "TALER" "GONE"]
-             (hidden-leaves (chooser {:selected #{"VISER"}
+             (hidden-ids (chooser {:selected #{"VISER"}
                                       :held     #{"VISER" "ANDEN"}}))))
-      (is (= [] (hidden-leaves (chooser {:selected #{} :choosing? true})))))
+      (is (= [] (hidden-ids (chooser {:selected #{} :choosing? true})))))
     (testing "the summary counts the selection over what is offered"
       (is (= [:small.count "(1/5)"]
              (last (get-in (chooser {:selected #{"VISER"}}) [3 2 2]))))
@@ -238,9 +224,9 @@
     (testing "a filter hides what does not answer it at every level, and
               the count follows it"
       (let [html (chooser {:client? true :filter "taler"})]
-        (is (= ["VISER" "ANDEN" "DIGTE" "VERS" "GONE"] (hidden-leaves html)))
+        (is (= ["VISER" "ANDEN" "DIGTE" "VERS" "GONE"] (hidden-ids html)))
         (is (= ["Litteratur (0/0)" "Folkeviser (0/0)" "Folketinget (0/1)"]
-               (rest (summaries html))))
+               (rest (summary-texts html))))
         (is (= [{:open   false
                  :on     {:toggle [:toggle-open :corpora ["Litteratur"]]}
                  :hidden true}]

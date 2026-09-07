@@ -14,7 +14,7 @@
   The frontpage and the glossary are prose rather than interface: the
   hiccup of a Markdown document (see dk.cst.corpus-probe.docs), rendered
   as it arrives."
-  (:require [clojure.walk :as walk]
+  (:require [dk.cst.corpus-probe.hiccup :as hiccup]
             [dk.cst.corpus-probe.i18n :as i18n]
             [dk.cst.corpus-probe.url :as url]
             [dk.cst.corpus-probe.views.corpus :as corpus-views]
@@ -68,28 +68,13 @@
      (result-view state)
      (page/help ui (:help state)))])
 
-(defn mark-target
-  "The hiccup `body` with the content of the element whose id is
-  `fragment` in a <mark>: the part a link named, which a deep link near
-  the foot of a page cannot scroll to the top. `body` as it is without a
-  fragment or a match."
-  [fragment body]
-  (if fragment
-    (walk/postwalk (fn [x]
-                     (if (and (vector? x) (map? (second x))
-                              (= fragment (:id (second x))))
-                       [(first x) (second x) (into [:mark] (drop 2 x))]
-                       x))
-                   body)
-    body))
-
 (defn document-view
   "The main content of a page that is a document, the frontpage or the
   glossary: the `:body` of `data`, the hiccup of the document, whose own
   first heading names the page, with the element the `fragment` of the
-  location names marked (see `mark-target`)."
+  location names marked (see dk.cst.corpus-probe.hiccup/mark-target)."
   [{:keys [body]} fragment]
-  [:main.document layout/main-attrs (mark-target fragment body)])
+  [:main.document layout/main-attrs (hiccup/mark-target fragment body)])
 
 (defn page
   "The main content of the page `state` describes, by its `:route`; nil

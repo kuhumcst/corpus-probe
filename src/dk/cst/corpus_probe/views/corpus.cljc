@@ -12,7 +12,8 @@
   CWB itself reports (the registry entry, `info;` and
   `cwb-describe-corpus -s`) onto a definition list and per-attribute
   statistics tables, following PLAN.md §7."
-  (:require [dk.cst.corpus-probe.i18n :as i18n]
+  (:require [dk.cst.corpus-probe.hiccup :as hiccup]
+            [dk.cst.corpus-probe.i18n :as i18n]
             [dk.cst.corpus-probe.url :as url]
             [dk.cst.corpus-probe.views.controls :as controls]
             [dk.cst.corpus-probe.views.layout :as layout]
@@ -72,11 +73,6 @@
              :on       {:change [:toggle-corpora [id]]}}]
     " " (or title id) " " (corpus-details ui m)]])
 
-(defn folder-corpora
-  "Every corpus overview in resolved `folder`, subfolders included."
-  [{:keys [corpora folders] :as folder}]
-  (concat corpora (mapcat folder-corpora folders)))
-
 (defn labelled-folders
   "Label the label-less tail folder among `folders` \"Other\", in `ui`,
   when it has labelled siblings.
@@ -121,11 +117,6 @@
                  {:invalid (when (empty? selected)
                              (i18n/tr ui "Select at least one corpus"))}))
 
-(defn heading
-  "The heading tag `level` deep, h6 at the deepest: HTML has no h7."
-  [level]
-  (keyword (str "h" (min 6 level))))
-
 (defn index-folder
   "One resolved `folder` of the corpus index in `ui`, headed at `level`
   (2 for a top-level folder, one more for each folder inside it): its
@@ -134,7 +125,7 @@
   label-less folder is its list alone, and takes no level."
   [ui level {:keys [label corpora folders]}]
   (list
-   (when label [(heading level) label])
+   (when label [(hiccup/heading level) label])
    ;; classed for the stylesheet, which lines the entries' names, ids
    ;; and sizes up in columns across the list
    (when (seq corpora) [:ul.index (map (partial corpus-item ui) corpora)])

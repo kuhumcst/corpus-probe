@@ -26,6 +26,8 @@
             [cognitect.transit :as transit]
             [dk.cst.corpus-probe.i18n :as i18n]
             [dk.cst.corpus-probe.query :as query]
+            [dk.cst.corpus-probe.query.mode :as mode]
+            [dk.cst.corpus-probe.query.tokens :as tokens]
             [dk.cst.corpus-probe.url :as url]
             [dk.cst.corpus-probe.views.corpus :as corpus-views]
             [dk.cst.corpus-probe.views.kwic :as kwic]
@@ -67,10 +69,6 @@
    "ArrowLeft"  [0 -1]
    "ArrowDown"  [1 0]
    "ArrowUp"    [-1 0]})
-
-(def transit-type
-  "The content type the server answers a route with."
-  "application/transit+json")
 
 (defn read-transit
   "Decode transit-JSON string `s`."
@@ -146,7 +144,7 @@
   dismissed."
   [corpus cpos matchend]
   (let [k [corpus cpos]]
-    (-> (js/fetch (str "/api/context?corpus=" corpus
+    (-> (js/fetch (str url/context-api "?corpus=" corpus
                        "&cpos=" cpos "&matchend=" matchend))
         (.then (fn [response]
                  (if (.-ok response)
@@ -473,7 +471,7 @@
   grouping travels with everything else the form holds and takes the same
   routed path a reader pressing the button would."
   []
-  (some-> (.getElementById js/document page/form-id) (.requestSubmit)))
+  (some-> (.getElementById js/document url/form-id) (.requestSubmit)))
 
 (def filters-debounce-ms
   "How long the corpus selection must hold still before the metadata
@@ -522,8 +520,8 @@
   (let [params (js/URLSearchParams.)]
     (doseq [corpus corpora] (.append params "corpus" corpus))
     (swap! state assoc :filters-pending? true)
-    (-> (js/fetch (str "/api/filters?" params)
-                  #js {:headers #js {"Accept" transit-type}})
+    (-> (js/fetch (str url/filters-api "?" params)
+                  #js {:headers #js {"Accept" url/transit-type}})
         (.then (fn [response]
                  (if (.-ok response)
                    (.text response)
@@ -596,16 +594,6 @@
          (swap! state dissoc :selected))))
    0))
 
-(defn own-rows
-  "The tokens of an extended search as this client shows them: the served
-  `tokens` (see dk.cst.corpus-probe.query/form-rows) less the blank
-  last one the server ends them in for a reader without a client, who
-  has no button to add one. Kept when it is the only one."
-  [tokens]
-  (if (and (next tokens) (not (url/asks? (last tokens))))
-    (vec (butlast tokens))
-    tokens))
-
 (defn focus-field!
   "Move focus to the form control named `name`, once the render that put
   it there has run: a reader who added or took away a token or a
@@ -633,16 +621,16 @@
   (swap! state update :tokens
          (fn [tokens]
            (conj (vec tokens)
-                 (url/blank-token (inc (reduce max 0 (map :id tokens)))))))
-  (focus-field! (url/token-key (count (:tokens @state)) 1 :attr)))
+                 (tokens/blank-token (inc (reduce max 0 (map :id tokens)))))))
+  (focus-field! (tokens/token-key (count (:tokens @state)) 1 :attr)))
 
 (defn remove-token!
   "Take the token with `id` away and focus the attribute of the token now
   in its place, or of the last."
   [id]
   (let [k (place (:tokens @state) id)]
-    (swap! state update :tokens without id (url/blank-token (inc id)))
-    (focus-field! (url/token-key (min k (count (:tokens @state))) 1 :attr))))
+    (swap! state update :tokens without id (tokens/blank-token (inc id)))
+    (focus-field! (tokens/token-key (min k (count (:tokens @state))) 1 :attr))))
 
 (defn add-condition!
   "Add a blank condition to token `i`, counted from one, and focus its
@@ -652,7 +640,7 @@
          (fn [conditions]
            (conj (vec conditions)
                  {:id (inc (reduce max 0 (map :id conditions)))})))
-  (focus-field! (url/token-key i (count (get-in @state [:tokens (dec i)
+  (focus-field! (tokens/token-key i (count (get-in @state [:tokens (dec i)
                                                         :conditions]))
                                :join)))
 
@@ -665,7 +653,7 @@
         k    (place (get-in @state path) id)]
     (swap! state update-in path without id {:id (inc id)})
     (let [c (min k (count (get-in @state path)))]
-      (focus-field! (url/token-key i c (if (= 1 c) :attr :join))))))
+      (focus-field! (tokens/token-key i c (if (= 1 c) :attr :join))))))
 
 (defn control-value
   "What the form control an `event` came from now holds, as its param
@@ -686,7 +674,8 @@
 
 (defn switch-mode!
   "Change the form of the query in `form` (the form element) to `mode`
-  (see dk.cst.corpus-probe.url/forms), holding in the new form as much
+  (see dk.cst.corpus-probe.query.mode/forms), holding in the new form as
+  much
   of the query the old one holds as it can, as the server does for a
   submitted form (see dk.cst.corpus-probe.query/project and /loss), and
   saying the rest in the form's status line.
@@ -696,7 +685,7 @@
   field's text seeds the tokens, read by its shape, and the tokens are
   handed to the field as CQP. What the old form reads is replaced by
   the new form's spelling of what it holds (see
-  dk.cst.corpus-probe.query/params); what neither reads stays in the
+  dk.cst.corpus-probe.query/->params); what neither reads stays in the
   params as memory.
 
   Switching away and back loses nothing while nothing was edited: what
@@ -713,7 +702,7 @@
   [form mode]
   (swap! state
          (fn [{:keys [params tokens remembered projected] :as s}]
-           (let [from    (url/form params)
+           (let [from    (mode/form params)
                  live    (form-params form)
                  typed   (query/of (assoc live :mode from))
                  back?   (and (= typed projected) (= mode (:form remembered)))
@@ -721,26 +710,27 @@
                  held    (when-not back? (query/project target typed))
                  spelt   (if back?
                            (:params remembered)
-                           (query/params target held))
-                 memory  (-> (apply dissoc params (url/read-keys from params))
+                           (query/->params target held))
+                 memory  (-> (apply dissoc params (mode/read-keys from params))
                              (merge (select-keys live
-                                                 (filter url/query-key?
+                                                 (filter mode/query-key?
                                                          (keys live)))))]
              (assoc s
                     :params     (-> (apply dissoc memory
-                                           (url/read-keys mode memory))
+                                           (mode/read-keys mode memory))
                                     (merge spelt)
                                     (assoc :mode mode))
                     :tokens     (cond
                                   (not= "extended" mode)
-                                  (own-rows (query/form-rows nil))
+                                  (tokens/own-rows (query/form-rows nil))
                                   back? (:tokens remembered)
-                                  :else (own-rows (query/form-rows held)))
+                                  :else
+                                  (tokens/own-rows (query/form-rows held)))
                     :switch     {:loss   (if back? [] (query/loss target typed))
                                  :unread #{}}
                     :remembered {:form   from
-                                 :params (select-keys live
-                                                      (url/read-keys from live))
+                                 :params (select-keys
+                                          live (mode/read-keys from live))
                                  :tokens tokens}
                     :projected  (query/of (assoc spelt :mode mode)))))))
 
@@ -901,17 +891,6 @@
             (fetch-context! corpus cpos matchend))))
     nil))
 
-(defn expand-param
-  "The set of hit keys named in the URL's `expand` parameter (`CORPUS:cpos`
-  items); malformed items are ignored."
-  []
-  (when-let [param (.get (.-searchParams (current-url)) "expand")]
-    (set (keep (fn [item]
-                 (let [[corpus cpos] (str/split item #":" 2)]
-                   (when-let [n (some-> cpos parse-long)]
-                     [corpus n])))
-               (str/split param #",")))))
-
 (defn sync-expand-url!
   "Mirror the expanded hits in the URL's `expand` parameter as
   `CORPUS:cpos` items, replacing history so the URL stays shareable without
@@ -930,14 +909,10 @@
   ;; left as it is: the rule would drop that query, and a reload would
   ;; then find an empty form (see dk.cst.corpus-probe.query/arrived)
   (when (and (= url/search js/location.pathname)
-             (not (url/unread-query? (location-params))))
+             (not (mode/unread-query? (location-params))))
     (let [url    (current-url)
-          ks     (sort (keys (:expanded @state)))
-          params (cond-> (dissoc (location-params) :expand)
-                   (seq ks)
-                   (assoc :expand (str/join "," (map (fn [[corpus cpos]]
-                                                       (str corpus ":" cpos))
-                                                     ks))))]
+          params (url/with-expanded (location-params)
+                                    (keys (:expanded @state)))]
       (set! (.-search url) (url/query-string params))
       ;; only when it would say something new: this runs on every render,
       ;; and a render happens on every arrow key. Safari throws past
@@ -1050,7 +1025,7 @@
   the `expand` parameter it is about to be restored from. That is what
   used to lose an expanded view on the back button."
   [data]
-  (let [hits (wanted-hits data (expand-param))]
+  (let [hits (wanted-hits data (url/expand-param (:expand (location-params))))]
     (cond-> data
       (seq hits) (assoc :expanded
                         (into {}
@@ -1069,7 +1044,7 @@
   (-> data
       (assoc :client?       true
              ;; the place in the page the location names, which a
-             ;; document marks (see dk.cst.corpus-probe.views.app/mark-target)
+             ;; document marks (see dk.cst.corpus-probe.hiccup/mark-target)
              :fragment      (fragment)
              :lists         (into {}
                                   (for [[k {:keys [tree chosen]}] lists
@@ -1082,7 +1057,7 @@
              ;; what the filters on screen describe, so that a selection
              ;; that has changed can be told from one that has not
              :filters-for   (vec (sort (get-in data [:params :corpus]))))
-      (update :tokens own-rows)
+      (update :tokens tokens/own-rows)
       (with-expansions)))
 
 (defn fetch-expansions!
@@ -1111,8 +1086,8 @@
   []
   (when (seq (get-in @state [:result :remaining]))
     (let [key (page-key)]
-      (-> (js/fetch (str "/api/counts" js/location.search)
-                    #js {:headers #js {"Accept" transit-type}})
+      (-> (js/fetch (str url/counts-api js/location.search)
+                    #js {:headers #js {"Accept" url/transit-type}})
           (.then (fn [response]
                    (if (.-ok response)
                      (.text response)
@@ -1178,7 +1153,7 @@
     (reset! in-flight controller)
     (debounce! pending-timer pending-delay-ms
                #(swap! state assoc :pending? true))
-    (-> (js/fetch href #js {:headers #js {"Accept" transit-type}
+    (-> (js/fetch href #js {:headers #js {"Accept" url/transit-type}
                             :signal  (.-signal controller)})
         (.then (fn [response]
                  (if (.-ok response)
@@ -1314,7 +1289,7 @@
          ;; the language switch changes a preference, not a place: store it
          ;; and ask the server for this same page in the other language,
          ;; rather than posting and reloading
-         (= layout/preferences-path (.getAttribute form "action"))
+         (= url/preferences (.getAttribute form "action"))
          (let [b (.-submitter e)]
            (.preventDefault e)
            (set-preference! (.-name b) (.-value b)))

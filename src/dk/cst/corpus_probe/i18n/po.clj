@@ -1,4 +1,4 @@
-(ns dk.cst.corpus-probe.translations
+(ns dk.cst.corpus-probe.i18n.po
   "The UI translations, read from the gettext PO files on the classpath.
 
   One file per language under resources/i18n/, keyed by the English

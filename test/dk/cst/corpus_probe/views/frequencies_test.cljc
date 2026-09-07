@@ -1,9 +1,9 @@
 (ns dk.cst.corpus-probe.views.frequencies-test
   (:require [clojure.test :refer [deftest is testing]]
+            [dk.cst.corpus-probe.hiccup :refer [deep]]
+            [dk.cst.corpus-probe.test.hiccup :refer [da en text]]
             [dk.cst.corpus-probe.url :as url]
-            [dk.cst.corpus-probe.views.hiccup :refer [da deep en]]
-            [dk.cst.corpus-probe.views.frequencies :as freq]
-            [dk.cst.corpus-probe.views.page :as page]))
+            [dk.cst.corpus-probe.views.frequencies :as freq]))
 
 (def counted
   "A frequency result of one corpus that could be counted."
@@ -16,11 +16,6 @@
   (is (freq/tabled? counted))
   (is (not (freq/tabled? {:counts [{:corpus "X" :error {:type :timeout}}]})))
   (is (not (freq/tabled? nil))))
-
-(defn text
-  "The strings of hiccup `x`, joined: what it reads as."
-  [x]
-  (apply str (filter string? (tree-seq coll? seq x))))
 
 (deftest frequency-heading-test
   (testing "a table that could be counted is headed by what was found,
@@ -116,7 +111,7 @@
                 (deep html))))
     (testing "it submits the query form and applies itself, as the
               grouping does"
-      (is (some #(and (map? %) (= "at" (:name %)) (= page/form-id (:form %))
+      (is (some #(and (map? %) (= "at" (:name %)) (= url/form-id (:form %))
                       (= [:apply-view] (get-in % [:on :change])))
                 (deep html))))
     (testing "in Danish"
@@ -149,7 +144,7 @@
       (is (some #{[:colgroup {:span 2}]} (deep (freq/frequency-table en counted))))))
   (testing "the control applies itself through the query form"
     (is (some #(and (map? %) (= "docs" (:name %)) (:checked %)
-                    (= page/form-id (:form %))
+                    (= url/form-id (:form %))
                     (= [:apply-view] (get-in % [:on :change])))
               (deep (freq/docs-control en true))))
     (is (some #{"tæl tekster"} (deep (freq/docs-control da false))))))
@@ -216,7 +211,7 @@
     (testing "the chosen attribute is selected, and the control applies itself"
       (is (some #(and (map? %) (= "text_year" (:value %)) (:selected %))
                 (deep html)))
-      (is (some #(and (map? %) (= "by" (:name %)) (= page/form-id (:form %))
+      (is (some #(and (map? %) (= "by" (:name %)) (= url/form-id (:form %))
                       (= [:apply-view] (get-in % [:on :change])))
                 (deep html))))
     (is (some #{"kolonner"} (deep (freq/by-control da attrs nil))))))

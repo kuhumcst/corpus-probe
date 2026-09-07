@@ -352,7 +352,7 @@ line, any one of them) or CQP, which passes through; the extended form
 is KORP's builder of tokens with conditions, repeats and sentence edges.
 Words, lists and tokens all read into one value, the tokens of a search
 kept within a unit of text, which `dk.cst.corpus-probe.query` compiles
-to CQP. Each mode reads the params its row of `url/fields` names and no
+to CQP. Each mode reads the params its row of `query.mode/fields` names and no
 other, so a URL carries only what its mode reads, and a change of form
 holds the query in the new form as far as that form can, saying the
 rest in a status line, on both sides and without a round trip where the
@@ -450,16 +450,19 @@ corpus-probe/
 ├── deps.edn  shadow-cljs.edn
 ├── resources/config.edn            ; registry path, sort locale, folder tree
 ├── src/dk/cst/corpus_probe/
-│   ├── cqp.clj                     ; child-process driver (§5)
-│   ├── parse.clj                   ; output parsers -> data (§6)
+│   ├── cwb.clj                     ; child-process driver (§5), errors,
+│   │                               ;   collation, fan-out under a deadline
+│   ├── cwb/parse.clj               ; output parsers -> data (§6)
+│   ├── cwb/registry.clj            ; registry entries and the folder tree
+│   ├── cwb/corpus.clj              ; show cd, info -> corpus facts, cached
+│   ├── cwb/command.clj             ; CQP commands: QueryLock wrapping,
+│   │                               ;   narrowing, sorting, counting
+│   ├── cwb/tools.clj               ; cwb-describe-corpus, cwb-lexdecode,
+│   │                               ;   cwb-s-decode and their parsers
 │   ├── query.cljc                  ; the query compilers: words, lists and
 │   │                               ;   tokens to CQP, escaping (§8)
-│   ├── commands.clj                ; CQP commands and batches: QueryLock
-│   │                               ;   wrapping, narrowing, sorting, counting
-│   ├── corpus.clj                  ; registry, show cd, info -> corpus facts
 │   ├── search.clj                  ; KWIC, concordance, frequency tables
-│   ├── tools.clj                   ; cwb-describe-corpus, cwb-lexdecode
-│   │                               ;   (scan-corpus and s-decode to come)
+│   ├── search/batch.clj            ; the batches a search runs
 │   ├── stats.cljc                  ; relative frequencies
 │   ├── export.clj                  ; TSV/CSV exports of concordances and
 │   │                               ;   frequency tables
@@ -483,7 +486,7 @@ plan). Production points `config.edn` at the existing server registry.
 
 ## 12. Milestones
 
-1. **Driver + parsers** (pure backend, REPL-driven): `cqp.clj`, `parse.clj`,
+1. **Driver + parsers** (pure backend, REPL-driven): `cwb.clj`, `cwb/parse.clj`,
    golden tests from captured outputs, hostile-corpus regression fixtures.
    Exit: `(kwic ctx "MEMO_1880" "[lemma=\"hund\"]" {:page 0})` returns clean
    data at the REPL.

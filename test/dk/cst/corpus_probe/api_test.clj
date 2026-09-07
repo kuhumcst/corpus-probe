@@ -4,13 +4,12 @@
             [cognitect.transit :as transit]
             [dk.cst.corpus-probe.api :as api]
             [dk.cst.corpus-probe.cache :as cache]
-            [dk.cst.corpus-probe.corpus :as corpus]
-            [dk.cst.corpus-probe.cqp-test :refer [ctx when-cwb]]
+            [dk.cst.corpus-probe.cwb.registry :as registry]
+            [dk.cst.corpus-probe.test.cwb :refer [ctx when-cwb]]
+            [dk.cst.corpus-probe.test.hiccup :refer [da en]]
             [dk.cst.corpus-probe.frequency :as frequency]
             [dk.cst.corpus-probe.query :as query]
             [dk.cst.corpus-probe.url :as url]
-            [dk.cst.corpus-probe.views.hiccup :refer [da en]]
-            [dk.cst.corpus-probe.views.page :as page]
             [taoensso.telemere :as t])
   (:import [java.io ByteArrayInputStream]))
 
@@ -38,22 +37,6 @@
     (is (nil? (api/subset-param {:subset "" :subset-attr "lemma"})))
     (is (nil? (api/subset-param {})))))
 
-(deftest subset-href-test
-  (let [href (api/subset-href {:q "hund" :corpus ["PROBE"] :attr "lemma"
-                               :at "match[-1]" :sort "word"}
-                              :lemma "match[-1]" "en kat")]
-    (testing "the concordance of the same search, kept to the row's hits"
-      (is (str/starts-with? href "/search?"))
-      (is (str/includes? href "subset=en+kat"))
-      (is (str/includes? href "subset-at=match%5B-1%5D"))
-      (is (str/includes? href "subset-attr=lemma"))
-      (is (str/ends-with? href "#results")))
-    (testing "the concordance is the default view, so it goes unnamed"
-      (is (not (str/includes? href "view="))))
-    (testing "the grouping and the order are the table's, not the hits'"
-      (is (not (str/includes? href "attr=lemma&")))
-      (is (not (str/includes? href "sort="))))))
-
 (deftest context-param-test
   (is (= 10 (api/context-param "10")))
   (is (= :sentence (api/context-param "sentence")))
@@ -66,12 +49,10 @@
   (testing "a word and how far away it may be"
     (is (= {:word "kat" :distance 3} (api/near-param " kat " "3"))))
   (testing "a distance that is not a positive integer is the default"
-    (is (= {:word "kat" :distance page/near-distance}
-           (api/near-param "kat" nil)))
-    (is (= {:word "kat" :distance page/near-distance}
-           (api/near-param "kat" "0")))
-    (is (= {:word "kat" :distance page/near-distance}
-           (api/near-param "kat" "x"))))
+    (let [default (parse-long (:distance url/defaults))]
+      (is (= {:word "kat" :distance default} (api/near-param "kat" nil)))
+      (is (= {:word "kat" :distance default} (api/near-param "kat" "0")))
+      (is (= {:word "kat" :distance default} (api/near-param "kat" "x")))))
   (testing "no word, nothing to be near"
     (is (nil? (api/near-param "" "5")))
     (is (nil? (api/near-param nil nil)))))
@@ -88,7 +69,7 @@
     (when-cwb
      (testing "naming none searches every corpus CWB can read"
        (is (= ["PROBE" "TALER" "VISER"]
-              (sort (api/selected-corpora ctx (corpus/corpora ctx) {}))))))))
+              (sort (api/selected-corpora ctx (registry/entries ctx) {}))))))))
 
 (deftest form-corpora-test
   (when-cwb
@@ -107,26 +88,11 @@
        (is (= ["VISER"] (form {:corpus "viser" :q "hund"})))))))
 
 (deftest results-fragment-hrefs-test
-  (testing "a page turn lands on the results, not the top of the form"
-    (is (str/ends-with? (api/page-href {:q "hund"} 1) "#results")))
-  (testing "so does every view of the same search"
+  (testing "every view of the same search lands on the results"
     (is (every? #(str/ends-with? (last %) "#results")
                 (:view-hrefs (api/search-view-data
                               {:registry "nonesuch"}
                               {:query-params {:q "hund"}}))))))
-
-(deftest page-href-test
-  (let [href (api/page-href {:corpus "PROBE" :q "hund" :page "1"} 2)]
-    (is (str/starts-with? href "/search?"))
-    (is (str/includes? href "corpus=PROBE"))
-    (testing "the URL counts pages from one, as the page does"
-      (is (str/includes? href "page=3"))
-      (is (not (str/includes? (api/page-href {:q "hund"} 0) "page="))))
-    (testing "the query is URL-encoded"
-      (is (str/includes? (api/page-href {:q "[lemma=\"a\"]"} 1) "%5B")))
-    (testing "the per-page expand parameter is dropped"
-      (is (not (str/includes? (api/page-href {:corpus "PROBE" :expand "9"} 1)
-                              "expand"))))))
 
 (deftest context-page-validation-test
   (let [context (fn [params] (api/context-page {} {:query-params params}))]
@@ -142,7 +108,7 @@
 (deftest filters-page-test
   (let [asked (atom nil)
         call  (fn [params]
-                (with-redefs [corpus/corpora
+                (with-redefs [registry/entries
                               (fn [_] [{:id "probe"} {:id "viser"}])
                               frequency/filter-options!
                               (fn [_ corpora]
@@ -165,73 +131,6 @@
     (testing "the values a reader chose are the reader's, not answered here"
       (is (not (contains? (transit-> (:body (call {:corpus "PROBE"})))
                           :selected))))))
-
-(deftest public-error-test
-  (testing "CL warning lines (which may name server paths) are dropped"
-    (is (= {:type :cqp :message "CQP Error: bad query\n  [pos = <--"}
-           (api/public-error
-            {:type    :cqp
-             :message (str "CL warning: ID field 'x' does not match name of "
-                           "registry file /srv/registry/y\n"
-                           "CQP Error: bad query\n  [pos = <--")}))))
-  (testing "a message of nothing but warnings empties out"
-    (is (nil? (:message (api/public-error {:message "CL warning: x"})))))
-  (testing "an error without a message passes through"
-    (is (= {:type :timeout} (api/public-error {:type :timeout}))))
-  (testing "follow-on errors after the failing command's own are dropped"
-    (is (= "CQP Error:\n\tCorpus ``NOSUCH'' is undefined"
-           (:message (api/public-error
-                      {:message (str "CQP Error:\n\tCorpus ``NOSUCH'' is "
-                                     "undefined\n"
-                                     (str/join "\n" api/follow-on-errors))})))))
-  (testing "a failed filter leaves only its own error"
-    (is (= "CQP Error:\n\tStructural attribute X.text_author does not exist."
-           (:message (api/public-error
-                      {:message (str "CQP Error:\n\tStructural attribute "
-                                     "X.text_author does not exist.\n"
-                                     "CQP Error:\n\tCorpus ``Last'' is "
-                                     "undefined\n"
-                                     "CQP Error:\n\tCorpus ``Filter'' is "
-                                     "undefined")})))))
-  (testing "a message of nothing but follow-on errors is kept"
-    (let [message (first api/follow-on-errors)]
-      (is (= message (:message (api/public-error {:message message})))))))
-
-(deftest grouped-corpora-test
-  (let [probe     {:id "PROBE" :title nil :size 47}
-        viser     {:id "VISER" :title "Folkeviser" :size 48}
-        taler     {:id "TALER" :title "Taler" :size 42}
-        overviews [probe taler viser]
-        folders   [{:label   "Litteratur"
-                    :folders [{:label "Folkeviser" :corpora ["VISER"]}]}
-                   {:label   "Folketinget"
-                    :corpora ["TALER" "GONE"]}]
-        grouped   (api/grouped-corpora folders overviews)]
-    (testing "nested folders resolve their corpus IDs to overviews"
-      (is (= [viser] (-> grouped first :folders first :corpora))))
-    (testing "IDs the registry does not know are dropped"
-      (is (= [taler] (:corpora (second grouped)))))
-    (testing "unclaimed corpora follow as a label-less folder"
-      (is (= {:label nil :corpora [probe] :folders []} (last grouped))))
-    (testing "no configuration means one label-less folder of everything"
-      (is (= [{:label nil :corpora overviews :folders []}]
-             (api/grouped-corpora nil overviews))))
-    (testing "everything claimed means no trailing folder"
-      (is (= 1 (count (api/grouped-corpora [{:label   "All"
-                                             :corpora ["PROBE" "TALER"
-                                                       "VISER"]}]
-                                           overviews)))))
-    (testing "folders the registry leaves empty are dropped, at any depth"
-      (is (= [{:label "Litteratur" :corpora []
-               :folders [{:label "Folkeviser" :corpora [viser] :folders []}]}
-              {:label nil :corpora [probe taler] :folders []}]
-             (api/grouped-corpora [{:label   "Litteratur"
-                                    :corpora ["GONE"]
-                                    :folders [{:label "Empty" :corpora ["X"]}
-                                              {:label   "Folkeviser"
-                                               :corpora ["VISER"]}]}
-                                   {:label "Nothing" :corpora []}]
-                                  overviews))))))
 
 (deftest document-page-test
   (let [page (fn [name lang]
@@ -332,20 +231,6 @@
       (is (= "All tokens · PROBE · by lemma · Frequencies · corpus-probe"
              (api/result-title en :frequencies (assoc params :q "")
                                result))))))
-
-(deftest view-hrefs-test
-  (let [hrefs (api/view-hrefs {:q "hund" :corpus ["PROBE"] :lang "da"})]
-    (testing "one entry per view, in display order"
-      (is (= [:kwic :frequencies] (map first hrefs))))
-    (testing "every view of one search shares its URL but for the view param"
-      (doseq [[_ href] hrefs]
-        (is (str/starts-with? href "/search?q=hund&corpus=PROBE"))
-        (is (str/ends-with? href "#results")))
-      (testing "and the concordance, being the default, goes unnamed"
-        (is (not (str/includes? (last (first hrefs)) "view=")))
-        (is (str/includes? (last (second hrefs)) "view=frequencies"))))
-    (testing "no URL names a language: that is the reader's own preference"
-      (is (not (some #(str/includes? (last %) "lang") hrefs))))))
 
 (deftest view-param-test
   (is (= :kwic (api/view-param nil)))
@@ -559,25 +444,6 @@
          (api/pattern-fields {:fp.text_title "Hav.*" :ff.text_year "1590"
                               :ft.text_pages "5" :q "x"}))))
 
-(deftest search-params-test
-  (testing "the filter params identify a search along with the query"
-    (is (= {:q "hund" :corpus ["A"] :f.text_year ["1591"]}
-           (api/search-params {:q "hund" :corpus ["A"] :page "2" :sort "word"
-                               :f.text_year ["1591"]})))
-    (testing "and so do its patterns and ranges"
-      (is (= {:q "hund" :fp.text_title "Hav.*" :ff.text_year "1590"
-              :ft.text_year "1592"}
-             (api/search-params {:q "hund" :fp.text_title "Hav.*"
-                                 :ff.text_year "1590" :ft.text_year "1592"
-                                 :page "2"})))))
-  (testing "so does the sample, which decides which hits there are; the
-            sort, which only decides their order, still does not"
-    (is (= {:q "hund" :sample "100"}
-           (api/search-params {:q "hund" :sample "100" :sort "word"}))))
-  (testing "and so does the unit the words are kept within"
-    (is (= {:q "lille hund" :within "text"}
-           (api/search-params {:q "lille hund" :within "text" :sort "word"})))))
-
 (deftest switched-frequency-test
   (when-cwb
    (testing "a form submitted from the frequency view with its mode changed
@@ -626,10 +492,6 @@
     (is (= 0 (api/page-param "x")))
     (is (= 0 (api/page-param "99999999999999999999")))))
 
-(deftest split-known-test
-  (is (= [["PROBE"] ["NOPE"]]
-         (api/split-known [{:id "probe"}] ["PROBE" "NOPE"]))))
-
 (deftest search-outcome-test
   (testing "nothing selected at all is the no-corpus error"
     (is (= {:error {:type :no-corpus}}
@@ -640,26 +502,6 @@
              (:counts result)))
       (is (= 0 (:size result)))
       (is (= 1 (:pages result))))))
-
-(deftest page-hrefs-test
-  (let [params {:q "hund"}]
-    (testing "the first page links onward only when the hits reach past it"
-      (is (= {:prev-href nil :next-href nil}
-             (api/page-hrefs params 0 {:size 25 :page-size 25})))
-      (is (str/ends-with? (:next-href (api/page-hrefs params 0 {:size      26
-                                                                :page-size 25}))
-                          "page=2#results")))
-    (testing "a result still being counted links onward on what it has so far"
-      (is (some? (:next-href (api/page-hrefs params 0 {:size      26
-                                                       :page-size 25
-                                                       :remaining ["X"]}))))
-      (is (nil? (:next-href (api/page-hrefs params 0 {:size      10
-                                                      :page-size 25
-                                                      :remaining ["X"]})))))
-    (testing "and back from any page but the first, result or no result"
-      (is (str/ends-with? (:prev-href (api/page-hrefs params 2 nil))
-                          "page=2#results"))
-      (is (nil? (:next-href (api/page-hrefs params 2 nil)))))))
 
 (deftest counts-page-test
   (when-cwb
@@ -704,16 +546,6 @@
                                 :error  {:type    :cqp
                                          :message (str "CL warning: /srv/x\n"
                                                        "CQP Error: bad")}}]}))))))
-
-(deftest content-lang-test
-  (let [corpora [{:id "probe" :language "??"}
-                 {:id "dan1" :language "da"}]]
-    (testing "a plausible language code is returned"
-      (is (= "da" (api/content-lang corpora "DAN1"))))
-    (testing "a placeholder language is ignored"
-      (is (nil? (api/content-lang corpora "PROBE"))))
-    (testing "an unknown corpus yields nil"
-      (is (nil? (api/content-lang corpora "NOPE"))))))
 
 (deftest correct-quote-escaping-test
   (testing "corrupted double quotes (&#39;) are restored to &#34;"
@@ -771,10 +603,6 @@
                                                          :t1.v)
                                               nil)
                             "Search"))))
-  (testing "the tokens identify the search, as the query does"
-    (is (= {:mode "extended" :t1.v "a" :t2.op "any"}
-           (api/search-params {:mode "extended" :t1.v "a" :t2.op "any"
-                               :page "2"}))))
   (when-cwb
    (testing "an extended search runs, and the page knows its CQP, its
              tokens and the values its fields suggest"
@@ -887,15 +715,7 @@
                                                 :corpus "PROBE"}
                                  :query-string "q=hund&match=&corpus=PROBE"
                                  :headers      {"accept"
-                                                api/transit-type}}))))))))
-
-(deftest export-hrefs-test
-  (testing "the view of the search as a file, one URL per format"
-    (is (= {:csv "/search/kwic.csv?q=hund&corpus=PROBE"
-            :tsv "/search/kwic.tsv?q=hund&corpus=PROBE"}
-           (api/export-hrefs :kwic {:corpus ["PROBE"] :q "hund"})))
-    (is (= "/search/frequencies.tsv?q=hund&attr=lemma"
-           (:tsv (api/export-hrefs :frequencies {:q "hund" :attr "lemma"}))))))
+                                                url/transit-type}}))))))))
 
 (deftest attr-options-test
   (testing "an unreadable corpus contributes nothing, word remains"
@@ -936,11 +756,6 @@
   (testing "no attribute, no second attribute"
     (is (nil? (api/by-param "")))
     (is (nil? (api/by-param nil)))))
-
-(deftest view-hrefs-by-test
-  (testing "the second attribute of a table travels between the views"
-    (is (every? #(str/includes? (second %) "by=text_year")
-                (api/view-hrefs {:q "hund" :attr "lemma" :by "text_year"})))))
 
 (deftest list-mode-test
   (testing "a list compiles to one token pattern"

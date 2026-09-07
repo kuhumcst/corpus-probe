@@ -19,7 +19,7 @@
         ;; map in the source, so adding a language is dropping in a file
         brightin/pottery               {:mvn/version "1.0.2"}
         ;; Markdown for resources/docs: nextjournal's parser is
-        ;; commonmark-java, which dk.cst.corpus-probe.markdown builds on
+        ;; commonmark-java, which dk.cst.corpus-probe.docs.markdown builds on
         ;; directly for its definition list, so both are named
         io.github.nextjournal/markdown {:mvn/version "0.7.225"}
         org.commonmark/commonmark                       {:mvn/version "0.24.0"}
@@ -33,7 +33,7 @@
  {:dev  {:extra-paths ["dev" "test"]}
 
   ;; Regenerate the translation template: clojure -M:i18n
-  :i18n {:main-opts ["-m" "dk.cst.corpus-probe.i18n-scan"]}
+  :i18n {:main-opts ["-m" "dk.cst.corpus-probe.i18n.scan"]}
 
   ;; the test path too: the shadow :test build compiles the tests of what
   ;; both sides build from (see shadow-cljs.edn)

@@ -1,7 +1,8 @@
 (ns dk.cst.corpus-probe.views.app-test
   (:require [clojure.test :refer [deftest is testing]]
+            [dk.cst.corpus-probe.hiccup :refer [deep]]
+            [dk.cst.corpus-probe.test.hiccup :refer [da en]]
             [dk.cst.corpus-probe.url :as url]
-            [dk.cst.corpus-probe.views.hiccup :refer [da deep en]]
             [dk.cst.corpus-probe.views.layout :as layout]
             [dk.cst.corpus-probe.views.app :as app-views]))
 
@@ -14,7 +15,7 @@
   {:ui en :folders [] :params {} :help help})
 
 (def views
-  "The two views of one result, as api/view-hrefs builds them."
+  "The two views of one result, as url/view-hrefs builds them."
   [[:kwic "/search?q=hund#results"]
    [:frequencies "/search?q=hund&view=frequencies#results"]])
 
@@ -109,8 +110,3 @@
                      (deep (app-views/page {:route :document :lang "en"
                                             :data {:body body}
                                             :fragment "nonesuch"}))))))))
-
-(deftest mark-target-test
-  (testing "the whole content of the element goes in the mark"
-    (is (= [[:dt {:id "a"} [:mark "x " [:code "y"]]]]
-           (app-views/mark-target "a" [[:dt {:id "a"} "x " [:code "y"]]])))))
