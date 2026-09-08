@@ -19,6 +19,7 @@
             [dk.cst.corpus-probe.server.response :as response]
             [dk.cst.corpus-probe.server.search :as search]
             [dk.cst.corpus-probe.server.vet :as vet]
+            [dk.cst.corpus-probe.settings :as settings]
             [dk.cst.corpus-probe.url :as url]
             [dk.cst.corpus-probe.views :as views]
             [io.pedestal.connector :as conn]
@@ -116,12 +117,17 @@
   A preference is state, so it is set with a POST and answered with a
   redirect: a refresh does not re-submit the form they came from. Cookies
   are the whole persistence: no URL names a preference, so a link can be
-  shared without imposing the sharer's settings."
+  shared without imposing the sharer's settings.
+
+  A reset goes to the bare form rather than back (see
+  dk.cst.corpus-probe.settings/return), where a form at the app's own
+  defaults is what the reset did."
   [_ctx request]
-  (let [params  (:form-params request)
+  (let [params  (settings/with-autosave (:form-params request))
         cookies (request/preference-cookies params)]
     {:status  303
-     :headers (cond-> {"Location" (request/safe-return (:return params))}
+     :headers (cond-> {"Location" (request/safe-return
+                                   (settings/return params))}
                 (seq cookies) (assoc "Set-Cookie" cookies))
      :body    ""}))
 

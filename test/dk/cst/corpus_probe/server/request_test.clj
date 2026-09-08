@@ -4,6 +4,7 @@
   (:require [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]
             [dk.cst.corpus-probe.server.request :as request]
+            [dk.cst.corpus-probe.settings :as settings]
             [dk.cst.corpus-probe.url :as url]))
 
 (deftest position-param-test
@@ -134,6 +135,23 @@
                                              :return  "/"
                                              "lang"   "xx"
                                              :Path    "/evil"})))))
+
+(deftest stored-settings-test
+  (let [stored (fn [cookie] (request/stored-settings {:headers {"cookie" cookie}}))]
+    (testing "what a reader stored, as written, for its readers to take apart"
+      (is (= "corpus=PROBE&view=frequencies"
+             (stored "lang=en; settings=corpus=PROBE&view=frequencies"))))
+    (testing "a reader who stored none has none"
+      (is (nil? (stored "lang=en")))
+      (is (nil? (request/stored-settings {}))))
+    (testing "the settings are one setting, so forgetting them leaves the
+              language alone"
+      (is (= "" (stored "lang=en; settings=")))
+      (is (= "en" (request/cookie-value "lang=en; settings=" :lang))))
+    (testing "a value too long for a browser to keep is not read back"
+      (is (nil? (stored (str "settings=corpus="
+                             (apply str (repeat settings/max-length
+                                                "X")))))))))
 
 (deftest safe-return-test
   (is (= "/?q=x" (request/safe-return "/?q=x")))

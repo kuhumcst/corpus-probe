@@ -228,6 +228,15 @@ msgstr "Søgetype"
 msgid "legend|Scope"
 msgstr "Afgrænsning"
 
+msgid "legend|Preferences"
+msgstr "Præferencer"
+
+msgid "Settings saved"
+msgstr "Indstillinger gemt"
+
+msgid "save automatically"
+msgstr "gem automatisk"
+
 msgid "Remove condition"
 msgstr "Fjern betingelse"
 
@@ -317,6 +326,12 @@ msgstr "kilde"
 
 msgid "button|Search"
 msgstr "Søg"
+
+msgid "button|Save"
+msgstr "Gem"
+
+msgid "button|Reset"
+msgstr "Nulstil"
 
 msgid "text"
 msgstr "tekst"

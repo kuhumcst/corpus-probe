@@ -285,6 +285,18 @@ pre { font-size: 0.875rem; padding: 0.75rem 1rem;
 .search-form > *,
 .search-form :where(.query, .rail, fieldset, noscript) > * { margin-block: 0; }
 
+/* a form cannot hold a form, so this holds only the preferences box's
+   target and return: it must lay nothing out, or the page grid would
+   place it as a cell of its own */
+.settings-form { display: contents; }
+.settings-buttons { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.settings-buttons > button { flex: 1; }
+
+/* spoken, never seen: clipped rather than moved off screen, which cannot
+   reach the scrollable area */
+.announcement { position: absolute; width: 1px; height: 1px;
+                clip-path: inset(50%); overflow: hidden; }
+
 .query { display: flex; flex-direction: column; gap: 0.5rem; }
 
 /* the submit button keeps to the end, at the foot of a tall text area */

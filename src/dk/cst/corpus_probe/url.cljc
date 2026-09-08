@@ -6,7 +6,7 @@
   (:require [clojure.string :as str]
             [dk.cst.corpus-probe.query.mode :as mode]
             [dk.cst.corpus-probe.query.tokens :as tokens])
-  #?(:clj (:import [java.net URLEncoder])))
+  #?(:clj (:import [java.net URLDecoder URLEncoder])))
 
 (def home
   "The frontpage."
@@ -73,7 +73,11 @@
   `cookie-max-age`, site-wide and on same-site requests only, as the
   server writes it in a header and the client to the document."
   [k v]
-  (str (name k) "=" v ";Path=/;Max-Age=" cookie-max-age ";SameSite=Lax"))
+  ;; a setting stored as nothing is forgotten, so storing and clearing
+  ;; are one path and a reset needs no writer of its own
+  (str (name k) "=" v ";Path=/"
+       ";Max-Age=" (if (str/blank? (str v)) 0 cookie-max-age)
+       ";SameSite=Lax"))
 
 (def context-api
   "The data behind one hit shown with wider context, for the client."
@@ -233,6 +237,19 @@
                                              (sort hits))))
     (dissoc params :expand)))
 
+(def chosen-scope
+  "The `scope` value marking a selection the reader made, so that having
+  emptied it is not read as having named no corpus."
+  "chosen")
+
+(def all-scope
+  "The `scope` value naming every corpus the reader may choose. No URL
+  carries it: a URL says the same by naming no corpus. But a form is not
+  a search, since a chooser with every box ticked and one with none are
+  different and only one of them can be searched, so the stored settings
+  say it (see dk.cst.corpus-probe.settings/string)."
+  "all")
+
 (defn with-corpora
   "The search `params` with their corpus selection as one param: the
   `corpora-param` names comma-joined, or none when they are every corpus
@@ -247,7 +264,16 @@
       ;; a selection the reader emptied: the one case where naming no
       ;; corpus does not mean every corpus
       (and (empty? corpora) (contains? params :scope))
-      (assoc :scope "chosen"))))
+      (assoc :scope chosen-scope))))
+
+(defn with-every-corpus
+  "The search `params` with a selection of `all-scope` written out as the
+  `all` corpora it stands for, the inverse of what `with-corpora` folds
+  away, so that nothing downstream reads a scope no form submits."
+  [params all]
+  (cond-> params
+    (= all-scope (:scope params))
+    (assoc :corpus (vec all) :scope chosen-scope)))
 
 (defn without-orphans
   "Canonical `params` less a param that only qualifies one that is not
@@ -309,21 +335,44 @@
         v     (if (vector? v) v [v])]
     [(name k) (str v)]))
 
+(defn form-encode
+  "The [name value] `pairs` as a query string, encoded as a browser
+  encodes a GET submit, so a URL the app builds and one the browser
+  built from the same form are the same."
+  [pairs]
+  #?(:clj  (str/join "&" (map (fn [[k v]]
+                                (str k "=" (URLEncoder/encode
+                                            ^String v "UTF-8")))
+                              pairs))
+     :cljs (.toString (js/URLSearchParams. (clj->js pairs)))))
+
+(defn form-decode
+  "The params of query string `s`, keyed as `form-encode` names them; a
+  key that repeats keeps its last value, since nothing this reads back
+  is written more than once."
+  [s]
+  (let [decode (fn [x]
+                 ;; a form encodes a space as a plus, which neither
+                 ;; percent-decoder undoes on its own
+                 (let [x (str/replace (str x) "+" " ")]
+                   #?(:clj  (URLDecoder/decode x "UTF-8")
+                      :cljs (js/decodeURIComponent x))))]
+    (into {}
+          (comp (remove str/blank?)
+                (map (fn [item]
+                       (let [[k v] (str/split item #"=" 2)]
+                         [(keyword (decode k)) (decode v)]))))
+          (str/split (str s) #"&"))))
+
 (defn query-string
   "The query string of search `params`, canonicalised: the `pairs`
-  form-encoded, as a browser encodes a GET submit, so a URL the app
-  builds and one the browser built from the same form are the same."
+  `form-encode`d."
   [params]
-  (let [pairs (pairs (canonical params))]
-    (-> #?(:clj  (str/join "&" (map (fn [[k v]]
-                                      (str k "=" (URLEncoder/encode
-                                                  ^String v "UTF-8")))
-                                    pairs))
-           :cljs (.toString (js/URLSearchParams. (clj->js pairs))))
-        ;; RFC 3986 allows both in a query, and they separate the corpora
-        ;; and the expanded hits a reader should be able to read in the bar
-        (str/replace "%2C" ",")
-        (str/replace "%3A" ":"))))
+  (-> (form-encode (pairs (canonical params)))
+      ;; RFC 3986 allows both in a query, and they separate the corpora
+      ;; and the expanded hits a reader should be able to read in the bar
+      (str/replace "%2C" ",")
+      (str/replace "%3A" ":")))
 
 (defn search-href
   "The URL of the search page for `params`: the page itself when they

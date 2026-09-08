@@ -9,6 +9,7 @@
             [dk.cst.corpus-probe.query :as query]
             [dk.cst.corpus-probe.query.mode :as mode]
             [dk.cst.corpus-probe.query.tokens :as tokens]
+            [dk.cst.corpus-probe.settings :as settings]
             [dk.cst.corpus-probe.url :as url]
             [dk.cst.corpus-probe.views.result :as result]
             [dk.cst.corpus-probe.views.search.filter :as filter-views]
@@ -276,11 +277,106 @@
                            :checked (some? ci)}]
            (i18n/tr ui "ignore case")]])])))
 
+(defn settings-now
+  "The settings the form of `state` shows, as they would be stored,
+  measured against its `:selectable` corpora.
+
+  The client calls it when it stores, so the value a button offers and
+  the value a change writes cannot drift apart."
+  [{:keys [params selectable autosave?]}]
+  (settings/string (cond-> params
+                     (false? autosave?)
+                     (assoc settings/autosave-key settings/autosave-off))
+                   selectable))
+
+(defn settings-buttons
+  "The buttons in `ui` storing `now` (see `settings-now`) as the reader's
+  own defaults, or forgetting what they have `stored`.
+
+  Without a `client?` neither is disabled: their state is read as the
+  page renders and goes stale as soon as a box is ticked, and a button
+  that does nothing is kinder than one that refuses a change the reader
+  really has made."
+  [ui now stored client?]
+  (let [departs? (seq now)
+        unsaved? (not= now stored)
+        button   (fn [value on? label]
+                   [:button {:type     "submit" :form settings/form-id
+                             :name     (name settings/cookie-key) :value value
+                             :disabled (boolean (and client? (not on?)))}
+                    label])]
+    [:p.settings-buttons
+     (button now (and departs? unsaved?) (i18n/trx ui "button" "Save"))
+     ;; the empty settings are no settings, so forgetting is storing
+     (button "" (or departs? (seq stored)) (i18n/trx ui "button" "Reset"))]))
+
+(defn autosave-control
+  "The checkbox in `ui` saying whether a change to the form stores the
+  settings it leaves, ticked when `autosave?`.
+
+  It stores itself the moment it changes, which cannot wait for the
+  button beside it: a reader who turns storing off could never keep that
+  choice if keeping it were the first thing the choice forbade. Without
+  a `client?` it is posted with the buttons instead."
+  [ui autosave? client?]
+  [:p.settings-autosave
+   [:label
+    [:input (cond-> {:type    "checkbox"
+                     :form    settings/form-id
+                     :name    (name settings/autosave-key)
+                     :value   "on"
+                     :checked (boolean autosave?)}
+              client? (assoc :on {:change [:set-autosave
+                                           :event.target/checked]}))]
+    (i18n/tr ui "save automatically")]])
+
+(defn settings-announcement
+  "The live region of the preferences box in `ui`, spoken and never seen,
+  saying what `announcement` names and nothing for nil.
+
+  Storing moves nothing and the button pressed goes quiet, so a reader
+  not watching the screen is otherwise told nothing; off screen because
+  one who is watching has the buttons. The announcement belongs to the
+  act and not to the state it left, so the next action takes it away
+  (see dk.cst.corpus-probe.client.actions/act) and a second save is
+  spoken as the first was."
+  [ui announcement]
+  (widgets/status "announcement"
+                  (when (= :saved announcement)
+                    (i18n/tr ui "Settings saved"))))
+
+(defn settings-fieldset
+  "The preferences box of the search form of `state` in `ui`: what the
+  form is stored as, forgotten with, and whether it is stored at all."
+  [{:keys [client? autosave? stored announcement] :as state} ui]
+  ;; the group takes focus where the button that had it goes quiet: the
+  ;; box they are still in, rather than the button that would undo it
+  [:fieldset.settings.box {:id settings/box-id :tabindex "-1"}
+   [:legend (i18n/trx ui "legend" "Preferences")]
+   (settings-buttons ui (settings-now state) stored client?)
+   (autosave-control ui autosave? client?)
+   (settings-announcement ui announcement)])
+
+(defn settings-form
+  "The form the `settings-fieldset`'s controls post to, returning to the
+  search `params` describe.
+
+  A preference is state, so it is posted rather than asked for in a URL
+  (see dk.cst.corpus-probe.server/serve-preferences). The buttons carry
+  what is stored and stand elsewhere, so this holds nothing but the
+  return and the id they name."
+  [params]
+  [:form.settings-form {:id     settings/form-id
+                        :method "post"
+                        :action url/preferences}
+   [:input {:type "hidden" :name "return" :value (url/search-href params)}]])
+
 (defn search-form
   "The search form of `state`, submitted as GET to `action` with the
   page's own `extra` hidden inputs and the `chooser` of its corpora: the
   query row, then the boxes deciding how the query is read and the
-  scope it is kept within, prefilled from the state's `:params`.
+  scope it is kept within, prefilled from the state's `:params`, and the
+  buttons storing them as the reader's defaults.
 
   The query is required unless the form is submitted from the frequency
   `:view`, which counts every token of a blank one."
@@ -331,7 +427,9 @@
                                      (assoc values
                                             :held     held
                                             :pending? filters-pending?
-                                            :client?  client?))]]
+                                            :client?  client?))
+       (settings-fieldset state ui)]]
+     (settings-form params)
      ;; only where the client runs: every other navigation is the
      ;; browser's own, and the browser reports those itself
      (when client? (navigation-status ui pending?))]))

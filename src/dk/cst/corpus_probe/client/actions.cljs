@@ -7,9 +7,11 @@
             [dk.cst.corpus-probe.query :as query]
             [dk.cst.corpus-probe.query.mode :as mode]
             [dk.cst.corpus-probe.query.tokens :as tokens]
+            [dk.cst.corpus-probe.settings :as settings]
             [dk.cst.corpus-probe.url :as url]
             [dk.cst.corpus-probe.views.chooser :as chooser]
             [dk.cst.corpus-probe.views.concordance :as concordance]
+            [dk.cst.corpus-probe.views.search :as search-views]
             [dk.cst.corpus-probe.views.search.filter :as filter-views]))
 
 (def arrow-keys
@@ -467,6 +469,64 @@
         (with-expansions (url/expand-param
                           (:expand (router/url-params url)))))))
 
+(defn set-preference
+  "Store setting `k` as `v` and put the reader where that leaves them,
+  who came from `return`.
+
+  Storing the search settings asks the server for nothing, so the page
+  stays as it is. Every other preference is fetched again: the language
+  because the server words the title and the summaries, a reset because
+  the form it leaves behind is the bare one (see
+  dk.cst.corpus-probe.settings/return). Onto the history only where it
+  took the reader somewhere else."
+  [state k v return]
+  (let [k (keyword k)]
+    (if (and (= settings/cookie-key k) (not (settings/reset? {k v})))
+      {:state   (assoc state :stored v :announcement :saved)
+       :effects [[:set-cookie k v] [:focus settings/box-id]]}
+      (let [to (settings/return {k v :return return})]
+        {:state   state
+         :effects [[:set-cookie k v] [:navigate to (not= to return)]]}))))
+
+(defn form-changed
+  "The state with the settings the form now shows in `params` taken into
+  it, stored where the reader has automatic storing on.
+
+  This client answers only the controls it has handlers for and reads
+  the rest when a search is sent, so the matching options would
+  otherwise never reach what the preferences box measures, and a change
+  nobody searched on would be lost on going anywhere else. A corpus
+  comes back as one name or several, so it is read as a URL names it."
+  [state params]
+  (let [shown (cond-> (select-keys params settings/param-keys)
+                (contains? params :corpus)
+                (update :corpus url/corpora-param))
+        state (update state :params merge shown)
+        now   (search-views/settings-now state)]
+    (if (and (:autosave? state) (not= now (:stored state)))
+      {:state   (assoc state :stored now)
+       :effects [[:set-cookie settings/cookie-key now]]}
+      {:state state})))
+
+(defn set-autosave
+  "Turn storing the settings as the reader changes them `on?` or off, and
+  store that choice at once (see
+  dk.cst.corpus-probe.views.search/autosave-control).
+
+  Turning it on stores the form in front of them, which is what asking
+  for it from now on means. Turning it off stores the choice alone: a
+  reader turning storing off is not asking for one last store."
+  [{:keys [stored selectable] :as state} on?]
+  (let [state (assoc state :autosave? on?)
+        now   (if on?
+                (search-views/settings-now state)
+                (settings/string
+                 (assoc (url/form-decode stored)
+                        settings/autosave-key settings/autosave-off)
+                 selectable))]
+    {:state   (assoc state :stored now)
+     :effects [[:set-cookie settings/cookie-key now]]}))
+
 (defn page-arrived
   "The state of the page `data` fetched from `href` and the effects of
   arriving on it, its address pushed onto the history when `push?`."
@@ -488,46 +548,52 @@
   nothing here answers. The render hooks never come this way (see
   dk.cst.corpus-probe.client/dispatch!)."
   [state [kind x y z]]
-  (case kind
-    :set-mode             {:state (switch-mode state x y)}
-    :add-token            (add-token state)
-    :remove-token         (remove-token state x)
-    :add-condition        (add-condition state x)
-    :remove-condition     (let [[i id] x] (remove-condition state i id))
-    ;; so the answer can tell when the form has moved on from what ran;
-    ;; the field keeps what was typed, since Replicant leaves an
-    ;; unchanged value alone
-    :set-query            {:state (assoc-in state [:params :q] x)}
-    :submit-on-enter      (submit-on-enter state x y z)
-    :set-condition        {:state (set-condition state x y)}
-    :set-token            {:state (set-token state x y)}
-    :apply-view           {:state state :effects [[:resubmit url/form-id]]}
-    :toggle-corpora       (toggle-corpora state x)
-    :toggle-filter-values (let [[attr values] x]
-                            {:state (toggle-filter-values state attr values)})
-    :set-filter-pattern   {:state (set-filter-pattern state x y)}
-    :set-filter-bound     {:state (set-filter-bound state x y z)}
-    :clear-filter         {:state (clear-filter state)}
-    :engage               (refreshed x (lists/engage state x))
-    :toggle-open          (refreshed x (lists/toggle-open state x y z))
-    :filter               {:state (lists/apply-filter state x y)}
-    :leave                {:state (cond-> state y (lists/leave x))}
-    :swallow-enter        (swallow-enter state x)
-    ;; on focus as well as on click, so the panel follows the cursor
-    :inspect              {:state (inspect state x)}
-    :close                (close state)
-    :move-cursor          (move-cursor state x y)
-    :leave-concordance    {:state state :effects [[:leave-concordance]]}
-    :toggle-context       (toggle-context state x)
-    :context-arrived      (context-arrived state x y)
-    :context-failed       {:state (context-failed state x)}
-    :filters-due          (filters-due state)
-    :filters-arrived      {:state (filters-arrived state x y)}
-    :filters-failed       {:state (assoc state :filters-pending? false)}
-    :counts-arrived       (counts-arrived state x)
-    :page-arrived         (page-arrived x y z)
-    :pending              {:state (assoc state :pending? true)}
-    :set-fragment         {:state (assoc state :fragment x)}
-    :navigate             {:state state :effects [[:navigate x y]]}
-    :set-preference       {:state state :effects [[:set-preference x y]]}
-    nil))
+  ;; an announcement belongs to the act, not to the state it left: taking
+  ;; it away here empties the live region on the reader's next move, so
+  ;; the same thing said twice is heard twice
+  (let [state (dissoc state :announcement)]
+    (case kind
+      :set-mode             {:state (switch-mode state x y)}
+      :add-token            (add-token state)
+      :remove-token         (remove-token state x)
+      :add-condition        (add-condition state x)
+      :remove-condition     (let [[i id] x] (remove-condition state i id))
+      ;; so the answer can tell when the form has moved on from what ran;
+      ;; the field keeps what was typed, since Replicant leaves an
+      ;; unchanged value alone
+      :set-query            {:state (assoc-in state [:params :q] x)}
+      :submit-on-enter      (submit-on-enter state x y z)
+      :set-condition        {:state (set-condition state x y)}
+      :set-token            {:state (set-token state x y)}
+      :apply-view           {:state state :effects [[:resubmit url/form-id]]}
+      :toggle-corpora       (toggle-corpora state x)
+      :toggle-filter-values (let [[attr values] x]
+                              {:state (toggle-filter-values state attr values)})
+      :set-filter-pattern   {:state (set-filter-pattern state x y)}
+      :set-filter-bound     {:state (set-filter-bound state x y z)}
+      :clear-filter         {:state (clear-filter state)}
+      :engage               (refreshed x (lists/engage state x))
+      :toggle-open          (refreshed x (lists/toggle-open state x y z))
+      :filter               {:state (lists/apply-filter state x y)}
+      :leave                {:state (cond-> state y (lists/leave x))}
+      :swallow-enter        (swallow-enter state x)
+      ;; on focus as well as on click, so the panel follows the cursor
+      :inspect              {:state (inspect state x)}
+      :close                (close state)
+      :move-cursor          (move-cursor state x y)
+      :leave-concordance    {:state state :effects [[:leave-concordance]]}
+      :toggle-context       (toggle-context state x)
+      :context-arrived      (context-arrived state x y)
+      :context-failed       {:state (context-failed state x)}
+      :filters-due          (filters-due state)
+      :filters-arrived      {:state (filters-arrived state x y)}
+      :filters-failed       {:state (assoc state :filters-pending? false)}
+      :counts-arrived       (counts-arrived state x)
+      :page-arrived         (page-arrived x y z)
+      :pending              {:state (assoc state :pending? true)}
+      :set-fragment         {:state (assoc state :fragment x)}
+      :navigate             {:state state :effects [[:navigate x y]]}
+      :form-changed         (form-changed state x)
+      :set-autosave         (set-autosave state x)
+      :set-preference       (set-preference state x y z)
+      nil)))

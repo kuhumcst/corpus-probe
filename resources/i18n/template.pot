@@ -580,6 +580,26 @@ msgid "find"
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/search.cljc
+msgid "button|Save"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/search.cljc
+msgid "button|Reset"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/search.cljc
+msgid "save automatically"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/search.cljc
+msgid "Settings saved"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/search.cljc
+msgid "legend|Preferences"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/search.cljc
 msgid "button|Search"
 msgstr ""
 

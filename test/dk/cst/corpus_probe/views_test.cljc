@@ -356,7 +356,17 @@
     (testing "a whole-corpus table says so rather than naming a query"
       (is (= "All tokens · PROBE · by lemma · Frequencies · corpus-probe"
              (views/result-title en :frequencies (assoc params :q "")
-                                 result))))))
+                                 result))))
+    (testing "a form seeded from stored settings has counted nothing, so
+              it is the search page whatever view it was left in"
+      (is (= "Search · corpus-probe"
+             (views/title {:route :search :lang "en" :seeded? true
+                           :view  :frequencies
+                           :params (dissoc params :q)})))
+      (is (= "All tokens · PROBE · by lemma · Frequencies · corpus-probe"
+             (views/title {:route :search :lang "en"
+                           :view  :frequencies
+                           :params (dissoc params :q) :result result}))))))
 
 (deftest document-title-test
   (is (= "Query help"

@@ -9,6 +9,7 @@
             [dk.cst.corpus-probe.cwb.corpus :as corpus]
             [dk.cst.corpus-probe.i18n :as i18n]
             [dk.cst.corpus-probe.search.batch :as batch]
+            [dk.cst.corpus-probe.settings :as settings]
             [dk.cst.corpus-probe.url :as url]))
 
 (defn multi-param?
@@ -201,7 +202,10 @@
   the name and the value of a cookie can fill a reader's jar until their
   requests no longer fit in a header, or shadow a cookie this app relies
   on. Whatever comes back out is a value the app has already agreed to."
-  {:lang i18n/supported?})
+  ;; the search settings are one setting holding many, so forgetting them
+  ;; clears one cookie and leaves the reader's language alone
+  {:lang               i18n/supported?
+   settings/cookie-key settings/storable?})
 
 (defn cookie-value
   "The value stored under `k` in the `Cookie` header value `s`, when it is
@@ -233,6 +237,12 @@
   there always is one."
   [request]
   (some #(when (i18n/supported? %) %) (request-languages request)))
+
+(defn stored-settings
+  "The settings `request` stored, as written; nil for a reader who has
+  stored none."
+  [request]
+  (cookie-value (get-in request [:headers "cookie"]) settings/cookie-key))
 
 (defn preference-cookies
   "The Set-Cookie headers storing every `preference-keys` setting that

@@ -5,6 +5,8 @@
             [dk.cst.corpus-probe.test.hiccup :refer [da en text]]
             [dk.cst.corpus-probe.i18n :as i18n]
             [dk.cst.corpus-probe.query.mode :as mode]
+            [dk.cst.corpus-probe.settings :as settings]
+            [dk.cst.corpus-probe.url :as url]
             [dk.cst.corpus-probe.views.corpus :as corpus-views]
             [dk.cst.corpus-probe.views.search :as search]))
 
@@ -134,10 +136,12 @@
                                  (assoc-in [:params :ci] "on"))))]
         (is (not (some #{:fieldset.matching.box} html)))
         (is (not (some #(and (map? %) (= "ci" (:name %))) html)))))
-    (testing "one status region in the form, for what a change of mode
-              could not keep, empty until then; the navigation's only with
-              a client to put anything in it"
-      (is (= [[:div.status {:role "status"} nil]]
+    (testing "two status regions in the form, each empty until it has
+              something to say: what a change of mode could not keep, and
+              what the preferences box says without showing it; the
+              navigation's only with a client to put anything in it"
+      (is (= [[:div.status {:role "status"} nil]
+              [:div.status {:class "announcement" :role "status"} nil]]
              (filter #(and (vector? %) (= :div.status (first %)))
                      (deep html)))))
     (testing "with one, the navigation's follows the form, inside the same
@@ -173,6 +177,80 @@
       (is (some #{:noscript} (deep (form {:ui en :folders [] :params {}})))))
     (testing "with it, none: the radios change the form themselves"
       (is (nil? (button {:ui en :folders [] :params {} :client? true}))))))
+
+(deftest settings-fieldset-test
+  (let [state   {:ui en :folders [] :client? true :autosave? true :stored ""
+                 :params {:corpus ["PROBE"] :q "hund" :sort "word"}}
+        buttons (fn [state]
+                  (filter #(and (vector? %) (= :button (first %))
+                                (= settings/form-id (:form (second %))))
+                          (deep (form state))))
+        attrs-of (fn [state label]
+                   (some #(when (= label (last %)) (second %)) (buttons state)))
+        settings-form (fn [state]
+                        (some #(when (and (vector? %)
+                                          (= :form.settings-form (first %)))
+                                 %)
+                              (deep (form state))))]
+    (testing "the settings the form shows are stored as they stand, and
+              never the query itself"
+      (is (= {:corpus "PROBE" :sort "word"}
+             (settings/params (:value (attrs-of state "Save"))))))
+    (testing "and forgetting is storing nothing"
+      (is (= "" (:value (attrs-of state "Reset")))))
+    (testing "a form nobody has departed from stores nothing and has
+              nothing to go back from, so neither button does anything"
+      (let [state (assoc state :params {})]
+        (is (true? (:disabled (attrs-of state "Save"))))
+        (is (true? (:disabled (attrs-of state "Reset"))))))
+    (testing "a form that departs from the defaults and says something
+              not stored already offers both"
+      (is (false? (:disabled (attrs-of state "Save"))))
+      (is (false? (:disabled (attrs-of state "Reset")))))
+    (testing "a form already stored as it stands has nothing left to
+              store, but there is still something to go back from"
+      (let [state (assoc state :stored "corpus=PROBE&sort=word")]
+        (is (true? (:disabled (attrs-of state "Save"))))
+        (is (false? (:disabled (attrs-of state "Reset"))))))
+    (testing "and one back at the defaults with something stored can only
+              go back"
+      (let [state (assoc state :params {} :stored "corpus=PROBE")]
+        (is (true? (:disabled (attrs-of state "Save"))))
+        (is (false? (:disabled (attrs-of state "Reset"))))))
+    (testing "without a script the state is read once and goes stale as
+              soon as a box is ticked, so neither is ever refused"
+      (let [state (assoc state :client? false :params {})]
+        (is (false? (:disabled (attrs-of state "Save"))))
+        (is (false? (:disabled (attrs-of state "Reset"))))))
+    (testing "storing as you search is what a reader has until they say
+              otherwise, and turning it off is stored with the rest"
+      (let [checkbox (fn [state]
+                       (some #(when (and (vector? %) (= :input (first %))
+                                         (= "autosave" (:name (second %))))
+                                (second %))
+                             (deep (form state))))]
+        (is (true? (:checked (checkbox state))))
+        (is (false? (:checked (checkbox (assoc state :autosave? false)))))
+        (is (= {:corpus "PROBE" :sort "word" :autosave "off"}
+               (url/form-decode
+                (:value (attrs-of (assoc state :autosave? false) "Save")))))))
+    (testing "storing is spoken and not shown: the box says as much by
+              going quiet, and a reader not watching the screen is told"
+      (let [said (fn [state]
+                   (some #(when (and (vector? %)
+                                     (= "announcement" (:class (second %))))
+                            (last %))
+                         (deep (form state))))]
+        (is (nil? (said state)))
+        (is (= "Settings saved" (said (assoc state :announcement :saved))))
+        (is (= "Indstillinger gemt"
+               (said (assoc state :ui da :announcement :saved))))))
+    (testing "a preference is posted, not asked for in a URL, and the
+              reader is sent back to the search they were on"
+      (let [[_ attrs [_ input]] (settings-form state)]
+        (is (= url/preferences (:action attrs)))
+        (is (= "post" (:method attrs)))
+        (is (= "/search?q=hund&corpus=PROBE&sort=word" (:value input)))))))
 
 (deftest cqp-line-test
   (testing "what the tokens run as, under them, as the form holds them

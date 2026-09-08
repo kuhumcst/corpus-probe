@@ -250,10 +250,15 @@
   "The document title of the page `state` describes, by its `:route` and
   in the language of its `:lang`; the app name alone for a route this
   app does not title."
-  [{:keys [route lang view params result data] :as state}]
+  [{:keys [route lang view params result data seeded?] :as state}]
   (let [ui (i18n/->ui lang)]
     (case route
-      :search   (result-title ui view params result)
+      ;; a seeded form has answered nothing, whatever view the settings
+      ;; left it in: the frequency view names what it counted, and it
+      ;; counted nothing
+      :search   (if seeded?
+                  (search-title ui nil)
+                  (result-title ui view params result))
       :document (page-title (document-title (:body data)))
       :corpora  (page-title (i18n/tr ui "Corpora"))
       :corpus   (page-title (:corpus data))

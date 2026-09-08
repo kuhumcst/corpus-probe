@@ -324,6 +324,77 @@ Translators work in Poedit or Weblate with [the
 template](resources/i18n/template.pot). The template is extracted from
 the source, and the test suite makes sure that it does not drift.
 
+### Preferences
+
+The reader does not build their settings again on each visit. Two
+cookies hold them, and no URL names either of them. The first holds the
+language (see above). The second holds the settings of the search form:
+the corpora, the form of the query, how the query is matched and how a
+result is shown. The query itself is not a setting, and neither is the
+metadata filter. Both belong to one search.
+
+Only what departs from the app's own defaults is stored. Thus the
+settings stay small. A form is not a search, though: a URL that names no
+corpus searches them all, but a chooser with every box ticked and one
+with none are different, and the form refuses to search from the empty
+one. So a selection of every corpus is stored as a scope of its own, and
+written out again for the form that reads it. A registry of many corpora
+would not fit in a cookie by name.
+
+With a script, the settings are stored as the reader changes them: a
+change to any control of the search form stores what the form then says.
+Thus a corpus ticked and not searched on survives a walk to the glossary
+and back. Only a control the reader works changes anything; arriving
+somewhere never does.
+
+Without a script there is nothing to notice a change, so a search stores
+the settings it was made with instead. The server can tell a submit from
+a followed link: a GET form submits its defaults and its empty fields
+too, so a submit never asks in the words of a citation, while a link
+this app writes always does. Thus a link that a colleague shares does
+not change the settings of the person who opens it, either way.
+
+The **Preferences** box at the foot of the form holds the controls.
+**Save** stores the form as it stands. **Reset** forgets what is stored
+and returns to the bare form, which is what a reset looks like.
+Forgetting is storing nothing, and it leaves the language alone. Save
+is offered while the form departs from the defaults and says something
+that is not stored already; Reset while there is anything to go back
+from. Without a script neither is refused: their state is read when the
+page renders, and it goes stale as soon as a box is ticked.
+
+Saving asks the server for nothing, because the server words no part of
+the page from the stored settings. The page stays as it is; the Save
+button goes quiet and Reset wakes up. Focus moves to the box, because a
+quiet button holds no focus and the reader would otherwise be dropped on
+the document and lose their place in the form. A live region in the box
+says that it was saved. The region is clipped and never seen: a reader
+who is watching the screen has the buttons to tell them, and one who is
+not has nothing else. It says so for the act and not for the state it
+left, so the next thing the reader does empties it, and a second save is
+spoken as the first was.
+
+A reset does ask again: the bare form it leaves behind is the server's
+to describe. Every routed navigation lands the reader at the top of what
+arrived, on the results where a search found any and on the main content
+otherwise. A real page load announces itself and resets focus; one the
+client makes must do the same by hand, or a reader who is not watching
+the screen is told nothing.
+
+**Save automatically** is that storing as you go. It is on until the
+reader says otherwise, so only turning it off is stored. Turned off, the
+Save button is the only way to store anything; turned on, it stores the
+form at once, which is what asking for it to be stored from now on
+means, and the Save button has nothing left to do and says so by going
+quiet. The choice stores itself the moment it changes, which is the one
+thing it cannot leave to the button beside it.
+
+The stored settings fill a form that asks for nothing: the bare
+`/search`. A URL that asks anything is read as it stands. Thus a result
+URL is still a citation, and it finds the same hits for everybody. A
+seeded form runs no search of its own, because the reader has asked for
+none yet.
+
 ### At the REPL
 
 One function call in, plain data out:

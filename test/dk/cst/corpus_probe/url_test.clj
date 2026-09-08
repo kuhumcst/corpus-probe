@@ -167,6 +167,30 @@
   (testing "nothing to say is an empty string"
     (is (= "" (url/query-string {:mode "simple"})))))
 
+(deftest form-decode-test
+  (testing "the inverse of form-encode for anything this app writes"
+    (is (= {:corpus "PROBE,VISER" :q "[lemma = \"hund\"]"}
+           (url/form-decode (url/form-encode [["corpus" "PROBE,VISER"]
+                                              ["q" "[lemma = \"hund\"]"]]))))
+    (is (= {:q "en høne"} (url/form-decode "q=en+h%C3%B8ne"))))
+  (testing "nothing said is nothing read"
+    (is (= {} (url/form-decode "")))
+    (is (= {} (url/form-decode nil))))
+  (testing "a key written without a value has none"
+    (is (= {:scope ""} (url/form-decode "scope"))))
+  (testing "a repeated key keeps its last value"
+    (is (= {:page "2"} (url/form-decode "page=1&page=2")))))
+
+
+(deftest cookie-test
+  (testing "a setting outlives the visit that set it, site-wide and on
+            same-site requests only"
+    (is (= (str "lang=en;Path=/;Max-Age=" url/cookie-max-age ";SameSite=Lax")
+           (url/cookie :lang "en"))))
+  (testing "a setting stored as nothing is a setting forgotten"
+    (is (= "settings=;Path=/;Max-Age=0;SameSite=Lax"
+           (url/cookie :settings "")))))
+
 (deftest hrefs-test
   (testing "the search page, bare when the params say nothing"
     (is (= "/search" (url/search-href {})))

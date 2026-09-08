@@ -20,72 +20,96 @@
             [dk.cst.corpus-probe.search.frequency :as frequency]
             [dk.cst.corpus-probe.server.request :as request]
             [dk.cst.corpus-probe.server.response :as response]
+            [dk.cst.corpus-probe.settings :as settings]
             [dk.cst.corpus-probe.url :as url]
             [dk.cst.corpus-probe.views :as views]
             [dk.cst.corpus-probe.views.frequency :as frequency-views]))
 
-(defn selected-corpora!
-  "The corpus names `params` asks for against the registry `entries` via
-  `ctx`: those it names, or every readable corpus when it names none and
-  the selection is not one the reader made.
+(defn selected-corpora
+  "The corpus names `params` asks for out of the `selectable` ones: those
+  it names, or all of them when it names none and the selection is not
+  one the reader made.
 
   The form submits a `scope` param alongside its checkboxes, so an empty
   selection a reader ticked their way to is answered with the no-corpus
   error rather than silently widened to the whole registry."
-  [ctx entries params]
+  [selectable params]
   (let [named (url/corpora-param (:corpus params))]
     (if (or (seq named) (contains? params :scope))
       named
-      (corpus/readable-corpora! ctx entries))))
+      (vec selectable))))
 
 (defn search-request!
   "What `request` asks of `ctx`: its scalar query `:params`, the
-  registry's `:entries`, the corpus names `:named`, `:selected`, `:known`
-  and `:unknown`, what `:arrived` with the form, the `:cqp` the query
-  compiles to and the `:opts` every search of it takes. A request naming
-  no corpus searches every readable one (see `selected-corpora!`).
+  registry's `:entries`, the `:selectable` corpora, the corpus names
+  `:named`, `:selected`, `:known` and `:unknown`, what `:arrived` with
+  the form, the `:cqp` the query compiles to and the `:opts` every
+  search of it takes. A request naming no corpus searches every readable
+  one (see `selected-corpora`).
 
   Every handler that answers a search starts from this."
   [ctx request]
-  (let [params   (request/scalar-params (:query-params request))
-        arrived  (query/arrived params)
-        query    (:query arrived)
-        entries  (registry/entries ctx)
-        selected (selected-corpora! ctx entries params)
+  (let [entries (registry/entries ctx)
+        ;; read once and carried: the citation, the selection and the
+        ;; stored settings all measure against the same set, and reading
+        ;; it runs cqp over every corpus of the registry
+        selectable      (corpus/readable-corpora! ctx entries)
+        ;; the stored settings name every corpus with a scope, which
+        ;; nothing past this reads
+        params          (url/with-every-corpus
+                          (request/scalar-params (:query-params request))
+                          selectable)
+        arrived         (query/arrived params)
+        query           (:query arrived)
+        selected        (selected-corpora selectable params)
         [known unknown] (corpus/split-known entries selected)]
-    {:params   params
-     :arrived  arrived
-     :entries  entries
-     :named    (url/corpora-param (:corpus params))
-     :selected selected
-     :known    known
-     :unknown  unknown
-     :cqp      (query/->cqp query)
-     :opts     {:filter   (request/filter-params params)
-                :patterns (request/pattern-params params)
-                :ranges   (request/range-params params)
-                :within   (query/within query)
-                :subset   (request/subset-param params)
-                :near     (request/near-param (:near params)
-                                              (:distance params))}}))
+    {:params     params
+     :arrived    arrived
+     :entries    entries
+     :selectable selectable
+     :named      (url/corpora-param (:corpus params))
+     :selected   selected
+     :known      known
+     :unknown    unknown
+     :cqp        (query/->cqp query)
+     :opts       {:filter   (request/filter-params params)
+                  :patterns (request/pattern-params params)
+                  :ranges   (request/range-params params)
+                  :within   (query/within query)
+                  :subset   (request/subset-param params)
+                  :near     (request/near-param (:near params)
+                                                (:distance params))}}))
 
 (defn read-request!
   "What the search page `request` asks of `ctx`: the search it describes
   (see `search-request!`) plus what the page reads beside it: the `:view`
   of the result, the `:attr` and `:at` a frequency table groups by and
   whether it counts `:docs`, the `:page` of a concordance, the `:lang`
-  the page is served in, and whether the client asked for the data
+  the page is served in, the settings its reader `:stored` and whether
+  the params were `:seeded?` from them, whether it stores them as they
+  change (`:autosave?`), and whether the client asked for the data
   alone, `:transit?`."
   [ctx request]
-  (let [{:keys [params] :as req} (search-request! ctx request)]
+  (let [cookie  (request/stored-settings request)
+        stored  (settings/params cookie)
+        ;; the stored settings stand in only for a request that asks for
+        ;; none: a URL that asks anything is read as it stands, or a link
+        ;; to a result would find different hits for the reader who
+        ;; stored a selection than for the one who shared it
+        seeded? (and (seq stored) (empty? (:query-params request)))
+        request (cond-> request seeded? (assoc :query-params stored))
+        {:keys [params] :as req} (search-request! ctx request)]
     (assoc req
-           :view     (request/view-param (:view params))
-           :attr     (request/attr-param (:attr params))
-           :at       (request/position-param (:at params))
-           :docs     (some? (:docs params))
-           :page     (request/page-param (:page params))
-           :lang     (request/request-language request)
-           :transit? (request/wants-transit? request))))
+           :view      (request/view-param (:view params))
+           :attr      (request/attr-param (:attr params))
+           :at        (request/position-param (:at params))
+           :docs      (some? (:docs params))
+           :page      (request/page-param (:page params))
+           :lang      (request/request-language request)
+           :stored    stored
+           :autosave? (settings/autosave? cookie)
+           :seeded?   seeded?
+           :transit?  (request/wants-transit? request))))
 
 (defn runs?
   "True when the search `req` (see `read-request!`) runs in its `:view`:
@@ -93,11 +117,15 @@
   which a blank query counts, unless the query is blank only because a
   change of mode could not keep it, when the form is shown and nothing
   runs."
-  [{:keys [view params cqp known unknown]}]
-  (boolean (or cqp
-               (and (= :frequencies view)
-                    (not (mode/unread-query? params))
-                    (or (seq known) (seq unknown))))))
+  [{:keys [view params cqp known unknown seeded?]}]
+  ;; a seeded form has been asked nothing: the frequency view of a blank
+  ;; query would otherwise count every corpus the reader last chose, on
+  ;; arrival, before they had typed anything
+  (boolean (and (not seeded?)
+                (or cqp
+                    (and (= :frequencies view)
+                         (not (mode/unread-query? params))
+                         (or (seq known) (seq unknown)))))))
 
 (defn shown-params
   "The params the search page for `req` (see `read-request!`) shows in
@@ -107,23 +135,37 @@
   the corpora searched, or only those named when nothing runs, since a
   reader arriving at the form starts with none selected; and the
   grouping of the frequency view. The mode is the form's, which the
-  radios read and no URL carries."
-  [{:keys [params arrived selected named] :as req}]
+  radios read and no URL carries.
+
+  A `:seeded?` form shows its settings as they are: how a query is
+  matched rides on the query, and there is none, so re-spelling would
+  drop what was stored."
+  [{:keys [params arrived selected named seeded?] :as req}]
   (let [{:keys [form held]} arrived]
-    (-> (apply dissoc params (mode/read-keys form params))
-        (merge (query/->params form held))
+    (-> (if seeded?
+          params
+          (merge (apply dissoc params (mode/read-keys form params))
+                 (query/->params form held)))
         (assoc :mode   (mode/form-of form)
                :corpus (if (runs? req) selected named)
                :attr   (request/attr-param (:attr params))
                :at     (request/position-param (:at params))))))
 
-(defn citation!
+(defn citation
   "The URL params the search page for `req` (see `read-request!`) cites
-  (see `shown-params` and dk.cst.corpus-probe.url/canonical), against
-  the corpora `ctx` can read."
-  [ctx {:keys [entries] :as req}]
-  (url/canonical (shown-params req)
-                 (set (corpus/readable-corpora! ctx entries))))
+  (see `shown-params` and dk.cst.corpus-probe.url/canonical), against its
+  `:selectable` corpora."
+  [{:keys [selectable] :as req}]
+  (url/canonical (shown-params req) (set selectable)))
+
+(defn uncited?
+  "True when what `request` asks is not the citation `cited` of the
+  search it describes: a form submits its defaults and its empty fields
+  too, so a submitted form is never cited, while every link this app
+  writes is. False for a `:seeded?` `req`, which was asked nothing."
+  [request {:keys [seeded?] :as req} cited]
+  (and (not seeded?)
+       (not= (or (:query-string request) "") (url/query-string cited))))
 
 (defn corpora-attrs!
   "The attribute descriptions `f` (a function of `ctx` and a corpus name)
@@ -337,7 +379,7 @@
 
 (defn links
   "The links out of the search page for `req` (see `read-request!`),
-  cited as `cited` (see `citation!`): to each view of the result as
+  cited as `cited` (see `citation`): to each view of the result as
   `:view-hrefs`, to its exports as `:export-hrefs` once `outcome` holds
   a result, and, for a concordance, to the pages before and after as
   `:prev-href` and `:next-href`."
@@ -365,18 +407,33 @@
   "The data dk.cst.corpus-probe.views/search-page renders one search page
   from, for `request` against `ctx`, or for the search `req` it reads
   with the citation `cited`: the state of the form (see `form-data!`),
-  the outcome of the search when the params describe one, and the links
-  out of it.
+  the outcome of the search when the params describe one, the links out
+  of it, and whether the form was `:seeded?` from the settings it holds
+  as `:stored`, which the title and the preferences box read against the
+  `:selectable` corpora both sides measure a selection by.
 
   The same map is embedded as transit for the client, so it holds corpus
   overviews only: the registry maps carry absolute server paths."
   ([ctx request]
    (let [req (read-request! ctx request)]
-     (search-view-data ctx req (citation! ctx req))))
-  ([ctx {:keys [lang view known] :as req} cited]
+     (search-view-data ctx req (citation req))))
+  ([ctx {:keys [lang view known stored selectable seeded? autosave?] :as req}
+    cited]
    (let [outcome (run-view! ctx req)
          attrs   (attr-options! ctx known)]
-     (merge {:lang lang :view view :cited cited}
+     (merge {:lang       lang
+             :view       view
+             :cited      cited
+             :seeded?    seeded?
+             :autosave?  autosave?
+             :selectable (set selectable)
+             ;; encoded again rather than passed on as the cookie holds
+             ;; it: the buttons compare this against the form, so both
+             ;; come from the same writer. Expanded first, or a stored
+             ;; selection of every corpus comes back out as an emptied one
+             :stored     (settings/string
+                          (url/with-every-corpus stored selectable)
+                          selectable)}
             (form-data! ctx req attrs)
             (result-data req attrs outcome)
             (links req cited outcome)))))
@@ -387,18 +444,31 @@
   there is none, else the search help where the results will be.
 
   A request whose query string is not the search's citation (see
-  `citation!`) is answered with a redirect to it, so a submit without the
+  `uncited?`) is answered with a redirect to it, so a submit without the
   client ends on the one URL the search has. Not one whose mode changed,
-  whose citation is what the form holds rather than what it was given."
+  whose citation is what the form holds rather than what it was given.
+
+  The same request stores what it asked as the reader's own defaults,
+  unless they turned that off. It is the reader without a script who is
+  served here: a search they asked for says how they work, one they
+  arrived at by a link says how the sharer does."
   [ctx request]
-  (let [req   (read-request! ctx request)
-        cited (citation! ctx req)]
+  (let [req     (read-request! ctx request)
+        cited   (citation req)
+        asked?  (uncited? request req cited)
+        ;; the form as it stands, which is what its own buttons store
+        ;; too (see dk.cst.corpus-probe.views.search/settings-now)
+        cookies (when (and asked? (:autosave? req))
+                  (request/preference-cookies
+                   {settings/cookie-key (settings/string
+                                         (shown-params req)
+                                         (:selectable req))}))]
     (if (and (not (:transit? req))
-             (nil? (get-in req [:arrived :from]))
-             (not= (or (:query-string request) "")
-                   (url/query-string cited)))
+             asked?
+             (nil? (get-in req [:arrived :from])))
       {:status  303
-       :headers {"Location" (url/results-href cited)}}
+       :headers (cond-> {"Location" (url/results-href cited)}
+                  (seq cookies) (assoc "Set-Cookie" cookies))}
       (let [{:keys [result error] :as data} (search-view-data ctx req cited)
             ;; the masthead's navigation takes the citation; the client
             ;; does not read it
@@ -406,7 +476,8 @@
                    (not (or result error))
                    (assoc :help (docs/document
                                  "help" (request/request-languages request))))]
-        (response/page-response request (views/title data) data cited)))))
+        (cond-> (response/page-response request (views/title data) data cited)
+          (seq cookies) (assoc-in [:headers "Set-Cookie"] cookies))))))
 
 (defn serve-filters
   "Answer the metadata filters the corpora named in `request` offer via
@@ -492,5 +563,5 @@
                                                        :ranges]))})]
         (response/transit-response
          (merge (select-keys result [:counts :size :pages])
-                (url/page-hrefs (citation! ctx req) page result)
+                (url/page-hrefs (citation req) page result)
                 {:title title}))))))

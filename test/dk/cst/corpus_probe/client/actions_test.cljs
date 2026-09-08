@@ -4,6 +4,7 @@
             [dk.cst.corpus-probe.client.lists-test :refer [filters folders]]
             [dk.cst.corpus-probe.query :as query]
             [dk.cst.corpus-probe.query.tokens :as tokens]
+            [dk.cst.corpus-probe.settings :as settings]
             [dk.cst.corpus-probe.url :as url]
             [dk.cst.corpus-probe.views.concordance :as concordance]))
 
@@ -391,11 +392,98 @@
     (is (true? (:pending? (:state (actions/act state [:pending])))))
     (is (= [[:navigate "http://localhost/" true]]
            (:effects (actions/act state [:navigate "http://localhost/" true]))))
-    (is (= [[:set-preference "lang" "da"]]
-           (:effects (actions/act state [:set-preference "lang" "da"]))))
+    (is (= [[:set-cookie :lang "da"] [:navigate "/search?q=hund" false]]
+           (:effects (actions/act state [:set-preference "lang" "da"
+                                         "/search?q=hund"]))))
+    (testing "a reset goes to the bare form, and onto the history only
+              when that is somewhere else"
+      (is (= [[:set-cookie :settings ""] [:navigate "/search" true]]
+             (:effects (actions/act state [:set-preference "settings" ""
+                                           "/search?q=hund"]))))
+      (is (= [[:set-cookie :settings ""] [:navigate "/search" false]]
+             (:effects (actions/act state [:set-preference "settings" ""
+                                           "/search"])))))
+    (testing "storing the settings asks the server for nothing: the page
+              stays as it is and only what the box measures against moves"
+      (let [{state' :state :keys [effects]}
+            (actions/act state [:set-preference "settings" "sort=word" "/search"])]
+        (is (= [[:set-cookie :settings "sort=word"]
+                ;; the button that had focus goes quiet as it is pressed
+                [:focus settings/box-id]]
+               effects))
+        (is (= "sort=word" (:stored state')))
+        (testing "and says so where it is heard and not seen"
+          (is (= :saved (:announcement state'))))))
+    (testing "an announcement belongs to the act that made it, so the
+              reader's next move takes it away and the same thing said
+              twice is heard twice"
+      (let [said (:state (actions/act state [:set-preference "settings"
+                                             "sort=word" "/search"]))]
+        (is (nil? (:announcement (:state (actions/act said [:pending])))))))
     (is (= [[:resubmit url/form-id]]
            (:effects (actions/act state [:apply-view]))))
     (is (= [[:leave-concordance]]
            (:effects (actions/act state [:leave-concordance]))))
     (is (false? (:filters-pending? (:state (actions/act state
                                                         [:filters-failed])))))))
+
+(deftest form-changed-test
+  (let [state   (assoc state :selectable #{"PROBE" "VISER"} :stored ""
+                       :params {} :autosave? true)
+        changed (fn [state params] (actions/act state [:form-changed params]))]
+    (testing "the form's own controls reach the state, matching options
+              among them, which this client answers none of itself"
+      (is (= {:in "lemma" :corpus ["PROBE"]}
+             (:params (:state (changed state {:q      "hund"
+                                              :in     "lemma"
+                                              :corpus ["PROBE"]}))))))
+    (testing "one corpus arrives as a name and several as a vector, and
+              the chooser reads a selection of names either way"
+      (is (= ["PROBE"] (:corpus (:params (:state (changed state
+                                                          {:corpus "probe"}))))))
+      (is (= ["PROBE" "VISER"]
+             (:corpus (:params (:state (changed state
+                                                {:corpus ["PROBE" "VISER"]})))))))
+    (testing "and are stored as they change, so a change the reader did
+              not search on survives their going somewhere else"
+      (let [{state' :state :keys [effects]} (changed state {:in "lemma"})]
+        (is (= [[:set-cookie :settings "in=lemma"]] effects))
+        (is (= "in=lemma" (:stored state')))))
+    (testing "every corpus chosen is stored as a scope, so the form comes
+              back with them ticked rather than empty"
+      (is (= [[:set-cookie :settings "scope=all"]]
+             (:effects (changed state {:corpus ["PROBE" "VISER"]})))))
+    (testing "a form at the app's own defaults is stored as nothing,
+              which is what having stored nothing means"
+      (is (= [[:set-cookie :settings ""]]
+             (:effects (changed (assoc state :stored "in=lemma")
+                                {:in "word"})))))
+    (testing "nothing is stored for a change the settings do not carry"
+      (is (nil? (:effects (changed state {:q "hund"})))))
+    (testing "nor while the reader has turned storing off"
+      (is (nil? (:effects (changed (assoc state :autosave? false)
+                                   {:in "lemma"})))))))
+
+(deftest set-autosave-test
+  (let [state (assoc state :autosave? true :selectable #{"PROBE" "VISER"}
+                     :stored "corpus=PROBE" :params {:corpus ["PROBE" "VISER"]})]
+    (testing "turning storing off stores that choice at once, which is the
+              one thing it cannot leave to the button beside it"
+      (let [{state' :state :keys [effects]} (actions/act state
+                                                         [:set-autosave false])]
+        (is (false? (:autosave? state')))
+        (is (= [[:set-cookie :settings "corpus=PROBE&autosave=off"]] effects))))
+    (testing "and only that choice: a form the reader has not stored is
+              not stored by their turning storing off"
+      (is (= [[:set-cookie :settings "corpus=PROBE&autosave=off"]]
+             (:effects (actions/act state [:set-autosave false])))))
+    (testing "the state keeps up with what is stored, so the button beside
+              it is not offered a change that has already been made"
+      (is (= "corpus=PROBE&autosave=off"
+             (:stored (:state (actions/act state [:set-autosave false]))))))
+    (testing "turning it back on takes that choice out of the settings
+              and stores the form in front of the reader, which is what
+              asking for it to be stored from now on means"
+      (let [off (:state (actions/act state [:set-autosave false]))]
+        (is (= [[:set-cookie :settings "scope=all"]]
+               (:effects (actions/act off [:set-autosave true]))))))))

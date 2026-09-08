@@ -161,8 +161,9 @@
 
 (defn listen!
   "Install the document's listeners, which only dispatch through
-  `dispatch!`: a routed link click or submit `[:navigate href true]`,
-  the language switch's submit `[:set-preference k v]`, a popstate to
+  `dispatch!`: a routed link click or submit `[:navigate href true]`, a
+  preference's submit `[:set-preference k v return]`, a change to any
+  control of the search form `[:form-changed params]`, a popstate to
   another page `[:navigate href false]`, a hashchange `[:set-fragment
   fragment]` and a press outside the fieldset of any of the lists `ks`
   `[:leave k true]`."
@@ -182,17 +183,31 @@
        (cond
          (.-defaultPrevented e) nil
 
-         ;; the language switch changes a preference, not a place: store
-         ;; it and ask the server for this same page in the other
-         ;; language, rather than posting and reloading
+         ;; a preference changes state, not a place: store it and ask the
+         ;; server for the page it leaves the reader on, rather than
+         ;; posting and reloading
          (= url/preferences (.getAttribute form "action"))
          (let [b (.-submitter e)]
            (.preventDefault e)
-           (dispatch! [:set-preference (.-name b) (.-value b)]))
+           ;; the page as it stands, not the form's own return field: the
+           ;; field is written from the params, which this client edits
+           ;; without moving, so it drifts from where the reader is. As a
+           ;; path, so that it compares with the one a preference returns
+           ;; to and a choice that goes nowhere adds no history entry
+           (dispatch! [:set-preference (.-name b) (.-value b) (page-key)]))
 
          (routed-submit? form)
          (do (.preventDefault e)
              (dispatch! [:navigate (submit-href form) true]))))))
+  ;; every control of the search form, not only the ones with a handler:
+  ;; the matching options have none, so what the form says would reach
+  ;; the preferences box only when a search sent it
+  (.addEventListener
+   js/document "change"
+   (fn [e]
+     (let [form (.-form (.-target e))]
+       (when (and form (= url/form-id (.-id form)))
+         (dispatch! [:form-changed (form-params form)])))))
   ;; a fragment navigation fires popstate too, and the browser has moved
   ;; to the place itself: fetching the page again would only move the
   ;; reader elsewhere

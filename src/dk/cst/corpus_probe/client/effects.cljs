@@ -8,7 +8,8 @@
             [dk.cst.corpus-probe.client.router :as router]
             [dk.cst.corpus-probe.query.mode :as mode]
             [dk.cst.corpus-probe.url :as url]
-            [dk.cst.corpus-probe.views.concordance :as concordance]))
+            [dk.cst.corpus-probe.views.concordance :as concordance]
+            [dk.cst.corpus-probe.views.widgets :as widgets]))
 
 (defonce ^{:doc "The wait before a routed navigation is worth reporting,
   so that an answer arriving at once is not announced and then
@@ -138,14 +139,19 @@
   (debounce! filters-timer filters-debounce-ms #(dispatch! [:filters-due])))
 
 (defn navigate!
-  "Fetch the route at absolute `href` as data and dispatch its arrival
-  through `dispatch!`: `[:page-arrived data landed push?]`, `landed`
-  being where the answer came from and `push?` whether it gets a history
-  entry; `[:pending]` once an answer is `pending-delay-ms` late. Falls
-  back to a real navigation on any failure, so a route the client cannot
-  render is still a working page."
+  "Fetch the route at `href` as data and dispatch its arrival through
+  `dispatch!`: `[:page-arrived data landed push?]`, `landed` being where
+  the answer came from and `push?` whether it gets a history entry;
+  `[:pending]` once an answer is `pending-delay-ms` late. Falls back to a
+  real navigation on any failure, so a route the client cannot render is
+  still a working page.
+
+  A path is resolved first: everything past here reads an href with
+  `js/URL`, which takes no relative one, and the fallback would answer
+  the throw by reloading the page it was avoiding."
   [dispatch! href push?]
-  (let [controller (js/AbortController.)]
+  (let [href       (.-href (js/URL. href js/location.href))
+        controller (js/AbortController.)]
     ;; called off rather than raced, so the reader gets the answer to
     ;; their latest question
     (some-> @in-flight (.abort))
@@ -172,15 +178,6 @@
   carry the setting too."
   [k v]
   (set! (.-cookie js/document) (url/cookie k v)))
-
-(defn set-preference!
-  "Store `v` under setting `k` (see `set-cookie!`) and fetch this page
-  again with it applied, dispatching through `dispatch!`: a fetch rather
-  than a re-render, since the server words the document title and the
-  result summaries."
-  [dispatch! k v]
-  (set-cookie! k v)
-  (navigate! dispatch! js/location.href false))
 
 (defn focus!
   "Move focus to the element with `id`, once the render that put it there
@@ -277,7 +274,12 @@
   "Put the reader where a routed navigation should leave them: at the
   place in the page the URL's fragment names, when it names one; else
   focused on the results, when the page has any, and moved to them only
-  if they are not already at hand; else at the top of the page."
+  if they are not already at hand; else at the start of the main content.
+
+  Focus, not only a scroll: a routed navigation replaces the page with
+  none of the announcement and reset of focus a real one gives, leaving
+  a reader who is not watching the screen told nothing and one on the
+  keyboard in a page that has gone."
   []
   (let [hash   (.-hash js/location)
         target (.getElementById js/document url/results-id)]
@@ -298,7 +300,9 @@
           (.focus target #js {:preventScroll true}))
 
       :else
-      (.scrollTo js/window 0 0))))
+      (do (.scrollTo js/window 0 0)
+          (some-> (.getElementById js/document widgets/main-id)
+                  (.focus #js {:preventScroll true}))))))
 
 (defn sync-url!
   "Mirror the hits `state` shows expanded in the URL's `expand` parameter,
@@ -340,7 +344,7 @@
       :fetch-expansions   (fetch-expansions! dispatch! state)
       :refresh-filters    (refresh-filters! dispatch!)
       :navigate           (apply navigate! dispatch! args)
-      :set-preference     (apply set-preference! dispatch! args)
+      :set-cookie         (apply set-cookie! args)
       :push-url           (apply push-url! args)
       :set-title          (apply set-title! args)
       :set-lang           (apply set-lang! args)

@@ -9,7 +9,9 @@
             [dk.cst.corpus-probe.query :as query]
             [dk.cst.corpus-probe.search.cache :as cache]
             [dk.cst.corpus-probe.search.frequency :as frequency]
+            [dk.cst.corpus-probe.server.request :as request]
             [dk.cst.corpus-probe.server.search :as search]
+            [dk.cst.corpus-probe.settings :as settings]
             [dk.cst.corpus-probe.test.cwb :refer [ctx when-cwb]]
             [dk.cst.corpus-probe.url :as url]
             [taoensso.telemere :as t])
@@ -22,20 +24,31 @@
   (let [in (ByteArrayInputStream. (.getBytes s "UTF-8"))]
     (transit/read (transit/reader in :json))))
 
+(defn query-pairs
+  "Query string `s` as the params Pedestal reads it into, a key that
+  repeats collecting a vector as it does there (test helper)."
+  [s]
+  (reduce (fn [m pair]
+            (let [[k v] (str/split pair #"=" 2)
+                  k     (keyword k)
+                  v     (or v "")]
+              (if-let [held (get m k)]
+                (assoc m k (conj (if (vector? held) held [held]) v))
+                (assoc m k v))))
+          {}
+          (remove str/blank? (str/split s #"&"))))
+
 (deftest selected-corpora-test
-  (let [entries [{:id "probe"} {:id "viser"}]]
+  (let [selectable ["PROBE" "VISER"]]
     (testing "the corpora the request names win"
-      (is (= ["PROBE"] (search/selected-corpora! nil entries {:corpus "probe"})))
+      (is (= ["PROBE"] (search/selected-corpora selectable {:corpus "probe"})))
       (is (= ["PROBE" "VISER"]
-             (search/selected-corpora! nil entries {:corpus ["probe" "viser"]
-                                                    :scope  "chosen"}))))
+             (search/selected-corpora selectable {:corpus ["probe" "viser"]
+                                                  :scope  "chosen"}))))
     (testing "a reader who unticked every corpus gets no corpus, not all"
-      (is (= [] (search/selected-corpora! nil entries {:scope "chosen"}))))
-    (when-cwb
-     (testing "naming none searches every corpus CWB can read"
-       (is (= ["PROBE" "TALER" "VISER"]
-              (sort (search/selected-corpora! ctx (registry/entries ctx)
-                                              {}))))))))
+      (is (= [] (search/selected-corpora selectable {:scope "chosen"}))))
+    (testing "naming none searches every corpus the chooser offers"
+      (is (= ["PROBE" "VISER"] (search/selected-corpora selectable {}))))))
 
 (deftest form-corpora-test
   (when-cwb
@@ -269,16 +282,11 @@
 
 (deftest citation-redirect-test
   (when-cwb
-   (let [pairs (fn [query-string]
-                 (into {}
-                       (map (fn [pair]
-                              (let [[k v] (str/split pair #"=" 2)]
-                                [(keyword k) (or v "")])))
-                       (remove str/blank? (str/split query-string #"&"))))
-         fetch (fn [query-string]
-                 (search/serve-search ctx {:query-params (pairs query-string)
-                                           :query-string query-string
-                                           :headers      {}}))]
+   (let [fetch (fn [query-string]
+                 (search/serve-search ctx
+                                      {:query-params (query-pairs query-string)
+                                       :query-string query-string
+                                       :headers      {}}))]
      (testing "a document asked for by a query string that is not the
                search's citation is sent to it"
        (let [{:keys [status headers]}
@@ -300,6 +308,88 @@
                                  :query-string "q=hund&match=&corpus=PROBE"
                                  :headers      {"accept"
                                                 url/transit-type}}))))))))
+
+(deftest seeded-form-test
+  (when-cwb
+   (let [stored {"cookie" "settings=corpus=VISER&view=frequencies&sort=word"}
+         page   (fn [params headers]
+                  (search/search-view-data ctx {:query-params params
+                                                :headers      headers}))]
+     (testing "a page asked for nothing shows the settings its reader stored"
+       (let [{:keys [params view]} (page {} stored)]
+         (is (= ["VISER"] (:corpus params)))
+         (is (= "word" (:sort params)))
+         (is (= :frequencies view))))
+     (testing "and runs nothing, since the reader has asked for no search:
+               the frequency view would otherwise count every corpus of a
+               selection on arrival"
+       (let [{:keys [result error]} (page {} stored)]
+         (is (nil? result))
+         (is (nil? error))))
+     (testing "how a query is matched rides on the query, and a seeded
+               form has none, so it shows what was stored as it stands"
+       (let [{:keys [params]} (page {} {"cookie" (str "settings=in=lemma&ci=on"
+                                                      "&match=prefix"
+                                                      "&within=text")})]
+         (is (= {:in "lemma" :ci "on" :match "prefix" :within "text"}
+                (select-keys params [:in :ci :match :within])))))
+     (testing "a page asked for a search reads it from the URL alone, so a
+               link to a result finds the same hits for everyone"
+       (is (= ["PROBE"] (:corpus (:params (page {:q "hund" :corpus "PROBE"}
+                                                stored))))))
+     (testing "a reader who stored nothing starts with no corpus selected"
+       (is (empty? (:corpus (:params (page {} {})))))
+       (is (= "" (:stored (page {} {})))))
+     (testing "and one who stored every corpus gets every corpus back,
+               not the empty form that names none"
+       (let [{:keys [params stored]} (page {} {"cookie" "settings=scope=all"})]
+         (is (= ["PROBE" "TALER" "VISER"] (sort (:corpus params))))
+         ;; or the form would read as departing from what it is
+         (is (= "scope=all" stored))))
+     (testing "the page carries what is stored, so the form can be told
+               from it, and whether a search stores itself"
+       (is (= "corpus=VISER&view=frequencies&sort=word" (:stored (page {} stored))))
+       (is (true? (:autosave? (page {} {}))))
+       (is (false? (:autosave? (page {} {"cookie" "settings=autosave=off"}))))))))
+
+(deftest stores-settings-test
+  (when-cwb
+   (let [fetch  (fn [query-string]
+                  (search/serve-search ctx
+                                       {:query-params (query-pairs query-string)
+                                        :query-string query-string
+                                        :headers      {}}))
+         stored (fn [response]
+                  (some-> (get-in response [:headers "Set-Cookie"])
+                          (first)
+                          (request/cookie-value :settings)
+                          (settings/params)))]
+     (testing "a submitted form stores what it departed from the app's
+               own defaults by, and nothing it left alone"
+       (is (= {:corpus "PROBE" :in "lemma" :ci "on"}
+              (stored
+               (fetch "q=hund&corpus=PROBE&scope=chosen&mode=simple&in=lemma&ci=on")))))
+     (testing "a search over every corpus stores that it was every corpus,
+               so the form comes back with them ticked rather than empty"
+       (is (= {:scope "all"}
+              (stored (fetch (str "q=hund&scope=chosen&mode=simple"
+                                  "&corpus=PROBE&corpus=TALER&corpus=VISER"))))))
+     (testing "not while the reader has turned storing off"
+       (is (nil? (some-> (search/serve-search
+                          ctx {:query-params (query-pairs "q=hund&corpus=PROBE")
+                               :query-string "q=hund&corpus=PROBE&scope=chosen"
+                               :headers      {"cookie" "settings=autosave=off"}})
+                         (get-in [:headers "Set-Cookie"])))))
+     (testing "a box left unticked is stored as the absence it is submitted
+               as, so the next form starts unticked too"
+       (is (nil? (:ci (stored (fetch "q=hund&corpus=PROBE&scope=chosen"))))))
+     (testing "not the query, nor which page of the result was asked for"
+       (is (nil? (:q (stored (fetch "q=hund&corpus=PROBE&scope=chosen&page=2"))))))
+     (testing "a link to a result stores nothing: it says how the reader
+               who shared it works, not how the reader who followed it does"
+       (is (nil? (stored (fetch "q=hund&corpus=PROBE")))))
+     (testing "nor does a bare page, which asked nothing"
+       (is (nil? (stored (fetch ""))))))))
 
 (deftest attr-options-test
   (testing "an unreadable corpus contributes nothing, word remains"
