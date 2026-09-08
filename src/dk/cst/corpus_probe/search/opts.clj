@@ -135,10 +135,10 @@
   "The options one KWIC batch of `query` in `corpus` needs, from the
   `opts` of dk.cst.corpus-probe.search/kwic! via `ctx`: the KWIC
   defaults, the corpus's positional and structural attributes, its
-  context, filter, narrowing and sort mode as the corpus runs them, and
-  whatever the cache adds (see `cache-opts!`). Requested :struct-attrs
-  are checked against the corpus's inventory, since their names are
-  spliced into a command."
+  context, filter, narrowing and sort mode as the corpus runs them, the
+  s-attribute marking one of its texts, and whatever the cache adds (see
+  `cache-opts!`). Requested :struct-attrs are checked against the
+  corpus's inventory, since their names are spliced into a command."
   [ctx corpus query opts]
   (let [attributes (corpus/attributes! ctx corpus)
         annotated  (corpus/attr-names corpus/annotated-s-attr? attributes)
@@ -154,6 +154,7 @@
                         :struct-attrs (or requested annotated)
                         :context      (corpus-context attributes
                                                       (:context opts))
+                        :text-attr    (corpus/unit-attr attributes :text)
                         :filter       (corpus-filter! ctx corpus opts)
                         :subset       (corpus-subset! ctx corpus
                                                       (:subset opts))

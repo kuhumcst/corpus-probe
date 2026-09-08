@@ -85,6 +85,37 @@
   [attrs lines]
   (mapv (partial kwic-line->hit attrs) lines))
 
+(defn- bounds
+  "The sides of `hit` on which its context has reached the edge of the
+  region of `attr`: `:start`, `:end`, both or neither. A side it has not
+  reached is one a wider context would give more of."
+  [attr {:keys [left match right]}]
+  (cond-> #{}
+    (some #{attr} (:open (first (concat left match))))  (conj :start)
+    (some #{attr} (:close (last (concat match right)))) (conj :end)))
+
+(defn clip-context
+  "`hit` with its context cut back to the region of s-attribute `attr`
+  its match is in, by the tags the tokens carry: CQP counts a context in
+  words, so a wide one runs on into the neighbouring regions, whose
+  words are not this hit's text. What it now reaches is its `:bounds`
+  (see `bounds`), which say where there is no more to fetch. Left alone
+  for a nil `attr`, and for a hit whose tokens carry no tags."
+  [attr {:keys [left right] :as hit}]
+  (if-not attr
+    hit
+    ;; the boundary token belongs to the region it bounds, so it is kept
+    (let [upto    (fn [tag tokens]
+                    (let [[in out] (split-with #(not (some #{attr} (tag %)))
+                                               tokens)]
+                      (concat in (take 1 out))))
+          clipped (assoc hit
+                         :left  (vec (reverse (upto :open (rseq left))))
+                         :right (vec (upto :close right)))
+          reached (bounds attr clipped)]
+      (cond-> clipped
+        (seq reached) (assoc :bounds reached)))))
+
 (defn show-cd->attributes
   "Parse `lines` from `show cd;` into attribute descriptions.
 

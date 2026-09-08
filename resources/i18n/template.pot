@@ -60,14 +60,6 @@ msgid "Filter"
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/concordance.cljc
-msgid "Show or hide more context"
-msgstr ""
-
-#: src/dk/cst/corpus_probe/views/concordance.cljc
-msgid "The context did not load."
-msgstr ""
-
-#: src/dk/cst/corpus_probe/views/concordance.cljc
 msgid "left context"
 msgstr ""
 
@@ -76,7 +68,7 @@ msgid "right context"
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/concordance.cljc
-msgid "source"
+msgid "Use the arrow keys to move between the words, Home and End for the ends of a line."
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/concordance.cljc
@@ -523,7 +515,7 @@ msgstr ""
 msgid "Help"
 msgstr ""
 
-#: src/dk/cst/corpus_probe/views/concordance.cljc src/dk/cst/corpus_probe/views/search.cljc
+#: src/dk/cst/corpus_probe/views/search.cljc
 msgid "Loading …"
 msgstr ""
 

@@ -14,16 +14,7 @@
 
 (def column-count
   "How many columns a concordance row has, which a full-width row spans."
-  5)
-
-(def loading
-  "Marks an expansion whose context is still in flight (see `hit-rows`)."
-  ::loading)
-
-(def failed
-  "Marks an expansion whose context could not be fetched, as `loading`
-  marks one still in flight."
-  ::failed)
+  4)
 
 (defn hit-key
   "The key identifying `hit` in a concordance over several corpora: its
@@ -31,12 +22,10 @@
   [{:keys [corpus cpos] :as hit}]
   [corpus cpos])
 
-(defn context-id
-  "The id of the row holding `hit`'s wider context, so the control that
-  reveals it can name what it controls."
-  [hit]
-  (let [[corpus cpos] (hit-key hit)]
-    (str "context-" corpus "-" cpos)))
+(defn hit-of
+  "The hit among `hits` with key `k` (see `hit-key`); nil for none."
+  [hits k]
+  (first (filter #(= k (hit-key %)) hits)))
 
 (defn token-title
   "Tooltip text for token map `m`: its non-word attributes joined by ' · ';
@@ -61,6 +50,36 @@
   the run the cursor moves along."
   [{:keys [left match right] :as hit}]
   (+ (count left) (count match) (count right)))
+
+(def fade-steps
+  "Over how many words the context past the width asked for falls away,
+  the last of them out of sight: the page holds far more than it shows
+  (see dk.cst.corpus-probe.search.batch/fetch-context), and a line that
+  ended in a wall of grey would read as the answer rather than as the
+  way on."
+  3)
+
+(defn faded-tokens
+  "How far outside the reader's window each token of `hit` falls: token
+  index to a step from 1, the first word past the window, to
+  `fade-steps`. The window is the `context` words either side of the
+  match, moved along the line by `travel` words, so that a step of the
+  cursor uncovers one word ahead and lets one behind fall away. Empty
+  for a unit of text, which bounds itself."
+  [{:keys [left match] :as hit} context travel]
+  (if-not (number? context)
+    {}
+    (let [nl   (count left)
+          nm   (count match)
+          ;; the last token before the window and the first one after it
+          upto (max 0 (- nl context (- travel)))
+          from (+ nl nm context travel)
+          step (fn [out] (min fade-steps (max 1 out)))]
+      (into {}
+            (concat (for [i (range (min nl upto))]
+                      [i (step (- upto i))])
+                    (for [i (range (max (+ nl nm) from) (token-count hit))]
+                      [i (step (inc (- i from)))]))))))
 
 (defn anchored-tokens
   "Which tokens of `hit` its target and keyword anchors fall on: token
@@ -91,28 +110,46 @@
   (min (dec (token-count hit))
        (max 0 (+ offset (count (:left hit))))))
 
-(defn cursor-range
-  "How many tokens the cursor can visit at hit key `k` among `hits`,
-  given the `expanded` map: the hit's own tokens, plus its wider
-  context's when one is showing."
-  [hits expanded k]
-  (when-let [hit (first (filter #(= k (hit-key %)) hits))]
-    (+ (token-count hit)
-       (let [ex (get expanded k)]
-         (if (map? ex) (token-count ex) 0)))))
-
 (defn default-cursor
-  "The cursor for `hits` when nothing has moved it yet: the first token of
-  the first hit, so exactly one token is tabbable and the concordance is
-  one tab stop rather than hundreds."
+  "The cursor for `hits` when nothing has moved it yet: the match of the
+  first hit, so exactly one token is tabbable and the concordance is one
+  tab stop rather than hundreds. The match rather than the first token,
+  which is the far end of the context and out of sight (see
+  `faded-tokens`), and which would put the reader's window there."
   [hits]
   (when-let [hit (first hits)]
-    [(hit-key hit) 0]))
+    [(hit-key hit) (count (:left hit))]))
+
+(defn resolved-cursor
+  "The `cursor` where it names a token among `hits`, else the
+  `default-cursor`: one left behind by a page that has since narrowed
+  would leave the concordance with no tab stop at all."
+  [hits [k i :as cursor]]
+  (or (when-let [hit (hit-of hits k)]
+        (when (< i (token-count hit)) cursor))
+      (default-cursor hits)))
+
+(defn travel-offset
+  "How far along the line from its match the reader has moved, in words:
+  the offset of the token the `cursor` is on (see `token->offset`), which
+  every row's window follows so the page travels as one. Zero when the
+  cursor is on no hit here."
+  [hits [k i]]
+  (if-let [hit (hit-of hits k)]
+    (token->offset hit i)
+    0))
 
 (defn token-id
   "The id of token `i` of `hit`, so the client can move focus to it."
   [hit i]
   (str "t-" (:corpus hit) "-" (:cpos hit) "-" i))
+
+(defn cursor-id
+  "The id of the token `cursor` is on (see `token-id`), which focus and
+  the concordance's scroll both follow; nil for no cursor."
+  [[[corpus cpos] i :as cursor]]
+  (when cursor
+    (token-id {:corpus corpus :cpos cpos} i)))
 
 (defn anchor-class
   "The class marking the token an `anchor` falls on, as cqp marks a
@@ -131,17 +168,21 @@
 
   Only the token at `:cursor` is tabbable, the arrow keys moving the
   cursor between neighbours, as the APG asks of a grid of controls."
-  [{:keys [client? cursor anchored] :as opts} hit source i m]
+  [{:keys [client? cursor anchored faded] :as opts} hit source i m]
   (let [k       [(hit-key hit) i]
-        inspect [:inspect (assoc source :token m)]
+        inspect [:inspect (assoc source :token m) k]
         anchor  (get anchored i)
         title   (->> [(some-> anchor name) (token-title m)]
                      (remove nil?)
                      (str/join " · ")
                      (not-empty))
+        out     (get faded i)
+        classes (cond-> []
+                  anchor (conj (anchor-class anchor))
+                  out    (conj "faded" (str "fade-" out)))
         attrs   (cond-> (token-data m)
-                  title  (assoc :title title)
-                  anchor (assoc :class (anchor-class anchor)))]
+                  title         (assoc :title title)
+                  (seq classes) (assoc :class (str/join " " classes)))]
     (if-not client?
       ;; no handler: nothing answers a click here, and the string renderer
       ;; would drop one anyway
@@ -154,7 +195,7 @@
               ;; inspecting follows focus rather than waiting for a press,
               ;; so moving the cursor moves what the panel describes
               :on       {:focus   inspect
-                         :keydown [:move-cursor k :event/key]
+                         :keydown [:move-cursor k :event/key :event/ctrl?]
                          :click   inspect})
        (:word m)])))
 
@@ -166,20 +207,14 @@
   (interpose " " (map-indexed (fn [i m] (token opts hit source (+ offset i) m))
                               ms)))
 
-(defn source-label
-  "The hit's source as hiccup: its text title as a `<cite>` (a corpus text
-  is a cited work) when present, else its most identifying structural value."
-  [structs]
-  (if-let [title (:text_title structs)]
-    [:cite title]
-    (or (:text_id structs) (first (vals structs)))))
-
-(defn source-title
-  "Tooltip text listing every structural annotation of a hit."
+(defn structs-title
+  "Tooltip text listing the structural annotations `structs` of a hit;
+  nil for a corpus that marks none, which has no tooltip to show."
   [structs]
   (->> structs
        (map (fn [[k v]] (str (name k) ": " v)))
-       (str/join "\n")))
+       (str/join "\n")
+       (not-empty)))
 
 (defn position-data
   "The hit's corpus positions as `data-*` attributes: the match start
@@ -198,113 +233,45 @@
   (assoc (select-keys hit [:corpus :structs :cpos])
          :matchend (:matchend (:anchors hit))))
 
-(defn source-cell
-  "The source of `hit` (see `source-label`) as the last cell of its row,
-  linking to the reading page of its text, with the hit marked, where
-  the hit knows its corpus; the label alone otherwise."
-  [{:keys [corpus structs cpos anchors] :as hit}]
-  [:td.kwic-structs {:title (source-title structs)}
-   (when-let [label (source-label structs)]
+(defn position-cell
+  "The corpus position of `source` (see `hit-source`) as the head of its
+  row: a link to the reading page of its text with the hit marked, which
+  is where the whole of the context is, named by the hit's structural
+  annotations (see `structs-title`). The bare position for a hit that
+  knows no corpus, which there is no text page for."
+  [{:keys [corpus structs cpos matchend] :as source}]
+  (let [title (structs-title structs)]
+    [:th.kwic-cpos (cond-> {:scope "row"}
+                     title (assoc :title title))
      (if corpus
-       [:a {:href (url/text corpus cpos (:matchend anchors))} label]
-       label))])
-
-(defn expand-control
-  "The corpus position of `hit` as the control revealing its wider
-  context, in `ui`, `expanded?` giving its state; the bare position where
-  no `client?` answers the click."
-  [ui client? hit expanded?]
-  (let [cpos  (str (:cpos hit))
-        ;; the accessible name opens with the visible position, so what is
-        ;; said matches what is seen
-        label (str cpos " · " (i18n/tr ui "Show or hide more context"))]
-    (if-not client?
-      cpos
-      [:button (cond-> {:type          "button"
-                        :aria-label    label
-                        :aria-expanded (str (boolean expanded?))
-                        :on            {:click [:toggle-context
-                                                {:corpus   (:corpus hit)
-                                                 :cpos     (:cpos hit)
-                                                 :matchend (:matchend
-                                                            (:anchors hit))}]}}
-                 expanded? (assoc :aria-controls (context-id hit)))
-       cpos])))
+       [:a {:href (url/text corpus cpos matchend)} (str cpos)]
+       (str cpos))]))
 
 (defn hit-row
   "One KWIC `hit` as a table row under the concordance `opts`, with its
   corpus positions, its anchored tokens marked (see `anchored-tokens`)
-  and `expanded?` its disclosure state."
-  [{:keys [ui client?] :as opts} hit expanded?]
+  and the ones outside the reader's window faded (see `faded-tokens`)."
+  [{:keys [context travel] :or {travel 0} :as opts} hit]
   (let [source (hit-source hit)
-        opts   (assoc opts :anchored (anchored-tokens hit))
-        {:keys [left match right structs anchors cpos]} hit
+        opts   (assoc opts
+                      :anchored (anchored-tokens hit)
+                      :faded    (faded-tokens hit context travel))
+        {:keys [left match right anchors cpos]} hit
         nl     (count left)]
     [:tr.kwic-hit (position-data cpos anchors)
      ;; the position heads the row, so every other cell resolves a row
      ;; header as well as a column one
-     [:th.kwic-cpos {:scope "row"} (expand-control ui client? hit expanded?)]
+     (position-cell source)
      [:td.kwic-left (tokens opts hit source 0 left)]
      [:td.kwic-match [:mark (tokens opts hit source nl match)]]
-     [:td.kwic-right (tokens opts hit source (+ nl (count match)) right)]
-     ;; last: between the position and the left context it stood in the
-     ;; middle of the line a reader is there to read
-     (source-cell hit)]))
-
-(defn expanded-row
-  "A full-width row under the concordance `opts` showing hit `ex`
-  (fetched with wider context, so without metadata of its own) as
-  flowing text, the match marked; its tokens are inspected with the
-  source of `hit`, the row it expands, whose disclosure names it."
-  [opts hit ex]
-  (let [source (hit-source hit)
-        ;; numbered past the row it expands: the two rows share a hit, so
-        ;; numbering both from zero would give four elements one id and
-        ;; four of them the cursor's tabindex
-        base   (token-count hit)
-        nl     (count (:left ex))
-        nm     (count (:match ex))]
-    [:tr.kwic-expanded {:id (context-id hit)}
-     [:td {:colspan column-count}
-      (tokens opts hit source base (:left ex)) " "
-      [:mark (tokens opts hit source (+ base nl) (:match ex))] " "
-      (tokens opts hit source (+ base nl nm) (:right ex))]]))
-
-(defn status-row
-  "A full-width row reporting `text` about an expansion in flight or
-  failed, under `role` (\"status\" while loading, \"alert\" on failure)."
-  [role text]
-  [:tr.kwic-expanded
-   ;; the only rows that appear without a page load, so the only ones a
-   ;; live region is any use for
-   [:td {:colspan column-count} [:span {:role role} text]]])
-
-(defn hit-rows
-  "The row(s) for `hit` under the concordance `opts` (see `concordance`),
-  in its `:ui`: the KWIC row, followed by its expanded-context row when
-  `:expanded` holds a fetched hit under its `hit-key`, an alert row when
-  the fetch `failed`, or a status row while one is pending (`loading`,
-  or anything else that is not a hit)."
-  [{:keys [ui expanded] :as opts} hit]
-  (let [ex  (get expanded (hit-key hit))
-        row (hit-row opts hit (some? ex))]
-    ;; always two children, the second sometimes nothing: a hit that
-    ;; changes length shifts every row after it, and Replicant asks for an
-    ;; explicit nil rather than a shorter list
-    [row (cond
-           (nil? ex)     nil
-           (map? ex)     (expanded-row opts hit ex)
-           (= failed ex) (status-row
-                          "alert"
-                          (i18n/tr ui "The context did not load."))
-           :else         (status-row "status" (i18n/tr ui "Loading …")))]))
+     [:td.kwic-right (tokens opts hit source (+ nl (count match)) right)]]))
 
 (defn corpus-group
   "The rows of `hits`, all from one corpus, as a row group under the
   concordance `opts` (see `concordance`): a header row naming the corpus
   and, from the per-corpus `:counts` of the search, how many hits it
-  holds in all, then the hit rows with their expansions. A corpus whose
-  query failed has no count.
+  holds in all, then the hit rows. A corpus whose query failed has no
+  count.
 
   The count is of the whole corpus, not of the rows below it."
   [{:keys [ui langs counts] :as opts} [{:keys [corpus]} :as hits]]
@@ -316,24 +283,36 @@
      (when corpus
        [:tr.kwic-corpus
         [:th {:scope "rowgroup" :colspan column-count}
-         [:a {:href (url/corpus corpus)}
-          [:code corpus]]
-         (when size
-           (list " " (widgets/count-badge (i18n/group-digits ui size))))]])
-     (mapcat #(hit-rows opts %) hits)]))
+         ;; on a box of its own, so it keeps to the start of the region
+         ;; while the rows below it travel sideways
+         [:span.pinned
+          [:a {:href (url/corpus corpus)}
+           [:code corpus]]
+          (when size
+            (list " " (widgets/count-badge (i18n/group-digits ui size))))]]])
+     (map (partial hit-row opts) hits)]))
 
 (defn column-headers
   "The concordance's column headings in `ui`."
   [ui]
-  ;; each heading carries its column's class, so a rule about a column
-  ;; reaches the heading too rather than counting columns
+  ;; each heading carries the class of its column, so a rule about a
+  ;; column also reaches its heading. The two long names have a box of
+  ;; their own: a narrow screen has no room for the three names side by
+  ;; side, and a name cannot wrap inside a cell that is wider than the
+  ;; screen
   [:thead
    [:tr
     [:th.kwic-cpos {:scope "col"} (widgets/term ui :cpos false)]
-    [:th.kwic-left {:scope "col"} (i18n/tr ui "left context")]
+    [:th.kwic-left {:scope "col"} [:span.measure (i18n/tr ui "left context")]]
     [:th.kwic-match {:scope "col"} (widgets/term ui :match false)]
-    [:th.kwic-right {:scope "col"} (i18n/tr ui "right context")]
-    [:th.kwic-structs {:scope "col"} (i18n/tr ui "source")]]])
+    [:th.kwic-right {:scope "col"}
+     [:span.measure (i18n/tr ui "right context")]]]])
+
+(defn context-value
+  "The context width `context` as a URL param and as an attribute value.
+  A number of words stays a number. A unit of text becomes its name."
+  [context]
+  (if (keyword? context) (name context) context))
 
 (def caption-id
   "The id of the concordance's caption, which names its scroll region."
@@ -345,38 +324,77 @@
   a style hook cannot break focus."
   "concordance")
 
+(def keys-id
+  "The id of the concordance's keyboard instructions, which describe its
+  region (see `key-help`)."
+  "concordance-keys")
+
+(defn key-help
+  "How the concordance is read by keyboard, in `ui`: spoken, never seen,
+  since a reader who can see the cursor move needs no telling.
+
+  The table keeps its own semantics rather than taking the grid roles of
+  the APG pattern, which would cost a screen reader the rows and columns
+  a concordance is read by. Nothing then says the arrow keys move a
+  cursor through the words, so the region says it in words."
+  [ui]
+  [:p.spoken {:id keys-id}
+   (i18n/tr ui (str "Use the arrow keys to move between the words, "
+                    "Home and End for the ends of a line."))])
+
 (defn concordance
   "The KWIC `hits` of one result page as a table, one row group per corpus
   in the order the hits arrive, inside the region that scrolls it.
 
   `opts` carries the `:caption` naming the table, the `:ui` of its
   headings and controls, `:langs` (corpus to the language of its text),
-  the per-corpus `:counts` heading each row group, `:expanded` (hit-key
-  to a wider-context hit below its row), `:client?` where the script
-  answering a token click runs, and `:cursor`, the one tabbable token."
-  [hits {:keys [caption ui] :as opts}]
-  (let [{:keys [expanded cursor]} opts
-        ;; a cursor left behind by a hit that has since collapsed names no
-        ;; token, which would leave the concordance with no tab stop at all
-        in-range? (when-let [n (cursor-range hits expanded (first cursor))]
-                    (< (second cursor) n))
-        opts      (cond-> opts
-                    (not in-range?) (assoc :cursor (default-cursor hits)))]
+  the per-corpus `:counts` heading each row group, the `:context` asked
+  for, which says how wide the reader's window is, `:client?` where the
+  script answering a token click runs, and `:cursor`, the one tabbable
+  token, which the window and the scroll both follow."
+  [hits {:keys [caption ui client? context] :as opts}]
+  (let [cursor (resolved-cursor hits (:cursor opts))
+        opts   (assoc opts :cursor cursor :travel (travel-offset hits cursor))]
     ;; a KWIC line must not wrap, or its columns stop lining up, so the
-    ;; table scrolls sideways in its own region; focusable because a
-    ;; keyboard must be able to scroll it, and named because a focusable
-    ;; region needs a name
-    [:div.scroll {:id              region-id
-                  :role            "region"
-                  :tabindex        "0"
-                  :aria-labelledby caption-id
-                  ;; the panel describes what the cursor is on, so it has
-                  ;; nothing to describe once the cursor is left behind
-                  :on              {:focusout [:leave-concordance]}}
+    ;; table stands in a region that clips it and is scrolled by the
+    ;; cursor alone; not a tab stop, since there is nothing to scroll by
+    ;; hand, but focusable because the panel sends focus back here on
+    ;; closing, and named because a focusable region needs a name
+    [:div.scroll (cond-> {:id              region-id
+                          :role            "region"
+                          :tabindex        "-1"
+                          :aria-labelledby caption-id
+                          ;; the panel describes what the cursor is on, so
+                          ;; it has nothing to describe once the cursor is
+                          ;; left behind
+                          :on              {:focusout [:leave-concordance]}}
+                   ;; the width of line that the reader asked for. The
+                   ;; page needs this to set its own width (style.css,
+                   ;; `.search-page:has(...)`)
+                   context
+                   (assoc :data-context (context-value context))
+                   ;; the token the reader is on stays in the middle, so
+                   ;; the scroll follows the cursor; the reach travels
+                   ;; with it, since a page that has just come back wider
+                   ;; has grown under the reader and must not be glided
+                   client?
+                   (assoc :replicant/on-render
+                          [:centre-match (cursor-id (:cursor opts))
+                           (:reach opts)]
+                          ;; on the region, not on the token: the cursor
+                          ;; would say it again at every word
+                          :aria-describedby keys-id))
+     ;; only where the script is running: without it there is no cursor,
+     ;; and the keys the help names do nothing
+     (when client? (key-help ui))
      [:table.kwic
-      (when caption [:caption {:id caption-id} caption])
+      ;; spoken, but never seen: the view controls above name this table
+      ;; on the screen. A table still needs a caption, and a region still
+      ;; needs a name
+      (when caption
+        [:caption.spoken {:id caption-id} caption])
       (column-headers ui)
-      (map #(corpus-group opts %) (partition-by :corpus hits))]]))
+      (map (partial corpus-group opts) (partition-by :corpus hits))]]))
 
 (defn sort-label
   "What the sort mode `value` (see
@@ -452,12 +470,11 @@
                  context-widths
                  (into (vec (sort (conj (filterv number? context-widths)
                                         context)))
-                       (filter keyword? context-widths)))
-        ;; a unit is named in the URL, a number of words is the number
-        value  (fn [width] (if (keyword? width) (name width) width))]
+                       (filter keyword? context-widths)))]
     (widgets/select url/form-id "context" (i18n/tr ui "Context")
                     (for [width widths]
-                      (widgets/option (value context) (value width)
+                      (widgets/option (context-value context)
+                                      (context-value width)
                                       (context-label ui width))))))
 
 (defn concordance-section
@@ -469,7 +486,7 @@
   The result answers the params the search was `:asked` with, not the
   form's `:params`, which the client's form leaves behind at a change of
   mode."
-  [{:keys [ui sort-modes asked result error langs expanded client?
+  [{:keys [ui sort-modes asked result error langs client?
            export-hrefs export-limit prev-href next-href]
     :as state}]
   (let [{:keys [counts hits size]} result
@@ -501,13 +518,14 @@
                                 (result/near-control ui (:near result))
                                 (:near result))
           (result/pagination ui prev-href next-href position)
-          (concordance hits {:caption  (widgets/term ui :kwic false)
-                             :ui       ui
-                             :langs    langs
-                             :counts   counts
-                             :expanded expanded
-                             :client?  client?
-                             :cursor   (:cursor state)})
+          (concordance hits {:caption   (widgets/term ui :kwic false)
+                             :ui        ui
+                             :langs     langs
+                             :counts    counts
+                             :context   (:context result)
+                             :reach     (:reach result)
+                             :client?   client?
+                             :cursor    (:cursor state)})
           (result/pager-links ui prev-href next-href position)
           ;; what to do next with these hits, so it follows them: reading
           ;; the concordance is the task, taking it elsewhere is the one

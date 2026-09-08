@@ -79,17 +79,6 @@
                                              {:uri          "/search"
                                               :query-params {nil "foo"}}))))))
 
-(deftest serve-context-validation-test
-  (let [context (fn [params] (search/serve-context {} {:query-params params}))]
-    (testing "a hostile corpus name is rejected before touching cqp"
-      (is (= 400 (:status (context {:corpus   "bad; exit"
-                                    :cpos     "9"
-                                    :matchend "9"})))))
-    (testing "a non-integer position is rejected"
-      (is (= 400 (:status (context {:corpus   "PROBE"
-                                    :cpos     "x"
-                                    :matchend "9"})))))))
-
 (deftest serve-filters-test
   (let [asked (atom nil)
         call  (fn [params]

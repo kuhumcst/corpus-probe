@@ -31,9 +31,50 @@ main { padding-block-start: 1rem; margin-block-end: 3rem;
 main:not(.search-page), .help { max-inline-size: 40rem; }
 
 /* the measure holds the rail and a KWIC line of ordinary length; a
-   wider answer grows the page, as far as the padding allows */
+   wider answer grows the page, as far as the padding allows. The
+   ceiling is not redundant: nested in the column flexes above it, this
+   box has no definite width to resolve `fit-content` against, so
+   without one a long line sizes the page to the line */
 .search-page { inline-size: fit-content;
-               min-inline-size: min(100%, 77rem); }
+               min-inline-size: min(100%, 77rem);
+               max-inline-size: 100%; }
+/* The page is as wide as the words that the reader can see, and no
+   wider. These are the context words that the reader asked for. The line
+   fades out a few more words on each side of the match. More width shows
+   only empty space.
+
+   We set this width here. We do not measure it. This is a workaround,
+   and it corrects a second workaround.
+
+   The two context columns have a large fixed width. No screen is that
+   wide (refer to `.kwic-left`). This stops the table from moving
+   sideways when more of the line comes in. But it also makes the table
+   width useless as a measure, because the table is always that wide. The
+   `fit-content` rule above can see only that width. The scroll region is
+   also a query container. The width of a query container does not change
+   with its content. So the rule above cannot measure through it.
+
+   The minimum width goes away for the same reason. A page sets a minimum
+   only when it has no line of its own to go by.
+
+   Each width below gives space for 2 × (context + 3) + 1 words. The
+   words are at the size of the concordance. Each width also includes the
+   rail and the position column. A context that is not in the list gets
+   the full page. A unit of text also gets the full page, because its
+   width is not known.
+
+   TODO: two changes can remove these rules. Show the words that are
+   outside the reader's window in a different way. Then the columns do
+   not need a fixed width, and `fit-content` can measure the line. Or
+   read the attribute in one rule, when more browsers than Chrome support
+   `attr()` with a type.
+   TODO: a word is 42px here, which is the average in the toy corpora.
+   Measure it again with the KU data, which has longer words. */
+.search-page:has(.scroll[data-context]) { inline-size: 100%;
+                                          min-inline-size: 0; }
+.search-page:has(.scroll[data-context="5"]) { inline-size: 66rem; }
+.search-page:has(.scroll[data-context="10"]) { inline-size: 92rem; }
+.search-page:has(.scroll[data-context="20"]) { inline-size: 144rem; }
 
 /* the bypass link, off screen until a keyboard reaches it */
 .skip { position: absolute; inset-inline-start: -100vw; }
@@ -209,13 +250,14 @@ label:has(:is(input, select):disabled) { color: var(--rule); }
        border: 1px solid var(--rule); border-radius: 2px;
        padding: 0.5rem var(--box-pad) var(--box-pad); }
 
-/* the small-caps voice of the apparatus: a box's name on its border in
-   the deep accent, and a key beside its value, muted */
+/* The small-caps voice of the apparatus. A box shows its name on its
+   border in the deep accent. A column shows its name over its data in
+   the same voice. A key beside its value is muted */
 legend, .inspector h3, .facts dt, thead th {
   font-family: var(--sans); font-variant: all-small-caps;
   letter-spacing: 0.04em; font-weight: 600; color: var(--accent-deep);
 }
-.facts dt, thead th { color: var(--tx-2); }
+.facts dt { color: var(--tx-2); }
 
 /* a live region is rendered even when empty, so its changes are
    announced; while empty it takes no step */
@@ -237,7 +279,9 @@ hgroup p { color: var(--tx-2); }
 .facts dd { margin: 0; }
 
 table { border-collapse: collapse; }
-thead th { border-block-end: 1px solid var(--rule); }
+/* Use the size of a legend, and not the size of the table. A column
+   name is apparatus. The tables set their data smaller than the page */
+thead th { border-block-end: 1px solid var(--rule); font-size: 1rem; }
 caption { caption-side: top; text-align: start; padding-block: 0.25rem;
           font-family: var(--sans); color: var(--tx-2); }
 
@@ -296,8 +340,8 @@ pre { font-size: 0.875rem; padding: 0.75rem 1rem;
 
 /* spoken, never seen: clipped rather than moved off screen, which cannot
    reach the scrollable area */
-.announcement { position: absolute; width: 1px; height: 1px;
-                clip-path: inset(50%); overflow: hidden; }
+.spoken { position: absolute; width: 1px; height: 1px;
+          clip-path: inset(50%); overflow: hidden; }
 
 .query { display: flex; flex-direction: column; gap: 0.5rem; }
 
@@ -407,28 +451,106 @@ pre { font-size: 0.875rem; padding: 0.75rem 1rem;
 .pager > li:not(.pager-prev, .pager-next) { grid-column: 2; }
 .pager-next { grid-column: 3; justify-self: start; }
 
-/* a KWIC line scrolls inside its box rather than reflow (WCAG 1.4.10) */
-.scroll { overflow-x: auto; overscroll-behavior-x: contain; }
+/* a wide table scrolls inside its box rather than reflow (WCAG 1.4.10);
+   the padding is the strip an overlay scrollbar is drawn over, which
+   would otherwise cover the last line */
+.scroll { overflow-x: auto; overscroll-behavior-x: contain;
+          padding-block-end: 0.75rem; }
+
+/* The concordance is the exception. It moves with the cursor, not with
+   the view. The line also fades out on each side of the reader's window.
+   A reader who panned the region would see only empty text. The region
+   still scrolls, but only when the cursor moves it.
+
+   The region is also a query container. The column names measure
+   themselves against it, and not against the window. On a wide screen
+   the search form takes a rail of its own. The strip that the reader
+   reads in is then narrower than the page. The page does not know how
+   much narrower */
+.scroll:has(> .kwic) { overflow-x: hidden; container-type: inline-size; }
 
 /* The concordance */
 
-/* the contexts share the width, so the match stands in the middle */
+/* the contexts share the width, so the match stands in the middle. The
+   line does not wrap at any width: a concordance is read down the match,
+   which wrapping buries mid-paragraph, and the fade and the travel both
+   need a line to work along (WCAG 1.4.10 exempts content that needs two
+   dimensions to mean anything, which a KWIC line does) */
 .kwic { font-size: 0.875rem; white-space: nowrap; inline-size: 100%; }
-.kwic th.kwic-left, .kwic th.kwic-right { inline-size: 50%; }
-.kwic th, .kwic td { padding: 0.15em 0.25em; }
+/* These two columns have a width of their own. It is wider than any page
+   (refer to dk.cst.corpus-probe.server.request/reach-limit). A page
+   holds more words than the reader's window shows. The browser lays out
+   these words, even when the reader cannot see them. A column that took
+   its width from its words would change width when more words come in.
+   The table would then move sideways.
+
+   A fixed width has a cost: the table can no longer show how much space
+   the result needs. This is why we tell the page its own width (refer to
+   `.search-page:has`) */
+.kwic :is(.kwic-left, .kwic-right) { inline-size: 50%;
+                                     min-inline-size: 900ch; }
+.kwic th, .kwic td { padding: 0.4em 0.25em; }
 .kwic th { text-align: left; }
 /* scoped, or the heading rule above wins and the left heading flips */
 .kwic .kwic-left { text-align: right; }
-.kwic td.kwic-match { text-align: center; }
+.kwic .kwic-match { text-align: center; }
+/* The mark is a highlighter over the words. It holds a little space
+   around them. It does not stop at the letters */
+.kwic mark { padding: 0.15em 0.3em; border-radius: 2px; }
+
+/* The two contexts are aligned against the match. Their names thus come
+   together at the middle, and they read as one line. This padding holds
+   each name away from the match. The columns are wider than the screen,
+   so the space is there. Padding cannot make these columns wider.
+
+   Do not pad the match itself. Its column is only as wide as its
+   content. More padding there would push the two contexts apart in every
+   row */
+.kwic thead { --name-gap: 1.5em; }
+.kwic thead .kwic-left { padding-inline-end: var(--name-gap); }
+.kwic thead .kwic-right { padding-inline-start: var(--name-gap); }
+/* Sometimes the concordance is narrower than the three names side by
+   side. The ends of the names then go under the position column and off
+   the edge. The two long names take two lines instead.
+
+   A measure makes them wrap. Without it they do not wrap at all, because
+   their cells are wider than any screen. Keep the measure below the
+   shorter of the two names. If you do not, one name keeps its line while
+   the other one breaks. Two lines are their own separation, so the names
+   need less space between them */
+@container (max-width: 32rem) {
+  .kwic thead { --name-gap: 1em; }
+  .kwic thead .measure { display: inline-block; white-space: normal;
+                         max-inline-size: 6em; }
+}
+/* no padding at the sides: it is the start of this cell's content box
+   that its pinned name can be held at, so any padding there is a step
+   the name takes the moment the table begins to scroll */
 .kwic .kwic-corpus th { font-family: var(--sans); font-weight: 600;
-                        padding-block-start: 0.75em; }
+                        padding-block-start: 0.75em; padding-inline: 0; }
 .kwic .kwic-hit:hover { background: var(--accent-pale); }
-.kwic .kwic-expanded td { white-space: normal; text-align: left;
-                          background: var(--field); }
+
+/* the position says which row this is rather than what it says, so it
+   stays at the start while the context travels past it. The fill is its
+   alone, not the row's: a fill the width of the table is repainted as it
+   scrolls, and its edge is then what a reader sees moving. The layer is
+   what keeps the words under it, a faded token being painted as a
+   positioned box (any opacity below 1 is) */
+.kwic .kwic-cpos { position: sticky; inset-inline-start: 0; z-index: 1;
+                   background: var(--bg); }
+.kwic .kwic-hit:hover .kwic-cpos { background: var(--accent-pale); }
+
+/* The corpus heading of a row group says what is on the screen. It thus
+   stays at the start of the region and does not move off it. Give it a
+   box of its own. The heading is as wide as its table, and a sticky box
+   cannot move inside its own width */
+.kwic .pinned { position: sticky; inset-inline-start: 0;
+                display: inline-block; }
 
 /* its own target (WCAG 2.5.8), without padding that would raise the row */
-.kwic .kwic-cpos button { min-inline-size: 24px; min-block-size: 24px;
-                          padding-block: 0; }
+.kwic .kwic-cpos a { display: inline-block;
+                     min-inline-size: 24px; min-block-size: 24px;
+                     padding-block: 0; }
 
 /* a token is a button that must still read as running text; the cursor
    is a position, not a passing focus, so :focus, not :focus-visible */
@@ -442,15 +564,24 @@ pre { font-size: 0.875rem; padding: 0.75rem 1rem;
 .kwic .token.target { font-weight: bold; }
 .kwic .token.keyword { text-decoration: underline; }
 
-/* narrow: the source column goes; it is still on the row as a title */
-@media (max-width: 63.999rem) {
-  .kwic { white-space: normal; }
-  .kwic .kwic-structs { display: none; }
-}
+/* the line falls away over a few words either side of the reader's
+   window, which travels with the cursor: a step of it uncovers the word
+   ahead and lets the one behind go. The steps are
+   dk.cst.corpus-probe.views.concordance/fade-steps */
+.kwic .token.faded { transition: opacity 100ms ease-out; }
+.kwic .token.fade-1 { opacity: 0.25; }
+.kwic .token.fade-2 { opacity: 0.09; }
+/* out of sight takes no clicks: a word the reader cannot see is not one
+   they can mean to press. The keyboard still reaches it, which is how
+   the window travels that far */
+.kwic .token.fade-3 { opacity: 0; pointer-events: none; }
 
 /* The inspector: a sheet at the foot of the viewport, a column when wide */
 
-.inspector { position: fixed; inset: auto 0 0 0;
+/* above the concordance, whose pinned position column has a layer of its
+   own; without one higher, the sheet is painted under the rows it
+   describes */
+.inspector { position: fixed; inset: auto 0 0 0; z-index: 2;
              max-block-size: var(--sheet-block-size); overflow: auto;
              padding: 0.75rem 1rem; background: var(--bg);
              border-block-start: 1px solid var(--rule);
@@ -486,7 +617,7 @@ body:has(.inspector) { padding-block-end: var(--sheet-block-size); }
 /* Frequency and corpus tables */
 
 .attributes, .frequencies { font-family: var(--sans); font-size: 0.9rem; }
-:is(.attributes, .frequencies) :is(th, td) { padding: 0.15em 0.5em;
+:is(.attributes, .frequencies) :is(th, td) { padding: 0.4em 0.5em;
                                              text-align: left; }
 :is(.attributes, .frequencies) .num { text-align: right; }
 

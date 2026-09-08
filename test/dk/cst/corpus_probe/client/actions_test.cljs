@@ -49,7 +49,7 @@
     :set-query :submit-on-enter :set-condition :set-token :apply-view
     :toggle-corpora :toggle-filter-values :clear-filter :engage
     :toggle-open :filter :leave :swallow-enter :inspect :close
-    :move-cursor :leave-concordance :toggle-context})
+    :move-cursor :leave-concordance})
 
 (deftest act-covers-every-view-action-test
   (let [examples [[:set-mode "extended" {:q "hund" :mode "extended"}]
@@ -70,11 +70,10 @@
                   [:filter :corpora "x"]
                   [:leave :corpora true]
                   [:swallow-enter "Enter"]
-                  [:inspect {:token {:word "hund"}}]
+                  [:inspect {:token {:word "hund"}} [["PROBE" 9] 0]]
                   [:close]
-                  [:move-cursor [["PROBE" 9] 0] "ArrowRight"]
-                  [:leave-concordance]
-                  [:toggle-context {:corpus "PROBE" :cpos 9 :matchend 9}]]]
+                  [:move-cursor [["PROBE" 9] 0] "ArrowRight" false]
+                  [:leave-concordance]]]
     (testing "one example per action the views emit, and each is answered"
       (is (= view-actions (set (map first examples))))
       (doseq [[kind :as action] examples]
@@ -97,13 +96,10 @@
                 (:tokens (actions/data->state
                           (assoc data :tokens
                                  (query/form-rows (query/of {:q "hund"})))
-                          "http://localhost/search")))))
-    (is (nil? (:expanded state))))
-  (testing "the fragment and the expansions the URL names"
-    (let [landed (actions/data->state
-                  data "http://localhost/search?expand=PROBE:9,X:1#top")]
-      (is (= "top" (:fragment landed)))
-      (is (= {["PROBE" 9] concordance/loading} (:expanded landed))))))
+                          "http://localhost/search"))))))
+  (testing "the fragment the URL names"
+    (is (= "top" (:fragment (actions/data->state
+                             data "http://localhost/search#top"))))))
 
 (deftest page-arrived-test
   (let [href "http://localhost/search?q=hund&corpus=PROBE#results"
@@ -117,7 +113,6 @@
               [:set-title "hund"]
               [:set-lang "en"]
               [:sync-url]
-              [:fetch-expansions]
               [:fetch-counts]
               [:land]]
              effects)))
@@ -127,83 +122,144 @@
 
 (deftest cursor-test
   (testing "along a row the cursor steps and stops at the ends"
-    (let [rows (actions/cursor-rows state)]
-      (is (= [["PROBE" 9] 1] (actions/step-cursor rows [["PROBE" 9] 0] [0 1])))
-      (is (= [["PROBE" 9] 3] (actions/step-cursor rows [["PROBE" 9] 3] [0 1])))
-      (is (= [["PROBE" 9] 0] (actions/step-cursor rows [["PROBE" 9] 0] [0 -1])))
+    (let [hits (actions/hits state)]
+      (is (= [["PROBE" 9] 1] (actions/step-cursor hits [["PROBE" 9] 0] [0 1])))
+      (is (= [["PROBE" 9] 3] (actions/step-cursor hits [["PROBE" 9] 3] [0 1])))
+      (is (= [["PROBE" 9] 0] (actions/step-cursor hits [["PROBE" 9] 0] [0 -1])))
       (testing "and between rows it keeps its distance from the match"
         (is (= [["PROBE" 20] 0]
-               (actions/step-cursor rows [["PROBE" 9] 2] [1 0])))
+               (actions/step-cursor hits [["PROBE" 9] 2] [1 0])))
         (is (= [["PROBE" 9] 2]
-               (actions/step-cursor rows [["PROBE" 20] 0] [-1 0]))))))
-  (testing "an expanded row follows its hit, numbered past it"
-    (let [rows (actions/cursor-rows (assoc state :expanded
-                                           {["PROBE" 9] wider}))]
-      (is (= [["PROBE" 9] ["PROBE" 9] ["PROBE" 20]] (map :key rows)))
-      (is (= [0 4 0] (map :from rows)))
-      (is (= [["PROBE" 9] 8]
-             (actions/step-cursor rows [["PROBE" 9] 2] [1 0])))
-      (is (= [["PROBE" 9] 2]
-             (actions/step-cursor rows [["PROBE" 9] 8] [-1 0])))))
+               (actions/step-cursor hits [["PROBE" 20] 0] [-1 0]))))))
   (testing "a key moves the cursor, focus with it, and consumes the key"
     (let [{state' :state :keys [effects]}
-          (actions/move-cursor state [["PROBE" 9] 0] "ArrowRight")]
+          (actions/move-cursor state [["PROBE" 9] 0] "ArrowRight" false)]
       (is (= [["PROBE" 9] 1] (:cursor state')))
-      (is (= [[:prevent-default] [:focus "t-PROBE-9-1"]] effects)))
+      ;; the view of the concordance is the concordance's own to move
+      (is (= [[:prevent-default] [:focus "t-PROBE-9-1" true]] effects)))
     (is (= [["PROBE" 9] 3]
            (:cursor (:state (actions/move-cursor state [["PROBE" 9] 0]
-                                                 "End")))))
+                                                 "End" false)))))
     (is (= [["PROBE" 9] 0]
            (:cursor (:state (actions/move-cursor state [["PROBE" 9] 3]
-                                                 "Home"))))))
+                                                 "Home" false))))))
+  (testing "and the Ctrl chords a text field takes for the ends of a line
+            go to the same ends, whatever the shift key did to the letter"
+    (is (= [["PROBE" 9] 3]
+           (:cursor (:state (actions/move-cursor state [["PROBE" 9] 0]
+                                                 "e" true)))))
+    (is (= [["PROBE" 9] 0]
+           (:cursor (:state (actions/move-cursor state [["PROBE" 9] 3]
+                                                 "A" true)))))
+    (testing "and without Ctrl they are letters the browser can have"
+      (is (= {:state state}
+             (actions/move-cursor state [["PROBE" 9] 0] "a" false)))
+      (is (= {:state state}
+             (actions/move-cursor state [["PROBE" 9] 0] "e" false)))))
   (testing "Escape closes the panel and nothing else moves"
     (let [{state' :state :keys [effects]}
           (actions/move-cursor (assoc state :selected {:token {}})
-                               [["PROBE" 9] 0] "Escape")]
+                               [["PROBE" 9] 0] "Escape" false)]
       (is (not (contains? state' :selected)))
       (is (= [[:prevent-default]] effects))))
   (testing "any other key is left to the browser"
-    (is (= {:state state} (actions/move-cursor state [["PROBE" 9] 0] "a")))))
+    (is (= {:state state}
+           (actions/move-cursor state [["PROBE" 9] 0] "x" false)))
+    (is (= {:state state}
+           (actions/move-cursor state [["PROBE" 9] 0] "x" true)))))
+
+(deftest widen-test
+  (let [reached (assoc-in state [:result :reach] 30)]
+    (testing "coming to the end of a line asks for twice as much of it"
+      (let [{state' :state :keys [effects]} (actions/widen reached 1 hit 1)]
+        (is (= [[:fetch-wider 60]] effects))
+        (is (= 1 (get-in state' [:result :widening])))))
+    (testing "but not at the end its text already reaches, and not at the
+              other end of a hit bounded at this one"
+      (let [ended (assoc hit :bounds #{:end})]
+        (is (nil? (:effects (actions/widen reached 1 ended 1))))
+        (is (= [[:fetch-wider 60]]
+               (:effects (actions/widen reached -1 ended -1))))))
+    (testing "and nothing is asked for between rows, while a fetch is out,
+              once no page comes back wider, or where the context is a
+              unit of text, which bounds itself"
+      (doseq [[what state* tokens]
+              [["between rows" reached 0]
+               ["already out"  (assoc-in reached [:result :widening] 1) 1]
+               ["none wider"   (assoc-in reached [:result :widest?] true) 1]
+               ["a unit"       (assoc-in state [:result :reach] :sentence) 1]]]
+        (is (nil? (:effects (actions/widen state* tokens hit tokens))) what)))))
+
+(deftest running-out-test
+  ;; nine tokens, the match in the middle
+  (let [row {:left (vec (repeat 4 {})) :match [{}] :right (vec (repeat 4 {}))}]
+    (testing "the line gives out within the window the reader can see
+              ahead of the cursor: the context asked for, and the fade"
+      ;; context 1 + 3 fade steps: four tokens ahead is near enough
+      (is (actions/running-out? row [nil 4] 1 1))
+      (is (not (actions/running-out? row [nil 3] 1 1)))
+      (testing "and the same counting back the other way"
+        (is (actions/running-out? row [nil 4] -1 1))
+        (is (not (actions/running-out? row [nil 5] -1 1)))))
+    (testing "nothing runs out between rows, or where the context is a
+              unit of text"
+      (is (not (actions/running-out? row [nil 8] 0 1)))
+      (is (not (actions/running-out? row [nil 8] 1 :sentence))))))
+
+(deftest carried-cursor-test
+  ;; hit: en lille [hund] gør, wider: der var en lille [hund] gør .
+  (testing "the cursor keeps its word where more context to the left has
+            moved it along the row, and takes the step it was refused"
+    (is (= [["PROBE" 9] 4]
+           (actions/carried-cursor [["PROBE" 9] 2] [hit] [wider] 0)))
+    (is (= [["PROBE" 9] 6]
+           (actions/carried-cursor [["PROBE" 9] 3] [hit] [wider] 1))))
+  (testing "a cursor on no hit of this page is left where it is"
+    (is (= [["VISER" 1] 0]
+           (actions/carried-cursor [["VISER" 1] 0] [hit] [wider] 1)))))
+
+(deftest wider-arrived-test
+  (let [reached (-> state
+                    (assoc-in [:result :reach] 30)
+                    (assoc-in [:result :widening] 1)
+                    (assoc :cursor [["PROBE" 9] 3]))]
+    (testing "a wider page comes with the cursor's word and the step the
+              end of the line refused"
+      (let [{state' :state :keys [effects]}
+            (actions/wider-arrived reached 60
+                                   (assoc-in data [:result :hits]
+                                             [wider other]))]
+        (is (= [wider other] (get-in state' [:result :hits])))
+        (is (= 60 (get-in state' [:result :reach])))
+        (is (= [["PROBE" 9] 6] (:cursor state')))
+        (is (= [[:focus "t-PROBE-9-6" true]] effects))
+        (is (not (contains? (:result state') :widening)))))
+    (testing "and one that came back no wider is all the line there is"
+      (let [{state' :state} (actions/wider-arrived reached 60 data)]
+        (is (true? (get-in state' [:result :widest?])))
+        (is (not (contains? (:result state') :widening)))
+        (is (= [["PROBE" 9] 3] (:cursor state')))))))
 
 (deftest inspect-and-close-test
-  (let [selected {:corpus "PROBE" :token {:word "hund"}}]
-    (is (= selected (:selected (actions/inspect state selected))))
-    (is (not (contains? (actions/inspect (assoc state :selected selected) nil)
-                        :selected)))
+  (let [selected {:corpus "PROBE" :token {:word "hund"}}
+        cursor   [["PROBE" 9] 3]]
+    (is (= selected (:selected (actions/inspect state selected cursor))))
+    (testing "the cursor follows what is inspected, so the tabbable token
+              is the one the reader is on however they got there"
+      (is (= cursor (:cursor (actions/inspect state selected cursor)))))
+    (testing "and dismissing takes the cursor with it, so the concordance
+              rests on its matches again rather than where the reader
+              stopped reading"
+      (let [dismissed (actions/inspect (assoc state
+                                              :selected selected
+                                              :cursor cursor)
+                                       nil nil)]
+        (is (not (contains? dismissed :selected)))
+        (is (not (contains? dismissed :cursor)))))
     (let [{state' :state :keys [effects]}
           (actions/close (assoc state :selected selected))]
       (is (not (contains? state' :selected)))
       (is (= [[:focus concordance/region-id]] effects)))))
-
-(deftest context-test
-  (let [k       [(:corpus hit) (:cpos hit)]
-        ;; the payload the cpos button carries (see
-        ;; dk.cst.corpus-probe.views.concordance/context-control)
-        control {:corpus "PROBE" :cpos 9 :matchend 9}
-        {expanded :state :keys [effects]} (actions/toggle-context state
-                                                                  control)]
-    (testing "expanding commits a placeholder, fetches and mirrors the URL"
-      (is (= {k concordance/loading} (:expanded expanded)))
-      (is (= [[:fetch-context "PROBE" 9 9] [:sync-url]] effects)))
-    (testing "the context arriving replaces the placeholder"
-      (is (= {k wider}
-             (:expanded (:state (actions/context-arrived expanded k wider))))))
-    (testing "an answer to a hit collapsed meanwhile revives nothing"
-      (is (= {:state state :effects [[:sync-url]]}
-             (actions/context-arrived state k wider)))
-      (let [{state' :state :keys [effects]}
-            (actions/context-arrived expanded k nil)]
-        (is (empty? (:expanded state')))
-        (is (= [[:sync-url]] effects))))
-    (testing "a failure marks the hit while it is still expanded"
-      (is (= {k concordance/failed}
-             (:expanded (actions/context-failed expanded k))))
-      (is (identical? state (actions/context-failed state k))))
-    (testing "and collapsing mirrors the URL again"
-      (let [{state' :state :keys [effects]}
-            (actions/toggle-context expanded control)]
-        (is (empty? (:expanded state')))
-        (is (= [[:sync-url]] effects))))))
 
 (deftest tokens-test
   (let [state (assoc state :tokens [{:id 1 :conditions [{:id 1 :v "a"}]}
@@ -424,6 +480,9 @@
            (:effects (actions/act state [:apply-view]))))
     (is (= [[:leave-concordance]]
            (:effects (actions/act state [:leave-concordance]))))
+    ;; a resize moves the strip the concordance is read in, not the state
+    (is (= {:state state :effects [[:recentre]]}
+           (actions/act state [:recentre])))
     (is (false? (:filters-pending? (:state (actions/act state
                                                         [:filters-failed])))))))
 

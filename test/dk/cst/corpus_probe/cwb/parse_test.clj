@@ -41,6 +41,32 @@
       (is (= [:s] (-> hit :match first :open)))
       (is (= [:s] (->> hit :right (keep :close) first))))))
 
+(deftest clip-context-test
+  (let [word  (fn [w & tags] (into {:word w} tags))
+        ;; a context wide enough to run out of the text at both ends
+        hit   {:left  [(word "før") (word "." {:close [:text]})
+                       (word "Her" {:open [:text]}) (word "står")]
+               :match [(word "det")]
+               :right [(word "skrevet") (word "." {:close [:text]})
+                       (word "Så" {:open [:text]}) (word "videre")]}
+        words (fn [hit k] (mapv :word (get hit k)))]
+    (testing "the context is cut back to the text the match is in, the
+              tokens bounding it kept"
+      (let [clipped (parse/clip-context :text hit)]
+        (is (= ["Her" "står"] (words clipped :left)))
+        (is (= ["skrevet" "."] (words clipped :right)))))
+    (testing "and says which ends of its text it has reached, so that a
+              reader travelling along the line knows where to stop asking
+              for more of it"
+      (is (= #{:start :end} (:bounds (parse/clip-context :text hit))))
+      (let [open-ended (update hit :right
+                               #(vec (take-while (fn [t] (not (:close t))) %)))]
+        (is (= #{:start} (:bounds (parse/clip-context :text open-ended))))))
+    (testing "no attribute to clip at, or no tag on any token, leaves the
+              hit as it is"
+      (is (= hit (parse/clip-context nil hit)))
+      (is (= hit (parse/clip-context :p hit))))))
+
 (deftest show-cd->attributes-test
   (let [attrs (parse/show-cd->attributes (golden-lines "show-cd.txt"))]
     (is (= 9 (count attrs)))

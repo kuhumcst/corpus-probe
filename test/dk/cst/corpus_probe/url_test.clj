@@ -22,7 +22,7 @@
   (testing "the data the client fetches is under one prefix, apart from
             the pages"
     (is (every? #(str/starts-with? % "/api/")
-                [url/context-api url/filters-api url/counts-api])))
+                [url/filters-api url/counts-api])))
   (testing "the fragment names the results region"
     (is (= (str "#" url/results-id) url/results-fragment))))
 
@@ -160,10 +160,9 @@
            (url/query-string {:q "[lemma = \"hund\"]"})))
     (is (= "q=h%C3%B8ne" (url/query-string {:q "høne"}))))
   (testing "except that a comma and a colon stay readable"
-    (is (= "q=a:%5B%5D+::+b&corpus=PROBE,VISER&expand=PROBE:9,PROBE:12"
+    (is (= "q=a:%5B%5D+::+b&corpus=PROBE,VISER"
            (url/query-string {:q "a:[] :: b"
-                              :corpus ["PROBE" "VISER"]
-                              :expand "PROBE:9,PROBE:12"}))))
+                              :corpus ["PROBE" "VISER"]}))))
   (testing "nothing to say is an empty string"
     (is (= "" (url/query-string {:mode "simple"})))))
 
@@ -237,10 +236,7 @@
       (is (str/includes? href "page=3"))
       (is (not (str/includes? (url/page-href {:q "hund"} 0) "page="))))
     (testing "the query is URL-encoded"
-      (is (str/includes? (url/page-href {:q "[lemma=\"a\"]"} 1) "%5B")))
-    (testing "the per-page expand parameter is dropped"
-      (is (not (str/includes? (url/page-href {:corpus "PROBE" :expand "9"} 1)
-                              "expand"))))))
+      (is (str/includes? (url/page-href {:q "[lemma=\"a\"]"} 1) "%5B")))))
 
 (deftest page-hrefs-test
   (let [params {:q "hund"}]
@@ -326,20 +322,6 @@
   (testing "names are uppercased and deduplicated, blanks dropped"
     (is (= ["PROBE"] (url/corpora-param ["probe" "PROBE" ""]))))
   (is (= [] (url/corpora-param nil))))
-
-(deftest expand-test
-  (testing "the expanded hits as the URL names them"
-    (is (= #{["PROBE" 9] ["VISER" 12]} (url/expand-param "PROBE:9,VISER:12")))
-    (is (= #{["PROBE" 9]} (url/expand-param ["PROBE:9" "x" "PROBE:"])))
-    (is (nil? (url/expand-param nil)))
-    (is (nil? (url/expand-param ""))))
-  (testing "and back, in order, or not at all"
-    (let [hits #{["PROBE" 12] ["PROBE" 9]}]
-      (is (= {:q "hund" :expand "PROBE:9,PROBE:12"}
-             (url/with-expanded {:q "hund"} hits)))
-      (is (= hits (url/expand-param (:expand (url/with-expanded {} hits)))))
-      (is (= {:q "hund"}
-             (url/with-expanded {:q "hund" :expand "PROBE:9"} nil))))))
 
 (deftest metadata-key?-test
   (is (url/metadata-key? :f.text_year))

@@ -45,6 +45,8 @@
                                (.-key dom-event))
    :event/shift?             (fn [{:replicant/keys [dom-event]}]
                                (.-shiftKey dom-event))
+   :event/ctrl?              (fn [{:replicant/keys [dom-event]}]
+                               (.-ctrlKey dom-event))
    :event/composing?         (fn [{:replicant/keys [dom-event]}]
                                (.-isComposing dom-event))
    :event.target.form/params (fn [{:replicant/keys [node]}]
@@ -126,5 +128,4 @@
   (r/set-dispatch! dispatch!)
   (add-watch state ::render (fn [_ _ _ _] (render!)))
   (render!)
-  (effects/perform! dispatch! {:state @state}
-                    [[:sync-url] [:fetch-expansions]]))
+  (effects/perform! dispatch! {:state @state} [[:sync-url]]))

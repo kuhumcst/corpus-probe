@@ -341,7 +341,7 @@
   (see dk.cst.corpus-probe.client.actions/act) and a second save is
   spoken as the first was."
   [ui announcement]
-  (widgets/status "announcement"
+  (widgets/status "spoken"
                   (when (= :saved announcement)
                     (i18n/tr ui "Settings saved"))))
 

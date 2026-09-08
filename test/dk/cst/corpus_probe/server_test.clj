@@ -90,7 +90,7 @@
         paths  (set (map first routes))]
     (testing "every path the URLs name is served, and the assets beside them"
       (is (every? paths [url/home url/search url/corpora url/glossary
-                         url/cqp-guide url/preferences url/context-api
+                         url/cqp-guide url/preferences
                          url/filters-api url/counts-api
                          "/css/*path" "/js/*path"])))
     (testing "each route names itself, once"

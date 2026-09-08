@@ -156,6 +156,32 @@
       :else                                             (:context
                                                          batch/kwic-defaults))))
 
+(def reach-limit
+  "The furthest a page may be asked to reach either side of a match, in
+  words. Past this the whole text is the bound and the reading page is
+  the way on."
+  ;; two reasons for a cap, and this number answers the second: a reader
+  ;; travelling on must not be able to ask for a page of any size, and
+  ;; the concordance's context columns are given a width that holds this
+  ;; many words (style.css, `.kwic-left`), since a column that grew with
+  ;; the page would shift the table sideways each time one arrived. The
+  ;; two must move together.
+  ;; TODO: it is also the furthest a reader can travel, which is a
+  ;; question about reading rather than about layout. If travelling to
+  ;; the end of a long text turns out to be wanted, the answer is not a
+  ;; bigger number here but handing over to the reading page at the edge
+  120)
+
+(defn reach-param
+  "How far either side of a match the `reach` query param value `v` asks
+  the page to hold: a positive number of words, up to `reach-limit`; nil
+  for anything else, leaving the width to the context asked for. The
+  client asks for this as it travels; no URL the app builds carries it."
+  [v]
+  (when-let [n (some-> v parse-long)]
+    (when (pos? n)
+      (min n reach-limit))))
+
 (defn near-param
   "The word the `near` query param value `word` asks every hit to have
   nearby, at most `distance` (the query param value) words away: {:word

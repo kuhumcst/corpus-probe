@@ -165,8 +165,8 @@
   preference's submit `[:set-preference k v return]`, a change to any
   control of the search form `[:form-changed params]`, a popstate to
   another page `[:navigate href false]`, a hashchange `[:set-fragment
-  fragment]` and a press outside the fieldset of any of the lists `ks`
-  `[:leave k true]`."
+  fragment]`, a resize `[:recentre]` and a press outside the fieldset of
+  any of the lists `ks` `[:leave k true]`."
   [dispatch! ks]
   (.addEventListener
    js/document "click"
@@ -220,6 +220,9 @@
   (.addEventListener js/window "hashchange"
                      (fn [_]
                        (dispatch! [:set-fragment (fragment (current-url))])))
+  ;; the concordance scrolls to hold the cursor in the middle of the
+  ;; window; a window of a different size holds it somewhere else
+  (.addEventListener js/window "resize" (fn [_] (dispatch! [:recentre])))
   ;; a press rather than a click, so that a drag begun elsewhere counts,
   ;; and rather than focus, which a label, a summary and the page take
   ;; none of, nor on Safari a box

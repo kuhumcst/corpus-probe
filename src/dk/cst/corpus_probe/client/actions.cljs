@@ -2,7 +2,8 @@
   "The pure step of the client: `act` takes the state and an action and
   answers with the state to keep and the effects to run. Nothing here
   touches the document, a timer, the network or the history."
-  (:require [dk.cst.corpus-probe.client.lists :as lists]
+  (:require [clojure.string :as str]
+            [dk.cst.corpus-probe.client.lists :as lists]
             [dk.cst.corpus-probe.client.router :as router]
             [dk.cst.corpus-probe.query :as query]
             [dk.cst.corpus-probe.query.mode :as mode]
@@ -27,91 +28,171 @@
   [state]
   (get-in state [:result :hits] []))
 
-(defn cursor-rows
-  "Every row the cursor can visit in `state`, in the order they are read:
-  each hit's own row and, beneath it, its wider context while one is
-  showing, as {:key hit-key :hit hit :from index-of-first-token}; an
-  expanded row numbers its tokens past the row it expands, so one index
-  names one token across both."
-  [state]
-  (let [expanded (:expanded state)]
-    (mapcat (fn [hit]
-              (let [k  (concordance/hit-key hit)
-                    ex (get expanded k)]
-                (cond-> [{:key k :hit hit :from 0}]
-                  (map? ex) (conj {:key  k
-                                   :hit  ex
-                                   :from (concordance/token-count hit)}))))
-            (hits state))))
-
-(defn row-at
-  "The index in `rows` of the row the cursor `[k i]` is in: the last row of
-  that hit whose tokens start at or before `i`."
-  [rows [k i]]
-  (or (last (keep-indexed (fn [n {:keys [key from]}]
-                            (when (and (= key k) (<= from i)) n))
-                          rows))
+(defn hit-at
+  "The index in `hits` of the hit the cursor `[k]` rests on."
+  [hits [k]]
+  (or (first (keep-indexed (fn [n hit] (when (= k (concordance/hit-key hit)) n))
+                           hits))
       0))
 
 (defn step-cursor
-  "The cursor moved `[rows tokens]` through `rows*` (see `cursor-rows`):
-  along a row it stops at its ends rather than wrapping; between rows it
-  keeps its distance from the match rather than its column, so stepping
-  into a hit's wider context lands on the word the cursor was on, or its
-  nearest token where the rows differ."
-  [rows* cursor [rows tokens]]
-  (let [at   (row-at rows* cursor)
-        here (nth rows* at)
-        i    (- (second cursor) (:from here))]
+  "The cursor moved `[rows tokens]` through `hits`: along a row it stops
+  at its ends rather than wrapping; between rows it keeps its distance
+  from the match rather than its column, landing on the word the cursor
+  was on, or its nearest token where the rows differ."
+  [hits cursor [rows tokens]]
+  (let [at   (hit-at hits cursor)
+        here (nth hits at)
+        i    (second cursor)]
     (if (zero? rows)
-      (let [i* (min (dec (concordance/token-count (:hit here)))
-                    (max 0 (+ i tokens)))]
-        [(:key here) (+ (:from here) i*)])
-      (let [n      (min (dec (count rows*)) (max 0 (+ at rows)))
-            there  (nth rows* n)
-            offset (concordance/token->offset (:hit here) i)]
-        [(:key there)
-         (+ (:from there) (concordance/offset->token (:hit there) offset))]))))
+      [(concordance/hit-key here)
+       (min (dec (concordance/token-count here)) (max 0 (+ i tokens)))]
+      (let [there (nth hits (min (dec (count hits)) (max 0 (+ at rows))))]
+        [(concordance/hit-key there)
+         (concordance/offset->token there
+                                    (concordance/token->offset here i))]))))
 
-(defn cursor-id
-  "The id of the token `cursor` is on (see
-  dk.cst.corpus-probe.views.concordance/token-id), which focus follows."
-  [[[corpus cpos] i]]
-  (concordance/token-id {:corpus corpus :cpos cpos} i))
+(def line-ends
+  "The keys that go to the ends of a line, to the end each names: Home
+  and End, and the Ctrl chords a text field answers the same way, which
+  is what a reader with their hands on the keys reaches for."
+  {"Home" :start "End" :end
+   ["a" :ctrl] :start ["e" :ctrl] :end})
+
+(defn line-end
+  "Which end of the line key `pressed` asks for, `ctrl?` saying whether
+  Ctrl was held (see `line-ends`); nil for a key that asks for neither."
+  [pressed ctrl?]
+  (get line-ends (if ctrl?
+                   ;; a chord is the letter, whatever the shift key did to it
+                   [(str/lower-case (str pressed)) :ctrl]
+                   pressed)))
+
+(defn widen
+  "Ask for more of the line than the page holds, the reader having come
+  to the end of `hit` going `tokens` along it: a fetch at twice the reach
+  the page has now, with the step `owed` when the words arrive. Nothing
+  to ask for at a `:bounds` of the hit, which is the end of its text."
+  [state tokens hit owed]
+  (let [{:keys [reach widest? widening]} (:result state)
+        ended? (contains? (:bounds hit) (if (pos? tokens) :end :start))]
+    (if (and (not (zero? tokens)) (not ended?) (number? reach) (not widest?)
+             (not widening))
+      ;; twice what the page holds, so that a reader who keeps going asks
+      ;; a handful of times rather than once per word, and one who stops
+      ;; after a step has paid for little more than they read
+      {:state   (assoc-in state [:result :widening] owed)
+       :effects [[:fetch-wider (* 2 reach)]]}
+      {:state state})))
+
+(defn running-out?
+  "True when the cursor `[_ i]` stands near enough the end of `hit` in the
+  direction `tokens` that the reader can see the line give out: the
+  window shows `context` words past them and the fade a few more, so the
+  words to ask for are wanted before the cursor arrives at the last one."
+  [hit [_ i] tokens context]
+  (and (number? context)
+       (not (zero? tokens))
+       (let [ahead (if (pos? tokens)
+                     (- (concordance/token-count hit) 1 i)
+                     i)]
+         (<= ahead (+ context concordance/fade-steps)))))
+
+(defn carried-cursor
+  "Where `cursor` lands among the `wider` hits it had among `old`: the
+  same word, which the context now to its left has moved along the row
+  (see dk.cst.corpus-probe.views.concordance/token->offset), and then
+  `tokens` further, the step the end of the line refused."
+  [cursor old wider tokens]
+  (let [[k i] cursor
+        was   (concordance/hit-of old k)
+        now   (concordance/hit-of wider k)]
+    (if (and was now (< i (concordance/token-count was)))
+      [k (concordance/offset->token
+          now (+ tokens (concordance/token->offset was i)))]
+      cursor)))
+
+(defn wider-arrived
+  "Put the hits of `data`, the page fetched to hold `reach` words either
+  side, in `state`, with the cursor still on its word and the step it was
+  refused taken (see `carried-cursor`). A page that came back no wider is
+  all the line there is, and is not asked for again."
+  [state reach data]
+  (let [old    (get-in state [:result :hits])
+        hits   (get-in data [:result :hits])
+        length #(reduce + (map concordance/token-count %))
+        rested #(dissoc % :widening)]
+    (if (> (length hits) (length old))
+      (let [cursor (carried-cursor (:cursor state) old hits
+                                   (get-in state [:result :widening] 0))]
+        {:state   (-> state
+                      (assoc :cursor cursor)
+                      (update :result #(rested (assoc % :hits hits
+                                                        :reach reach))))
+         :effects [[:focus (concordance/cursor-id cursor) true]]})
+      {:state (update state :result #(rested (assoc % :widest? true)))})))
 
 (defn move-cursor
-  "Answer key `pressed` on the token at cursor `k` in `state`: an arrow
-  moves the cursor and focus with it, Home and End go to the ends of the
-  row the cursor is in, and Escape closes the panel; each consumed, since
-  the concordance is one tab stop with a cursor inside it."
-  [state k pressed]
-  (let [rows (cursor-rows state)
+  "Answer key `pressed` on the token at cursor `k` in `state`, `ctrl?`
+  saying whether Ctrl was held: an arrow moves the cursor and focus with
+  it, the `line-ends` keys go to the ends of the row the cursor is in,
+  and Escape closes the panel; each consumed, since the concordance is
+  one tab stop with a cursor inside it."
+  [state k pressed ctrl?]
+  (let [hits (hits state)
+        end  (line-end pressed ctrl?)
         move (fn [cursor]
                {:state   (assoc state :cursor cursor)
-                :effects [[:prevent-default] [:focus (cursor-id cursor)]]})]
+                ;; the concordance travels to the token itself, so focus
+                ;; must not jump the view there first
+                :effects [[:prevent-default]
+                          [:focus (concordance/cursor-id cursor) true]]})]
     (cond
       (= "Escape" pressed)
       {:state (dissoc state :selected) :effects [[:prevent-default]]}
 
       (contains? arrow-keys pressed)
-      (move (step-cursor rows k (arrow-keys pressed)))
+      (let [step   (arrow-keys pressed)
+            tokens (second step)
+            cursor (step-cursor hits k step)
+            hit    (nth hits (hit-at hits k))
+            ;; a step that moves nothing has come to the end of the line;
+            ;; one that lands near it will, so the words are asked for
+            ;; while the reader is still reading their way there
+            stuck? (= cursor k)
+            asking (when (or stuck?
+                             (running-out? hit cursor tokens
+                                           (get-in state [:result :context])))
+                     (widen state tokens hit (if stuck? tokens 0)))
+            state* (:state asking state)]
+        (if stuck?
+          {:state state* :effects (into [[:prevent-default]] (:effects asking))}
+          {:state   (assoc state* :cursor cursor)
+           :effects (into [[:prevent-default]
+                           [:focus (concordance/cursor-id cursor) true]]
+                          (:effects asking))}))
 
-      ;; the ends of the row the cursor is in, not of the hit: a wider
-      ;; context is its own run of text
-      (contains? #{"Home" "End"} pressed)
-      (let [{:keys [key hit from]} (nth rows (row-at rows k))
-            i (if (= "Home" pressed) 0 (dec (concordance/token-count hit)))]
-        (move [key (+ from i)]))
+      end
+      (let [hit (nth hits (hit-at hits k))]
+        (move [(concordance/hit-key hit)
+               (if (= :start end) 0 (dec (concordance/token-count hit)))]))
 
       :else {:state state})))
 
 (defn inspect
   "Put `selected`, the token the inspection panel describes, in `state`,
-  or take it out for nil."
-  [state selected]
+  or take it out for nil. The cursor follows it to `k`, so that the one
+  tabbable token is the one the reader is on however they got there, and
+  the concordance can keep it in the middle.
+
+  Taking it out takes the cursor with it: the reader has left the
+  concordance, and it goes back to resting on its matches rather than
+  holding the line where they stopped reading."
+  [state selected k]
   (if selected
-    (assoc state :selected selected)
-    (dissoc state :selected)))
+    (cond-> (assoc state :selected selected)
+      k (assoc :cursor k))
+    (dissoc state :selected :cursor)))
 
 (defn close
   "Dismiss the inspection panel of `state` from its own button and leave
@@ -122,45 +203,6 @@
    ;; button, which is about to go: the region, focusable since it
    ;; scrolls, from where a tab reaches the cursor again
    :effects [[:focus concordance/region-id]]})
-
-(defn collapse
-  "Drop the hit keyed `k` from the expanded set of `state`, if it is
-  there."
-  [state k]
-  (cond-> state
-    (contains? (:expanded state) k) (update :expanded dissoc k)))
-
-(defn toggle-context
-  "Expand `hit` in `state`, fetching its wider context, or collapse it
-  when it is expanded; the URL follows either way."
-  [state {:keys [corpus cpos matchend] :as hit}]
-  (let [k (concordance/hit-key hit)]
-    (if (contains? (:expanded state) k)
-      {:state   (update state :expanded dissoc k)
-       :effects [[:sync-url]]}
-      ;; the placeholder at once, so a second click does not fetch twice
-      {:state   (assoc-in state [:expanded k] concordance/loading)
-       :effects [[:fetch-context corpus cpos matchend] [:sync-url]]})))
-
-(defn context-arrived
-  "Put `hit`, the wider context fetched for the hit keyed `k`, in the
-  expanded set of `state` if it is still wanted there; a hit collapsed while
-  the fetch was in flight, or an empty answer, collapses the entry
-  again, so a late response never revives a dismissed hit."
-  [state k hit]
-  (if (and hit (contains? (:expanded state) k))
-    {:state (assoc-in state [:expanded k] hit)}
-    {:state   (collapse state k)
-     :effects [[:sync-url]]}))
-
-(defn context-failed
-  "Mark the hit keyed `k` in `state` as one whose context could not be
-  fetched (see dk.cst.corpus-probe.views.concordance/failed), if it
-  is still expanded."
-  [state k]
-  (cond-> state
-    (contains? (:expanded state) k)
-    (assoc-in [:expanded k] concordance/failed)))
 
 (defn place
   "Where the item with `id` stands among `items`, counted from one."
@@ -422,31 +464,11 @@
                 (merge (select-keys counted [:prev-href :next-href])))
    :effects [[:set-title (:title counted)]]})
 
-(defn wanted-hits
-  "The hits of `data` whose key is in `wanted` (nil when nothing is
-  wanted); `?expand` is scoped to one page, so off-page hits are ignored."
-  [data wanted]
-  (when wanted
-    (filter (comp wanted concordance/hit-key) (get-in data [:result :hits]))))
-
-(defn with-expansions
-  "Seed the hits keyed in `wanted` in `data` as loading placeholders,
-  which the fetch of the expansions reads."
-  [data wanted]
-  (let [hits (wanted-hits data wanted)]
-    (cond-> data
-      (seq hits) (assoc :expanded
-                        (into {}
-                              (map (fn [hit]
-                                     [(concordance/hit-key hit)
-                                      concordance/loading]))
-                              hits)))))
-
 (defn data->state
   "Server `data` as the state this client renders from at the absolute
-  `href` it arrived at: marked as the client's, seeded with the
-  expansions the URL names, and with each list at rest, since what a
-  served page shows of the two lists is what the search read."
+  `href` it arrived at: marked as the client's, with each list at rest,
+  since what a served page shows of the two lists is what the search
+  read."
   [data href]
   (let [url (js/URL. href)]
     (-> data
@@ -465,9 +487,7 @@
                ;; what the filters on screen describe, so that a selection
                ;; that has changed can be told from one that has not
                :filters-for (lists/chosen-corpora data))
-        (update :tokens tokens/own-rows)
-        (with-expansions (url/expand-param
-                          (:expand (router/url-params url)))))))
+        (update :tokens tokens/own-rows))))
 
 (defn set-preference
   "Store setting `k` as `v` and put the reader where that leaves them,
@@ -536,7 +556,6 @@
      :effects (cond->> [[:set-title (:title data)]
                         [:set-lang (:lang data)]
                         [:sync-url]
-                        [:fetch-expansions]
                         [:fetch-counts]
                         [:land]]
                 push? (into [[:push-url cited]]))}))
@@ -578,17 +597,18 @@
       :leave                {:state (cond-> state y (lists/leave x))}
       :swallow-enter        (swallow-enter state x)
       ;; on focus as well as on click, so the panel follows the cursor
-      :inspect              {:state (inspect state x)}
+      :inspect              {:state (inspect state x y)}
       :close                (close state)
-      :move-cursor          (move-cursor state x y)
+      :move-cursor          (move-cursor state x y z)
       :leave-concordance    {:state state :effects [[:leave-concordance]]}
-      :toggle-context       (toggle-context state x)
-      :context-arrived      (context-arrived state x y)
-      :context-failed       {:state (context-failed state x)}
+      :recentre             {:state state :effects [[:recentre]]}
       :filters-due          (filters-due state)
       :filters-arrived      {:state (filters-arrived state x y)}
       :filters-failed       {:state (assoc state :filters-pending? false)}
       :counts-arrived       (counts-arrived state x)
+      :wider-arrived        (wider-arrived state x y)
+      ;; the fetch is gone, so a later step at the end may ask again
+      :wider-failed         {:state (update state :result dissoc :widening)}
       :page-arrived         (page-arrived x y z)
       :pending              {:state (assoc state :pending? true)}
       :set-fragment         {:state (assoc state :fragment x)}

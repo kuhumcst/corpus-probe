@@ -141,7 +141,7 @@
               what the preferences box says without showing it; the
               navigation's only with a client to put anything in it"
       (is (= [[:div.status {:role "status"} nil]
-              [:div.status {:class "announcement" :role "status"} nil]]
+              [:div.status {:class "spoken" :role "status"} nil]]
              (filter #(and (vector? %) (= :div.status (first %)))
                      (deep html)))))
     (testing "with one, the navigation's follows the form, inside the same
@@ -238,7 +238,7 @@
               going quiet, and a reader not watching the screen is told"
       (let [said (fn [state]
                    (some #(when (and (vector? %)
-                                     (= "announcement" (:class (second %))))
+                                     (= "spoken" (:class (second %))))
                             (last %))
                          (deep (form state))))]
         (is (nil? (said state)))

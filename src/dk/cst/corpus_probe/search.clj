@@ -115,6 +115,11 @@
   :size <total hits> :rows [from to] :hits [hit ...]}, each hit a parsed
   KWIC line (:cpos :left :match :right) with its :anchors and :structs.
 
+  A page holds more context than it was asked for (see
+  dk.cst.corpus-probe.search.batch/fetch-context), cut back to the text
+  each hit is in, so the concordance has words to fade out and to travel
+  into.
+
   `opts`: :rows (the [from to] row range, default the first page),
   :context (a number of tokens, or a unit of text), :sort (a mode, or a
   positional attribute), :filter, :patterns and :ranges (a metadata
@@ -135,13 +140,15 @@
         :size   0
         :rows   (:rows opts (:rows batch/kwic-defaults))
         :hits   []}
-       (let [opts     (opts/kwic-opts! ctx corpus query opts)
-             {:keys [p-attrs struct-attrs rows]} opts
+       (let [opts     (as-> (opts/kwic-opts! ctx corpus query opts) $
+                        (update $ :context batch/fetch-context (:reach $)))
+             {:keys [p-attrs struct-attrs rows text-attr]} opts
              sections (kwic-sections! ctx corpus query opts)
              {[cat-lines]  :cat
               [dump-lines] :dump
               tab-sections :tabulate} sections
-             hits     (parse/kwic->hits p-attrs cat-lines)
+             hits     (mapv #(parse/clip-context text-attr %)
+                            (parse/kwic->hits p-attrs cat-lines))
              anchors  (parse/dump->anchors dump-lines)
              structs  (when (seq struct-attrs)
                         (mapv #(zipmap struct-attrs %)
@@ -319,8 +326,8 @@
   ([ctx corpora query]
    (concordance! ctx corpora query {}))
   ([ctx corpora query opts]
-   (let [{:keys [page page-size context filter patterns ranges subset near
-                 sample incremental?]
+   (let [{:keys [page page-size context reach filter patterns ranges subset
+                 near sample incremental?]
           :as   opts}
          (merge batch/page-defaults opts)
          kwic-opts (dissoc opts :page :page-size :incremental?)
@@ -339,6 +346,9 @@
      ;; is not a page of the whole one, and nothing else says so
      (cond-> {:query     query
               :context   context
+              ;; how far either side of a match the page holds, which the
+              ;; reader travels within and asks to widen at its end
+              :reach     (batch/fetch-context context reach)
               :filter    filter
               :patterns  patterns
               :ranges    ranges

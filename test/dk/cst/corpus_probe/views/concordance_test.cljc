@@ -39,8 +39,13 @@
       (is (= 5 (concordance/offset->token hit 9))))))
 
 (deftest default-cursor-test
-  (testing "exactly one token is tabbable, the first, so the concordance is
-            one tab stop rather than hundreds"
+  (testing "exactly one token is tabbable, so the concordance is one tab
+            stop rather than hundreds, and it is the match: the far end of
+            the context is out of sight, and the window follows the cursor"
+    (is (= [["PROBE" 9] 3]
+           (concordance/default-cursor [{:corpus "PROBE" :cpos 9
+                                         :left [{} {} {}] :match [{}]
+                                         :right [{} {}]}])))
     (is (= [["PROBE" 9] 0] (concordance/default-cursor [{:corpus "PROBE" :cpos 9}])))
     (is (nil? (concordance/default-cursor [])))))
 
@@ -63,10 +68,11 @@
         (is (= "button" (:type attrs)))
         (is (= "t-PROBE-9-0" (:id attrs)))
         (is (= "0" (:tabindex attrs)))
-        (testing "and inspecting follows focus, not only a press"
-          (is (= [:inspect (assoc source :token m)]
+        (testing "and inspecting follows focus, not only a press, taking
+                  the cursor with it"
+          (is (= [:inspect (assoc source :token m) [["PROBE" 9] 0]]
                  (get-in attrs [:on :focus])))
-          (is (= [:move-cursor [["PROBE" 9] 0] :event/key]
+          (is (= [:move-cursor [["PROBE" 9] 0] :event/key :event/ctrl?]
                  (get-in attrs [:on :keydown]))))))
     (testing "every other token is out of the tab order"
       (is (= "-1" (:tabindex (second (concordance/token
@@ -83,14 +89,6 @@
                                                           hit source 0
                                                           {:word "hund"})))))
       (is (= "keyword" (concordance/anchor-class :keyword))))))
-
-(deftest source-label-test
-  (testing "a text title is a cited work"
-    (is (= [:cite "Hverdag"]
-           (concordance/source-label {:text_id "t1" :text_title "Hverdag"}))))
-  (testing "falls back to text_id, then any value"
-    (is (= "t1" (concordance/source-label {:text_id "t1"})))
-    (is (= "x" (concordance/source-label {:other "x"})))))
 
 (deftest position-data-test
   (is (= {:data-cpos "9" :data-matchend "10"}
@@ -112,6 +110,60 @@
   "Concordance options as the client renders them."
   {:ui en :client? true})
 
+(deftest faded-tokens-test
+  ;; indices 0-4 are the left context, 5 the match, 6-10 the right
+  (let [hit {:left [{} {} {} {} {}] :match [{}] :right [{} {} {} {} {}]}]
+    (testing "the words either side of the match that were asked for stay,
+              and the ones the page fetched past them fall away a step at
+              a time, out of sight by the last"
+      (is (= {0 3 1 2 2 1, 8 1 9 2 10 3}
+             (concordance/faded-tokens hit 2 0))))
+    (testing "the window travels with the cursor, uncovering the word
+              ahead and letting the one behind go"
+      (is (= {0 3 1 3 2 2 3 1, 9 1 10 2}
+             (concordance/faded-tokens hit 2 1)))
+      (is (= {0 1, 6 1 7 2 8 3 9 3 10 3}
+             (concordance/faded-tokens hit 2 -2))))
+    (testing "the match stays, however far the window has travelled from it"
+      (is (nil? (get (concordance/faded-tokens hit 2 40) 5)))
+      (is (nil? (get (concordance/faded-tokens hit 2 -40) 5))))
+    (testing "the steps stop at the last one, however far out a word is"
+      (is (= {0 3 1 3 2 3 3 2 4 1, 6 1 7 2 8 3 9 3 10 3}
+             (concordance/faded-tokens hit 0 0))))
+    (testing "a width the line does not reach leaves nothing to fade"
+      (is (= {} (concordance/faded-tokens hit 5 0)))
+      (is (= {} (concordance/faded-tokens hit 40 0))))
+    (testing "a unit of text bounds itself, so none of it is faded"
+      (is (= {} (concordance/faded-tokens hit :sentence 0))))))
+
+(deftest travel-offset-test
+  (let [hits [{:corpus "PROBE" :cpos 9
+               :left [{} {}] :match [{}] :right [{} {}]}]]
+    (testing "how far the cursor has moved from the match, which every
+              row's window follows"
+      (is (= 0 (concordance/travel-offset hits [["PROBE" 9] 2])))
+      (is (= -2 (concordance/travel-offset hits [["PROBE" 9] 0])))
+      (is (= 2 (concordance/travel-offset hits [["PROBE" 9] 4]))))
+    (testing "a cursor on no hit here moves nothing"
+      (is (= 0 (concordance/travel-offset hits nil)))
+      (is (= 0 (concordance/travel-offset hits [["VISER" 1] 0]))))))
+
+(deftest resolved-cursor-test
+  (let [hits [{:corpus "PROBE" :cpos 9
+               :left [{} {}] :match [{}] :right [{} {}]}]]
+    (testing "a cursor naming a token of a hit here is kept"
+      (is (= [["PROBE" 9] 4] (concordance/resolved-cursor hits
+                                                          [["PROBE" 9] 4]))))
+    (testing "one on no hit here, or past the tokens of a page that has
+              since narrowed, falls back to the match"
+      (is (= [["PROBE" 9] 2] (concordance/resolved-cursor hits nil)))
+      (is (= [["PROBE" 9] 2] (concordance/resolved-cursor hits
+                                                          [["VISER" 1] 0])))
+      (is (= [["PROBE" 9] 2] (concordance/resolved-cursor hits
+                                                          [["PROBE" 9] 99]))))
+    (testing "and with no hits at all there is no cursor"
+      (is (nil? (concordance/resolved-cursor [] [["PROBE" 9] 0]))))))
+
 (deftest anchored-tokens-test
   (let [hit (assoc sample-hit :anchors {:matchend 9 :target 8 :keyword 10})]
     (testing "an anchor is found by its distance from the match"
@@ -122,127 +174,61 @@
                  (assoc sample-hit :anchors {:target 20 :keyword nil})))))))
 
 (deftest hit-row-test
-  (let [row (concordance/hit-row client sample-hit false)]
+  (let [row (concordance/hit-row client sample-hit)]
     (testing "the row carries its corpus position as data"
       (is (= :tr.kwic-hit (first row)))
       (is (= "9" (:data-cpos (second row)))))
-    (testing "the position is the row's header and its first cell"
+    (testing "the position is the row's header and its first cell, and the
+              row is the four columns it ends with"
       (is (= :th.kwic-cpos (first (nth row 2))))
       (is (= "row" (:scope (second (nth row 2)))))
-      (is (= :td.kwic-left (first (nth row 3)))))
-    (testing "the source comes last, out of the line a reader is reading"
-      (is (= :td.kwic-structs (first (nth row 6)))))
-    (testing "the position cell is a disclosure button showing the cpos"
-      (let [button (nth (nth row 2) 2)]
-        (is (= :button (first button)))
-        (is (= "9" (last button)))
-        (is (= "false" (:aria-expanded (second button))))
-        (is (= [:toggle-context {:corpus "PROBE" :cpos 9 :matchend 9}]
-               (get-in button [1 :on :click])))))
-    (testing "without a client it is the bare position, not a dead control"
-      (is (= "9" (nth (nth (concordance/hit-row {:ui en} sample-hit false) 2) 2))))
-    (testing "aria-expanded tracks the flag, and names the row it revealed"
-      (let [button (nth (nth (concordance/hit-row client sample-hit true) 2) 2)]
-        (is (= "true" (:aria-expanded (second button))))
-        (is (= "context-PROBE-9" (:aria-controls (second button)))))
-      (testing "and names nothing while there is no such row"
-        (is (not (contains? (second (nth (nth row 2) 2)) :aria-controls)))))
-    (testing "the control opens its name with the position a reader can see"
-      (is (= "9 · Show or hide more context"
-             (get-in (nth (nth row 2) 2) [1 :aria-label])))
-      (is (= "9 · Vis eller skjul mere kontekst"
-             (get-in (nth (nth (concordance/hit-row {:ui da :client? true}
-                                                    sample-hit false)
-                               2) 2)
-                     [1 :aria-label]))))
+      (is (= :td.kwic-left (first (nth row 3))))
+      (is (= concordance/column-count (- (count row) 2))))
     (testing "the match is wrapped in a mark element"
       (is (= :td.kwic-match (first (nth row 4))))
       (is (= :mark (get-in row [4 1 0]))))
     (testing "the anchors mark their tokens"
       (let [row (concordance/hit-row client
                                      (assoc sample-hit
-                                            :anchors {:matchend 9 :target 8})
-                                     false)]
+                                            :anchors {:matchend 9 :target 8}))]
         (is (some #(and (map? %) (= "target" (:class %)))
                   (deep (nth row 3))))))))
-
-(deftest hit-rows-test
-  (testing "a hit is always two children, the second nil without an expansion"
-    (let [rows (concordance/hit-rows {:ui en} sample-hit)]
-      (is (= 2 (count rows)))
-      (is (nil? (second rows)))))
-  (testing "a failed fetch says so, in a live region: it had no page load"
-    (let [rows (concordance/hit-rows {:ui en :expanded {["PROBE" 9] concordance/failed}}
-                                     sample-hit)]
-      (is (= 2 (count rows)))
-      (is (= [:span {:role "alert"} "The context did not load."]
-             (get-in (second rows) [1 2])))))
-  (testing "an expanded hit adds a full-width context row after it"
-    (let [ex   {:left  [{:word "en"}]
-                :match [{:word "hund"}]
-                :right [{:word "i"}]}
-          rows (concordance/hit-rows {:ui en :client? true
-                                      :expanded {["PROBE" 9] ex}}
-                                     sample-hit)]
-      (is (= 2 (count rows)))
-      (is (= :tr.kwic-expanded (first (second rows))))
-      (is (= concordance/column-count (get-in (second rows) [2 1 :colspan])))
-      (testing "its tokens are inspected with the hit's corpus and structs"
-        (is (some #(and (map? %) (= "PROBE" (:corpus %))
-                        (= {:text_title "Hverdag"} (:structs %)))
-                  (deep (second rows)))))))
-  (testing "the same position in another corpus is not expanded"
-    (is (nil? (second (concordance/hit-rows {:lang     "en"
-                                             :expanded {["VISER" 9] {}}}
-                                            sample-hit)))))
-  (testing "an expanded row numbers its tokens past the row it expands, so
-            no two elements of one hit share an id or the cursor"
-    (let [ex   {:left [{:word "en"}] :match [{:word "hund"}]
-                :right [{:word "i"}]}
-          rows (concordance/hit-rows {:lang     "en" :client? true
-                                      :cursor   [["PROBE" 9] 0]
-                                      :expanded {["PROBE" 9] ex}}
-                                     sample-hit)
-          ids  (keep #(when (map? %) (:id %)) (deep rows))
-          cur  (filter #(and (map? %) (= "0" (:tabindex %))) (deep rows))]
-      (is (= (count ids) (count (distinct ids))))
-      (is (= 1 (count cur)))
-      (is (= ["t-PROBE-9-0" "t-PROBE-9-1" "t-PROBE-9-2"
-              "t-PROBE-9-3" "t-PROBE-9-4" "t-PROBE-9-5"]
-             (filter #(re-matches #"t-.*" %) ids)))))
-  (testing "a pending placeholder shows a loading row, also a live region"
-    (let [rows (concordance/hit-rows {:ui en :expanded {["PROBE" 9] concordance/loading}}
-                                     sample-hit)]
-      (is (= 2 (count rows)))
-      (is (= [:span {:role "status"} "Loading …"]
-             (get-in (second rows) [1 2])))))
-  (testing "the context row is named by the disclosure that revealed it"
-    (let [rows (concordance/hit-rows {:lang     "en"
-                                      :expanded {["PROBE" 9] {:left [] :match []
-                                                              :right []}}}
-                                     sample-hit)]
-      (is (= "context-PROBE-9" (:id (second (second rows))))))))
 
 (deftest concordance-test
   (let [hits   [sample-hit (assoc sample-hit :corpus "VISER" :cpos 3)]
         html   (concordance/concordance hits {:lang    "en"
                                               :caption "Concordance"
                                               :langs   {"VISER" "da"}})
-        table  (nth html 2)
+        table  (nth html 3)
         groups (nth table 3)]
-    (testing "the table scrolls inside a named, focusable region of its own"
+    (testing "the table scrolls inside a named region of its own, focusable
+              but not a tab stop: nothing there is scrolled by hand"
       (is (= :div.scroll (first html)))
       (is (= {:id              concordance/region-id
               :role            "region"
-              :tabindex        "0"
+              :tabindex        "-1"
               :aria-labelledby concordance/caption-id
               :on              {:focusout [:leave-concordance]}}
              (second html))))
     (testing "leaving it closes the panel, which describes what it holds"
       (is (= [:leave-concordance] (get-in html [1 :on :focusout]))))
-    (testing "the caption names the region as well as the table"
+    (testing "without a script there is no cursor, so nothing is said about
+              the keys that move one"
+      (is (nil? (nth html 2)))
+      (is (not (contains? (second html) :aria-describedby))))
+    (testing "the region says how wide a line was asked for, which is how
+              wide a page it takes to read it; a unit of text by name"
+      (is (not (contains? (second html) :data-context)))
+      (is (= 20 (:data-context (second (concordance/concordance
+                                        hits {:ui en :context 20})))))
+      (is (= "sentence" (:data-context (second (concordance/concordance
+                                                hits {:ui en
+                                                      :context :sentence}))))))
+    (testing "the caption names the region as well as the table, spoken
+              but not seen: the view controls name it on screen"
       (is (= :table.kwic (first table)))
-      (is (= concordance/caption-id (:id (second (nth table 1))))))
+      (is (= [:caption.spoken {:id concordance/caption-id} "Concordance"]
+             (nth table 1))))
     (testing "every column is headed, so a data cell resolves both headers,
               and no heading is a link: the glossary is linked from the
               prose, not from the machinery"
@@ -250,22 +236,24 @@
               [:tr
                [:th.kwic-cpos {:scope "col"}
                 [:abbr {:title "corpus position"} "cpos"]]
-               [:th.kwic-left {:scope "col"} "left context"]
+               ;; a measure the long names can wrap at on a narrow screen,
+               ;; which their own cells are far too wide to give them
+               [:th.kwic-left {:scope "col"} [:span.measure "left context"]]
                [:th.kwic-match {:scope "col"} "match"]
-               [:th.kwic-right {:scope "col"} "right context"]
-               [:th.kwic-structs {:scope "col"} "source"]]]
+               [:th.kwic-right {:scope "col"} [:span.measure "right context"]]]]
              (nth table 2))))
     (testing "a heading carries its column's class, so a rule about the
               column reaches the heading too"
-      (is (= [:th.kwic-structs {:scope "col"} "source"]
-             (get-in table [2 1 5]))))
+      (is (= [:th.kwic-right {:scope "col"} [:span.measure "right context"]]
+             (get-in table [2 1 4]))))
     (testing "hits are grouped by corpus, each group headed by its name"
       (is (= 2 (count groups)))
       ;; the count is an explicit nil where the search has none, the
       ;; header keeping its shape whether or not one arrives
-      (is (= [:th {:scope "rowgroup" :colspan 5}
-              [:a {:href "/corpora/probe"} [:code "PROBE"]]
-              nil]
+      (is (= [:th {:scope "rowgroup" :colspan concordance/column-count}
+              [:span.pinned
+               [:a {:href "/corpora/probe"} [:code "PROBE"]]
+               nil]]
              (get-in (first groups) [2 1])))
       (is (= :tr.kwic-corpus (get-in (first groups) [2 0]))))
     (testing "and by how many hits its corpus holds in all, beside the
@@ -276,11 +264,11 @@
                         {:ui     en
                          :counts [{:corpus "PROBE" :size 1113}
                                   {:corpus "VISER" :error {:type :cqp}}]})
-                       (nth 2)
+                       (nth 3)
                        (nth 3))]
         (is (= [" " [:small.note "(1,113)"]]
-               (get-in (first groups) [2 1 3])))
-        (is (nil? (get-in (second groups) [2 1 3])))))
+               (get-in (first groups) [2 1 2 2])))
+        (is (nil? (get-in (second groups) [2 1 2 2])))))
     (testing "a group carries its corpus's language when known"
       (is (nil? (:lang (second (first groups)))))
       (is (= "da" (:lang (second (second groups))))))
@@ -288,25 +276,41 @@
       (let [group (first (nth (nth (concordance/concordance
                                     [(dissoc sample-hit :corpus)]
                                     {:ui en})
-                                   2)
+                                   3)
                               3))]
         (is (= :tbody (first group)))
         (is (nil? (nth group 2)))))))
 
-(deftest source-cell-test
-  (let [hit {:corpus  "PROBE"
-             :cpos    9
-             :anchors {:matchend 10}
-             :structs {:text_title "Hverdag"}}]
-    (testing "the source links to the reading page of its text, hit marked"
-      (is (= [:td.kwic-structs {:title "text_title: Hverdag"}
-              [:a {:href "/corpora/probe/text?cpos=9&matchend=10#hit"}
-               [:cite "Hverdag"]]]
-             (concordance/source-cell hit))))
-    (testing "a hit that knows no corpus has nowhere to link"
-      (is (= [:cite "Hverdag"] (last (concordance/source-cell (dissoc hit :corpus))))))
-    (testing "and one without annotations has no source at all"
-      (is (nil? (last (concordance/source-cell {:corpus "PROBE" :cpos 9})))))))
+(deftest position-cell-test
+  (let [source (concordance/hit-source
+                {:corpus  "PROBE"
+                 :cpos    9
+                 :anchors {:matchend 10}
+                 :structs {:text_title "Hverdag" :text_year "1591"}})]
+    (testing "the position heads the row and links to the reading page of
+              its text, where the whole of the context is, with the hit
+              marked; every annotation names it under the pointer"
+      (is (= [:th.kwic-cpos {:scope "row"
+                             :title "text_title: Hverdag\ntext_year: 1591"}
+              [:a {:href "/corpora/probe/text?cpos=9&matchend=10#hit"} "9"]]
+             (concordance/position-cell source))))
+    (testing "a hit that knows no corpus has no text page to link to"
+      (is (= "9" (last (concordance/position-cell (dissoc source :corpus))))))
+    (testing "and one from a corpus that marks nothing gets no empty tooltip"
+      (is (not (contains? (second (concordance/position-cell
+                                   (dissoc source :structs)))
+                          :title))))))
+
+(deftest key-help-test
+  (let [html (concordance/concordance [sample-hit] client)]
+    (testing "where the script runs, the region says in words what only a
+              reader who can see the cursor move would know: it is spoken,
+              never seen, and describes the region rather than the token,
+              which would say it again at every word"
+      (is (= concordance/keys-id (get-in html [1 :aria-describedby])))
+      (is (= :p.spoken (first (nth html 2))))
+      (is (= concordance/keys-id (:id (second (nth html 2)))))
+      (is (str/includes? (last (nth html 2)) "arrow keys")))))
 
 (deftest sort-label-test
   (testing "every sort mode the command namespace offers is named here"

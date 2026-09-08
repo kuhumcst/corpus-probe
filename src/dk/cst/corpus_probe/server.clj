@@ -165,8 +165,6 @@
      :route-name ::corpus]
     [(str url/corpora "/:id/text") :get (partial corpora/serve-text ctx)
      :route-name ::text]
-    [url/context-api              :get (partial search/serve-context ctx)
-     :route-name ::context]
     [url/filters-api              :get (partial search/serve-filters ctx)
      :route-name ::filters]
     [url/counts-api               :get (partial search/serve-counts ctx)

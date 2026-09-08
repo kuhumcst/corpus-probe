@@ -61,9 +61,6 @@ msgstr "Ryd filter"
 msgid "Close"
 msgstr "Luk"
 
-msgid "The context did not load."
-msgstr "Kunne ikke hente konteksten."
-
 msgid "columns"
 msgstr "kolonner"
 
@@ -306,6 +303,9 @@ msgstr "Liste"
 msgid "Read the whole text"
 msgstr "Læs hele teksten"
 
+msgid "Use the arrow keys to move between the words, Home and End for the ends of a line."
+msgstr "Brug piletasterne til at bevæge dig mellem ordene, Home og End til linjens ender."
+
 msgid "The corpus marks no texts"
 msgstr "Korpusset opmærker ingen tekster"
 
@@ -320,9 +320,6 @@ msgstr "match bagfra"
 
 msgid "match"
 msgstr "match"
-
-msgid "source"
-msgstr "kilde"
 
 msgid "button|Search"
 msgstr "Søg"
@@ -389,9 +386,6 @@ msgstr "Ulæseligt korpus"
 
 msgid "CWB cannot read the data files of this corpus."
 msgstr "CWB kan ikke læse korpussets datafiler."
-
-msgid "Show or hide more context"
-msgstr "Vis eller skjul mere kontekst"
 
 msgid "with annotations"
 msgstr "med annotationer"

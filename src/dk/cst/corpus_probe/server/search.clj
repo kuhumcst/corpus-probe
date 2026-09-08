@@ -1,12 +1,10 @@
 (ns dk.cst.corpus-probe.server.search
   "The search page and the data behind it: what a search request asks,
   the search run in the view asked for, the state of the form and the
-  links out of the result, and the three endpoints the client asks on
-  its own: the metadata filters a corpus selection offers, one hit with
-  wider context, and the count of a search still being counted when its
-  page was served."
-  (:require [dk.cst.corpus-probe.cqp :as cqp]
-            [dk.cst.corpus-probe.cwb :as cwb]
+  links out of the result, and the two endpoints the client asks on its
+  own: the metadata filters a corpus selection offers, and the count of
+  a search still being counted when its page was served."
+  (:require [dk.cst.corpus-probe.cwb :as cwb]
             [dk.cst.corpus-probe.cwb.command :as command]
             [dk.cst.corpus-probe.cwb.corpus :as corpus]
             [dk.cst.corpus-probe.cwb.registry :as registry]
@@ -325,6 +323,8 @@
                             :sort    (:sort params)
                             :context (request/context-param
                                       (:context params))
+                            :reach   (request/reach-param
+                                      (:reach params))
                             :sample  (request/sample-param
                                       (:sample params))
                             ;; a document waits for the count; the client
@@ -493,39 +493,6 @@
         named     (url/corpora-param (:corpus (:query-params request)))
         [known _] (corpus/split-known entries named)]
     (response/transit-response (frequency/filter-options! ctx known))))
-
-(def expanded-context
-  "Context width, in tokens each side, for an expanded hit."
-  50)
-
-(defn serve-context
-  "Answer the hit at the corpus position `request` names via `ctx` with
-  wider context, as transit, for the client's context expansion.
-
-  Rejects an invalid corpus or non-integer `cpos`/`matchend`, since those
-  are interpolated into a CQP query (as validated integers) outside the
-  sandbox."
-  [ctx request]
-  (let [{:keys [corpus cpos matchend]} (:query-params request)
-        cpos*     (parse-long (str cpos))
-        matchend* (parse-long (str matchend))]
-    (if-not (and (cqp/corpus-name? corpus) cpos* matchend*)
-      response/bad-request
-      (try
-        (let [q      (command/position-query cpos* matchend*)
-              ;; one hit at a position nothing will ask for again, so
-              ;; saving it would only fill the cache (see
-              ;; dk.cst.corpus-probe.search.cache)
-              result (search/kwic! ctx corpus q {:context      expanded-context
-                                                 :rows         [0 0]
-                                                 :struct-attrs []
-                                                 :cache?       false})]
-          (if-let [hit (first (:hits result))]
-            (response/transit-response hit)
-            ;; a position that matches nothing (out of range) is not found
-            response/not-found))
-        (catch Exception _
-          response/not-found)))))
 
 (defn serve-counts
   "Answer the count of the search `request` describes against `ctx`, as

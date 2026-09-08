@@ -79,10 +79,6 @@
        ";Max-Age=" (if (str/blank? (str v)) 0 cookie-max-age)
        ";SameSite=Lax"))
 
-(def context-api
-  "The data behind one hit shown with wider context, for the client."
-  "/api/context")
-
 (def filters-api
   "The metadata filters the chosen corpora offer, for the client."
   "/api/filters")
@@ -180,7 +176,7 @@
    :corpus :scope ::filter
    :near :distance :subset :subset-at :subset-attr :sample
    :view :sort :context :attr :at :by :docs
-   :page :expand])
+   :page])
 
 (defn rank
   "Where param key `k` sorts in a query string: its place in
@@ -211,31 +207,6 @@
        (map str/upper-case)
        (distinct)
        (vec)))
-
-(defn expand-param
-  "The hits the `expand` query param value `v` names, as a set of
-  [corpus cpos] keys: `CORPUS:cpos` items, comma-joined or repeated,
-  an item naming no position ignored. nil for none."
-  [v]
-  (when-let [items (tokens/present v)]
-    (into #{}
-          (comp (mapcat #(str/split % #","))
-                (keep (fn [item]
-                        (let [[corpus cpos] (str/split item #":" 2)]
-                          (when-let [n (some-> cpos parse-long)]
-                            [corpus n])))))
-          (if (vector? items) items [items]))))
-
-(defn with-expanded
-  "The search `params` with the `expand` param naming the `hits` shown
-  expanded ([corpus cpos] keys) as `CORPUS:cpos` items in order, the
-  inverse of `expand-param`; without it when there are none."
-  [params hits]
-  (if (seq hits)
-    (assoc params :expand (str/join "," (map (fn [[corpus cpos]]
-                                               (str corpus ":" cpos))
-                                             (sort hits))))
-    (dissoc params :expand)))
 
 (def chosen-scope
   "The `scope` value marking a selection the reader made, so that having
@@ -370,7 +341,7 @@
   [params]
   (-> (form-encode (pairs (canonical params)))
       ;; RFC 3986 allows both in a query, and they separate the corpora
-      ;; and the expanded hits a reader should be able to read in the bar
+      ;; and the ranges a reader should be able to read in the bar
       (str/replace "%2C" ",")
       (str/replace "%3A" ":")))
 
@@ -410,10 +381,9 @@
 
 (defn page-href
   "The URL of page `page` of the search `params` cite, counted from
-  nought here and from one in the URL; without `expand`, which names
-  positions on the current page and does not carry to another's hits."
+  nought here and from one in the URL."
   [params page]
-  (results-href (assoc (dissoc params :expand) :page (inc page))))
+  (results-href (assoc params :page (inc page))))
 
 (defn page-count
   "The number of pages a `result` of `size` hits spans."
@@ -486,6 +456,4 @@
   (results-href {:q "[lemma = \"hund\"]" :corpus ["PROBE" "VISER"]})
   ;; => "/search?q=%5Blemma+%3D+%22hund%22%5D&corpus=PROBE,VISER#results"
 
-  (expand-param "PROBE:9,PROBE:12")
-  ;; => #{["PROBE" 9] ["PROBE" 12]}
   #_.)

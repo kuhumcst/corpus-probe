@@ -73,7 +73,26 @@
          (is (= ["Katten" "jagter" "en" "lille"] (mapv :word left)))
          (is (= ["i" "haven" "."] (mapv :word right)))))
      (testing "a unit the corpus lacks shows the usual width instead"
-       (is (= 5 (count (:left (hit :paragraph)))))))))
+       ;; the same hit as the default width gives, rather than a count:
+       ;; a page fetches past the width it shows (see
+       ;; dk.cst.corpus-probe.search.batch/fetch-context)
+       (is (= (hit 5) (hit :paragraph)))))))
+
+(deftest context-overshoot-test
+  (when-cwb
+   (testing "a page holds more context than the width asked for, cut back
+             to the text the hit is in: VISER's first text runs to the
+             word before its second one begins"
+     (let [{:keys [left match right]}
+           (first (:hits (search/kwic! ctx "VISER" "[word = \"ved\"]"
+                                       {:rows [0 0] :context 5})))]
+       (is (= ["ved"] (mapv :word match)))
+       (is (= ["Ridderen" "red" "over" "den" "grønne" "eng" "." "Fruen"
+               "stod"]
+              (mapv :word left)))
+       (is (= ["borgens" "port" "." "Hunden" "fulgte" "ridderen" "til"
+               "borgen" "."]
+              (mapv :word right)))))))
 
 (deftest subset-test
   (when-cwb

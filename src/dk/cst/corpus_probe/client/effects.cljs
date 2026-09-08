@@ -29,6 +29,13 @@
   in-flight
   (atom nil))
 
+(defonce ^{:doc "What the concordance was last centred on. This is the
+  token, the reach, and the width of the strip that is read (refer to
+  `centre-match!`). A render that changed none of these leaves the reader
+  where they scrolled to."}
+  centred
+  (atom nil))
+
 (def pending-delay-ms
   "How long a routed navigation may take before it is worth saying that
   it is in flight."
@@ -77,18 +84,6 @@
                          (fn [body] [(read-transit body) (.-url response)]))
                   (throw (js/Error. (str "request failed: " href)))))))))
 
-(defn fetch-context!
-  "Fetch the hit at `cpos`/`matchend` in `corpus` with wider context and
-  dispatch its arrival through `dispatch!`: `[:context-arrived k hit]`,
-  or `[:context-failed k]` when the request fails, `k` being the hit's
-  key."
-  [dispatch! corpus cpos matchend]
-  (let [k [corpus cpos]]
-    (-> (fetch-transit! (str url/context-api "?corpus=" corpus
-                             "&cpos=" cpos "&matchend=" matchend))
-        (.then (fn [[hit]] (dispatch! [:context-arrived k hit])))
-        (.catch (fn [_] (dispatch! [:context-failed k]))))))
-
 (defn fetch-filters!
   "Fetch the metadata filters `corpora` offer and dispatch their arrival
   through `dispatch!`: `[:filters-arrived corpora options]`, or
@@ -120,16 +115,24 @@
                     (when (= key @router/shown)
                       (set! (.-href js/location) js/location.href))))))))
 
-(defn fetch-expansions!
-  "Fetch the wider context of every hit `state` holds as loading in
-  `:expanded`, each arriving through `dispatch!` (see `fetch-context!`)."
-  [dispatch! state]
-  (doseq [[[corpus cpos :as k] v] (:expanded state)
-          :when (= concordance/loading v)
-          :let [hit (first (filter #(= k (concordance/hit-key %))
-                                   (get-in state [:result :hits])))]
-          :when hit]
-    (fetch-context! dispatch! corpus cpos (:matchend (:anchors hit)))))
+(defn fetch-wider!
+  "Fetch the page on screen holding `reach` words either side of each
+  match and dispatch its arrival through `dispatch!`: `[:wider-arrived
+  reach data]`. The page's own query string with the reach added, so the
+  server answers the question the page answered; the URL in the bar is
+  left as it is, a reach being a way of reading a result rather than part
+  of naming one. Dropped once the reader has moved on."
+  [dispatch! reach]
+  (let [key (router/page-key)
+        url (router/current-url)]
+    (.set (.-searchParams url) "reach" (str reach))
+    (-> (fetch-transit! (str (.-pathname url) (.-search url)))
+        (.then (fn [[data]]
+                 (when (= key @router/shown)
+                   (dispatch! [:wider-arrived reach data]))))
+        (.catch (fn [_]
+                  (when (= key @router/shown)
+                    (dispatch! [:wider-failed])))))))
 
 (defn refresh-filters!
   "Ask, once the corpus selection has held still for
@@ -179,11 +182,43 @@
   [k v]
   (set! (.-cookie js/document) (url/cookie k v)))
 
+(defn reduced-motion?
+  "True when the reader has asked their system for less animation."
+  []
+  (.-matches (js/matchMedia "(prefers-reduced-motion: reduce)")))
+
+(defn keep-in-view!
+  "Scroll the page so that `el` is on screen: a step of the cursor down
+  the rows can land past the foot of the window. The panel is the foot
+  while it is a sheet across the window, or it would cover the very token
+  it describes."
+  [el]
+  (let [panel  (.getElementById js/document concordance/inspector-id)
+        margin 16
+        foot   (- (if (and panel (= "fixed" (.-position
+                                             (js/getComputedStyle panel))))
+                    (.-top (.getBoundingClientRect panel))
+                    (.-innerHeight js/window))
+                  margin)
+        box    (.getBoundingClientRect el)]
+    (when-let [dy (cond (< (.-top box) margin)  (- (.-top box) margin)
+                        (> (.-bottom box) foot) (- (.-bottom box) foot))]
+      (.scrollBy js/window #js {:top      dy
+                                :behavior (if (reduced-motion?)
+                                            "auto"
+                                            "smooth")}))))
+
 (defn focus!
   "Move focus to the element with `id`, once the render that put it there
-  has run."
-  [id]
-  (some-> (.getElementById js/document id) (.focus)))
+  has run. `follow?` brings it onto the screen here rather than letting
+  focus jump there itself (see `keep-in-view!`), which is what keeps the
+  panel from covering the token it describes."
+  ([id]
+   (focus! id false))
+  ([id follow?]
+   (when-let [el (.getElementById js/document id)]
+     (.focus el #js {:preventScroll follow?})
+     (when follow? (keep-in-view! el)))))
 
 (defn focus-field!
   "Move focus to the form control named `name`, once the render that put
@@ -242,6 +277,89 @@
   [node {:keys [indeterminate invalid]}]
   (set! (.-indeterminate node) indeterminate)
   (.setCustomValidity node (or invalid "")))
+
+(defn reading-strip
+  "The strip that the reader reads in, as [start end] in viewport pixels.
+
+  The strip starts inside the position column, which is pinned over the
+  start of concordance region `el`."
+  [el]
+  (let [box (.getBoundingClientRect el)
+        cpos (some-> (.querySelector el ".kwic-cpos")
+                     (.getBoundingClientRect)
+                     (.-width))]
+    [(+ (.-left box) (or cpos 0)) (.-right box)]))
+
+(defn centre-on!
+  "Scroll concordance region `el` until `cell` is in the middle of the
+  strip `[start end]` that is read (see `reading-strip`).
+
+  Scroll by the difference between the two centres. The region thus stays
+  where it is if it is already centred. `glide?` moves there slowly
+  instead of immediately. A reader who asked for less animation always
+  gets the immediate move."
+  [el [start end] cell glide?]
+  (let [box (.getBoundingClientRect cell)]
+    (.scrollTo el #js {:left     (+ (.-scrollLeft el)
+                                    (- (+ (.-left box) (/ (.-width box) 2))
+                                       (/ (+ start end) 2)))
+                       :behavior (if (and glide? (not (reduced-motion?)))
+                                   "smooth"
+                                   "auto")})))
+
+(defn in-strip?
+  "True when `cell` is anywhere in the strip `[start end]` that is read."
+  [[start end] cell]
+  (let [box (.getBoundingClientRect cell)]
+    (and (< (.-left box) end) (> (.-right box) start))))
+
+(defn centre-match!
+  "Keep the token with id `token`, which the cursor is on, in the middle
+  of concordance region `el`.
+
+  Centre it again when one of these changes:
+  - the token;
+  - the page's `reach`;
+  - the width of the strip that is read.
+  Centre it again also when the cursor has left that strip. A render that
+  changed none of these leaves the reader where they scrolled to.
+
+  The region glides only between two tokens of one page at one width. A
+  step along the line then reads as a step. In the other cases the region
+  moves immediately. A new page, a page the reader came back to, and a
+  page that changed width are all too far for a step."
+  [el token reach]
+  (when-let [cell (some->> token (.getElementById js/document))]
+    (let [[start end :as strip] (reading-strip el)
+          was    @centred
+          ;; the width of the strip, and not of the region: the strip is
+          ;; what the cursor is held in the middle of, and the position
+          ;; column pinned over the region's edge is no part of it
+          now    [token reach (- end start)]
+          lost?  (not (in-strip? strip cell))
+          ;; only the token changed, so the reader took a step
+          glide? (and (not lost?) (= (rest now) (rest was)))]
+      (when (or lost? (not= now was))
+        (reset! centred now)
+        (centre-on! el strip cell glide?)))))
+
+(defn recentre!
+  "Put the cursor of `state` back in the middle of the concordance. The
+  window has changed size under it.
+
+  Move immediately, and do not glide. A resize is not a step, and it
+  happens many times while the reader drags a window edge.
+
+  Take the cursor as the view resolves it, and not as the state holds it.
+  The state has no cursor until the reader moves one. The view shows the
+  default cursor until then."
+  [state]
+  (when-let [el (.getElementById js/document concordance/region-id)]
+    (let [hits   (get-in state [:result :hits] [])
+          cursor (concordance/resolved-cursor hits (:cursor state))]
+      (when-let [cell (some->> (concordance/cursor-id cursor)
+                               (.getElementById js/document))]
+        (centre-on! el (reading-strip el) cell false)))))
 
 (defn leave-concordance!
   "Close the inspection panel, `[:inspect nil]` through `dispatch!`, once
@@ -305,7 +423,7 @@
                   (.focus #js {:preventScroll true}))))))
 
 (defn sync-url!
-  "Mirror the hits `state` shows expanded in the URL's `expand` parameter,
+  "Write the canonical query string of the page on screen into the bar,
   replacing history so the URL stays shareable without new entries, and
   record the page on screen (see dk.cst.corpus-probe.client.router/shown!)."
   [state]
@@ -316,8 +434,7 @@
   (when (and (= url/search js/location.pathname)
              (not (mode/unread-query? (router/location-params))))
     (let [url    (router/current-url)
-          params (url/with-expanded (router/location-params)
-                                    (keys (:expanded state)))]
+          params (router/location-params)]
       ;; the whole query string, so the bar shows the canonical URL
       ;; whatever was typed
       (set! (.-search url) (url/query-string params))
@@ -338,10 +455,9 @@
       :prevent-default    (prevent-default! (:replicant/dom-event data))
       :focus              (apply focus! args)
       :focus-field        (apply focus-field! args)
-      :fetch-context      (apply fetch-context! dispatch! args)
       :fetch-filters      (apply fetch-filters! dispatch! args)
       :fetch-counts       (fetch-counts! dispatch! state)
-      :fetch-expansions   (fetch-expansions! dispatch! state)
+      :fetch-wider        (apply fetch-wider! dispatch! args)
       :refresh-filters    (refresh-filters! dispatch!)
       :navigate           (apply navigate! dispatch! args)
       :set-cookie         (apply set-cookie! args)
@@ -352,6 +468,8 @@
       :set-validity       (apply set-validity! (:replicant/node data) args)
       :set-checkbox-state (apply set-checkbox-state! (:replicant/node data)
                                  args)
+      :centre-match       (apply centre-match! (:replicant/node data) args)
+      :recentre           (recentre! state)
       :leave-concordance  (leave-concordance! dispatch!)
       :land               (land!)
       :sync-url           (sync-url! state))))
