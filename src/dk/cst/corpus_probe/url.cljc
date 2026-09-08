@@ -150,6 +150,14 @@
    :from    "ff."
    :to      "ft."})
 
+(defn whole-range
+  "The `bounds` ([from to]) of a metadata range as the two whole numbers
+  they name, lower first; nil when they name anything else, which is a
+  range no search can be made of."
+  [bounds]
+  (let [[a b] (map #(some-> % not-empty parse-long) bounds)]
+    (when (and a b (<= a b)) [a b])))
+
 (defn metadata-key?
   "True when param key `k` names part of the metadata filter: one of the
   `filter-prefixes` followed by an attribute name."

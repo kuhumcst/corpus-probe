@@ -38,9 +38,13 @@
 
 (defn summary-texts
   "The text of every disclosure summary in hiccup `html`, in order, the
-  chooser's classed ones included."
+  chooser's classed ones included; what an attribute holds is not text,
+  so a title beside the words is left out."
   [html]
   (->> (deep html)
        (filter #(and (vector? %)
                      (#{:summary :summary.chooser-summary} (first %))))
-       (map #(apply str (filter string? (tree-seq coll? seq (rest %)))))))
+       (map #(apply str (filter string?
+                                (tree-seq coll? (fn [x]
+                                                  (seq (remove map? x)))
+                                          (rest %)))))))

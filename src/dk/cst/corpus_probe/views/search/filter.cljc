@@ -10,24 +10,42 @@
             [dk.cst.corpus-probe.views.chooser :as chooser]
             [dk.cst.corpus-probe.views.widgets :as widgets]))
 
+(defn value-count
+  "How much of the corpus carries a metadata value, `n` of them, in
+  words in `ui`: the unit the attribute `attr` annotates, which the
+  prefix of its name gives (`text_year` annotates texts, `s_id`
+  sentences), or regions where that prefix names no unit."
+  [ui attr n]
+  (str (i18n/group-digits ui n) " "
+       (case (str/replace (name attr) #"_.*" "")
+         "text"            (i18n/trn ui "text" "texts" n)
+         ("s" "sentence")  (i18n/trn ui "sentence" "sentences" n)
+         ("p" "paragraph") (i18n/trn ui "paragraph" "paragraphs" n)
+         (i18n/trn ui "region" "regions" n))))
+
 (defn filter-item
   "One metadata value, the leaf `m` of the filter's tree, as a checkbox
   named for the attribute's filter param, checked when the set
-  `selected` holds the leaf's id, with how many regions carry the value
-  in `ui` when known."
+  `selected` holds the leaf's id, with how much of the corpus carries
+  the value in `ui` when known (see `value-count`)."
   [ui selected {[attr value :as id] :id :keys [total hidden?] :as m}]
   [:li (widgets/hidden-attrs hidden?)
    [:label
-    [:input {:type    "checkbox"
-             :name    (str (:value url/filter-prefixes) (name attr))
-             :value   value
-             :checked (contains? selected id)
-             :on      {:change [:toggle-filter-values [attr [value]]]}}]
+    ;; a title is no part of a label's own text, so the box says the
+    ;; count in its name too
+    [:input (cond-> {:type    "checkbox"
+                     :name    (str (:value url/filter-prefixes) (name attr))
+                     :value   value
+                     :checked (contains? selected id)
+                     :on      {:change [:toggle-filter-values [attr [value]]]}}
+              total (assoc :aria-label
+                           (str value ", " (value-count ui attr total))))]
     " " (widgets/attribute-value attr value)
+    ;; figures alone: a word beside them reads as a second value
     (when total
-      (list " " [:data {:value (str total)}
-                 (str (i18n/group-digits ui total) " "
-                      (i18n/trn ui "region" "regions" total))]))]])
+      (list " " (widgets/note [:data {:value (str total)}
+                               (str "(" (i18n/group-digits ui total) ")")]
+                              (value-count ui attr total))))]])
 
 (defn numeric-values?
   "True when every listed value of `rows` is an integer, so that a range
@@ -35,37 +53,97 @@
   [rows]
   (boolean (and (seq rows) (every? #(parse-long (:value %)) rows))))
 
+(defn value-span
+  "The smallest and largest value of `rows`, which `numeric-values?` has
+  said are all integers, as the strings a field shows."
+  [rows]
+  (let [ns (map (comp parse-long :value) rows)]
+    [(str (apply min ns)) (str (apply max ns))]))
+
+(defn range-bounds
+  "The `bounds` ([from to]) of a range as the fields hold them over the
+  value span [`lo` `hi`] (see `value-span`): an end left empty takes the
+  end of the span, which is what its placeholder shows, so that writing
+  one end asks for everything from or up to it. Both empty is no range."
+  [[lo hi] [from to]]
+  (cond
+    (and (str/blank? from) (str/blank? to)) [nil nil]
+    (str/blank? from)                       [lo to]
+    (str/blank? to)                         [from hi]
+    :else                                   [from to]))
+
+(defn in-force?
+  "True when a `pattern` or either of the `bounds` ([from to]) narrows an
+  attribute beside the values chosen under it."
+  [pattern bounds]
+  (boolean (some #(not (str/blank? %)) (cons pattern bounds))))
+
 (defn pattern-row
-  "The controls asking for the values of `attr` a `pattern` matches and,
-  over `rows` that are all numbers, those within `bounds` ([from to]),
-  in `ui`; `hidden?` keeps the row in the document while only what is
-  in force is shown."
-  [ui attr rows pattern [from to :as bounds] hidden?]
-  (let [field (fn [prefix value attrs]
+  "The controls narrowing the values of `attr` in `ui`: a `pattern` they
+  must match and, over `rows` that are all numbers, the `bounds` ([from
+  to]) they must lie between; `hidden?` keeps the row in the document
+  while only what is in force is shown."
+  [ui attr rows pattern bounds hidden?]
+  (let [;; no label of its own: `label` is the placeholder and, with the
+        ;; attribute after it, the accessible name, as chooser/filter-box.
+        ;; Every keystroke goes into the state, so that what is in force
+        ;; marks the attribute and is checked as the reader writes it
+        field (fn [prefix value label action attrs]
                 [:input (merge {:name         (str prefix (name attr))
                                 :value        (or value "")
+                                :placeholder  label
+                                :aria-label   (str label " " (name attr))
                                 :autocomplete "off"
-                                :spellcheck   "false"}
+                                :spellcheck   "false"
+                                :on           {:input action}}
                                attrs)])
         ;; a text field with a numeric pattern: the browser then reports a
         ;; bound that is not a whole number, which the server would drop
-        bound (fn [prefix value]
-                (field prefix value
-                       {:type      "text"
-                        :inputmode "numeric"
-                        :size      6
-                        :pattern   "-?[0-9]*"
-                        :title     (i18n/tr ui "a whole number")}))]
-    [:p.pattern (widgets/hidden-attrs hidden?)
-     [:label (i18n/tr ui "pattern") " "
-      (field (:pattern url/filter-prefixes) pattern {:type "search"})]
+        bound (fn [end value label placeholder]
+                (field (end url/filter-prefixes) value label
+                       [:set-filter-bound attr end :event.target/value]
+                       {:type        "text"
+                        :inputmode   "numeric"
+                        :pattern     "-?[0-9]*"
+                        :placeholder placeholder
+                        :title       (i18n/tr ui "a whole number")}))]
+    [:div.pattern (widgets/hidden-attrs hidden?)
+     [:p.pattern-match
+      (field (:pattern url/filter-prefixes) pattern (i18n/tr ui "pattern")
+             [:set-filter-pattern attr :event.target/value]
+             {:type "search"})
+      ;; what the field takes has a glossary entry of its own, which a
+      ;; placeholder of one word cannot say
+      (widgets/help (i18n/tr ui "a regular expression") "regex")]
      (when (numeric-values? rows)
-       (list " "
-             [:label (i18n/tr ui "from") " "
-              (bound (:from url/filter-prefixes) from)]
-             " "
-             [:label (i18n/tr ui "to") " "
-              (bound (:to url/filter-prefixes) to)]))]))
+       ;; the span of the values as the placeholders, which says both that
+       ;; the fields take a number and which numbers are there to ask for;
+       ;; write one end and the other fills with the end it shows, so that
+       ;; what the fields hold is what the search will read
+       (let [[lo hi :as span] (value-span rows)
+             [from to]        (range-bounds span bounds)]
+         [:p.pattern-range
+          (bound :from from (i18n/tr ui "from") lo)
+          ;; the dash says the two are one range; both are named already,
+          ;; so it is nothing for a screen reader to read between them
+          [:span.range-mark {:aria-hidden "true"} "–"]
+          (bound :to to (i18n/tr ui "to") hi)]))]))
+
+(defn range-fault
+  "What is wrong with the `ranges` asked of the `nodes` of the filter's
+  tree, worded in `ui`: the first whose bounds no search can be made of
+  (see dk.cst.corpus-probe.url/whole-range), which it would drop without
+  a word, said with the span the attribute's own values run over; nil
+  while every range stands."
+  [ui nodes ranges]
+  (some (fn [{:keys [id items]}]
+          (let [bounds (get ranges id)]
+            (when (and (some not-empty bounds) (numeric-values? items))
+              (let [[lo hi :as span] (value-span items)]
+                (when-not (url/whole-range (range-bounds span bounds))
+                  (i18n/tr ui "Give {attribute} a range from {low} to {high}"
+                           {:attribute (name id) :low lo :high hi}))))))
+        nodes))
 
 (defn filter-pairs
   "Turn `selected`, each metadata attribute mapped to the values chosen
@@ -87,7 +165,7 @@
                        {:value value}))]
     {:id        attr
      :label     (name attr)
-     :in-force? (boolean (some #(not (str/blank? %)) (cons pattern bounds)))
+     :in-force? (in-force? pattern bounds)
      :items     (mapv (fn [{:keys [value] :as row}]
                         (assoc row :id [attr value] :text value))
                       rows)
@@ -125,8 +203,11 @@
                       selected
                       [:clear-filter]
                       ;; taking every value is no filter at all, and would
-                      ;; put a query parameter per value in the URL
-                      {:clear-only? true}))
+                      ;; put a query parameter per value in the URL.
+                      ;; A pattern or a range makes it live and mixed with
+                      ;; no box ticked: it is the way back from one
+                      {:clear-only? true
+                       :mixed?      (boolean (some :in-force? nodes))}))
 
 (defn filterable?
   "True when `filters` offer anything to filter by or hold a selection
@@ -146,7 +227,8 @@
    {:keys [held pending?] :as opts}]
   (when (filterable? filters)
     (let [selected (filter-pairs selected)
-          nodes    (filter-tree filters (or held selected))]
+          nodes    (filter-tree filters (or held selected))
+          noun     #(i18n/trn ui "value" "values" %)]
       (chooser/chooser
        ui :values nodes
        (assoc opts
@@ -154,19 +236,23 @@
               :selected  selected
               :busy?     pending?
               :legend    (widgets/term ui :metadata false)
+              :noun      noun
               :not-found (i18n/tr ui "No values found.")
+              :invalid   (range-fault ui nodes ranges)
               :control   (fn [_] (clear-toggle ui nodes selected))
-              :toggle    (fn [{:keys [id offered]}]
+              ;; a pattern or a range narrows the attribute as its boxes
+              ;; do, so its own box reads as neither all nor none, which
+              ;; is what the summary would otherwise need words for
+              :toggle    (fn [{:keys [id offered in-force?]}]
                            (widgets/select-all
                             (str (i18n/tr ui "All values of") " " (name id))
                             offered selected
-                            [:toggle-filter-values [id (mapv second offered)]]))
+                            [:toggle-filter-values [id (mapv second offered)]]
+                            {:mixed? in-force?}))
               :item      (partial filter-item ui selected)
-              :summary   (fn [{:keys [label in-force?] :as node}]
+              :summary   (fn [{:keys [label] :as node}]
                            (list [:code label] " "
-                                 (chooser/node-count selected node)
-                                 (when in-force?
-                                   (str " · " (i18n/tr ui "pattern")))))
+                                 (chooser/node-count ui noun selected node)))
               :extra     (fn [{:keys [id items in-force?]} resting?]
                            (pattern-row ui id items
                                         (get patterns id) (get ranges id)

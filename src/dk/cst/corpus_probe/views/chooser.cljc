@@ -105,17 +105,40 @@
        (remove :hidden?)
        (map :id)))
 
+(defn count-title
+  "What the figures of a count say in words in `ui`: how many of how
+  many are chosen, `noun` (a function of a count) naming what they are
+  where the list has a word for them."
+  [ui noun chosen total]
+  (str chosen " " (i18n/tr ui "of") " " total " "
+       (when noun (str (noun total) " "))
+       (i18n/tr ui "selected")))
+
 (defn node-count
   "How many of the leaves a counted `node` offers are in the set
-  `selected`, beside how many there are, as a badge."
-  [selected {:keys [offered]}]
-  (widgets/count-badge (count (filter selected offered)) (count offered)))
+  `selected`, beside how many there are, as a badge titled with what
+  they are in `ui` (see `count-title`), which `noun` names.
+
+  A node narrowed by something other than its boxes, `:in-force?`, is
+  marked with an asterisk: the figures count boxes and cannot show it."
+  [ui noun selected {:keys [offered in-force?]}]
+  (let [chosen (count (filter selected offered))
+        total  (count offered)
+        said   (count-title ui noun chosen total)
+        active (when in-force? (i18n/tr ui "active filter"))]
+    (widgets/count-badge chosen total
+                         (cond
+                           (not active)   said
+                           ;; no box ticked beside a filter says nothing
+                           (zero? chosen) active
+                           :else          (str said " + " active))
+                         (when active "*"))))
 
 (defn node-summary
   "What the disclosure of a counted `node` says of it by default: its
-  label and its count over the set `selected`."
-  [selected node]
-  (list (:label node) " " (node-count selected node)))
+  label and its count over the set `selected` (see `node-count`)."
+  [ui noun selected node]
+  (list (:label node) " " (node-count ui noun selected node)))
 
 (defn toggled
   "Put `control` beside `disclosure` as one row, the row being there
@@ -157,28 +180,32 @@
   "A box narrowing what is under it to whatever answers what is typed in
   it: `id` names it, `label` says what it is for, `q` is what it holds
   and `actions` are what it dispatches, `:input` on every change and
-  `:focus` as it takes focus."
-  [id label q actions]
+  `:focus` as it takes focus. It reports `invalid`, what is wrong deeper
+  in the list, since a control inside a shut disclosure cannot be shown
+  a message and blocks the submit in silence."
+  [id label q invalid actions]
   ;; no name, so it is not submitted: what was typed to find a thing is
   ;; not the search. Enter is swallowed for the same reason
   [:input.chooser-find
-   {:id           id
-    :type         "search"
-    :placeholder  label
-    :aria-label   label
-    :value        (or q "")
-    :autocomplete "off"
-    :on           (assoc actions :keydown [:swallow-enter :event/key])}])
+   {:id                  id
+    :type                "search"
+    :placeholder         label
+    :aria-label          label
+    :value               (or q "")
+    :autocomplete        "off"
+    :replicant/on-render [:set-validity invalid]
+    :on                  (assoc actions :keydown [:swallow-enter :event/key])}])
 
 (defn fieldset
   "The box a long list stands in, named for the client by list `k` in a
   data attribute and worded in `ui`: its `:legend` and `:class`, the
   `:control` taking every entry at once, the `:box` narrowing the
   disclosure the `entries` are behind, how many of the `:total` entries
-  are `:chosen`, the `:details` attributes of the disclosure, the
-  `:status` the box reports and what focus leaving it dispatches,
-  `:leave`."
-  [ui k {:keys [class legend control box chosen total details status leave]}
+  are `:chosen` and what that `:said` in words, the `:details`
+  attributes of the disclosure, the `:status` the box reports and what
+  focus leaving it dispatches, `:leave`."
+  [ui k {:keys [class legend control box chosen total said details status
+                leave]}
    & entries]
   [:fieldset.chooser.box (cond-> {:data-list (name k)}
                            class (assoc :class class)
@@ -192,11 +219,9 @@
            ;; the box sits in the summary, the one line in view whether the
            ;; list is open or shut; a click in it works the box, not the
            ;; disclosure
-           [:summary.chooser-summary
-            {:aria-label (str chosen " " (i18n/tr ui "of") " "
-                              total " " (i18n/tr ui "selected"))}
+           [:summary.chooser-summary {:aria-label said}
             box
-            (widgets/count-badge chosen total)]]
+            (widgets/count-badge chosen total said)]]
           entries)]
    ;; outside the disclosure: a live region revealed from inside one as
    ;; it fills announces nothing either
@@ -213,11 +238,12 @@
   as chosen, the selection by default; `:open` is the set of open
   disclosures, `:root` for the fieldset's own. The instance supplies the
   rest: `:item`, `:summary`, `:extra`, `:control`, `:toggle` and
-  `:after` draw its parts, and the controls and the box are rendered
-  only where `:client?` runs."
+  `:after` draw its parts, `:noun` names what it counts (see
+  `count-title`), `:invalid` is what the box reports of them, and the
+  controls and the box are rendered only where `:client?` runs."
   [ui k nodes {:keys [selected held open choosing? client? busy? class
                       legend not-found control toggle item summary extra
-                      after]
+                      after invalid noun]
                q     :filter
                :or   {selected #{}}}]
   (let [held      (or held selected)
@@ -230,7 +256,9 @@
         offered   (mapcat :offered nodes)
         nodes     (cond->> nodes
                     resting? (mapv (partial only-chosen held)))
-        nothing-found? (and filtering (every? :hidden? nodes))]
+        nothing-found? (and filtering (every? :hidden? nodes))
+        chosen         (count (filter selected offered))
+        total          (count offered)]
     (fieldset
      ui k
      {:class   class
@@ -238,11 +266,12 @@
       :control (when (and client? control) (control offered))
       :box     (when client?
                  (filter-box (str (name k) "-filter")
-                             (i18n/tr ui "Filter") q
+                             (i18n/tr ui "Filter") q invalid
                              {:input [:filter k :event.target/value]
                               :focus [:engage k]}))
-      :chosen  (count (filter selected offered))
-      :total   (count offered)
+      :chosen  chosen
+      :total   total
+      :said    (count-title ui noun chosen total)
       :details (cond-> {:open (contains? open :root)
                         :on   {:toggle [:toggle-open k :root
                                         :event.target/open]}}
@@ -251,7 +280,8 @@
       :status  (when nothing-found? not-found)}
      (map (partial node-view
                    {:item      item
-                    :summary   (or summary (partial node-summary selected))
+                    :summary   (or summary
+                                   (partial node-summary ui noun selected))
                     :extra     (when extra #(extra % resting?))
                     :toggle    (when client? toggle)
                     :open?     (comp (partial contains? open) :id)

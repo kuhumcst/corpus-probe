@@ -63,6 +63,7 @@
      :cqp      (query/->cqp query)
      :opts     {:filter   (request/filter-params params)
                 :patterns (request/pattern-params params)
+                :ranges   (request/range-params params)
                 :within   (query/within query)
                 :subset   (request/subset-param params)
                 :near     (request/near-param (:near params)
@@ -487,7 +488,8 @@
                      :view   :kwic
                      :params (assoc params :corpus selected)
                      :result (merge result
-                                    (select-keys opts [:filter :patterns]))})]
+                                    (select-keys opts [:filter :patterns
+                                                       :ranges]))})]
         (response/transit-response
          (merge (select-keys result [:counts :size :pages])
                 (url/page-hrefs (citation! ctx req) page result)

@@ -138,9 +138,14 @@ a abbr[title] { text-decoration: none; }
     margin-block-end: 1rem;
   }
 
-  /* a scroll container clips at its padding edge, where a focus ring
-     would be: the padding gives it room and the margin takes it back */
-  .search-page .rail,
+  /* the rail grows down the page rather than scrolling inside itself,
+     which rules out sticking it: that strands the foot of a rail taller
+     than the viewport */
+  .search-page .rail { grid-area: rail; }
+
+  /* the panel is short and follows the reading, so it sticks; a scroll
+     container clips at its padding edge, where a focus ring would be,
+     so the padding gives it room and the margin takes it back */
   .search-page > .inspector {
     grid-area: rail; position: sticky; inset-block-start: 1rem;
     max-block-size: calc(100vh - 2rem); overflow-y: auto;
@@ -181,7 +186,16 @@ legend { padding-inline: 0.3em;
 /* a disclosure with a text cursor does not read as a control; the
    count beside a name is a side note */
 summary { cursor: pointer; }
-.count { color: var(--tx-2); font-weight: normal; }
+.note { color: var(--tx-2); font-weight: normal; }
+/* a note whose title says in words what it stands for offers it under
+   the pointer */
+.note[title] { cursor: help; }
+
+/* a help button is a link that explains rather than goes somewhere: it
+   keeps a link's underline but the note's own muted ink, so it is there
+   for the reader who looks for it without competing with the controls */
+.help { color: inherit; cursor: help; }
+.help:hover { color: var(--tx); }
 
 label:has(:is(input, select):disabled) { color: var(--rule); }
 
@@ -234,10 +248,14 @@ pre { font-size: 0.875rem; padding: 0.75rem 1rem;
 
 /* the label is the row's whole target; a value list scrolls inside itself */
 .chooser li label { display: block; padding-block: 0.15rem; }
-.chooser-list { list-style: none; padding-left: 1em;
-                          /* the form's margin-clearing rule reaches a
-                             fieldset's own children only */
-                          margin-block: 0; }
+/* every level indents by the width of its parent's box alone, so a row
+   sits under the disclosure marker above it however deep the tree runs:
+   no padding on the list, and no user-agent margin on the box */
+.chooser-list { list-style: none; padding-inline-start: 0;
+                /* the form's margin-clearing rule reaches a fieldset's
+                   own children only */
+                margin-block: 0; }
+.chooser input[type="checkbox"] { margin-inline-start: 0; }
 .filters details > .chooser-list { max-block-size: 40vh; overflow-y: auto;
                                    overscroll-behavior: contain; }
 
@@ -293,15 +311,18 @@ pre { font-size: 0.875rem; padding: 0.75rem 1rem;
 .matching-case > label { grid-column: 1 / -1; }
 .modes > p { display: flex; flex-wrap: wrap; gap: 0.25rem 1rem; }
 
-/* a sized field would overflow the box without a floor of nought.
-   TODO: these three rows want a design of their own: the only controls
-   this deep in a tree, they read as a form inside a list */
-.pattern { display: flex; flex-wrap: wrap; align-items: center;
-           gap: 0.25rem 0.5rem; margin-block: 0.25rem; min-inline-size: 0; }
-.pattern > label { display: flex; align-items: center; gap: 0.5rem;
-                   flex: 1; min-inline-size: 0; }
-.pattern > label:first-child { flex-basis: 100%; }
-.pattern > label > input { flex: 1; min-inline-size: 0; }
+/* an attribute's own fields, the only controls this deep in a tree:
+   one field to the row, so they read as a block above the values
+   rather than as a form inside the list */
+.pattern { display: flex; flex-direction: column; gap: 0.25rem;
+           margin-block: 0.25rem; }
+.pattern > p { margin-block: 0; }
+.pattern-match { display: flex; align-items: center; gap: 0.25rem; }
+.pattern-match > input { flex: 1; min-inline-size: 0; }
+.pattern-range { display: grid; align-items: center; gap: 0.25rem;
+                 grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); }
+.pattern-range > input { inline-size: 100%; }
+.range-mark { color: var(--tx-2); }
 
 /* token boxes fill the row and wrap in the order the tokens match, so
    a query reads across like the text it matches */

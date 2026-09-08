@@ -69,27 +69,53 @@
     (or (corpus/unit-attr attributes context) (:context batch/kwic-defaults))
     context))
 
+(defn range-values!
+  "Those values of annotated s-attribute `attr` of `corpus` via `ctx`
+  that lie between the whole numbers `from` and `to`. Throws when the
+  corpus cannot list the attribute's values (see
+  dk.cst.corpus-probe.cwb.tools/annotation-values!), a range being a
+  question about them that it therefore cannot answer."
+  [ctx corpus attr [from to]]
+  (if-let [rows (tools/annotation-values! ctx corpus attr)]
+    (into #{}
+          (comp (map (comp first :values))
+                (filter #(when-let [n (parse-long %)] (<= from n to))))
+          rows)
+    (throw (ex-info "Too many values to search a range of them"
+                    {:corpus corpus :attr attr}))))
+
 (defn corpus-filter!
-  "Metadata `filter` (attribute to the set of values accepted) and
-  `patterns` (attribute to the regexes accepted) as
-  dk.cst.corpus-probe.cwb.command/filter-query takes them for `corpus`
-  via `ctx`: [attr values patterns] triples, the attribute with the most
-  regions first; nil when neither restricts anything. Every attribute
-  must be an annotated s-attribute of the corpus, since the names are
-  spliced into a command."
-  [ctx corpus filter patterns]
-  (when (or (seq filter) (seq patterns))
+  "The metadata narrowing of `opts` as
+  dk.cst.corpus-probe.cwb.command/filter-query takes it for `corpus` via
+  `ctx`: [attr values patterns] triples, the attribute with the most
+  regions first; nil when nothing is narrowed. `:filter` maps an
+  attribute to the set of values accepted, `:patterns` to the regexes
+  accepted and `:ranges` to the [from to] its values must lie between,
+  which this corpus's own values answer (see `range-values!`). Every
+  attribute must be an annotated s-attribute of the corpus, since the
+  names are spliced into a command."
+  [ctx corpus {:keys [filter patterns ranges]}]
+  (when (or (seq filter) (seq patterns) (seq ranges))
     (let [regions (into {}
                         (keep (fn [{:keys [name regions values?]}]
                                 (when values? [name regions])))
                         (:s-attrs (tools/describe-corpus! ctx corpus)))
-          attrs   (distinct (concat (keys filter) (keys patterns)))]
+          attrs   (distinct (concat (keys filter) (keys patterns)
+                                    (keys ranges)))]
       (when-let [bad (seq (remove regions attrs))]
         (throw (ex-info "Not an annotated structural attribute of this corpus"
                         {:corpus corpus :attrs bad})))
+      ;; TODO: a range the corpus has no value in leaves the attribute
+      ;; with no value and no pattern, which filter-query renders as
+      ;; <attr = "">: that matches an empty annotation rather than
+      ;; nothing. It wants a matcher for "no region at all".
       (vec (sort-by (juxt (comp - regions first) first)
                     (for [attr attrs]
-                      [attr (get filter attr #{}) (get patterns attr)]))))))
+                      [attr
+                       (into (get filter attr #{})
+                             (when-let [bounds (get ranges attr)]
+                               (range-values! ctx corpus attr bounds)))
+                       (get patterns attr)]))))))
 
 (defn cache-opts!
   "Give `opts` the cache directory and the name the result of `query` in
@@ -128,9 +154,7 @@
                         :struct-attrs (or requested annotated)
                         :context      (corpus-context attributes
                                                       (:context opts))
-                        :filter       (corpus-filter! ctx corpus
-                                                      (:filter opts)
-                                                      (:patterns opts))
+                        :filter       (corpus-filter! ctx corpus opts)
                         :subset       (corpus-subset! ctx corpus
                                                       (:subset opts))
                         :sort         (corpus-sort! ctx corpus
@@ -140,11 +164,11 @@
   "The arguments a count of CQP `query` in `corpus` via `ctx` under `opts`
   is keyed and run by, as dk.cst.corpus-probe.search/size! resolves them
   for that corpus: [ctx query opts]."
-  [ctx corpus query {:keys [filter patterns sample within near subset]}]
+  [ctx corpus query {:keys [sample within near subset] :as opts}]
   (let [ctx (corpus/corpus-ctx ctx corpus)]
     [ctx
      (corpus-query! ctx corpus query within)
-     {:filter (corpus-filter! ctx corpus filter patterns)
+     {:filter (corpus-filter! ctx corpus opts)
       :subset (corpus-subset! ctx corpus subset)
       :near   near
       :sample sample}]))

@@ -212,7 +212,7 @@
                    (when (and hits (pos? (:size result 0)))
                      (result/sample-phrase ui (:sample result) corpus))
                    (when (seq corpus) (result/corpora-phrase ui corpus))
-                   (result/filter-phrase (:filter result) (:patterns result))
+                   (result/filter-phrase result)
                    (when (pos? page-n)
                      (str (i18n/tr ui "page") " " (inc page-n))))))))
 
@@ -225,7 +225,7 @@
                 (result/query-phrase ui params)
                 (i18n/tr ui "All tokens"))
               (when (seq corpus) (result/corpora-phrase ui corpus))
-              (result/filter-phrase (:filter result) (:patterns result))
+              (result/filter-phrase result)
               (str (i18n/tr ui "by") " " attr
                    (when-not (str/blank? by)
                      (str " " (i18n/tr ui "and") " " by)))

@@ -30,20 +30,40 @@
   (when-cwb
    (testing "the triples the filter query takes, patterns beside values"
      (is (= [[:text_title #{} ["Hav.*"]] [:text_year #{"1583"} ["1591"]]]
-            (opts/corpus-filter! ctx "VISER" {:text_year #{"1583"}}
-                                 {:text_year  ["1591"]
-                                  :text_title ["Hav.*"]}))))
+            (opts/corpus-filter! ctx "VISER"
+                                 {:filter   {:text_year #{"1583"}}
+                                  :patterns {:text_year  ["1591"]
+                                             :text_title ["Hav.*"]}}))))
    (testing "attributes from two levels anchor on the innermost"
      (is (= [[:s_id #{"2"} nil] [:text_year #{"1591"} nil]]
-            (opts/corpus-filter! ctx "VISER" {:text_year #{"1591"}
-                                              :s_id      #{"2"}}
-                                 nil))))
+            (opts/corpus-filter! ctx "VISER"
+                                 {:filter {:text_year #{"1591"}
+                                           :s_id      #{"2"}}}))))
+   (testing "a range is the corpus's own values in it, and no more: the
+             numbers between that nothing carries are not asked for"
+     (is (= [[:text_year #{"1583" "1591"} nil]]
+            (opts/corpus-filter! ctx "VISER" {:ranges {:text_year [1000 1600]}})))
+     (is (= [[:text_year #{"1591"} nil]]
+            (opts/corpus-filter! ctx "VISER" {:ranges {:text_year [1584 1600]}})))
+     (testing "beside the values chosen, which it joins"
+       (is (= [[:text_year #{"1583" "1591"} nil]]
+              (opts/corpus-filter! ctx "VISER"
+                                   {:filter {:text_year #{"1583"}}
+                                    :ranges {:text_year [1584 1600]}}))))
+     (testing "and nothing where the corpus carries none of it"
+       (is (= [[:text_year #{} nil]]
+              (opts/corpus-filter! ctx "VISER"
+                                   {:ranges {:text_year [1700 1800]}})))))
    (testing "nothing restricts nothing"
-     (is (nil? (opts/corpus-filter! ctx "VISER" {} nil))))
+     (is (nil? (opts/corpus-filter! ctx "VISER" {})))
+     (is (nil? (opts/corpus-filter! ctx "VISER" {:filter {} :ranges {}}))))
    (testing "an attribute the corpus lacks is rejected before any command"
      (is (thrown-with-msg? Exception #"Not an annotated structural attribute"
                            (opts/corpus-filter! ctx "TALER"
-                                                {:text_author #{"x"}} nil))))))
+                                                {:filter {:text_author #{"x"}}})))
+     (is (thrown-with-msg? Exception #"Not an annotated structural attribute"
+                           (opts/corpus-filter!
+                            ctx "TALER" {:ranges {:text_author [1 2]}}))))))
 
 (deftest cache-opts!-test
   (let [ctx (cache-ctx!)]

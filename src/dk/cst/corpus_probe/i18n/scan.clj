@@ -34,14 +34,14 @@
   `(str ...)` of literals counts as one string, so a msgid too long for
   one line still reaches the template."
   (pottery/make-extractor
-   [(:or 'tr 'i18n/tr) _ (s :guard string?)] s
-   [(:or 'tr 'i18n/tr) _ (s :guard string?) _] s
-   [(:or 'tr 'i18n/tr) _ (['str & parts] :seq)] (apply str parts)
+   ;; the values a call may carry after its string are `& _`, so an
+   ;; arity that fills them in needs no clause of its own
+   [(:or 'tr 'i18n/tr) _ (s :guard string?) & _] s
+   [(:or 'tr 'i18n/tr) _ (['str & parts] :seq) & _] (apply str parts)
    [(:or 'trx 'i18n/trx) _ (c :guard string?) (s :guard string?)] (str c "|" s)
    [(:or 'trx 'i18n/trx) _ (c :guard string?) (['str & parts] :seq)]
    (str c "|" (apply str parts))
-   [(:or 'trn 'i18n/trn) _ (s1 :guard string?) (s2 :guard string?) _] [s1 s2]
-   [(:or 'trn 'i18n/trn) _ (s1 :guard string?) (s2 :guard string?) _ _]
+   [(:or 'trn 'i18n/trn) _ (s1 :guard string?) (s2 :guard string?) & _]
    [s1 s2]
    [(:or 'tr 'i18n/tr 'trx 'i18n/trx 'trn 'i18n/trn) & _]
    (pottery/extraction-warning "No literal UI string in:")))

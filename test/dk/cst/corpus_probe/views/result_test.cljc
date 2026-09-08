@@ -122,22 +122,33 @@
   (is (nil? (result/near-phrase en nil))))
 
 (deftest filter-phrase-test
-  (is (= "" (result/filter-phrase {} nil)))
+  (is (= "" (result/filter-phrase {})))
   (is (= "text_author ukendt; text_year 1583, 1591"
-         (result/filter-phrase {:text_year   #{"1591" "1583"}
-                                :text_author #{"ukendt"}}
-                               nil)))
-  (is (nil? (result/within-phrase en nil nil)))
+         (result/filter-phrase {:filter {:text_year   #{"1591" "1583"}
+                                         :text_author #{"ukendt"}}})))
+  (is (nil? (result/within-phrase en {})))
   (is (= "within text_year 1591"
-         (result/within-phrase en {:text_year #{"1591"}} nil)))
+         (result/within-phrase en {:filter {:text_year #{"1591"}}})))
   (is (= "inden for text_year 1591"
-         (result/within-phrase da {:text_year #{"1591"}} nil)))
+         (result/within-phrase da {:filter {:text_year #{"1591"}}})))
   (testing "patterns follow the values, between slashes"
     (is (= "text_title /Hav.*/; text_year 1583, 1591, /16../"
-           (result/filter-phrase {:text_year #{"1591" "1583"}}
-                                 {:text_title ["Hav.*"] :text_year ["16.."]})))
+           (result/filter-phrase {:filter   {:text_year #{"1591" "1583"}}
+                                  :patterns {:text_title ["Hav.*"]
+                                             :text_year  ["16.."]}})))
     (is (= "within text_title /Hav.*/"
-           (result/within-phrase en nil {:text_title ["Hav.*"]})))))
+           (result/within-phrase en {:patterns {:text_title ["Hav.*"]}}))))
+  (testing "and a range is the two numbers asked for, last of all: the
+            values it stands for are the corpus's own, and there may be
+            hundreds of them"
+    (is (= "text_year 1900–2024"
+           (result/filter-phrase {:ranges {:text_year [1900 2024]}})))
+    (is (= "text_year 1583, /16../, 1900–2024"
+           (result/filter-phrase {:filter   {:text_year #{"1583"}}
+                                  :patterns {:text_year ["16.."]}
+                                  :ranges   {:text_year [1900 2024]}})))
+    (is (= "within text_year 1900–2024"
+           (result/within-phrase en {:ranges {:text_year [1900 2024]}})))))
 
 (deftest qualifiers-test
   (let [phrases (fn [ui params result]

@@ -157,6 +157,7 @@
    (assoc opts
           :selected  selected
           :legend    (i18n/tr ui "Corpora")
+          :noun      #(i18n/trn ui "corpus" "corpora" %)
           :not-found (i18n/tr ui "No corpora found.")
           :control   (partial all-toggle ui selected)
           :toggle    (fn [{:keys [label offered]}]

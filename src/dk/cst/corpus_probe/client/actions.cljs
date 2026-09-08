@@ -315,24 +315,60 @@
                   (lists/tick :corpora ids unticking?))
      :effects [[:refresh-filters]]}))
 
+(defn clear-fields
+  "Take the pattern and the range of `attr` out of `state`, which empties
+  its fields, they being what the state holds."
+  [state attr]
+  (-> state
+      (update-in [:filter-controls :patterns] dissoc attr)
+      (update-in [:filter-controls :ranges] dissoc attr)))
+
+(defn in-force?
+  "True when a pattern or a range narrows `attr` in `state` (see
+  dk.cst.corpus-probe.views.search.filter/in-force?)."
+  [state attr]
+  (filter-views/in-force? (get-in state [:filter-controls :patterns attr])
+                          (get-in state [:filter-controls :ranges attr])))
+
 (defn toggle-filter-values
   "Choose or drop the metadata `values` of `attr` in `state` (see
   dk.cst.corpus-probe.client.lists/choose-values), the change noted for
-  the filter's list."
+  the filter's list.
+
+  An attribute a pattern or a range narrows is emptied instead, fields
+  and boxes together: the control is the one way back from a narrowing
+  the boxes cannot show."
   [state attr values]
-  (let [chosen (set (get-in state [:filter-controls :selected attr]))]
+  (let [chosen (set (get-in state [:filter-controls :selected attr]))
+        clear? (or (in-force? state attr) (every? chosen values))]
     (-> state
+        (cond-> clear? (clear-fields attr))
         (update-in [:filter-controls :selected]
-                   lists/choose-values attr values)
-        (lists/tick :values (map (partial vector attr) values)
-                    (every? chosen values)))))
+                   (if clear? lists/drop-values lists/choose-values)
+                   attr values)
+        (lists/tick :values (map (partial vector attr) values) clear?))))
+
+(defn set-filter-pattern
+  "Put `value`, the pattern the values of `attr` must match, in `state`
+  as the reader writes it."
+  [state attr value]
+  (assoc-in state [:filter-controls :patterns attr] value))
+
+(defn set-filter-bound
+  "Put `value`, one `end` (:from or :to) of the range the values of
+  `attr` must lie in, in `state` as the reader writes it."
+  [state attr end value]
+  (update-in state [:filter-controls :ranges attr]
+             ;; a pair, which the views read as [from to], not a map
+             #(assoc (or % [nil nil]) (case end :from 0 :to 1) value)))
 
 (defn clear-filter
-  "Empty the whole metadata filter of `state`, every value it held noted
-  as unticked for the filter's list."
+  "Empty the whole metadata filter of `state`, the patterns and ranges
+  with the values, every value it held noted as unticked for the filter's
+  list."
   [state]
   (-> state
-      (assoc-in [:filter-controls :selected] {})
+      (update :filter-controls assoc :selected {} :patterns {} :ranges {})
       (lists/tick :values (filter-views/filter-pairs
                            (get-in state [:filter-controls :selected]))
                   true)))
@@ -469,6 +505,8 @@
     :toggle-corpora       (toggle-corpora state x)
     :toggle-filter-values (let [[attr values] x]
                             {:state (toggle-filter-values state attr values)})
+    :set-filter-pattern   {:state (set-filter-pattern state x y)}
+    :set-filter-bound     {:state (set-filter-bound state x y z)}
     :clear-filter         {:state (clear-filter state)}
     :engage               (refreshed x (lists/engage state x))
     :toggle-open          (refreshed x (lists/toggle-open state x y z))

@@ -156,27 +156,33 @@
     (list (i18n/tr ui "near") " " [:code word])))
 
 (defn filter-phrase
-  "The metadata `filter` (a map of attribute to the set of values
-  accepted) and the `patterns` beside it (a map of attribute to the
-  regexes accepted) in words: each attribute with its values, sorted,
-  then its patterns between slashes; empty without either.
+  "How a search was narrowed by metadata, in words: each attribute of
+  `narrowing` with the values `:filter` accepts, sorted, then the
+  regexes `:patterns` accepts between slashes and the [from to] of
+  `:ranges`; empty when nothing narrows it.
 
-  (filter-phrase {:text_year #{\"1591\" \"1583\"}} {:text_title [\"Hav.*\"]})
-  ;; => \"text_title /Hav.*/; text_year 1583, 1591\""
-  [filter patterns]
+  (filter-phrase {:filter {:text_year #{\"1591\"}}
+                  :patterns {:text_title [\"Hav.*\"]}})
+  ;; => \"text_title /Hav.*/; text_year 1591\""
+  [{:keys [filter patterns ranges] :as narrowing}]
   (str/join "; " (for [attr (sort (distinct (concat (keys filter)
-                                                    (keys patterns))))]
+                                                    (keys patterns)
+                                                    (keys ranges))))
+                       :let [[from to] (get ranges attr)]]
                    (str (name attr) " "
-                        (str/join ", " (concat (sort (get filter attr))
-                                               (map #(str "/" % "/")
-                                                    (get patterns attr))))))))
+                        (str/join ", "
+                                  (concat (sort (get filter attr))
+                                          (map #(str "/" % "/")
+                                               (get patterns attr))
+                                          (when from
+                                            [(str from "–" to)])))))))
 
 (defn within-phrase
-  "The metadata `filter` and its `patterns` as a qualifier of a result
-  in `ui`, or nil without either: \"within text_year 1591\"."
-  [ui filter patterns]
-  (when (or (seq filter) (seq patterns))
-    (str (i18n/tr ui "within") " " (filter-phrase filter patterns))))
+  "The `narrowing` of a result (see `filter-phrase`) as a qualifier of it
+  in `ui`, or nil without one: \"within text_year 1591\"."
+  [ui {:keys [filter patterns ranges] :as narrowing}]
+  (when (or (seq filter) (seq patterns) (seq ranges))
+    (str (i18n/tr ui "within") " " (filter-phrase narrowing))))
 
 (defn qualifiers
   "The question a `result` answered, less the query itself, as short
@@ -197,7 +203,7 @@
                (match-label ui match))
              (when (seq searched)
                (str (i18n/tr ui "in") " " (corpora-phrase ui searched)))
-             (within-phrase ui (:filter result) (:patterns result))
+             (within-phrase ui result)
              (subset-phrase ui (:subset result))
              (near-phrase ui (:near result))
              ;; a search that found nothing sampled nothing, and saying it
@@ -381,7 +387,11 @@
                           "marks."))])
    ;; the stylesheet scrolls this rather than letting cqp's column-aligned
    ;; pointer reflow, and a scroll container a keyboard cannot reach is
-   ;; unreadable in the browsers that do not focus scrollers themselves
+   ;; unreadable in the browsers that do not focus scrollers themselves.
+   ;; TODO: a :rejected message is this project's own guard, not CQP's
+   ;; (see dk.cst.corpus-probe.cwb/error-map), so it is shown as another
+   ;; program's output while being untranslated English of our own. It
+   ;; wants an explanation per guard, worded from the ex-data.
    (when message [:pre {:tabindex "0"} [:samp message]])))
 
 (defn cqp-error-section

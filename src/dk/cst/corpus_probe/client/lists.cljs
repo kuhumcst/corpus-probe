@@ -129,22 +129,27 @@
   (let [selected (set corpus)]
     (vec (sort (if add? (into selected ids) (reduce disj selected ids))))))
 
-(defn choose-values
-  "Add every value in `values` under `attr` of `selected`, the map of
-  metadata attribute to the values chosen under it, or take them all away
-  when they are all there already: one rule for one value and for every
-  value of an attribute, as the corpus chooser has for a corpus and a
-  folder."
+(defn drop-values
+  "Take every value in `values` away from `attr` of `selected`, the map
+  of metadata attribute to the values chosen under it."
   [selected attr values]
-  (let [chosen (set (get selected attr))
-        chosen (if (every? chosen values)
-                 (reduce disj chosen values)
-                 (into chosen values))]
+  (let [chosen (reduce disj (set (get selected attr)) values)]
     (if (seq chosen)
       (assoc selected attr chosen)
       ;; dropped rather than kept empty, or it would still count as one
       ;; the reader filters by
       (dissoc selected attr))))
+
+(defn choose-values
+  "Add every value in `values` under `attr` of `selected` (see
+  `drop-values`), or take them all away when they are all there already:
+  one rule for one value and for every value of an attribute, as the
+  corpus chooser has for a corpus and a folder."
+  [selected attr values]
+  (let [chosen (set (get selected attr))]
+    (if (every? chosen values)
+      (drop-values selected attr values)
+      (assoc selected attr (into chosen values)))))
 
 (defn chosen-corpora
   "The selected corpus IDs of `state` in a settled order, which is what

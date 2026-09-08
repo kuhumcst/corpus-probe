@@ -71,7 +71,7 @@
   by `attr` via `ctx` under `opts`, counted from the saved result or
   afresh (see `count-sections!`): what `frequencies!` answers with once
   it knows there is something to count. See it for the arguments."
-  [ctx corpus query attr {:keys [filter patterns subset at docs by]
+  [ctx corpus query attr {:keys [subset at docs by]
                           :or   {at "match"}
                           :as   opts}]
   (let [[attr by] (groupable! ctx corpus (cond-> [attr] by (conj by)))
@@ -82,8 +82,7 @@
         opts      (opts/cache-opts!
                    ctx corpus query
                    (assoc opts
-                          :filter (opts/corpus-filter! ctx corpus filter
-                                                       patterns)
+                          :filter (opts/corpus-filter! ctx corpus opts)
                           :subset (opts/corpus-subset! ctx corpus subset)
                           :sample nil))
         whole?    (command/whole-match? at)
@@ -131,21 +130,22 @@
 
 (defn value-sizes!
   "How many tokens of `corpus` via `ctx` carry each value of `attr`,
-  within the :filter and :patterns of `opts`: {<value> <tokens>}, or nil
-  when `attr` marks no regions of its own (see `sized-attr?`) or has too
-  many to decode.
+  within the :filter, :patterns and :ranges of `opts`: {<value> <tokens>},
+  or nil when `attr` marks no regions of its own (see `sized-attr?`) or
+  has too many to decode.
 
   What the rate per million of a value is measured against: the text
   carrying it rather than the whole corpus, so a year with more text does
   not look busier."
-  [ctx corpus attr {:keys [filter patterns] :as opts}]
+  [ctx corpus attr {:keys [filter patterns ranges] :as opts}]
   (when (sized-attr? (corpus/attributes! ctx corpus) attr)
-    (if (or (seq filter) (seq patterns))
+    (if (or (seq filter) (seq patterns) (seq ranges))
       (into {}
             (map (fn [{:keys [values freq]}] [(first values) freq]))
             ;; nothing saves a result of every token, so none is looked for
             (frequencies! ctx corpus "[]" attr
-                          (assoc (select-keys opts [:filter :patterns])
+                          (assoc (select-keys opts [:filter :patterns
+                                                    :ranges])
                                  :cache? false)))
       (tools/annotation-sizes! ctx corpus attr))))
 
@@ -171,12 +171,12 @@
   the sizes of its regions rather than by matching every token. Under a
   :filter it breaks down every token of the filtered regions, and the
   :tokens are theirs, so the rates stay relative to what was counted."
-  [ctx corpus query attr {:keys [filter patterns at by] :as opts}]
+  [ctx corpus query attr {:keys [filter patterns ranges at by] :as opts}]
   (cwb/attempt
    corpus
    (fn []
      (let [blank?  (str/blank? query)
-           whole?  (and (empty? filter) (empty? patterns))
+           whole?  (and (empty? filter) (empty? patterns) (empty? ranges))
            sizes   (when-not (command/whole-match? at)
                      (value-sizes! ctx corpus (or by attr) opts))
            freqs   (cond
@@ -300,6 +300,7 @@
          table    {:query    query
                    :filter   (:filter opts)
                    :patterns (:patterns opts)
+                   :ranges   (:ranges opts)
                    :subset   (:subset opts)
                    :near     (:near opts)
                    :attr     (keyword attr)

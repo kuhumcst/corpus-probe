@@ -117,9 +117,9 @@
 
   `opts`: :rows (the [from to] row range, default the first page),
   :context (a number of tokens, or a unit of text), :sort (a mode, or a
-  positional attribute), :filter and :patterns (a metadata filter),
-  :sample (how many matches to keep, at random), :near (a word the
-  matches must have nearby), :within (a unit of text they are kept
+  positional attribute), :filter, :patterns and :ranges (a metadata
+  filter), :sample (how many matches to keep, at random), :near (a word
+  the matches must have nearby), :within (a unit of text they are kept
   within), :struct-attrs (default every annotated s-attribute) and
   :cache? (false keeps the result out of the cache). Throws ex-info when
   CQP reports an error, times out or dies."
@@ -319,8 +319,8 @@
   ([ctx corpora query]
    (concordance! ctx corpora query {}))
   ([ctx corpora query opts]
-   (let [{:keys [page page-size context filter patterns subset near sample
-                 incremental?]
+   (let [{:keys [page page-size context filter patterns ranges subset near
+                 sample incremental?]
           :as   opts}
          (merge batch/page-defaults opts)
          kwic-opts (dissoc opts :page :page-size :incremental?)
@@ -341,6 +341,7 @@
               :context   context
               :filter    filter
               :patterns  patterns
+              :ranges    ranges
               :subset    subset
               :near      near
               :sample    sample

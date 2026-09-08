@@ -53,39 +53,32 @@
                  :when (seq values)]
              [attr values])))
 
-(def range-limit
-  "The most values a range of integers is spelt out as: enough for the
-  years any corpus spans, and a bound on the query it becomes."
-  1000)
-
-(defn range-pattern
-  "The pattern matching every integer from `from` to `to` inclusive (both
-  query param values): an alternation of them, the first `range-limit`
-  of them at most; nil unless both are integers in order."
-  [from to]
-  (let [a (some-> from parse-long)
-        b (some-> to parse-long)]
-    (when (and a b (<= a b))
-      (str/join "|" (take range-limit (range a (inc b)))))))
-
 (defn pattern-params
   "The patterns `params` ask each metadata attribute's values to match
   instead of, or beside, the values chosen: the regex of its
-  `fp.<attribute>` param as a reader wrote it, and the integers from its
-  `ff.<attribute>` to its `ft.<attribute>` param (see `range-pattern`).
-  A map of attribute to its patterns; empty when there are none."
+  `fp.<attribute>` param as a reader wrote it. A map of attribute to its
+  patterns; empty when there are none."
+  [params]
+  (into {} (for [[attr pattern] (prefixed-params params
+                                                 (:pattern url/filter-prefixes))
+                 :when (not (str/blank? pattern))]
+             [attr [pattern]])))
+
+(defn range-params
+  "The ranges `params` ask each metadata attribute's values to lie in:
+  the whole numbers its `ff.<attribute>` and `ft.<attribute>` params
+  name (see dk.cst.corpus-probe.url/whole-range), which the corpus
+  resolves to the values it has in them (see
+  dk.cst.corpus-probe.search.opts/corpus-filter!). A map of attribute to
+  its [from to]; an attribute whose bounds are no whole range has none,
+  since no search can be made of it."
   [params]
   (let [to (prefixed-params params (:to url/filter-prefixes))]
-    (reduce (fn [m [attr pattern]] (update m attr (fnil conj []) pattern))
-            {}
-            (concat (remove (comp str/blank? val)
-                            (prefixed-params params
-                                             (:pattern url/filter-prefixes)))
-                    (keep (fn [[attr from]]
-                            (some->> (range-pattern from (get to attr))
-                                     (vector attr)))
-                          (prefixed-params params
-                                           (:from url/filter-prefixes)))))))
+    (into {} (for [[attr from] (prefixed-params params
+                                                (:from url/filter-prefixes))
+                   :let  [bounds (url/whole-range [from (get to attr)])]
+                   :when bounds]
+               [attr bounds]))))
 
 (defn pattern-fields
   "What the pattern and range fields of the metadata filter hold, from

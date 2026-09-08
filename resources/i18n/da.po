@@ -403,10 +403,33 @@ msgid_plural "regions"
 msgstr[0] "region"
 msgstr[1] "regioner"
 
+msgid "text"
+msgid_plural "texts"
+msgstr[0] "tekst"
+msgstr[1] "tekster"
+
+msgid "sentence"
+msgid_plural "sentences"
+msgstr[0] "sætning"
+msgstr[1] "sætninger"
+
+msgid "paragraph"
+msgid_plural "paragraphs"
+msgstr[0] "afsnit"
+msgstr[1] "afsnit"
+
 msgid "value"
 msgid_plural "values"
 msgstr[0] "værdi"
 msgstr[1] "værdier"
+
+msgid "corpus"
+msgid_plural "corpora"
+msgstr[0] "korpus"
+msgstr[1] "korpusser"
+
+msgid "active filter"
+msgstr "aktivt filter"
 
 msgid "Near"
 msgstr "Sammen med"
@@ -497,6 +520,12 @@ msgstr "Københavns Universitet"
 
 msgid "a whole number"
 msgstr "et helt tal"
+
+msgid "a regular expression"
+msgstr "et regulært udtryk"
+
+msgid "Give {attribute} a range from {low} to {high}"
+msgstr "Angiv et interval for {attribute} fra {low} til {high}"
 
 msgid "whole word"
 msgstr "hele ordet"

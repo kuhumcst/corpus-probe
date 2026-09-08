@@ -16,8 +16,10 @@
     (testing "a literal, qualified or not"
       (is (= "a" (extract '(tr ui "a"))))
       (is (= "a" (extract '(i18n/tr ui "a")))))
-    (testing "a (str ...) of literals is one string, so a long msgid fits"
-      (is (= "a b" (extract '(i18n/tr ui (str "a " "b"))))))
+    (testing "a (str ...) of literals is one string, so a long msgid fits,
+              with placeholders to fill or without"
+      (is (= "a b" (extract '(i18n/tr ui (str "a " "b")))))
+      (is (= "a {n}" (extract '(i18n/tr ui (str "a " "{n}") {:n 2})))))
     (testing "a context becomes part of the msgid"
       (is (= "button|a" (extract '(i18n/trx ui "button" "a")))))
     (testing "a plural pair becomes one entry"

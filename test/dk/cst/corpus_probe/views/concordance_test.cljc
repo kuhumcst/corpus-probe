@@ -278,7 +278,7 @@
                                   {:corpus "VISER" :error {:type :cqp}}]})
                        (nth 2)
                        (nth 3))]
-        (is (= [" " [:small.count "(1,113)"]]
+        (is (= [" " [:small.note "(1,113)"]]
                (get-in (first groups) [2 1 3])))
         (is (nil? (get-in (second groups) [2 1 3])))))
     (testing "a group carries its corpus's language when known"
@@ -454,7 +454,7 @@
                                         :hits [{:corpus "PROBE" :cpos 9
                                                 :anchors {:matchend 9}
                                                 :match   [{:word "hund"}]}])}))]
-        (is (some #{[:small.count "(5)"]} html))
+        (is (some #{[:small.note "(5)"]} html))
         (is (not (some #{:table.counts} html))))))
   (testing "nothing searchable means only the errors, and the heading names one"
     (let [html (concordance/concordance-section

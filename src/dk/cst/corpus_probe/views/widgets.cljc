@@ -1,6 +1,6 @@
 (ns dk.cst.corpus-probe.views.widgets
   "The generic parts the views are built from: selects, a live region,
-  a pager, a link row, a definition list, count badges and cells, a
+  a pager, a link row, a definition list, side notes and count cells, a
   checkbox over a group, an error section, attribute values, glossary
   terms and the attribute maps every page shares. Nothing here knows
   what it is listing: a caller hands in its words, already translated."
@@ -112,13 +112,45 @@
    (for [[k v] pairs]
      (list [:dt (name k)] [:dd (attribute-value k v)]))])
 
+(defn note
+  "A side note beside what it is about, `content` in small muted type:
+  a figure or a sign standing for something the layout has no room to
+  say, which `title` says in words under the pointer."
+  ([content]
+   (note content nil))
+  ([content title]
+   (if title
+     [:small.note {:title title} content]
+     [:small.note content])))
+
+(defn help
+  "A contextual help button beside a control: a `?` saying `what` the
+  control takes, linked to the glossary `entry` that explains it at
+  length. The words are the link's name too, `?` being none."
+  [what entry]
+  (note [:a.help {:href       (url/glossary-entry entry)
+                  :title      what
+                  :aria-label what}
+         "?"]))
+
 (defn count-badge
   "How many entries a disclosure holds, `n`, or how many of the `total`
-  it holds are chosen, as a side note beside the name in its summary."
+  it holds are chosen, as a `note` beside the name in its summary.
+
+  `title` says in words what the figures count, which they cannot say
+  themselves. `mark` stands after them where they are not the whole
+  story, the title saying what else there is."
   ([n]
-   [:small.count (str "(" n ")")])
+   (count-badge n nil nil nil))
   ([n total]
-   [:small.count (str "(" n "/" total ")")]))
+   (count-badge n total nil nil))
+  ([n total title]
+   (count-badge n total title nil))
+  ([n total title mark]
+   (cond-> (note (if total (str "(" n "/" total ")") (str "(" n ")")) title)
+     ;; the mark is the title in one character, so there is nothing in
+     ;; it for a screen reader to spell out
+     mark (conj [:span {:aria-hidden "true"} mark]))))
 
 (defn count-cell
   "A table cell of the count `n` in `ui`, its digits grouped, with
@@ -139,13 +171,15 @@
   for a screen reader; nil when there is nothing to take. Checked when
   they all are, indeterminate when only some are.
 
-  In `opts`, `:clear-only?` disables it while nothing is chosen, for a
-  list where taking everything means nothing; `:invalid` is the message
-  it reports while a group that must not be left empty is, HTML being
-  able to require one box but not one of a group."
+  In `opts`, `:clear-only?` disables it while there is nothing to clear,
+  for a list where taking everything means nothing; `:invalid` is the
+  message it reports while a group that must not be left empty is, HTML
+  being able to require one box but not one of a group; and `:mixed?`
+  marks it indeterminate whatever the boxes say, for a group narrowed by
+  something other than them, which is then also something to clear."
   ([label items chosen? action]
    (select-all label items chosen? action nil))
-  ([label items chosen? action {:keys [clear-only? invalid]}]
+  ([label items chosen? action {:keys [clear-only? invalid mixed?]}]
    (when (seq items)
      (let [n (count (filter chosen? items))]
        [:input {:type                "checkbox"
@@ -153,12 +187,14 @@
                 ;; Replicant drops a false attribute value, so this is
                 ;; absent rather than the string "false", which on a
                 ;; boolean attribute would disable the control outright
-                :disabled            (boolean (and clear-only? (zero? n)))
+                :disabled            (boolean (and clear-only? (zero? n)
+                                                   (not mixed?)))
                 :aria-label          label
                 ;; neither the indeterminate state nor a custom validity
                 ;; is an attribute, so both are set as properties on render
                 :replicant/on-render [:set-checkbox-state
-                                      {:indeterminate (< 0 n (count items))
+                                      {:indeterminate (or (boolean mixed?)
+                                                          (< 0 n (count items)))
                                        :invalid       invalid}]
                 :on                  {:change action}}]))))
 

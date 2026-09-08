@@ -318,6 +318,29 @@
       (is (= #{[:text_year "1583"] [:text_year "1591"]}
              (get-in (actions/clear-filter chosen)
                      [:lists :values :unticked])))))
+  (testing "an attribute a pattern or a range narrows is emptied by its
+            own control, fields and boxes together: the boxes cannot show
+            that narrowing, so nothing else takes it back"
+    (doseq [[what state] [["a pattern"
+                           (assoc-in state [:filter-controls :patterns
+                                            :text_year] "15..")]
+                          ["a range"
+                           (assoc-in state [:filter-controls :ranges
+                                            :text_year] ["1583" nil])]]]
+      (testing what
+        (let [cleared (actions/toggle-filter-values state :text_year ["1591"])]
+          (is (empty? (get-in cleared [:filter-controls :patterns])))
+          (is (empty? (get-in cleared [:filter-controls :ranges])))
+          (is (empty? (get-in cleared [:filter-controls :selected])))))))
+  (testing "and the whole filter is cleared the same way, the patterns and
+            the ranges with the values"
+    (let [state   (-> state
+                      (assoc-in [:filter-controls :patterns :text_year] "15..")
+                      (assoc-in [:filter-controls :ranges :s_id] ["1" "9"]))
+          cleared (actions/clear-filter state)]
+      (is (empty? (get-in cleared [:filter-controls :patterns])))
+      (is (empty? (get-in cleared [:filter-controls :ranges])))
+      (is (empty? (get-in cleared [:filter-controls :selected])))))
   (testing "the list actions answer with a refresh only for the metadata
             filter"
     (is (= [[:refresh-filters]]

@@ -52,6 +52,10 @@ msgid "selected"
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/chooser.cljc
+msgid "active filter"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/chooser.cljc
 msgid "Filter"
 msgstr ""
 
@@ -146,6 +150,12 @@ msgstr ""
 #: src/dk/cst/corpus_probe/views.cljc src/dk/cst/corpus_probe/views/corpus.cljc
 msgid "Corpora"
 msgstr ""
+
+#: src/dk/cst/corpus_probe/views/corpus.cljc
+msgid "corpus"
+msgid_plural "corpora"
+msgstr[0] ""
+msgstr[1] ""
 
 #: src/dk/cst/corpus_probe/views/corpus.cljc
 msgid "No corpora found."
@@ -246,12 +256,6 @@ msgstr ""
 #: src/dk/cst/corpus_probe/views.cljc src/dk/cst/corpus_probe/views/frequency.cljc
 msgid "by"
 msgstr ""
-
-#: src/dk/cst/corpus_probe/views/frequency.cljc
-msgid "value"
-msgid_plural "values"
-msgstr[0] ""
-msgstr[1] ""
 
 #: src/dk/cst/corpus_probe/views/frequency.cljc
 msgid "column"
@@ -579,6 +583,24 @@ msgstr ""
 msgid "button|Search"
 msgstr ""
 
+#: src/dk/cst/corpus_probe/views/search/filter.cljc
+msgid "text"
+msgid_plural "texts"
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/dk/cst/corpus_probe/views/search/filter.cljc
+msgid "sentence"
+msgid_plural "sentences"
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/dk/cst/corpus_probe/views/search/filter.cljc
+msgid "paragraph"
+msgid_plural "paragraphs"
+msgstr[0] ""
+msgstr[1] ""
+
 #: src/dk/cst/corpus_probe/views/corpus.cljc src/dk/cst/corpus_probe/views/search/filter.cljc
 msgid "region"
 msgid_plural "regions"
@@ -594,12 +616,26 @@ msgid "pattern"
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/search/filter.cljc
+msgid "a regular expression"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/search/filter.cljc
 msgid "from"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/search/filter.cljc
+msgid "Give {attribute} a range from {low} to {high}"
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/search/filter.cljc
 msgid "Clear filter"
 msgstr ""
+
+#: src/dk/cst/corpus_probe/views/frequency.cljc src/dk/cst/corpus_probe/views/search/filter.cljc
+msgid "value"
+msgid_plural "values"
+msgstr[0] ""
+msgstr[1] ""
 
 #: src/dk/cst/corpus_probe/views/search/filter.cljc
 msgid "No values found."

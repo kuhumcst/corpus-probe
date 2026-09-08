@@ -164,23 +164,28 @@
 (deftest pattern-params-test
   (testing "a pattern param is kept as the reader wrote it"
     (is (= {:text_title ["Hav.*"]}
-           (request/pattern-params {:q "x" :fp.text_title "Hav.*"}))))
-  (testing "a range of integers is spelt out"
-    (is (= {:text_year ["1590|1591|1592"]}
-           (request/pattern-params {:ff.text_year "1590" :ft.text_year "1592"})))
-    (is (= "1583" (request/range-pattern "1583" "1583")))
-    (testing "and not at all when either end is missing, or out of order"
-      (is (= {} (request/pattern-params {:ff.text_year "1590"})))
-      (is (nil? (request/range-pattern "1592" "1590")))
-      (is (nil? (request/range-pattern "1590" "many"))))
-    (testing "only so far"
-      (is (= request/range-limit
-             (count (str/split (request/range-pattern "0" "5000") #"\|"))))))
-  (testing "both together, blanks and nameless params dropped"
-    (is (= {:text_year ["15.." "1590|1591"]}
-           (request/pattern-params {:fp.text_year "15.." :ff.text_year "1590"
-                                    :ft.text_year "1591" :fp.text_title " "
-                                    :fp. "x"})))))
+           (request/pattern-params {:q "x" :fp.text_title "Hav.*"})))
+    (testing "and a blank or nameless one is dropped"
+      (is (= {} (request/pattern-params {:fp.text_title " " :fp. "x"})))))
+  (testing "a range is the two numbers it names, for the corpus to answer
+            from its own values rather than every number in between"
+    (is (= {:text_year [1590 1592]}
+           (request/range-params {:ff.text_year "1590" :ft.text_year "1592"})))
+    (is (= {:text_year [1583 1583]}
+           (request/range-params {:ff.text_year "1583" :ft.text_year "1583"})))
+    (testing "and nothing at all when an end is missing, out of order or
+              no whole number"
+      (is (= {} (request/range-params {:ff.text_year "1590"})))
+      (is (= {} (request/range-params {:ft.text_year "1590"})))
+      (is (= {} (request/range-params {:ff.text_year "1592"
+                                       :ft.text_year "1590"})))
+      (is (= {} (request/range-params {:ff.text_year "1590"
+                                       :ft.text_year "many"})))))
+  (testing "the two are read apart, an attribute being able to carry both"
+    (let [params {:fp.text_year "15.." :ff.text_year "1590"
+                  :ft.text_year "1591"}]
+      (is (= {:text_year ["15.."]} (request/pattern-params params)))
+      (is (= {:text_year [1590 1591]} (request/range-params params))))))
 
 (deftest pattern-fields-test
   (is (= {:patterns {:text_title "Hav.*"}

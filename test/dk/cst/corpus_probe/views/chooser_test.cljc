@@ -145,8 +145,31 @@
       (is (= ["Litteratur (1/4)" "Folkeviser (0/2)"]
              (summary-texts (chooser/node-view
                              (assoc opts :summary (partial chooser/node-summary
-                                                           #{"VISER"}))
+                                                           en nil #{"VISER"}))
                              litteratur)))))
+    (testing "and the figures say aloud what they count, where the list
+              says what that is"
+      (is (= [:small.note {:title "1 of 4 corpora selected"} "(1/4)"]
+             (last (chooser/node-summary en (constantly "corpora") #{"VISER"}
+                                         (chooser/counted litteratur)))))
+      (is (= [:small.note {:title "1 of 4 selected"} "(1/4)"]
+             (last (chooser/node-summary en nil #{"VISER"}
+                                         (chooser/counted litteratur))))))
+    (testing "and a node narrowed by something other than its boxes is
+              marked, the figures counting boxes alone"
+      (let [in-force (assoc (chooser/counted litteratur) :in-force? true)
+            title    (fn [selected]
+                       (-> (chooser/node-summary en (constantly "corpora")
+                                                 selected in-force)
+                           (last) (second) (:title)))]
+        (is (= [:small.note {:title "active filter"}
+                "(0/4)" [:span {:aria-hidden "true"} "*"]]
+               (last (chooser/node-summary en (constantly "corpora")
+                                           #{} in-force))))
+        (testing "the figures worded beside it only where boxes are ticked
+                  too: none of them beside a filter says nothing"
+          (is (= "active filter" (title #{})))
+          (is (= "1 of 4 corpora selected + active filter" (title #{"VISER"}))))))
     (testing "a control takes its place beside the disclosure, not inside
               it, and the row is there with or without one"
       (let [[tag control disclosure]
@@ -221,7 +244,7 @@
                                    :held     #{"VISER" "ANDEN"}}))))
       (is (= [] (hidden-ids (chooser {:selected #{} :choosing? true})))))
     (testing "the summary counts the selection over what is offered"
-      (is (= [:small.count "(1/5)"]
+      (is (= [:small.note {:title "1 of 5 selected"} "(1/5)"]
              (last (get-in (chooser {:selected #{"VISER"}}) [3 2 2]))))
       (is (= :summary.chooser-summary
              (first (get-in (chooser {:selected #{"VISER"}}) [3 2 2]))))

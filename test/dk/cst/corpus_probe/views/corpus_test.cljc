@@ -83,7 +83,7 @@
                                                 :corpora [{:id "PROBE" :size 1}]
                                                 :folders []}))]
                     ;; [:fieldset {} [:legend] [:div.chooser-group <toggle>
-                    ;;  [:details {} [:summary {} <box> [:small.count]]]]
+                    ;;  [:details {} [:summary {} <box> [:small.note]]]]
                     ;;  <status>]
                     (get-in (corpus-views/corpus-chooser en fs {:selected selected})
                             [3 2 2])))]
@@ -116,13 +116,19 @@
     (testing "the summary counts the selection rather than naming it: two
               figures read the same way in every such list, where a
               sentence about corpora is one more thing to learn"
-      (is (= [:small.count "(2/2)"] (last (summary #{"VISER" "TALER"}))))
-      (is (= [:small.count "(1/2)"] (last (summary #{"VISER"}))))
-      (is (= [:small.count "(0/2)"] (last (summary #{}))))
-      (is (= [:small.count "(1/3)"] (last (summary #{"VISER"} {:total 3}))))
-      (testing "and says aloud what the figures do not"
-        (is (= {:aria-label "1 of 2 selected"} (second (summary #{"VISER"}))))
-        (is (= {:aria-label "1 af 2 valgt"}
+      (is (= [:small.note {:title "2 of 2 corpora selected"} "(2/2)"]
+             (last (summary #{"VISER" "TALER"}))))
+      (is (= [:small.note {:title "1 of 2 corpora selected"} "(1/2)"]
+             (last (summary #{"VISER"}))))
+      (is (= [:small.note {:title "0 of 2 corpora selected"} "(0/2)"]
+             (last (summary #{}))))
+      (is (= [:small.note {:title "1 of 3 corpora selected"} "(1/3)"]
+             (last (summary #{"VISER"} {:total 3}))))
+      (testing "and says aloud what the figures do not, in the same words
+                the pointer is offered"
+        (is (= {:aria-label "1 of 2 corpora selected"}
+               (second (summary #{"VISER"}))))
+        (is (= {:aria-label "1 af 2 korpusser valgt"}
                (second (get-in (corpus-views/corpus-chooser
                                 da folders {:selected #{"VISER"}})
                                [3 2 2]))))))
@@ -136,8 +142,8 @@
                       (->> (deep (corpus-views/corpus-chooser
                                   en folders (merge {:selected #{"VISER"}
                                                      :client?  true} opts)))
-                           (filter #(and (map? %)
-                                         (contains? % :replicant/on-render)))
+                           (filter #(and (map? %) (= "checkbox" (:type %))
+                                         (:aria-label %)))
                            (map (juxt :aria-label #(get-in % [:on :change])))))]
         (is (= [["All corpora" [:toggle-corpora ["VISER" "TALER"]]]
                 ["All corpora in Litteratur" [:toggle-corpora ["VISER"]]]
@@ -149,7 +155,8 @@
                                                             :client? true
                                                             :choosing? true})
                    (deep)
-                   (->> (filter #(and (map? %) (:replicant/on-render %)))
+                   (->> (filter #(and (map? %) (= "checkbox" (:type %))
+                                      (:aria-label %)))
                         (map :aria-label))
                    (second))))
         ;; at rest a folder nothing is chosen in is not shown, and

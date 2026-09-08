@@ -82,9 +82,29 @@
   (testing "a string key names itself"
     (is (some #{[:dt "size"]} (deep (widgets/facts [["size" "47"]]))))))
 
+(deftest note-test
+  (testing "a sign the layout has no room to explain: bare, said in words
+            under the pointer, or linked to the page that says it at
+            length, where the words name the link"
+    (is (= [:small.note "?"] (widgets/note "?")))
+    (is (= [:small.note {:title "a regular expression"} "?"]
+           (widgets/note "?" "a regular expression")))
+    (is (= [:small.note [:a.help {:href       "/glossary#regex"
+                                  :title      "a regular expression"
+                                  :aria-label "a regular expression"}
+                          "?"]]
+           (widgets/help "a regular expression" "regex")))))
+
 (deftest count-badge-test
-  (is (= [:small.count "(5)"] (widgets/count-badge 5)))
-  (is (= [:small.count "(2/5)"] (widgets/count-badge 2 5))))
+  (is (= [:small.note "(5)"] (widgets/count-badge 5)))
+  (is (= [:small.note "(2/5)"] (widgets/count-badge 2 5)))
+  (testing "with what the figures count in the title, and a mark where
+            they are not the whole story"
+    (is (= [:small.note {:title "2 of 5 chosen"} "(2/5)"]
+           (widgets/count-badge 2 5 "2 of 5 chosen")))
+    (is (= [:small.note {:title "2 of 5 chosen"} "(2/5)"
+            [:span {:aria-hidden "true"} "*"]]
+           (widgets/count-badge 2 5 "2 of 5 chosen" "*")))))
 
 (deftest count-cell-test
   (is (= [:td.num "1,000"] (widgets/count-cell en 1000)))
