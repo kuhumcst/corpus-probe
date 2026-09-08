@@ -45,7 +45,7 @@
   {:lang lang :table (get tables lang {})})
 
 (defn fill
-  "`s` with each `{key}` in it replaced by the value under that key in
+  "Replace each `{key}` in `s` with the value under that key in
   `values`, a key the map lacks left as it stands; a value goes in as it
   is, so a number that wants its digits grouped is formatted first (see
   `group-digits`).

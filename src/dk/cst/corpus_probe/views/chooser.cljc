@@ -41,8 +41,8 @@
           (mapcat offered nodes)))
 
 (defn counted
-  "`node` and the nodes under it, each stamped with `:offered`, the ids
-  it offers (see `offered`).
+  "Stamp `node` and the nodes under it with `:offered`, the ids each of
+  them offers (see `offered`).
 
   Stamped before the resting view hides what is not chosen, so every
   count is of what the filter left rather than of the selection alone."
@@ -118,7 +118,7 @@
   (list (:label node) " " (node-count selected node)))
 
 (defn toggled
-  "`disclosure` with `control` beside it as one row, the row being there
+  "Put `control` beside `disclosure` as one row, the row being there
   whether or not there is a control to put in it."
   [control disclosure]
   ;; always the row, even with no control: an element that changes kind

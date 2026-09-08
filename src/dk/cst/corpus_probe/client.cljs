@@ -53,8 +53,8 @@
                                (focus-left? dom-event))})
 
 (defn interpolate
-  "`action` with every placeholder in it (see `placeholders`) replaced by
-  what the dispatch `data` of its event says."
+  "Replace every placeholder in `action` (see `placeholders`) with what
+  the dispatch `data` of its event says."
   [data action]
   (walk/postwalk (fn [x]
                    (if-let [f (and (keyword? x) (placeholders x))]

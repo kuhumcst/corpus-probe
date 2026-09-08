@@ -37,8 +37,8 @@
   dir)
 
 (defn sentence-tags
-  "`query` with its sentence tags, `<s>` and `</s>` standing between
-  tokens, renamed after s-attribute `attr`, which is not every corpus's
+  "Rename the sentence tags of `query`, `<s>` and `</s>` standing between
+  tokens, after s-attribute `attr`, which is not every corpus's
   name for a sentence; `query` itself when `attr` is nil or `s`. A tag
   inside a quoted literal is left alone.
 
@@ -60,11 +60,11 @@
                    ")\\s*;?")))
 
 (defn within-clause
-  "`query` with a `within` clause at its end naming a unit of text by
-  CWB's usual name for it renamed after the s-attribute `attrs` gives
-  that unit (unit to attribute), or dropped where it gives none, so the
-  query runs in each corpus as far as the corpus marks the unit; `query`
-  itself without such a clause.
+  "Rewrite the `within` clause at the end of `query`: the unit of text it
+  names by CWB's usual name is renamed after the s-attribute `attrs`
+  gives that unit (unit to attribute), or the clause is dropped where it
+  gives none, so the query runs in each corpus as far as the corpus marks
+  the unit; `query` itself without such a clause.
 
   (within-clause \"[] [] within s\" {:sentence :sentence})
   ;; => [] [] within sentence"
@@ -77,7 +77,7 @@
       query)))
 
 (defn within-query
-  "`query` with its matches kept within one region of s-attribute `attr`,
+  "Keep the matches of `query` within one region of s-attribute `attr`,
   or `query` itself when `attr` is nil. Never appended to CQP a reader
   wrote, which may carry a within clause of its own.
 

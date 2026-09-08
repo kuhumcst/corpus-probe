@@ -210,8 +210,8 @@
                            (update :error cwb/public-error)))))
 
 (defn public-result
-  "`result` with its counts prepared for display (see `public-counts`)
-  and its :pages, once every corpus is counted."
+  "Prepare `result` for display: its counts (see `public-counts`), and
+  its :pages once every corpus is counted."
   [result]
   (cond-> (public-counts result)
     (not (:remaining result)) (assoc :pages (url/page-count result))))

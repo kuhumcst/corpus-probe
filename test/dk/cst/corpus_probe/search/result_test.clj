@@ -20,7 +20,7 @@
 (use-fixtures :each reset-cache!)
 
 (defn caching-ctx!
-  "`ctx` with a cache directory of its own, so that one test's stored
+  "Give `ctx` a cache directory of its own, so that one test's stored
   results are never another's."
   []
   (assoc ctx :cache-dir (str (fs/create-temp-dir))))

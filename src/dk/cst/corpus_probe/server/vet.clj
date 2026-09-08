@@ -78,8 +78,8 @@
   (into {} (map-indexed (fn [i word] [word (str (inc i))])) collation-probe))
 
 (def probe-input
-  "`collation-probe` as the lines CQP's ExternalSort writes to its temp
-  file: a line number, a TAB and the sort key."
+  "The lines CQP's ExternalSort writes to its temp file for
+  `collation-probe`: a line number, a TAB and the sort key."
   (str/join (map (fn [word] (str (probe-line word) "\t" word "\n"))
                  collation-probe)))
 

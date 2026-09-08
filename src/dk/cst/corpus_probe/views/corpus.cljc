@@ -82,7 +82,7 @@
 ;; bites: ticking each folder still selects the lot, and a URL naming no
 ;; corpus already means every corpus (see url/with-corpora).
 (defn all-toggle
-  "`corpus-toggle` over every corpus on offer, the `ids`, named for the
+  "The `corpus-toggle` over every corpus on offer, the `ids`, named for the
   registry in `ui`: the one control that selects or clears the lot.
 
   It carries the chooser's one constraint, that a search needs a corpus:

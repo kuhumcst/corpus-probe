@@ -104,8 +104,8 @@
       :else {:state state})))
 
 (defn inspect
-  "`state` with `selected`, the token the inspection panel describes, or
-  without one for nil."
+  "Put `selected`, the token the inspection panel describes, in `state`,
+  or take it out for nil."
   [state selected]
   (if selected
     (assoc state :selected selected)
@@ -122,7 +122,8 @@
    :effects [[:focus concordance/region-id]]})
 
 (defn collapse
-  "`state` without the hit keyed `k` in the expanded set, if it is there."
+  "Drop the hit keyed `k` from the expanded set of `state`, if it is
+  there."
   [state k]
   (cond-> state
     (contains? (:expanded state) k) (update :expanded dissoc k)))
@@ -140,8 +141,8 @@
        :effects [[:fetch-context corpus cpos matchend] [:sync-url]]})))
 
 (defn context-arrived
-  "`state` with `hit`, the wider context fetched for the hit keyed `k`,
-  in the expanded set if it is still wanted there; a hit collapsed while
+  "Put `hit`, the wider context fetched for the hit keyed `k`, in the
+  expanded set of `state` if it is still wanted there; a hit collapsed while
   the fetch was in flight, or an empty answer, collapses the entry
   again, so a late response never revives a dismissed hit."
   [state k hit]
@@ -151,8 +152,8 @@
      :effects [[:sync-url]]}))
 
 (defn context-failed
-  "`state` with the hit keyed `k` marked as one whose context could not
-  be fetched (see dk.cst.corpus-probe.views.concordance/failed), if it
+  "Mark the hit keyed `k` in `state` as one whose context could not be
+  fetched (see dk.cst.corpus-probe.views.concordance/failed), if it
   is still expanded."
   [state k]
   (cond-> state
@@ -165,14 +166,14 @@
   (inc (count (take-while #(not= id (:id %)) items))))
 
 (defn without
-  "`items` less the one with `id`; `fallback` alone when that was the
+  "Remove from `items` the one with `id`; `fallback` alone when that was the
   last, since neither the tokens nor a token's conditions may run out."
   [items id fallback]
   (let [left (vec (remove #(= id (:id %)) items))]
     (if (seq left) left [fallback])))
 
 (defn add-token
-  "`state` with a blank token after the last, and focus on its attribute."
+  "Add to `state` a blank token after the last, and focus its attribute."
   [{:keys [tokens] :as state}]
   (let [id (inc (reduce max 0 (map :id tokens)))]
     {:state   (assoc state :tokens (conj (vec tokens) (tokens/blank-token id)))
@@ -180,8 +181,8 @@
                                                1 :attr)]]}))
 
 (defn remove-token
-  "`state` without the token with `id`, and focus on the attribute of the
-  token now in its place, or of the last."
+  "Remove from `state` the token with `id`, and focus the attribute of
+  the token now in its place, or of the last."
   [{:keys [tokens] :as state} id]
   (let [k    (place tokens id)
         left (without tokens id (tokens/blank-token (inc id)))]
@@ -190,8 +191,8 @@
                                                1 :attr)]]}))
 
 (defn add-condition
-  "`state` with a blank condition added to token `i`, counted from one,
-  and focus on its join."
+  "Add a blank condition to token `i` of `state`, counted from one, and
+  focus its join."
   [state i]
   (let [path       [:tokens (dec i) :conditions]
         conditions (vec (get-in state path))
@@ -201,8 +202,8 @@
                                                :join)]]}))
 
 (defn remove-condition
-  "`state` without the condition with `id` of token `i`, counted from
-  one, and focus on the condition now in its place, or the last: its
+  "Remove the condition with `id` from token `i` of `state`, counted from
+  one, and focus the condition now in its place, or the last: its
   join, or the attribute of a first condition, which has none."
   [state i id]
   (let [path [:tokens (dec i) :conditions]
@@ -215,8 +216,8 @@
                                                      :join))]]}))
 
 (defn with-field
-  "`m`, a token or a condition as the form holds it, with `field` set to
-  `value`, or without the field for a nil value: a checkbox unticked is
+  "Set `field` of `m`, a token or a condition as the form holds it, to
+  `value`, or drop the field for a nil value: a checkbox unticked is
   a field the form does not submit, and one ticked is its `on`, which is
   how the placeholder's true and false arrive."
   [m field value]
@@ -224,8 +225,8 @@
     (if (some? value) (assoc m field value) (dissoc m field))))
 
 (defn set-condition
-  "`state` with `field` of the condition with `id` of token `i`, counted
-  from one, set to `value` as the reader set it (see `with-field`)."
+  "Set `field` of the condition with `id` of token `i` in `state`,
+  counted from one, to `value` as the reader set it (see `with-field`)."
   [state [i id field] value]
   (update-in state [:tokens (dec i) :conditions]
              (fn [conditions]
@@ -233,13 +234,13 @@
                      conditions))))
 
 (defn set-token
-  "`state` with `field` of token `i`, counted from one, set to `value` as
+  "Set `field` of token `i` in `state`, counted from one, to `value` as
   the reader set it (see `with-field`)."
   [state [i field] value]
   (update-in state [:tokens (dec i)] with-field field value))
 
 (defn switch-mode
-  "`state` with the form of its query changed to `mode` from the form's
+  "Change the form of the query in `state` to `mode` from the form's
   fields `live`, holding in the new form as much of the query the old
   one holds as it can, as the server does for a submitted form (see
   dk.cst.corpus-probe.query/arrived), and saying the rest in the form's
@@ -280,7 +281,7 @@
            :projected  (query/of (assoc spelt :mode mode)))))
 
 (defn submit-on-enter
-  "`state` as it is, and the search submitted from the query field when
+  "Submit the search from the query field, `state` as it is, when
   `pressed` is Enter and neither `shift?` nor `composing?`: the field is
   a text area, which takes Enter as a line, where a reader pressing it
   after a word expects a submit; so a line is Shift+Enter, as the chat
@@ -292,16 +293,16 @@
     {:state state}))
 
 (defn swallow-enter
-  "`state` as it is, with `pressed` kept from submitting the search when
-  it is Enter: a text field in a form submits it on Enter, and a reader
+  "Keep `pressed` from submitting the search, `state` as it is, when it
+  is Enter: a text field in a form submits it on Enter, and a reader
   finding something to tick is not asking for an answer yet."
   [state pressed]
   (cond-> {:state state}
     (= "Enter" pressed) (assoc :effects [[:prevent-default]])))
 
 (defn toggle-corpora
-  "`state` with every corpus in `ids` selected, or all of them cleared
-  when they are already selected, the change noted for the chooser (see
+  "Select every corpus in `ids` in `state`, or clear them all when they
+  are already selected, the change noted for the chooser (see
   dk.cst.corpus-probe.client.lists/tick) and the metadata filters asked
   to refresh: one rule for a corpus and a folder, so a folder only partly
   selected fills rather than clearing the part the reader already had."
@@ -315,7 +316,7 @@
      :effects [[:refresh-filters]]}))
 
 (defn toggle-filter-values
-  "`state` with the metadata `values` of `attr` chosen or dropped (see
+  "Choose or drop the metadata `values` of `attr` in `state` (see
   dk.cst.corpus-probe.client.lists/choose-values), the change noted for
   the filter's list."
   [state attr values]
@@ -327,8 +328,8 @@
                     (every? chosen values)))))
 
 (defn clear-filter
-  "`state` with the whole metadata filter emptied, every value it held
-  noted as unticked for the filter's list."
+  "Empty the whole metadata filter of `state`, every value it held noted
+  as unticked for the filter's list."
   [state]
   (-> state
       (assoc-in [:filter-controls :selected] {})
@@ -337,8 +338,8 @@
                   true)))
 
 (defn refreshed
-  "`state` as the step's answer, with the metadata filters asked to
-  refresh when the list `k` worked is the metadata filter: what metadata
+  "Answer the step with `state`, and ask the metadata filters to refresh
+  when the list `k` worked is the metadata filter: what metadata
   a selection offers is fetched rather than known, and only once a
   reader looks at it."
   [k state]
@@ -356,8 +357,8 @@
     {:state state}))
 
 (defn filters-arrived
-  "`state` with `options`, the metadata filters fetched for `corpora`,
-  applied while they still describe the selection, so that a slow answer
+  "Apply `options`, the metadata filters fetched for `corpora`, to
+  `state` while they still describe the selection, so that a slow answer
   to a question the reader has moved on from does not overwrite the
   answer to the one they are asking now; `:selected` is the reader's and
   is kept, a chosen value the new corpora do not offer keeping its box."
@@ -372,7 +373,7 @@
           (lists/settle :values)))))
 
 (defn counts-arrived
-  "`state` with `counted`, the count of the search on screen, and the
+  "Put `counted`, the count of the search on screen, in `state`, with the
   document title it decides."
   [state counted]
   {:state   (-> state
@@ -391,7 +392,7 @@
     (filter (comp wanted concordance/hit-key) (get-in data [:result :hits]))))
 
 (defn with-expansions
-  "`data` with the hits keyed in `wanted` seeded as loading placeholders,
+  "Seed the hits keyed in `wanted` in `data` as loading placeholders,
   which the fetch of the expansions reads."
   [data wanted]
   (let [hits (wanted-hits data wanted)]

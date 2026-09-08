@@ -106,8 +106,8 @@
                                 conditions)))))))
 
 (defn numbered
-  "`rows` with :id 1, 2 and so on in order, their `key` (:n of a token,
-  :c of a condition) dropped."
+  "Number `rows` with :id 1, 2 and so on in order, dropping their `key`
+  (:n of a token, :c of a condition)."
   [rows key]
   (into []
         (map-indexed (fn [i row] (assoc (dissoc row key) :id (inc i))))

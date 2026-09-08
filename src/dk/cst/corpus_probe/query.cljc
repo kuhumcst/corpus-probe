@@ -18,8 +18,8 @@
   #{"is" "prefix" "suffix" "infix"})
 
 (defn affixed
-  "`literal`, escaped already, with the affixes of the literal operator
-  `op`: `.*` after it for prefix, before it for suffix, both for infix."
+  "Affix `literal`, escaped already, as the literal operator `op` asks:
+  `.*` after it for prefix, before it for suffix, both for infix."
   [op literal]
   (case op
     "prefix" (str literal ".*")
@@ -243,7 +243,7 @@
                 tokens)))
 
 (defn project
-  "`query` as the form of `mode` holds it (see `loss`): the field, under
+  "Project `query` into the form of `mode` (see `loss`): the field, under
   the CQP mode, holds CQP as it is and the tokens compiled, kept within
   their unit by name; the extended form holds no CQP and no list past
   `max-alternatives`, and starts blank, nil. Nil for no query."

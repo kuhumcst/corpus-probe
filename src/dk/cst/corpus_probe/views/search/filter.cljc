@@ -68,9 +68,9 @@
               (bound (:to url/filter-prefixes) to)]))]))
 
 (defn filter-pairs
-  "`selected`, each metadata attribute mapped to the values chosen under
-  it, as the set of [attribute value] pairs the filter's tree names a
-  value by."
+  "Turn `selected`, each metadata attribute mapped to the values chosen
+  under it, into the set of [attribute value] pairs the filter's tree
+  names a value by."
   [selected]
   (into #{} (for [[attr values] selected, value values] [attr value])))
 

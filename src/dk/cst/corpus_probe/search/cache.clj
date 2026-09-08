@@ -183,7 +183,7 @@
     (io/file dir (command/valid-corpus-name corpus))))
 
 (defn corpus-directory!
-  "`corpus-directory`, created if it is not there yet: CQP given a data
+  "Create the `corpus-directory` if it is not there yet: CQP given a data
   directory that does not exist saves nothing and reports nothing."
   ^File [ctx corpus]
   (when-let [^File dir (corpus-directory ctx corpus)]

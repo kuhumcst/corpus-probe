@@ -43,9 +43,9 @@
    :join  join})
 
 (defn joined
-  "`conditions` (see `condition-params`) with the :join of each after the
-  first read as one of the joins, and otherwise; the first has none,
-  since it joins nothing."
+  "Read the :join of each of `conditions` (see `condition-params`) after
+  the first as one of the joins, and as `and` where it is not one; the
+  first has none, since it joins nothing."
   [conditions]
   (into []
         (map-indexed (fn [i {:keys [join] :as condition}]

@@ -130,7 +130,7 @@
          (keys params))))
 
 (defn without-unread
-  "`params` less what the mode `m` does not read (see `unread`)."
+  "Drop from `params` what the mode `m` does not read (see `unread`)."
   [params m]
   (apply dissoc params (unread params m)))
 

@@ -92,7 +92,7 @@
                       [attr (get filter attr #{}) (get patterns attr)]))))))
 
 (defn cache-opts!
-  "`opts` with the cache directory and the name the result of `query` in
+  "Give `opts` the cache directory and the name the result of `query` in
   `corpus` is saved under, when `ctx` keeps a cache and `opts` does not
   turn it off with a false :cache?."
   [ctx corpus query opts]

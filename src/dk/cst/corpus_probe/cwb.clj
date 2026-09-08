@@ -255,7 +255,7 @@
   (> (System/currentTimeMillis) deadline))
 
 (defn within-deadline
-  "`ctx` with its timeouts cut down to the time left before `deadline`:
+  "Cut the timeouts of `ctx` down to the time left before `deadline`:
   the budget alone bounds how many corpora a search starts, not how long
   the last one may run."
   [ctx deadline]
@@ -265,7 +265,7 @@
       (:query-timeout-ms ctx) (update :query-timeout-ms min left))))
 
 (defn running-ctx
-  "`ctx` with the longer timeout a batch that runs the query needs (its
+  "Give `ctx` the longer timeout a batch that runs the query needs (its
   :query-timeout-ms), leaving batches that only read a saved result on the
   ordinary :timeout-ms. Counting and showing run the same query and get
   the same budget, or a corpus could time out while counted and succeed
