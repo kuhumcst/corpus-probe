@@ -89,9 +89,9 @@
     (is (= [:small.note "?"] (widgets/note "?")))
     (is (= [:small.note {:title "a regular expression"} "?"]
            (widgets/note "?" "a regular expression")))
-    (is (= [:small.note [:a.help {:href       "/glossary#regex"
-                                  :title      "a regular expression"
-                                  :aria-label "a regular expression"}
+    (is (= [:small.note [:a.help-link {:href       "/glossary#regex"
+                                       :title      "a regular expression"
+                                       :aria-label "a regular expression"}
                           "?"]]
            (widgets/help "a regular expression" "regex")))))
 

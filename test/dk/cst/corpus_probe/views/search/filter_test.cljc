@@ -24,9 +24,9 @@
     (testing "and the pattern field says what it takes with a help button,
               the glossary having a page on it that a placeholder of one
               word cannot hold"
-      (is (some #{[:a.help {:href       "/glossary#regex"
-                            :title      "a regular expression"
-                            :aria-label "a regular expression"}
+      (is (some #{[:a.help-link {:href       "/glossary#regex"
+                                 :title      "a regular expression"
+                                 :aria-label "a regular expression"}
                     "?"]}
                 (deep html)))
       (is (some #{"et regulært udtryk"}

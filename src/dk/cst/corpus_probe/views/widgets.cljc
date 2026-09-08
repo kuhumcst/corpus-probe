@@ -128,9 +128,9 @@
   control takes, linked to the glossary `entry` that explains it at
   length. The words are the link's name too, `?` being none."
   [what entry]
-  (note [:a.help {:href       (url/glossary-entry entry)
-                  :title      what
-                  :aria-label what}
+  (note [:a.help-link {:href       (url/glossary-entry entry)
+                       :title      what
+                       :aria-label what}
          "?"]))
 
 (defn count-badge
