@@ -3,8 +3,12 @@
 A web front end for the IMS Open Corpus Workbench (CWB). It runs `cqp` as a
 child process and turns its terminal output into semantic HTML.
 
-- [README.md](README.md) has the setup, the settings and the namespace layout.
-- [PLAN.md](PLAN.md) has the implementation plan and the milestones.
+- [README.md](README.md) has the design and the setup.
+- [docs/architecture.md](docs/architecture.md) has the routes and the
+  namespace tree. Keep it current when either changes.
+- [docs/features.md](docs/features.md) has each feature in detail.
+- [PLAN.md](PLAN.md) is the original plan and the CWB research. It is frozen.
+  Do not update it to match the code.
 
 ## The development environment
 

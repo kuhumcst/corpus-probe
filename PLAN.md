@@ -1,10 +1,18 @@
 # corpus-probe — a minimal, faithful CWB web frontend in Clojure(Script)
 
+> **What this is.** A plan written on 2026-09-03, before any code existed,
+> kept as the record of the CWB research and the decisions behind the app.
+> Nothing in it is maintained. For the app as it stands, read
+> [README.md](README.md) for the design, [docs/features.md](docs/features.md)
+> for the features and [docs/architecture.md](docs/architecture.md) for the
+> routes and the namespace tree.
+
 A plan for a web application that puts a simple, semantic-HTML face directly on
 the [IMS Open Corpus Workbench](https://cwb.sourceforge.io/) (CWB) — driving its
 query processor `cqp` as a child process, translating its terminal output as
-directly as possible into HTML, and replacing the KORP installation at
-<https://alf.hum.ku.dk/korp> for day-to-day corpus search.
+directly as possible into HTML, and standing beside the KORP installation
+at <https://alf.hum.ku.dk/korp> as an alternative for day-to-day corpus
+search, and a possible replacement for it later.
 
 **Recommendation in one paragraph.** Run `cqp -c` (child mode) as a short-lived
 process per request from a Clojure backend (Pedestal 0.8 + http-kit connector),
@@ -62,8 +70,9 @@ Four possible integration surfaces, evaluated:
 3. **The other CWB command-line tools** — used selectively, read-only:
    `cwb-describe-corpus` (corpus info pages), `cwb-lexdecode` (frequency
    lexicon / word lists, faster than the equivalent CQP query),
-   `cwb-scan-corpus` (n-gram and joint frequency scans), `cwb-s-decode`
-   (text inventories, metadata value lists).
+   `cwb-s-decode` (text inventories, metadata value lists).
+   `cwb-scan-corpus` (n-gram and joint frequency scans) was evaluated here
+   and never used.
 4. **korp-backend's JSON API** — kept as a fallback only. The existing Flask
    backend at `alf.hum.ku.dk/korp/backend` works today and could serve a new
    frontend, but going through it would inherit its JSON shapes and its
@@ -129,7 +138,7 @@ version branching at all.
 - **Frequency views**: group hits by attribute (`count by`), relative and
   absolute per corpus; whole-corpus frequency lists via `cwb-lexdecode`.
 - Metadata filtering via CQP structural constraints, with value lists
-  precomputed by `cwb-scan-corpus`.
+  precomputed by `cwb-s-decode`.
 - Corpus info pages (`cwb-describe-corpus -s`, registry, `.info` file).
 - CSV/TSV export of KWIC and frequency tables; shareable URL state; da/en UI.
 
@@ -179,6 +188,11 @@ browser ── transit/JSON ──> Pedestal (http-kit connector)
               NQR cache dir (set DataDirectory) ── saved query results,
                                                    sortidx persisted
 ```
+
+The plan expected an API-first app with five JSON endpoints. What was built
+renders pages on the server, with two endpoints for what the client fetches
+after the first paint. [docs/architecture.md](docs/architecture.md) has the
+routes as they are.
 
 - **One `cqp -c` process per request batch** (the Korp/cglossa/fglossa
   pattern): commands written to stdin, stdout read to the sentinel, process
@@ -356,7 +370,7 @@ to CQP. Each mode reads the params its row of `query.mode/fields` names and no
 other, so a URL carries only what its mode reads, and a change of form
 holds the query in the new form as far as that form can, saying the
 rest in a status line, on both sides and without a round trip where the
-client runs (built 2026-09-05, milestone 6; the three text modes merged
+client runs (built 2026-09-05; the three text modes merged
 into one field 2026-09-06). The two modes the plan started from:
 
 **Raw CQP** — passed through verbatim, wrapped in CQP's own sandbox designed
@@ -445,62 +459,8 @@ practice.
 
 ## 11. Project layout
 
-```
-corpus-probe/
-├── deps.edn  shadow-cljs.edn
-├── resources/config.edn            ; registry path, sort locale, folder tree
-├── src/dk/cst/corpus_probe/
-│   ├── cqp.cljc                    ; the lexical rules of CQP: escaping,
-│   │                               ;   names, the units of text (§8)
-│   ├── hiccup.cljc                 ; hiccup helpers: walking, headings
-│   ├── stats.cljc                  ; relative frequencies
-│   ├── i18n.cljc                   ; the gettext tables of the interface
-│   ├── i18n/                       ; po (the PO files), scan (the template)
-│   ├── query.cljc                  ; the query as one value, compiled to
-│   │                               ;   CQP from words, lists and tokens (§8)
-│   ├── query/                      ; mode (the forms and modes), tokens
-│   │                               ;   (the extended form's rows), params
-│   ├── url.cljc                    ; paths, landing ids and the one query
-│   │                               ;   string a search has
-│   ├── docs.clj                    ; the Markdown documents as hiccup
-│   ├── docs/markdown.clj           ; CommonMark plus a definition list
-│   ├── cwb.clj                     ; child-process driver (§5), errors,
-│   │                               ;   collation, fan-out under a deadline
-│   ├── cwb/parse.clj               ; output parsers -> data (§6)
-│   ├── cwb/registry.clj            ; registry entries and the folder tree
-│   ├── cwb/corpus.clj              ; show cd, info -> corpus facts, cached
-│   ├── cwb/command.clj             ; CQP commands: QueryLock wrapping,
-│   │                               ;   narrowing, sorting, counting
-│   ├── cwb/tools.clj               ; cwb-describe-corpus, cwb-lexdecode,
-│   │                               ;   cwb-s-decode and their parsers
-│   ├── search.clj                  ; KWIC, concordance, texts, exports
-│   ├── search/opts.clj             ; the options as one corpus runs them
-│   ├── search/result.clj           ; results stored or run afresh
-│   ├── search/batch.clj            ; the batches a search runs
-│   ├── search/cache.clj            ; CQP's saved query results, reaped
-│   ├── search/frequency.clj        ; frequency tables and filter values
-│   ├── search/export.clj           ; TSV/CSV exports of concordances and
-│   │                               ;   frequency tables
-│   ├── views.cljc                  ; .cljc shared hiccup: the pages by
-│   │                               ;   route, their titles, the chrome
-│   ├── views/                      ; widgets, chooser, result, search
-│   │                               ;   (tokens, filter), concordance,
-│   │                               ;   frequency, corpus (index, chooser,
-│   │                               ;   info, reading page)
-│   ├── client.cljs                 ; Replicant client: state, dispatch
-│   ├── client/                     ; router, effects, lists, actions
-│   ├── server.clj                  ; config, CSP, routes, start/stop
-│   └── server/                     ; request readers, responses and the
-│                                   ;   document shell, the search page
-│                                   ;   and its endpoints, corpus pages,
-│                                   ;   exports, startup self-checks
-├── test/…                          ; golden-file tests against captured outputs
-│   └── resources/                  ;   (the captures and a registry entry;
-│                                   ;   hostile cases live inline in the tests)
-├── dev/                            ; encode.sh, encode-big.sh, capture-golden.sh,
-│                                   ;   user.clj, cache_bench.clj
-└── docs/research/                  ; the evidence base for this plan
-```
+The layout as built, with the island rule and the dependency order, is in
+[docs/architecture.md](docs/architecture.md).
 
 Local development runs against corpora encoded from VRT fixtures in the repo
 (`cwb-encode`/`cwb-makeall` in a dev script — Homebrew `cwb3` provides the
@@ -522,7 +482,7 @@ plan). Production points `config.edn` at the existing server registry.
 4. **Breadth**: corpus chooser + multi-corpus search (serial fill then
    parallel counts, Korp-style), simple-search compiler, frequency views,
    corpus info pages, export.
-5. **Cutover**: metadata filtering with `cwb-scan-corpus` value lists, da/en
+5. **Cutover**: metadata filtering with `cwb-s-decode` value lists, da/en
    i18n, deploy next to the existing KORP (`/korp` untouched), fix or filter
    the three phantom registry corpora, run CWB 3.5.0 in the app's own
    container (§2).
