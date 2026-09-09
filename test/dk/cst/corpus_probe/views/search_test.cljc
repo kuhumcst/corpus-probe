@@ -45,7 +45,11 @@
                             (first)
                             (:required)))]
         (is (true? (required state)))
-        (is (false? (required (assoc state :view :frequencies))))))
+        (is (false? (required (assoc state :view :frequencies))))
+        ;; a stored :view seeds the form with no search behind it, and a
+        ;; seeded form asks for a query whatever view it was seeded in
+        (is (true? (required (assoc state :view :frequencies
+                                    :seeded? true))))))
     (testing "grouped controls have legends"
       (is (some #{:legend} (deep html))))
     (testing "the example says what the field takes"

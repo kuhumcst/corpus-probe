@@ -379,14 +379,19 @@
   buttons storing them as the reader's defaults.
 
   The query is required unless the form is submitted from the frequency
-  `:view`, which counts every token of a blank one."
+  `:view`, which counts every token of a blank one. A `:seeded?` form has
+  run no search, so it asks for a query whatever view it was seeded in."
   [{:keys [ui view filter-controls search-attrs params tokens value-lists
-           switch client? pending? lists filters-pending?]
+           switch client? pending? lists filters-pending? seeded?]
     :as state}
    action extra chooser]
   (let [{:keys [q]} params
         {:keys [values]} lists
         extended? (= "extended" (mode/form params))
+        ;; a stored :view seeds the form without a search behind it, and
+        ;; the blank query the frequency view allows is for counting a
+        ;; result the reader is already looking at
+        required? (boolean (or (not= :frequencies view) seeded?))
         button    [:button {:type "submit"} (i18n/trx ui "button" "Search")]
         held      (into (filter-views/filter-pairs (:selected filter-controls))
                         (:unticked values))]
@@ -404,11 +409,11 @@
       [:div.query (cond-> {} extended? (assoc :class "query-extended"))
        (if extended?
          (list (tokens-views/token-fieldset ui search-attrs value-lists client?
-                                            (not= :frequencies view) tokens)
+                                            required? tokens)
                (tokens-views/add-token-row ui client? button)
                (cqp-line ui params tokens))
          (let [line (reading-line ui params)]
-           (list [:p (query-field ui q (not= :frequencies view)
+           (list [:p (query-field ui q required?
                                   (when line reading-id))
                   " " button]
                  line)))]

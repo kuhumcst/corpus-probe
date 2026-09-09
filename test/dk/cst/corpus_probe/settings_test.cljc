@@ -8,7 +8,7 @@
 
 (deftest string-test
   (testing "the settings of a search, and nothing of the search itself"
-    (is (= {:corpus "PROBE,VISER" :mode "extended" :view "frequencies"}
+    (is (= {:corpus "PROBE,VISER" :mode "extended"}
            (settings/params
             (settings/string {:q           "hund"
                               :corpus      ["PROBE" "VISER"]
@@ -16,6 +16,10 @@
                               :view        "frequencies"
                               :page        "2"
                               :f.text_year "1591"})))))
+  (testing "which view a result is shown in belongs to the result, not to
+            the reader, so a form seeded from the settings still asks for
+            a query"
+    (is (= "" (settings/string {:view "frequencies"}))))
   (testing "a cookie value may hold no comma, so the corpora keep the
             encoding a form gives them"
     (is (= "corpus=PROBE%2CVISER"
@@ -26,13 +30,13 @@
            (settings/params (settings/string {:in "lemma" :ci nil})))))
   (testing "only what departs from the app's own defaults is stored, so
             a form nobody changed is stored as nothing"
-    (is (= "" (settings/string {:mode "simple" :in "word" :view "kwic"
+    (is (= "" (settings/string {:mode "simple" :in "word"
                                 :sort "corpus" :context "5" :attr "word"
                                 :at   "match" :within "sentence"})))
     (is (= "sort=word" (settings/string {:sort "word" :context "5"}))))
   (testing "nothing stored under another name is read back"
-    (is (= {:view "frequencies"}
-           (settings/params "view=frequencies&q=hund&lang=en"))))
+    (is (= {:mode "extended"}
+           (settings/params "mode=extended&view=frequencies&q=hund&lang=en"))))
   (testing "the settings are stored while they fit in a cookie"
     (is (settings/storable? ""))
     (is (settings/storable? (settings/string {:corpus ["PROBE"]})))

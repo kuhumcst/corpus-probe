@@ -308,10 +308,11 @@
        (let [{:keys [params view]} (page {} stored)]
          (is (= ["VISER"] (:corpus params)))
          (is (= "word" (:sort params)))
-         (is (= :frequencies view))))
+         ;; which view a result is shown in is not a stored setting, so a
+         ;; seeded form starts at the concordance whatever was stored
+         (is (= :kwic view))))
      (testing "and runs nothing, since the reader has asked for no search:
-               the frequency view would otherwise count every corpus of a
-               selection on arrival"
+               a page they only arrived at spends no query"
        (let [{:keys [result error]} (page {} stored)]
          (is (nil? result))
          (is (nil? error))))
@@ -337,7 +338,7 @@
          (is (= "scope=all" stored))))
      (testing "the page carries what is stored, so the form can be told
                from it, and whether a search stores itself"
-       (is (= "corpus=VISER&view=frequencies&sort=word" (:stored (page {} stored))))
+       (is (= "corpus=VISER&sort=word" (:stored (page {} stored))))
        (is (true? (:autosave? (page {} {}))))
        (is (false? (:autosave? (page {} {"cookie" "settings=autosave=off"}))))))))
 

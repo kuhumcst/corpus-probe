@@ -13,13 +13,13 @@
   "The search params a reader may store.
 
   Not the query itself, nor the metadata filter or the narrowings of a
-  result: those belong to one search rather than to the way a reader
-  works."
+  result, nor which view a result is shown in: those belong to one
+  search rather than to the way a reader works."
   ;; TODO: several named sets, one per project a reader works on, each
   ;; holding these settings and no query. Several do not belong in a
   ;; cookie sent with every request, so they want a store of their own.
   [:corpus :scope :mode :in :ci :match :within
-   :view :sort :context :attr :at :by :docs])
+   :sort :context :attr :at :by :docs])
 
 (def defaults
   "What a setting left out means: the defaults a URL applies, plus the
