@@ -3,6 +3,9 @@
 ;; and limits in a file of its own, named by CORPUS_PROBE_CONFIG or the
 ;; corpus-probe.config system property, and that is merged over this one.
 ;; See README.md.
+;;
+;; The paths below are the ones dev/encode.sh writes, so a fresh checkout
+;; runs with no configuration of its own.
 
 ;; A port of its own, deliberately not 8080 or 3000: those are where every
 ;; other dev server on a machine already is, and a corpus server that has

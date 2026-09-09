@@ -1,4 +1,7 @@
-{:deps   {:aliases [:cljs]}
+{:deps   {:aliases [:dev]}
+ ;; declared, not defaulted: dev/user.clj reads this port for the
+ ;; Content-Security-Policy, and :strict stops it drifting when busy
+ :http   {:port 9630 :strict true}
  :builds {:app  {:target     :browser
                  :output-dir "resources/public/js"
                  :asset-path "/js"

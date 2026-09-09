@@ -30,29 +30,22 @@
         org.commonmark/commonmark-ext-task-list-items   {:mvn/version "0.24.0"}}
 
  :aliases
- {:dev  {:extra-paths ["dev" "test"]}
+ {;; What an editor points at: one REPL for the server and the watch (see
+  ;; dev/user.clj). A dev/config.edn would shadow resources/config.edn.
+  :dev {:extra-paths ["dev" "test"]
+        :extra-deps  {thheller/shadow-cljs       {:mvn/version "3.5.0"}
+                      com.cognitect/transit-cljs {:mvn/version "0.8.280"}}}
 
   ;; Regenerate the translation template: clojure -M:i18n
   :i18n {:main-opts ["-m" "dk.cst.corpus-probe.i18n.scan"]}
 
-  ;; the test path too: the shadow :test build compiles the tests of what
-  ;; both sides build from (see shadow-cljs.edn)
-  :cljs {:extra-paths ["test"]
-         :extra-deps  {thheller/shadow-cljs        {:mvn/version "3.5.0"}
-                       com.cognitect/transit-cljs  {:mvn/version "0.8.280"}}}
-
+  ;; for an editor that starts no nREPL of its own: clojure -M:dev:nrepl
   :nrepl {:extra-deps {nrepl/nrepl {:mvn/version "1.3.1"}}
           :main-opts  ["-m" "nrepl.cmdline"]}
 
-  ;; The development environment in one JVM: the server under
-  ;; dev/watch.edn, which lets a shadow-cljs watch through, then an nREPL
-  ;; (see dev/serve.clj). Beside it, the watch itself:
-  ;;   clojure -M:cljs -m shadow.cljs.devtools.cli watch app
-  ;; .claude/launch.json starts both by name.
-  :serve {:extra-paths ["dev" "test"]
-          :extra-deps  {nrepl/nrepl {:mvn/version "1.3.1"}}
-          :jvm-opts    ["-Dcorpus-probe.config=dev/watch.edn"]
-          :main-opts   ["-i" "dev/serve.clj" "-m" "nrepl.cmdline"]}
+  ;; the same environment without an editor: clojure -M:dev:serve
+  :serve {:extra-deps {nrepl/nrepl {:mvn/version "1.3.1"}}
+          :main-opts  ["-e" "(start!)" "-m" "nrepl.cmdline"]}
 
   :test {:extra-paths ["test"]
          :extra-deps  {io.github.cognitect-labs/test-runner

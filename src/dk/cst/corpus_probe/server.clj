@@ -240,3 +240,12 @@
   (let [{:keys [port] :as config} (read-config)]
     (start! config)
     (println (str "corpus-probe running on http://localhost:" port))))
+
+(comment
+  (read-config)
+  @server
+  (start!)
+  (stop!)
+
+  ;; a development machine uses (start!) in dev/user.clj, which adds the watch
+  #_.)

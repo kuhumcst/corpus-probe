@@ -6,19 +6,23 @@
   measurement proves nothing."
   (:require [babashka.fs :as fs]
             [dk.cst.corpus-probe.search :as search]
-            [dk.cst.corpus-probe.search.cache :as cache]))
+            [dk.cst.corpus-probe.search.cache :as cache]
+            [dk.cst.corpus-probe.server :as server]))
 
-(def ctx
-  {:registry  (str (System/getProperty "user.dir") "/dev/corpus/registry")
-   :cache-dir (str (System/getProperty "user.dir") "/dev/cache")})
+(def config
+  "The settings the app runs on, which the CWB layer takes as its `ctx`."
+  (server/read-config))
 
-(def big
-  "A context over the STOR corpus, as the app runs a batch that sorts
-  (see dk.cst.corpus-probe.cwb/running-ctx)."
-  {:registry         (str (System/getProperty "user.dir")
-                          "/dev/corpus/registry-big")
-   :sort-locale      "da_DK.UTF-8"
-   :query-timeout-ms 900000})
+(def big-config
+  "The same over the STOR corpus, which dev/encode-big.sh writes beside the
+  registry of the others, as the app runs a batch that sorts (see
+  dk.cst.corpus-probe.cwb/running-ctx)."
+  ;; no :cache-dir: the measurements add one where they want a result saved,
+  ;; and the timeout goes past what config.edn deliberately refuses
+  (-> config
+      (dissoc :cache-dir)
+      (assoc :registry (str (:registry config) "-big")
+             :query-timeout-ms 900000)))
 
 (defn page-ms!
   "How many milliseconds one page of 25 hits, `page` of every match in
@@ -31,12 +35,12 @@
 
 (comment
   ;; the name moves with the corpus build stamp, so it is not written down
-  (cache/result-name ctx "VISER" "[pos=\"N.*\"]" {:sort "word"})
+  (cache/result-name config "VISER" "[pos=\"N.*\"]" {:sort "word"})
 
-  (cache/stored? ctx "VISER" (cache/result-name ctx "VISER" "[]" {}))
+  (cache/stored? config "VISER" (cache/result-name config "VISER" "[]" {}))
   ;; => false
 
-  (cache/count! ctx "VISER" "[]" {} #(do (Thread/sleep 1000) 48))
+  (cache/count! config "VISER" "[]" {} #(do (Thread/sleep 1000) 48))
   ;; => 48   (a second the first time, instant after)
 
   (cache/forget-counts!)
@@ -44,15 +48,16 @@
   (cache/share! ::probe (fn [] :once))
   ;; => :once
 
-  (cache/excess-files (cache/max-bytes ctx) (cache/result-files ctx))
+  (cache/excess-files (cache/max-bytes config) (cache/result-files config))
   ;; => []
 
-  (cache/reap! ctx)
+  (cache/reap! config)
   ;; => 0
 
   ;; Each number is one page of 25 hits out of two million matches.
-  (page-ms! big "left" 100)
-  (page-ms! (assoc big :cache-dir (str (fs/create-temp-dir))) "left" 100)
+  (page-ms! big-config "left" 100)
+  (page-ms! (assoc big-config :cache-dir (str (fs/create-temp-dir)))
+            "left" 100)
 
   ;;   sort mode | uncached page | cached page | save file
   ;;   corpus    |         77 ms |       16 ms |     16 MB

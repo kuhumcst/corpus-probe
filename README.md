@@ -414,65 +414,136 @@ One function call in, plain data out:
 
 ## Development
 
-corpus-probe requires [Clojure](https://clojure.org/guides/install_clojure)
-and CWB (`brew install cwb3` on macOS).
+### Requirements
+
+- Java.
+- The [Clojure CLI tools](https://clojure.org/guides/install_clojure).
+- CWB and gawk. On macOS, `brew install cwb3 gawk` installs both.
+
+The dev corpora are not in the repository. Encode them:
 
 ```sh
-dev/encode.sh          # encode the dev corpus (PROBE) once
-clojure -M:dev:nrepl   # start a REPL; see dev/user.clj for entry points
-clojure -X:test        # run the tests
-clojure -M:i18n        # re-extract the translation template
-clojure -M:cljs -m shadow.cljs.devtools.cli compile app   # build the client
-clojure -M:cljs -m shadow.cljs.devtools.cli compile test && node target/test.js
-                       # run the tests of the shared code and the client in JavaScript
-clojure -M -m dk.cst.corpus-probe.server                  # serve (config.edn)
+dev/encode.sh          # reads dev/corpus/*.vrt
+                       # writes dev/corpus/{data,registry}, both gitignored
 ```
 
-The server listens on <http://localhost:7373>.
+Note: If you move the checkout, the integration tests fail. The registry
+files hold absolute paths. `dev/encode.sh` writes them again.
 
-To work on the client, run two processes: a watch that recompiles on
-save, and a server that lets the watch through, with an nREPL in the
-server's JVM. [.claude/launch.json](.claude/launch.json) names both,
-`watch` and `server`, for the Claude app to start.
+### IntelliJ IDEA
+
+The development environment is one REPL. In Cursive, make this run
+configuration:
+
+- Type: **Clojure REPL, Local**
+- Execution: **Run with Deps**
+- Options: `-M:dev`
+- Working directory: the project root
+
+Start the run configuration. It loads [dev/user.clj](dev/user.clj) as the
+`user` namespace. Then evaluate these forms, from the comment block at the
+end of that file:
+
+```clojure
+(start!)   ; the web server and the shadow-cljs watch, in this one JVM
+;; => {:app "http://localhost:7373" :watch :watching}
+
+(restart!) ; the server only, not the watch
+(stop!)    ; both
+
+config     ; the settings this machine runs on
+overrides  ; what this machine adds to resources/config.edn
+```
+
+- The watch compiles a ClojureScript file after each save. Then it sends the
+  new code to the open page.
+- `dk.cst.corpus-probe.client/reload!` draws the page again after each swap.
+  The search on the screen stays.
+- `(restart!)` is necessary after a reload of a handler namespace. The route
+  table holds the handler functions from the previous start.
+- The CWB layer takes `config` as its `ctx`. The comment block calls that
+  layer with it.
+- A Cursive REPL of type **Remote** attaches to an environment that another
+  process started. Set it to use the port file `.nrepl-port`. Both this run
+  configuration and `clojure -M:dev:serve` write that file.
+- For a ClojureScript REPL, connect a second Cursive REPL of type **Remote**.
+  Use the port in `.shadow-cljs/nrepl.port`, which the watch writes.
+- After a change to a PO file, compile the client again. The build inlines
+  the translation tables with a macro. It does not see the change.
+
+### From the command line
 
 ```sh
-clojure -M:cljs -m shadow.cljs.devtools.cli watch app     # recompile on save
-clojure -M:serve       # serve, watch allowed, then an nREPL (.nrepl-port)
+clojure -M:dev:serve   # the server and the watch, then an nREPL (.nrepl-port)
+clojure -M:dev:nrepl   # an nREPL only, then evaluate (start!) in it
+clojure -X:test        # the Clojure tests
+clojure -M:i18n        # the translation template, extracted again
+clojure -M -m dk.cst.corpus-probe.server   # the server alone, no dev settings
+
+# the ClojureScript builds
+clojure -M:dev -m shadow.cljs.devtools.cli watch app     # the watch alone
+clojure -M:dev -m shadow.cljs.devtools.cli compile app   # one build of the client
+
+# the ClojureScript tests
+clojure -M:dev -m shadow.cljs.devtools.cli compile test && node target/test.js
 ```
 
-The watch pushes recompiled code over a socket on its own port. The
-Content-Security-Policy blocks this socket unless a configuration names
-it. That is the purpose of [dev/watch.edn](dev/watch.edn). It is a file
-outside the jar, not a default, so that the strict policy is the one
-that ships. `dk.cst.corpus-probe.client/reload!` renders again after each
-swap. Thus a saved file shows up, and the search on screen stays.
+- [.claude/launch.json](.claude/launch.json) names the first command `dev`,
+  for the Claude app.
+- shadow-cljs permits one watch for each project. Start only one of these
+  commands.
 
-After you edit a PO file, force a recompile of the client. The
-ClojureScript build inlines the tables through a macro and does not see
-the file change.
+### Settings
 
-Settings come from [resources/config.edn](resources/config.edn). The
-server reads it from the classpath, so it is inside a packaged jar. An
-installation puts its own paths and limits in a file of its own and
-names that file, in one of two ways:
+[resources/config.edn](resources/config.edn) holds the settings. The server
+reads this file from the classpath. As a result, the file is inside a
+packaged jar.
+
+- The file holds the paths that `dev/encode.sh` writes. As a result, a new
+  checkout needs no other settings.
+- `overrides` in [dev/user.clj](dev/user.clj) holds what a development
+  machine adds.
+- An installation can name a settings file of its own. There are two ways:
 
 ```sh
 CORPUS_PROBE_CONFIG=/etc/corpus-probe/config.edn clojure -M -m dk.cst.corpus-probe.server
 clojure -J-Dcorpus-probe.config=/etc/corpus-probe/config.edn -M -m dk.cst.corpus-probe.server
 ```
 
-The server merges that file over the built-in one. Thus the file only
-has to contain the settings that it changes. Those are the registry,
-the location and size limit of the query result cache, and the
-timeouts. The `:folders` tree
-describes the corpora, not the machine, so it stays in the jar. If the
-named file cannot be read, the server stops. The server logs the
-effective settings at startup.
+- The server merges that file over the built-in file. As a result, the file
+  holds only the settings that it changes.
+- Those settings are the registry, the location and size limit of the query
+  result cache, and the timeouts.
+- The `:folders` tree describes the corpora, not the machine. It stays in the
+  jar.
+- If the server cannot read the named file, the server stops.
+- The server writes the effective settings to the log at startup.
 
-The parsers are developed against byte-exact golden files in
-[test/resources/golden/](test/resources/golden/). Regenerate them
-deliberately with `dev/capture-golden.sh`. The integration tests skip
-themselves when `cqp` or the encoded dev corpus is missing.
+Each port is set in one file only:
+
+| Port | File | Read by |
+|---|---|---|
+| 7373, the app | `resources/config.edn` | `config` |
+| 9630, the watch | `shadow-cljs.edn` | `overrides` |
+
+No port is in the source code. `shadow-cljs.edn` also sets `:strict true`. If
+the port is busy, the watch does not start. It does not move to the next free
+port.
+
+The Content-Security-Policy blocks the socket of the watch. It also blocks
+the `eval` of the module loader of shadow-cljs. The `:dev-client` setting in
+`overrides` names the origin of the watch. Then the browser permits both.
+The strict policy is the default. Only a development machine widens it.
+
+### Golden files
+
+- The tests compare the parsers against byte-exact golden files in
+  [test/resources/golden/](test/resources/golden/).
+- When `cqp` or the encoded dev corpus is absent, the integration tests skip
+  themselves.
+
+CAUTION: `dev/capture-golden.sh` replaces the golden files. The tests then
+compare against the new output of `cqp`. A regression becomes the reference.
 
 ### Layout
 

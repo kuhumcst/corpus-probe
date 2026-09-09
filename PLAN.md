@@ -498,7 +498,7 @@ corpus-probe/
 │   └── resources/                  ;   (the captures and a registry entry;
 │                                   ;   hostile cases live inline in the tests)
 ├── dev/                            ; encode.sh, encode-big.sh, capture-golden.sh,
-│                                   ;   user.clj, serve.clj, cache_bench.clj
+│                                   ;   user.clj, cache_bench.clj
 └── docs/research/                  ; the evidence base for this plan
 ```
 
