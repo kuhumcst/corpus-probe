@@ -146,9 +146,11 @@
      ;; concordance: one page serves both, and only this says which.
      ;; It submits to the results fragment, so a search lands on its answer
      (search/search-form state (str url/search url/results-fragment)
-                         (when (= :frequencies view)
-                           [:input {:type  "hidden" :name "view"
-                                    :value "frequencies"}])
+                         (list
+                          (when (= :frequencies view)
+                            [:input {:type  "hidden" :name "view"
+                                     :value "frequencies"}])
+                          (result/subset-inputs (:subset result)))
                          chooser)
      ;; before the hits in the document, so reading order and visual
      ;; order agree; the panel takes the form's column while it is open

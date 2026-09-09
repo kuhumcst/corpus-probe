@@ -148,6 +148,19 @@
     (list [:code (name attr)] " " (position-label ui anchor) " = "
           [:code value])))
 
+(defn subset-inputs
+  "The `subset` narrowing as hidden inputs, so the form carries it; nil
+  without one.
+
+  It reaches a result by link alone (see
+  dk.cst.corpus-probe.url/subset-href) and has no control of its own, so
+  without these a change of sort or context drops it without a word."
+  [{:keys [anchor attr value] :as subset}]
+  (when subset
+    (list [:input {:type "hidden" :name "subset" :value value}]
+          [:input {:type "hidden" :name "subset-at" :value anchor}]
+          [:input {:type "hidden" :name "subset-attr" :value (name attr)}])))
+
 (defn near-phrase
   "That a result holds only the hits with the :word of `near` nearby,
   in `ui`; nil without one."
@@ -184,6 +197,7 @@
   (when (or (seq filter) (seq patterns) (seq ranges))
     (str (i18n/tr ui "within") " " (filter-phrase narrowing))))
 
+;; TODO: should any of these phrases be optional, kept as a stored setting?
 (defn qualifiers
   "The question a `result` answered, less the query itself, as short
   phrases in `ui`: the attribute a simple search of `params` matched and

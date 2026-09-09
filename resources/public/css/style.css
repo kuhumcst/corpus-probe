@@ -439,6 +439,9 @@ pre { font-size: 0.875rem; padding: 0.75rem 1rem;
                padding-block-end: 0.5rem;
                border-block-end: 1px solid var(--rule); }
 
+/* TODO: should this row stick while the table scrolls? Narrow, the
+   inspector sheet holds the foot of the viewport, so a stuck row would
+   squeeze the reading strip from both ends. */
 .view-controls { display: flex; flex-direction: column; gap: 0.5rem; }
 .view-controls p { display: flex; flex-wrap: wrap; align-items: center;
                    gap: 0.5rem; margin-block: 0; }

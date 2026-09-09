@@ -114,6 +114,14 @@
     (is (= "target" (result/position-label en "target"))))
   (is (= "over hele matchet" (result/position-label da "match..matchend"))))
 
+(deftest subset-inputs-test
+  (is (= (list [:input {:type "hidden" :name "subset" :value "kat"}]
+               [:input {:type "hidden" :name "subset-at" :value "match[-1]"}]
+               [:input {:type "hidden" :name "subset-attr" :value "lemma"}])
+         (result/subset-inputs {:anchor "match[-1]" :attr :lemma
+                                :value  "kat"})))
+  (is (nil? (result/subset-inputs nil))))
+
 (deftest near-phrase-test
   (is (= (list "near" " " [:code "kat"])
          (result/near-phrase en {:word "kat" :distance 5})))
