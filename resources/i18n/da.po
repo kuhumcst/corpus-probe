@@ -243,8 +243,33 @@ msgstr "Fjern token"
 msgid "repeat"
 msgstr "gentag"
 
-msgid "Request rejected"
-msgstr "Afvist anmodning"
+msgid "Left out of the search"
+msgstr "Ikke med i søgningen"
+
+msgid "The corpus cannot be counted by {attr}."
+msgid_plural "The corpora cannot be counted by {attr}."
+msgstr[0] "Korpusset kan ikke tælles efter {attr}."
+msgstr[1] "Korpusserne kan ikke tælles efter {attr}."
+
+msgid "The corpus cannot be sorted by {attr}."
+msgid_plural "The corpora cannot be sorted by {attr}."
+msgstr[0] "Korpusset kan ikke sorteres efter {attr}."
+msgstr[1] "Korpusserne kan ikke sorteres efter {attr}."
+
+msgid "The corpus has no attribute {attr}."
+msgid_plural "The corpora have no attribute {attr}."
+msgstr[0] "Korpusset har ikke attributten {attr}."
+msgstr[1] "Korpusserne har ikke attributten {attr}."
+
+msgid "The corpus has no metadata field of that name: {attr}."
+msgid_plural "The corpora have no metadata field of that name: {attr}."
+msgstr[0] "Korpusset har ikke et metadatafelt med det navn: {attr}."
+msgstr[1] "Korpusserne har ikke et metadatafelt med det navn: {attr}."
+
+msgid "The corpus has too many values of {attr} to search a range."
+msgid_plural "The corpora have too many values of {attr} to search a range."
+msgstr[0] "Korpusset har for mange værdier af {attr} til at søge et interval."
+msgstr[1] "Korpusserne har for mange værdier af {attr} til at søge et interval."
 
 msgid "Result view"
 msgstr "Resultatvisning"

@@ -358,6 +358,48 @@
   (is (= "Søgningen tog for lang tid"
          (result/error-heading da {:type :timeout}))))
 
+(deftest rejection-explanation-test
+  (testing "a guard's reason and attribute, agreeing with the corpora"
+    (is (= "The corpus cannot be counted by lemma."
+           (result/rejection-explanation
+            en {:type :rejected :reason :not-groupable :attr :lemma} 1)))
+    (is (= "The corpora cannot be counted by lemma."
+           (result/rejection-explanation
+            en {:type :rejected :reason :not-groupable :attr :lemma} 2)))
+    (is (= "Korpusset kan ikke tælles efter lemma."
+           (result/rejection-explanation
+            da {:type :rejected :reason :not-groupable :attr :lemma} 1))))
+  (testing "the one guard naming several attributes lists them"
+    (is (= "The corpus has no metadata field of that name: text_year, text_x."
+           (result/rejection-explanation
+            en {:type :rejected :reason :no-filter-attr
+                :attrs [:text_year :text_x]} 1))))
+  (testing "a guard with no reason says nothing: its message is ours"
+    (is (nil? (result/rejection-explanation
+               en {:type :rejected :message "Not a groupable attribute"} 1)))
+    (is (nil? (result/rejection-explanation
+               en {:type :rejected :reason :not-groupable} 1)))))
+
+(deftest rejected-attrs-test
+  (is (= ["lemma"] (result/rejected-attrs {:attr :lemma})))
+  (is (= ["a" "b"] (result/rejected-attrs {:attrs [:a :b]})))
+  (is (empty? (result/rejected-attrs {}))))
+
+(deftest rejected-body-test
+  (testing "our own guard is worded, not boxed as another program's output"
+    (let [body (result/error-body da {:type    :rejected
+                                      :reason  :not-groupable
+                                      :attr    :lemma
+                                      :message "Not a groupable attribute"}
+                                  ["TALER"])]
+      (is (some #{"Korpusset kan ikke tælles efter lemma."} (deep body)))
+      (is (not-any? #(and (vector? %) (= :pre (first %))) (deep body)))))
+  (testing "CQP's own words keep their box"
+    (is (some #(and (vector? %) (= :pre (first %)))
+              (deep (result/error-body en {:type    :cqp
+                                           :message "CQP Error:"}
+                                       ["PROBE"]))))))
+
 (deftest near-control-test
   (testing "no word in force: an empty field and the default distance"
     (let [html (result/near-control en nil)]
@@ -421,7 +463,7 @@
       (is (some #{"Select at least one corpus to search."} (deep html)))
       (is (not (some #{:pre} (deep html))))))
   (testing "our own rejections and internal failures are not CQP errors"
-    (is (some #{"Request rejected"}
+    (is (some #{"Left out of the search"}
               (deep (result/cqp-error-section en {:type    :rejected
                                                   :message "x"} nil))))
     (is (some #{"Unexpected error"}

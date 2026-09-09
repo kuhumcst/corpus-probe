@@ -45,7 +45,8 @@
     (mapv (fn [attr]
             (or (groupable (keyword attr))
                 (throw (ex-info "Not a groupable attribute of this corpus"
-                                {:corpus corpus :attr attr}))))
+                                {:corpus corpus :attr attr
+                                 :reason :not-groupable}))))
           attrs)))
 
 (defn count-sections!

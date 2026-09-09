@@ -408,7 +408,7 @@ msgid "Unknown corpus"
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/result.cljc
-msgid "Request rejected"
+msgid "Left out of the search"
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/result.cljc
@@ -442,6 +442,36 @@ msgstr ""
 #: src/dk/cst/corpus_probe/views/result.cljc
 msgid "The search failed on the server. The server log has the details."
 msgstr ""
+
+#: src/dk/cst/corpus_probe/views/result.cljc
+msgid "The corpus cannot be counted by {attr}."
+msgid_plural "The corpora cannot be counted by {attr}."
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/dk/cst/corpus_probe/views/result.cljc
+msgid "The corpus cannot be sorted by {attr}."
+msgid_plural "The corpora cannot be sorted by {attr}."
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/dk/cst/corpus_probe/views/result.cljc
+msgid "The corpus has no attribute {attr}."
+msgid_plural "The corpora have no attribute {attr}."
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/dk/cst/corpus_probe/views/result.cljc
+msgid "The corpus has no metadata field of that name: {attr}."
+msgid_plural "The corpora have no metadata field of that name: {attr}."
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/dk/cst/corpus_probe/views/result.cljc
+msgid "The corpus has too many values of {attr} to search a range."
+msgid_plural "The corpora have too many values of {attr} to search a range."
+msgstr[0] ""
+msgstr[1] ""
 
 #: src/dk/cst/corpus_probe/views/result.cljc
 msgid "CQP reads a bare word as the name of a query result. To match a word, put it in quotation marks."

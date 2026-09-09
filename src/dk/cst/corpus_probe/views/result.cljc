@@ -357,7 +357,7 @@
     :no-corpus      (i18n/tr ui "No corpus selected")
     :no-texts       (i18n/tr ui "The corpus marks no texts")
     :unknown-corpus (i18n/tr ui "Unknown corpus")
-    :rejected       (i18n/tr ui "Request rejected")
+    :rejected       (i18n/tr ui "Left out of the search")
     :misaligned     (i18n/tr ui "Unreadable CQP output")
     :internal       (i18n/tr ui "Unexpected error")
     (i18n/tr ui "CQP error")))
@@ -376,6 +376,57 @@
                                      "server log has the details."))
     nil))
 
+(defn rejected-attrs
+  "The attribute names a :rejected `error` carries, from the one or the
+  several its guard named."
+  [{:keys [attr attrs] :as error}]
+  (map name (or (seq attrs) (when attr [attr]))))
+
+(defn rejection-explanation
+  "Why one of this project's own guards left the `n` corpora an `error`
+  concerns out of the search, in `ui`: worded from its :reason and the
+  attributes it named. Nil for a guard naming neither, whose message is
+  ours rather than the reader's and says nothing they can act on."
+  [ui {:keys [reason] :as error} n]
+  ;; every sentence spelled out at its own call: the scanner reads the
+  ;; literal arguments of `trn`, and a helper passing them on hides them
+  (when-let [attr (not-empty (str/join ", " (rejected-attrs error)))]
+    (let [values {:attr attr}]
+      (case reason
+        :not-groupable
+        (i18n/trn ui
+                  "The corpus cannot be counted by {attr}."
+                  "The corpora cannot be counted by {attr}."
+                  n values)
+
+        :not-sortable
+        (i18n/trn ui
+                  "The corpus cannot be sorted by {attr}."
+                  "The corpora cannot be sorted by {attr}."
+                  n values)
+
+        :no-attr
+        (i18n/trn ui
+                  "The corpus has no attribute {attr}."
+                  "The corpora have no attribute {attr}."
+                  n values)
+
+        ;; the only guard naming several attributes, so the sentence lists
+        ;; them rather than agreeing with them: `trn` counts the corpora
+        :no-filter-attr
+        (i18n/trn ui
+                  "The corpus has no metadata field of that name: {attr}."
+                  "The corpora have no metadata field of that name: {attr}."
+                  n values)
+
+        :too-many-values
+        (i18n/trn ui
+                  "The corpus has too many values of {attr} to search a range."
+                  "The corpora have too many values of {attr} to search a range."
+                  n values)
+
+        nil))))
+
 (defn bare-word-error?
   "True when CQP's error `message` is the one a bare word in a CQP query
   gets: it is read as the name of a corpus or a query result, and
@@ -385,15 +436,17 @@
 
 (defn error-body
   "The parts of an `error` under its heading in `ui`: the `corpora` it
-  concerns, the explanation of a type that carries no message, what a
-  bare word in CQP gets told, and CQP's own message verbatim as the
-  sample output of another program."
-  [ui {:keys [type message]} corpora]
+  concerns, the explanation of a type that carries no message, why a
+  guard of ours refused, what a bare word in CQP gets told, and CQP's
+  own message verbatim as the sample output of another program."
+  [ui {:keys [type message] :as error} corpora]
   (list
    (when (seq corpora)
      [:p (str (i18n/tr ui "in") " ")
       (interpose ", " (map (fn [c] [:code c]) corpora))])
    (when-let [explanation (error-explanation ui type)]
+     [:p explanation])
+   (when-let [explanation (rejection-explanation ui error (count corpora))]
      [:p explanation])
    (when (bare-word-error? message)
      [:p (i18n/tr ui (str "CQP reads a bare word as the name of a query "
@@ -402,11 +455,10 @@
    ;; the stylesheet scrolls this rather than letting cqp's column-aligned
    ;; pointer reflow, and a scroll container a keyboard cannot reach is
    ;; unreadable in the browsers that do not focus scrollers themselves.
-   ;; TODO: a :rejected message is this project's own guard, not CQP's
-   ;; (see dk.cst.corpus-probe.cwb/error-map), so it is shown as another
-   ;; program's output while being untranslated English of our own. It
-   ;; wants an explanation per guard, worded from the ex-data.
-   (when message [:pre {:tabindex "0"} [:samp message]])))
+   ;; Only CQP's own words go in it: a guard of ours is untranslated
+   ;; English that never was another program's output
+   (when (and message (not= :rejected type))
+     [:pre {:tabindex "0"} [:samp message]])))
 
 (defn cqp-error-section
   "An `error` map as an error section in `ui`, naming the `corpora` it

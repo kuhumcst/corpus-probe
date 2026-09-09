@@ -43,7 +43,7 @@
     (when-not (some-> (corpus/attribute (corpus/attributes! ctx corpus) attr)
                       (corpus/countable-attr?))
       (throw (ex-info "Not an attribute of this corpus"
-                      {:corpus corpus :attr attr})))
+                      {:corpus corpus :attr attr :reason :no-attr})))
     subset))
 
 (defn corpus-sort!
@@ -55,7 +55,7 @@
     (when-not (corpus/positional?
                (corpus/attribute (corpus/attributes! ctx corpus) attr))
       (throw (ex-info "Not a positional attribute of this corpus"
-                      {:corpus corpus :attr attr}))))
+                      {:corpus corpus :attr attr :reason :not-sortable}))))
   mode)
 
 (defn corpus-context
@@ -82,7 +82,7 @@
                 (filter #(when-let [n (parse-long %)] (<= from n to))))
           rows)
     (throw (ex-info "Too many values to search a range of them"
-                    {:corpus corpus :attr attr}))))
+                    {:corpus corpus :attr attr :reason :too-many-values}))))
 
 (defn corpus-filter!
   "The metadata narrowing of `opts` as
@@ -104,7 +104,7 @@
                                     (keys ranges)))]
       (when-let [bad (seq (remove regions attrs))]
         (throw (ex-info "Not an annotated structural attribute of this corpus"
-                        {:corpus corpus :attrs bad})))
+                        {:corpus corpus :attrs bad :reason :no-filter-attr})))
       ;; TODO: a range the corpus has no value in leaves the attribute
       ;; with no value and no pattern, which filter-query renders as
       ;; <attr = "">: that matches an empty annotation rather than

@@ -189,15 +189,26 @@
   [ctx]
   (:banner (run-batch! ctx [])))
 
+(def rejection-keys
+  "What a guard's ex-data may tell the reader: why it refused and the
+  attributes it named. Selected rather than merged, since the ex-data of
+  the tool guards carries a command line and a registry path."
+  [:reason :attr :attrs])
+
 (defn error-map
   "The error map for exception `e` thrown by a search: the CQP error it
-  carries, a :rejected error with the message of one of this project's own
-  guards (an ex-info without one), or :internal for anything else, logged
-  rather than shown since its message may name a server path."
+  carries, a :rejected error with the message and the `rejection-keys` of
+  one of this project's own guards (an ex-info without one), or :internal
+  for anything else, logged rather than shown since its message may name
+  a server path.
+
+  The corpus is left out: the view groups the corpora that failed the
+  same way, which two error maps differing only by corpus would split."
   [e]
   (or (:error (ex-data e))
       (if (instance? clojure.lang.ExceptionInfo e)
-        {:type :rejected :message (ex-message e)}
+        (merge {:type :rejected :message (ex-message e)}
+               (select-keys (ex-data e) rejection-keys))
         (do (t/error! ::internal-error e)
             {:type :internal}))))
 
