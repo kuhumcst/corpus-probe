@@ -251,8 +251,7 @@
     (testing "where the page leads is a named navigation, not a paragraph"
       (is (some #{{:aria-label "This corpus"}} html))
       (is (some #{:ul.row} html))
-      (is (= ["/search?corpus=VISER"
-              "/search?corpus=VISER&view=frequencies#results"]
+      (is (= ["/search?corpus=VISER"]
              (map :href (filter #(and (map? %) (:href %)) html)))))
     (testing "a phantom entry cannot be searched, so it is offered nothing"
       (is (not (some #{{:aria-label "This corpus"}}

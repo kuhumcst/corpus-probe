@@ -213,10 +213,6 @@ msgstr ""
 msgid "Search in"
 msgstr ""
 
-#: src/dk/cst/corpus_probe/views/corpus.cljc
-msgid "Word frequencies of"
-msgstr ""
-
 #: src/dk/cst/corpus_probe/views/concordance.cljc src/dk/cst/corpus_probe/views/corpus.cljc
 msgid "Text"
 msgstr ""
@@ -293,10 +289,6 @@ msgstr[1] ""
 
 #: src/dk/cst/corpus_probe/views/result.cljc
 msgid "at least"
-msgstr ""
-
-#: src/dk/cst/corpus_probe/views.cljc src/dk/cst/corpus_probe/views/result.cljc
-msgid "All tokens"
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/frequency.cljc src/dk/cst/corpus_probe/views/result.cljc

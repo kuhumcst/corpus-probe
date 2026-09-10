@@ -103,7 +103,7 @@
 
 (deftest page-arrived-test
   (let [href "http://localhost/search?q=hund&corpus=PROBE#results"
-        {state' :state :keys [effects]} (actions/page-arrived data href true)]
+        {state' :state :keys [effects]} (actions/page-arrived {} data href true)]
     (testing "the state of the page, with the results fragment dropped"
       (is (true? (:client? state')))
       (is (nil? (:fragment state'))))
@@ -118,7 +118,22 @@
              effects)))
     (testing "a popstate pushes nothing"
       (is (= [:set-title "hund"]
-             (first (:effects (actions/page-arrived data href false))))))))
+             (first (:effects (actions/page-arrived {} data href false)))))))
+  (testing "a page that is not a search keeps the link back to the one
+            before it, having no search of its own to build one from"
+    (let [came-from {:nav {:search "/search?q=hund#results"}}
+          arrive    (fn [page href]
+                      (get-in (:state (actions/page-arrived came-from page
+                                                            href true))
+                              [:nav :search]))]
+      (is (= "/search?q=hund#results"
+             (arrive (assoc data :route :corpora :nav {:search url/search})
+                     "http://localhost/corpora")))
+      (testing "and a search page brings its own, which replaces it"
+        (is (= "/search?q=kat#results"
+               (arrive (assoc data :route :search
+                              :nav {:search "/search?q=kat#results"})
+                       "http://localhost/search?q=kat")))))))
 
 (deftest cursor-test
   (testing "along a row the cursor steps and stops at the ends"

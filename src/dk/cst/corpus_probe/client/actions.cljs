@@ -549,9 +549,16 @@
 
 (defn page-arrived
   "The state of the page `data` fetched from `href` and the effects of
-  arriving on it, its address pushed onto the history when `push?`."
-  [data href push?]
-  (let [cited (router/cited-href href)]
+  arriving on it, its address pushed onto the history when `push?`, the
+  search `state` was on kept where the page is not one itself."
+  [state data href push?]
+  ;; the link back to the search is built from the page being rendered,
+  ;; so a corpus or a document has none of its own and would drop the
+  ;; result at the first step away from it
+  (let [cited  (router/cited-href href)
+        search (when (not= :search (:route data))
+                 (get-in state [:nav :search]))
+        data   (cond-> data search (assoc-in [:nav :search] search))]
     {:state   (data->state data cited)
      :effects (cond->> [[:set-title (:title data)]
                         [:set-lang (:lang data)]
@@ -609,7 +616,7 @@
       :wider-arrived        (wider-arrived state x y)
       ;; the fetch is gone, so a later step at the end may ask again
       :wider-failed         {:state (update state :result dissoc :widening)}
-      :page-arrived         (page-arrived x y z)
+      :page-arrived         (page-arrived state x y z)
       :pending              {:state (assoc state :pending? true)}
       :set-fragment         {:state (assoc state :fragment x)}
       :navigate             {:state state :effects [[:navigate x y]]}

@@ -399,8 +399,13 @@
   a reader who is not watching the screen told nothing and one on the
   keyboard in a page that has gone."
   []
+  ;; nothing has gone where a control of the search form still holds
+  ;; focus: the form outlives a search, and taking the caret out of the
+  ;; field the reader typed in is no rescue
   (let [hash   (.-hash js/location)
-        target (.getElementById js/document url/results-id)]
+        target (.getElementById js/document url/results-id)
+        held?  (= url/form-id (some-> js/document (.-activeElement)
+                                      (.-form) (.-id)))]
     (cond
       ;; replacing the location with itself is a fragment navigation,
       ;; which scrolls, marks the :target and sets where Tab starts, none
@@ -415,12 +420,14 @@
       target
       (do (when-not (at-hand? target)
             (.scrollIntoView target))
-          (.focus target #js {:preventScroll true}))
+          (when-not held?
+            (.focus target #js {:preventScroll true})))
 
       :else
       (do (.scrollTo js/window 0 0)
-          (some-> (.getElementById js/document widgets/main-id)
-                  (.focus #js {:preventScroll true}))))))
+          (when-not held?
+            (some-> (.getElementById js/document widgets/main-id)
+                    (.focus #js {:preventScroll true})))))))
 
 (defn sync-url!
   "Write the canonical query string of the page on screen into the bar,

@@ -504,14 +504,14 @@
   The result answers the params the search was `:asked` with, not the
   form's `:params`, which the client's form leaves behind at a change of
   mode."
-  [{:keys [ui asked result error langs client?
+  [{:keys [ui result error langs client?
            export-hrefs export-limit prev-href next-href]
     :as state}]
   (let [{:keys [counts hits size]} result
         position (when result (result/page-phrase ui result))]
     (result/results-region
      state
-     (result/result-heading ui asked result error)
+     (result/result-heading ui result error)
      (concordance-controls state)
      (when (result/searched? result)
        ;; a search that found nothing has nothing to page, download or

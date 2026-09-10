@@ -61,15 +61,12 @@
 
 (defn hits-heading
   "What a search found, as the heading of its result in `ui`: how many
-  hits, `size`, at least that many while `counting?`; every token when
-  nothing was `asked?` of `params`."
-  ([ui params size]
-   (hits-heading ui params size false))
-  ([ui params size counting?]
-   (if (asked? params)
-     (str (when counting? (str (i18n/tr ui "at least") " "))
-          (hits-phrase ui size))
-     (i18n/tr ui "All tokens"))))
+  hits, `size`, at least that many while `counting?`."
+  ([ui size]
+   (hits-heading ui size false))
+  ([ui size counting?]
+   (str (when counting? (str (i18n/tr ui "at least") " "))
+        (hits-phrase ui size))))
 
 (defn corpora-phrase
   "The names of `corpora` in words in `ui`: the one name, or how many
@@ -481,13 +478,13 @@
         [:p found]))))
 
 (defn result-heading
-  "The heading naming the results region in `ui`: what the `result` of
-  the search `params` describe found when any corpus could be searched,
-  else the name of the `error` that came instead, so a search that
-  failed everywhere is not announced as a count of nothing."
-  [ui params {:keys [counts size] :as result} error]
+  "The heading naming the results region in `ui`: what the `result`
+  found when any corpus could be searched, else the name of the `error`
+  that came instead, so a search that failed everywhere is not announced
+  as a count of nothing."
+  [ui {:keys [counts size] :as result} error]
   (if (searched? result)
-    (hits-heading ui params size (counting? result))
+    (hits-heading ui size (counting? result))
     (error-heading ui (or error (some :error counts)))))
 
 (defn results-region

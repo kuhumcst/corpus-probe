@@ -27,16 +27,13 @@
 (deftest frequency-heading-test
   (testing "a table that could be counted is headed by what was found,
             the hits it counted"
-    (is (= "5 hits" (frequency/frequency-heading en {:q "hund"} counted nil)))
-    (is (= "All tokens"
-           (frequency/frequency-heading en {:q ""} counted nil))))
+    (is (= "5 hits" (frequency/frequency-heading en counted nil))))
   (testing "a request no corpus answered is headed by its error instead"
     (is (= "The search did not finish in time"
            (frequency/frequency-heading
-            "en" {:q "hund"} {:counts [{:corpus "X" :error {:type :timeout}}]}
-            nil)))
+            "en" {:counts [{:corpus "X" :error {:type :timeout}}]} nil)))
     (is (= "No corpus selected"
-           (frequency/frequency-heading en {:q "hund"} nil {:type :no-corpus})))))
+           (frequency/frequency-heading en nil {:type :no-corpus})))))
 
 (deftest frequency-section-test
   (let [html (frequency/frequency-section
@@ -183,7 +180,7 @@
   (testing "only the corpora that could be counted are counted, in the
             heading"
     (is (= "31 hits"
-           (frequency/frequency-heading en {:q "hund"} sample-result nil)))))
+           (frequency/frequency-heading en sample-result nil)))))
 
 (deftest frequency-table-test
   (let [table (frequency/frequency-table en sample-result)

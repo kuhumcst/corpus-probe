@@ -436,17 +436,18 @@
                             :context (:context params)))]))
 
 (defn nav-hrefs
-  "The URL of each top-level page for `params`: the search keeping the
-  current query, so that returning to it from the corpus index does not
-  lose it."
+  "The URL of each top-level page for `params`: the search page as it
+  stands, so that returning to it from the corpus index does not lose
+  it."
   [params]
-  (let [asked (search-params params)]
-    {:home            home
-     :search          (if (seq asked)
-                        (results-href asked)
-                        search)
-     :corpora-heading corpora
-     :glossary        glossary}))
+  ;; the whole citation, not only what identifies the search: the view,
+  ;; the order and the page are where the reader was
+  {:home            home
+   :search          (if (seq (search-params params))
+                      (results-href params)
+                      search)
+   :corpora-heading corpora
+   :glossary        glossary})
 
 (comment
   (canonical {:q "hund" :mode "simple" :in "word" :corpus ["PROBE" "VISER"]

@@ -19,9 +19,6 @@ msgstr "Alle korpusser"
 msgid "All corpora in"
 msgstr "Alle korpusser i"
 
-msgid "All tokens"
-msgstr "Alle tokens"
-
 msgid "all values"
 msgstr "alle værdier"
 
@@ -434,9 +431,6 @@ msgstr "en tilfældig stikprøve på højst"
 
 msgid "per corpus"
 msgstr "pr. korpus"
-
-msgid "Word frequencies of"
-msgstr "Ordfrekvenser i"
 
 msgid "hit"
 msgid_plural "hits"

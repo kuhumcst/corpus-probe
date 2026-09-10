@@ -46,6 +46,13 @@ the field says how the text is read, with the CQP that words or a list
 run as, so that a reader sees the reading before a search is spent on
 it and can learn CQP from it.
 
+The field is required while the page holds no result, so the bare form
+reports an empty query rather than searching for nothing. Once there is
+a result, submitting an empty field is how the reader starts over: it
+goes to `/search`, the bare page, which forgets the view, the order and
+the page the result was read in. A search runs only when it asks
+something, in either view.
+
 A simple search matches the surface form. The reader can select another
 positional attribute of the searched corpora, for example lemma. A
 simple search of several words is kept within one sentence, as the CQP
@@ -164,6 +171,13 @@ selects the corpora first, and the browser refuses a search without
 one.
 Pages are numbered from one, as the page numbers itself.
 
+The **Search** link in the masthead is the address of the result being
+looked at, its view, its order and its page with it. It keeps that
+address while the reader is on a corpus, the glossary or the frontpage,
+so that coming back lands where they left. The memory is the client's:
+without a script, and on a page loaded afresh, the link is the bare
+search page.
+
 ## Result controls
 
 A result has its own controls, in two rows. The first row sets how the
@@ -224,9 +238,7 @@ million against the tokens of that text, not against the whole corpus.
 Thus a year with more text does not look busier. A column shows the
 tokens. The tokens come from `cwb-s-decode`, which lists the regions
 of the attribute. Under a metadata filter, the app counts the tokens
-of the kept regions with the CQP command `group` instead. A blank
-query grouped by a structural attribute is a table of the corpus size
-per value.
+of the kept regions with the CQP command `group` instead.
 
 The table can count one attribute against another, for example lemma
 by year. The control `columns` selects the second attribute. Each
@@ -363,7 +375,15 @@ to describe. Every routed navigation lands the reader at the top of what
 arrived, on the results where a search found any and on the main content
 otherwise. A real page load announces itself and resets focus; one the
 client makes must do the same by hand, or a reader who is not watching
-the screen is told nothing.
+the screen is told nothing. It leaves focus alone, though, where a
+control of the search form holds it: the form outlives a search, so the
+reader is still standing where they submitted from, and there is nothing
+to rescue them from. The page still scrolls to the results.
+
+A search that keeps focus says what it found in a live region instead,
+clipped and never seen. It holds the query and the heading, "hund. 3
+hits": a live region announces changes alone, and two searches running
+to the same count would otherwise leave the line unchanged.
 
 **Save automatically** is that storing as you go. It is on until the
 reader says otherwise, so only turning it off is stored. Turned off, the

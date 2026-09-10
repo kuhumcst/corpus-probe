@@ -39,20 +39,15 @@
 (deftest hits-heading-test
   (testing "the heading is the answer alone, how many: the field above
             holds the query"
-    (is (= "6 hits" (result/hits-heading en {:q "hund"} 6)))
-    (is (= "6 hits" (result/hits-heading da {:q "hund"} 6))))
-  (testing "an extended search is answered like any other"
-    (is (= "6 hits"
-           (text (result/hits-heading en {:mode    "extended"
-                                          :t1.attr "lemma"
-                                          :t1.v    "hund"}
-                                      6))))
-    (testing "and every token when no token asked for anything"
-      (is (= "All tokens" (result/hits-heading en {:mode "extended"} 47)))
-      (is (result/asked? {:q "hund"}))
-      (is (not (result/asked? {:q "hund" :mode "extended"})))))
-  (testing "a blank query counts every token, which only a table asks for"
-    (is (= "All tokens" (result/hits-heading en {:q ""} 47)))))
+    (is (= "6 hits" (result/hits-heading en 6)))
+    (is (= "6 hits" (result/hits-heading da 6)))))
+
+(deftest asked?-test
+  (testing "a search asks something or it does not run at all, and an
+            extended form reads its tokens rather than the field"
+    (is (result/asked? {:q "hund"}))
+    (is (not (result/asked? {:q "hund" :mode "extended"})))
+    (is (not (result/asked? {:q ""})))))
 
 (deftest page-phrase-test
   (is (= "page 3 of 6" (result/page-phrase en {:page 2 :pages 6})))
@@ -158,8 +153,8 @@
     (is (not (result/counting? {:remaining []})))
     (is (not (result/counting? {}))))
   (testing "the heading gives the hits counted so far as a floor"
-    (is (= "at least 6 hits" (result/hits-heading en {:q "hund"} 6 true)))
-    (is (= "mindst 6 hits" (result/hits-heading da {:q "hund"} 6 true))))
+    (is (= "at least 6 hits" (result/hits-heading en 6 true)))
+    (is (= "mindst 6 hits" (result/hits-heading da 6 true))))
   (testing "the page is placed without a last page"
     (is (= "page 3" (result/page-phrase en {:page 2})))
     (is (= "side 3" (result/page-phrase da {:page 2}))))
@@ -498,13 +493,13 @@
               still being counted"
       (let [counting (assoc example-result :pages nil :remaining ["X" "Y"])]
         (is (= "at least 6 hits"
-               (result/result-heading en {:q "hund"} counting nil)))
+               (result/result-heading en counting nil)))
         (is (some #{[:p "Counting hits in 2 corpora …"]}
                   (deep (result/results-region (assoc state :result counting)
                                                "x" nil nil))))))
     (testing "a search that failed outright is headed by its error"
       (is (= "No corpus selected"
-             (result/result-heading en {:q "hund"} nil {:type :no-corpus})))
+             (result/result-heading en nil {:type :no-corpus})))
       (is (some #{"Select at least one corpus to search."}
                 (deep (result/results-region {:ui en :error {:type :no-corpus}}
                                              "x" nil nil)))))))

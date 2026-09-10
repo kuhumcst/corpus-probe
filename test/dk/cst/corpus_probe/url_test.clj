@@ -305,12 +305,16 @@
                                    {:q "hund" :attr "lemma"}))))))
 
 (deftest nav-hrefs-test
-  (testing "the search keeps the current query, the rest are their pages"
+  (testing "the search keeps the result as it stands, the view and the
+            order with it, the rest are their pages"
     (is (= {:home            "/"
-            :search          "/search?q=hund&corpus=PROBE#results"
+            :search          "/search?q=hund&corpus=PROBE&sort=word#results"
             :corpora-heading "/corpora"
             :glossary        "/glossary"}
-           (url/nav-hrefs {:q "hund" :corpus ["PROBE"] :sort "word"}))))
+           (url/nav-hrefs {:q "hund" :corpus ["PROBE"] :sort "word"})))
+    (is (= "/search?q=hund&view=frequencies&attr=lemma#results"
+           (:search (url/nav-hrefs {:q "hund" :view "frequencies"
+                                    :attr "lemma"})))))
   (testing "and is the bare page when nothing was asked"
     (is (= "/search" (:search (url/nav-hrefs {:sort "word"}))))))
 

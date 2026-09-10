@@ -82,12 +82,33 @@
     (let [selected {:token {:word "hund"} :corpus "PROBE"}
           html     (views/search-page (assoc base :client? true
                                              :selected selected))]
-      (is (= :aside.inspector (first (nth html 3))))
+      (is (= :aside.inspector (first (nth html 4))))
       (is (= "inspecting" (:class (second html))))
       (is (not (some #{:aside.inspector}
                      (deep (views/search-page (assoc base :selected selected))))))
       (is (not (contains? (second (views/search-page (assoc base :client? true)))
                           :class))))))
+
+(deftest result-announcement-test
+  (let [result {:size 1 :page 0 :pages 1 :hits []
+                :counts [{:corpus "PROBE" :size 1}]}
+        said   (fn [m] (views/result-announcement (merge base m)))]
+    (testing "a search from the field keeps focus, so what it found is
+              spoken rather than landed on"
+      (is (= [:p "hund. 1 hit"] (said {:asked {:q "hund"} :result result}))))
+    (testing "the frequency view is answered by its own heading"
+      (is (= [:p "hund. 5 hits"]
+             (said {:asked  {:q "hund"} :view :frequencies
+                    :result {:counts [{:corpus "PROBE" :tokens 47 :size 5}]}}))))
+    (testing "and an error by its name"
+      (is (= [:p "hund. No corpus selected"]
+             (said {:asked {:q "hund"} :error {:type :no-corpus}}))))
+    (testing "nothing is said until there is an answer, and the region is
+              rendered all the same: one created already full announces
+              nothing"
+      (is (nil? (said {})))
+      (is (= [:div.status {:class "spoken" :role "status"} nil]
+             (nth (views/search-page base) 3))))))
 
 (deftest search-page-carries-the-view-test
   (let [views (fn [v] (->> (deep (views/search-page (assoc base :view v)))
@@ -129,7 +150,7 @@
               to lay out, before the answer it switches"
       (let [html  (views/search-page state)
             order (fn [x] (.indexOf (vec (deep html)) x))]
-        (is (= :nav.tabs (first (nth html 4))))
+        (is (= :nav.tabs (first (nth html 5))))
         (is (< (order :nav.tabs) (order :section.result)))))
     (testing "but an answer with nothing in it reads the same either
               way, so neither view is offered"
@@ -376,17 +397,9 @@
                                         :t1.v "hund" :corpus ["PROBE"]
                                         :attr "word"}
                                     nil))))
-    (testing "a whole-corpus table says so rather than naming a query"
-      (is (= "All tokens · PROBE · by lemma · Frequencies · corpus-probe"
-             (views/result-title en :frequencies (assoc params :q "")
-                                 result))))
-    (testing "a form seeded from stored settings has counted nothing, so
-              it is the search page whatever view it was left in"
+    (testing "a form that asked nothing has counted nothing, so it is the
+              search page whatever view it was left in"
       (is (= "Search · corpus-probe"
-             (views/title {:route :search :lang "en" :seeded? true
-                           :view  :frequencies
-                           :params (dissoc params :q)})))
-      (is (= "All tokens · PROBE · by lemma · Frequencies · corpus-probe"
              (views/title {:route :search :lang "en"
                            :view  :frequencies
                            :params (dissoc params :q) :result result}))))))

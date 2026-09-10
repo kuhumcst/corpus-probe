@@ -120,17 +120,17 @@
        (is (= [{:id 1 :conditions [{:id 1 :v "hund"}]}
                {:id 2 :conditions [{:id 1}]}]
               tokens))))
-   (testing "while a blank query still counts them all, from a form whose
-             radio was changed too"
-     (is (some? (:result (search/search-view-data
-                          ctx {:query-params {:view "frequencies"
-                                              :corpus "PROBE"}}))))
-     (is (some? (:result (search/search-view-data
-                          ctx {:query-params {:t1.attr "word" :t1.op "is"
-                                              :t1.v "" :t1.min "1"
-                                              :t1.max "1" :mode "simple"
-                                              :view "frequencies"
-                                              :corpus "PROBE"}})))))))
+   (testing "while a blank query runs nothing at all, in either view: a
+             form with no query is a form, not a count of every token"
+     (is (nil? (:result (search/search-view-data
+                         ctx {:query-params {:view "frequencies"
+                                             :corpus "PROBE"}}))))
+     (is (nil? (:result (search/search-view-data
+                         ctx {:query-params {:t1.attr "word" :t1.op "is"
+                                             :t1.v "" :t1.min "1"
+                                             :t1.max "1" :mode "simple"
+                                             :view "frequencies"
+                                             :corpus "PROBE"}})))))))
 
 (deftest search-outcome-test
   (testing "nothing selected at all is the no-corpus error"

@@ -294,10 +294,7 @@
      [:nav {:aria-label (i18n/tr ui "This corpus")}
       (widgets/link-row
        [[:search (url/search-href {:corpus corpus})
-         (str (i18n/tr ui "Search in") " " corpus)]
-        [:frequencies (url/results-href {:corpus corpus
-                                         :view   "frequencies"})
-         (str (i18n/tr ui "Word frequencies of") " " corpus)]]
+         (str (i18n/tr ui "Search in") " " corpus)]]
        nil)])])
 
 (defn text-name

@@ -350,20 +350,16 @@
   scope it is kept within, prefilled from the state's `:params`, and the
   buttons storing them as the reader's defaults.
 
-  The query is required unless the form is submitted from the frequency
-  `:view`, which counts every token of a blank one. A `:seeded?` form has
-  run no search, so it asks for a query whatever view it was seeded in."
-  [{:keys [ui view filter-controls search-attrs params tokens value-lists
-           switch client? pending? lists filters-pending? seeded?]
+  The query is required while the page has no `:result` and no `:error`
+  to clear; with one, an empty field is how the reader starts over."
+  [{:keys [ui filter-controls search-attrs params tokens value-lists
+           switch client? pending? lists filters-pending? result error]
     :as state}
    action extra chooser]
   (let [{:keys [q]} params
         {:keys [values]} lists
         extended? (= "extended" (mode/form params))
-        ;; a stored :view seeds the form without a search behind it, and
-        ;; the blank query the frequency view allows is for counting a
-        ;; result the reader is already looking at
-        required? (boolean (or (not= :frequencies view) seeded?))
+        required? (not (or result error))
         ;; the button says what pressing it does. A text shaped like CQP
         ;; runs as CQP, and the form says so nowhere else: the boxes it
         ;; takes away are an absence, not a statement

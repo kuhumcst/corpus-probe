@@ -121,6 +121,21 @@
       (i18n/tr ui "Source code")]]
     nil)])
 
+(defn result-announcement
+  "What the search in `state` leaves for a reader who is not watching the
+  screen: the query it asked and the heading its answer came under. Nil
+  until there is an answer."
+  [{:keys [ui view asked result error]}]
+  ;; the field keeps focus through a search (see
+  ;; dk.cst.corpus-probe.client.effects/land!), so nothing else says the
+  ;; answer arrived; the query is in it because a live region announces
+  ;; changes alone, and two searches to the same count would not change
+  (when (or result error)
+    [:p (str (result/query-phrase ui asked) ". "
+             (if (= :frequencies view)
+               (frequency/frequency-heading ui result error)
+               (result/result-heading ui result error)))]))
+
 (defn search-page
   "The search page's main content from application `state`: the query
   form with the corpus chooser over its `:folders`, the inspector while
@@ -155,6 +170,9 @@
                                      :value "frequencies"}])
                           (result/subset-inputs (:subset result)))
                          chooser)
+     ;; always rendered, and before everything the answer replaces: a
+     ;; live region created already full announces nothing
+     (widgets/status "spoken" (result-announcement state))
      ;; before the hits in the document, so reading order and visual
      ;; order agree; the panel takes the form's column while it is open
      (when client? (concordance/inspector ui selected))
@@ -231,9 +249,7 @@
   was counted, in which corpora, within the metadata filter of `result`,
   and by what."
   [ui {:keys [corpus attr by] :as params} result]
-  (page-title (if (result/asked? params)
-                (result/query-phrase ui params)
-                (i18n/tr ui "All tokens"))
+  (page-title (result/query-phrase ui params)
               (when (seq corpus) (result/corpora-phrase ui corpus))
               (result/filter-phrase result)
               (str (i18n/tr ui "by") " " attr
@@ -246,7 +262,9 @@
   in `view` with `result`: each view names what it shows, since a full
   page load announces the title and nothing else."
   [ui view params result]
-  (if (= :frequencies view)
+  ;; a frequency view that asked nothing has counted nothing, so it is
+  ;; the search page and `search-title` names it
+  (if (and (= :frequencies view) (result/asked? params))
     (frequency-title ui params result)
     (search-title ui params result)))
 
@@ -260,15 +278,10 @@
   "The document title of the page `state` describes, by its `:route` and
   in the language of its `:lang`; the app name alone for a route this
   app does not title."
-  [{:keys [route lang view params result data seeded?] :as state}]
+  [{:keys [route lang view params result data] :as state}]
   (let [ui (i18n/->ui lang)]
     (case route
-      ;; a seeded form has answered nothing, whatever view the settings
-      ;; left it in: the frequency view names what it counted, and it
-      ;; counted nothing
-      :search   (if seeded?
-                  (search-title ui nil)
-                  (result-title ui view params result))
+      :search   (result-title ui view params result)
       :document (page-title (document-title (:body data)))
       :corpora  (page-title (i18n/tr ui "Corpora"))
       :corpus   (page-title (:corpus data))

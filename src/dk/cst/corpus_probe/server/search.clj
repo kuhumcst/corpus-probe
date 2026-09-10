@@ -110,20 +110,11 @@
            :transit?  (request/wants-transit? request))))
 
 (defn runs?
-  "True when the search `req` (see `read-request!`) runs in its `:view`:
-  it carries a query, or it is the frequency view of the corpora whole,
-  which a blank query counts, unless the query is blank only because a
-  change of mode could not keep it, when the form is shown and nothing
-  runs."
-  [{:keys [view params cqp known unknown seeded?]}]
-  ;; a seeded form has been asked nothing: the frequency view of a blank
-  ;; query would otherwise count every corpus the reader last chose, on
-  ;; arrival, before they had typed anything
-  (boolean (and (not seeded?)
-                (or cqp
-                    (and (= :frequencies view)
-                         (not (mode/unread-query? params))
-                         (or (seq known) (seq unknown)))))))
+  "True when the search `req` (see `read-request!`) runs: it carries a
+  query. A form with none is a form, in either view, and is shown rather
+  than answered."
+  [{:keys [cqp]}]
+  (boolean cqp))
 
 (defn shown-params
   "The params the search page for `req` (see `read-request!`) shows in
@@ -155,6 +146,14 @@
   `:selectable` corpora."
   [{:keys [selectable] :as req}]
   (url/canonical (shown-params req) (set selectable)))
+
+(defn cleared?
+  "True when the submitted search `req` asks nothing: the reader
+  emptying the field to start over (see
+  dk.cst.corpus-probe.client.router/cleared?, the same rule with a
+  script)."
+  [{:keys [params]}]
+  (nil? (query/of params)))
 
 (defn uncited?
   "True when what `request` asks is not the citation `cited` of the
@@ -408,23 +407,22 @@
   from, for `request` against `ctx`, or for the search `req` it reads
   with the citation `cited`: the state of the form (see `form-data!`),
   the outcome of the search when the params describe one, the links out
-  of it, and whether the form was `:seeded?` from the settings it holds
-  as `:stored`, which the title and the preferences box read against the
-  `:selectable` corpora both sides measure a selection by.
+  of it, and the settings it holds as `:stored`, which the preferences
+  box reads against the `:selectable` corpora both sides measure a
+  selection by.
 
   The same map is embedded as transit for the client, so it holds corpus
   overviews only: the registry maps carry absolute server paths."
   ([ctx request]
    (let [req (read-request! ctx request)]
      (search-view-data ctx req (citation req))))
-  ([ctx {:keys [lang view known stored selectable seeded? autosave?] :as req}
+  ([ctx {:keys [lang view known stored selectable autosave?] :as req}
     cited]
    (let [outcome (run-view! ctx req)
          attrs   (attr-options! ctx known)]
      (merge {:lang       lang
              :view       view
              :cited      cited
-             :seeded?    seeded?
              :autosave?  autosave?
              :selectable (set selectable)
              ;; encoded again rather than passed on as the cookie holds
@@ -467,7 +465,9 @@
              asked?
              (nil? (get-in req [:arrived :from])))
       {:status  303
-       :headers (cond-> {"Location" (url/results-href cited)}
+       :headers (cond-> {"Location" (if (cleared? req)
+                                      url/search
+                                      (url/results-href cited))}
                   (seq cookies) (assoc "Set-Cookie" cookies))}
       (let [{:keys [result error] :as data} (search-view-data ctx req cited)
             ;; the masthead's navigation takes the citation; the client

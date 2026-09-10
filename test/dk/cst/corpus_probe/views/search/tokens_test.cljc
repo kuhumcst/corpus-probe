@@ -106,9 +106,10 @@
           (is (= [true] (required (assoc state :tokens
                                          [{:id 1 :conditions [{:id 1}]}]))))
           (is (= [true] (required (dissoc state :tokens)))))
-        (testing "except from the frequency view, which counts every token"
+        (testing "except with a result on the page, which an empty form
+                  clears"
           (is (= [false false false false]
-                 (required (assoc state :view :frequencies)))))
+                 (required (assoc state :result {:size 3})))))
         (testing "with the client, which shows no blank token and adds
                   tokens and conditions by a button, every one must be"
           (is (= [true true false true]

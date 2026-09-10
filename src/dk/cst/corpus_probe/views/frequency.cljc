@@ -236,14 +236,12 @@
   (boolean (some :tokens counts)))
 
 (defn frequency-heading
-  "The heading naming the results region in `ui`: what the search
-  `params` describe found, counted over the corpora of the frequency
-  `result` that could be counted, else the name of the `error` that came
-  instead."
-  [ui params {:keys [counts] :as result} error]
+  "The heading naming the results region in `ui`: what the frequency
+  `result` found, counted over the corpora that could be counted, else
+  the name of the `error` that came instead."
+  [ui {:keys [counts] :as result} error]
   (if (tabled? result)
-    (result/hits-heading ui params
-                         (reduce + (keep :size (filter :tokens counts))))
+    (result/hits-heading ui (reduce + (keep :size (filter :tokens counts))))
     (result/error-heading ui (or error (some :error counts)))))
 
 (defn frequency-controls
@@ -275,10 +273,10 @@
 
   The table answers the params the search was `:asked` with, not the
   form's `:params`."
-  [{:keys [ui asked result error export-hrefs] :as state}]
+  [{:keys [ui result error export-hrefs] :as state}]
   (result/results-region
    state
-   (frequency-heading ui asked result error)
+   (frequency-heading ui result error)
    (frequency-controls state)
    (when (tabled? result)
      ;; no rows to table, and the exports would be header-only files

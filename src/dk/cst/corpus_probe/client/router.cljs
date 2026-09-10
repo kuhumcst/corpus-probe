@@ -5,6 +5,7 @@
   serves as transit, so a link or a GET submit is fetched as data, and
   anything that fails falls back to a real navigation."
   (:require [clojure.string :as str]
+            [dk.cst.corpus-probe.query :as query]
             [dk.cst.corpus-probe.url :as url]))
 
 (defonce ^{:doc "The path and query of the page on screen, so that a
@@ -159,6 +160,14 @@
   (and (= "get" (str/lower-case (or (.-method form) "get")))
        (= (.-origin (js/URL. (.-action form))) js/location.origin)))
 
+(defn cleared?
+  "True when a submit of `form` asks nothing: the reader emptying the
+  field to start over."
+  [form]
+  ;; no search runs without a query, so no control beside a result can
+  ;; submit a blank form and be taken for the reader clearing it
+  (nil? (query/of (form-params form))))
+
 (defn listen!
   "Install the document's listeners, which only dispatch through
   `dispatch!`: a routed link click or submit `[:navigate href true]`, a
@@ -198,7 +207,10 @@
 
          (routed-submit? form)
          (do (.preventDefault e)
-             (dispatch! [:navigate (submit-href form) true]))))))
+             (dispatch! [:navigate (if (cleared? form)
+                                     url/search
+                                     (submit-href form))
+                         true]))))))
   ;; every control of the search form, not only the ones with a handler:
   ;; the matching options have none, so what the form says would reach
   ;; the preferences box only when a search sent it

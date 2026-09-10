@@ -37,19 +37,18 @@
     (testing "the query field is a text area, one row for one line"
       (is (some #(and (map? %) (= "q" (:id %)) (= 1 (:rows %))) (deep html)))
       (is (some #{:textarea} (deep html))))
-    (testing "the query is required, except from the frequency view, which
-              counts every token of a blank one"
+    (testing "the query is required while there is nothing to clear, so
+              the bare form still asks for a term"
       (let [required (fn [state]
                        (->> (deep (form state))
                             (filter #(and (map? %) (= "q" (:id %))))
                             (first)
                             (:required)))]
         (is (true? (required state)))
-        (is (false? (required (assoc state :view :frequencies))))
-        ;; a stored :view seeds the form with no search behind it, and a
-        ;; seeded form asks for a query whatever view it was seeded in
-        (is (true? (required (assoc state :view :frequencies
-                                    :seeded? true))))))
+        (testing "and is not once there is a result, or an error, since an
+                  empty field is how the reader starts over"
+          (is (false? (required (assoc state :result {:size 3}))))
+          (is (false? (required (assoc state :error {:type :timeout})))))))
     (testing "grouped controls have legends"
       (is (some #{:legend} (deep html))))
     (testing "the example says what the field takes"
