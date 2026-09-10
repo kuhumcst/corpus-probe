@@ -121,7 +121,7 @@ a abbr[title] { text-decoration: none; }
   text-decoration-line: underline;
 }
 
-.masthead, .result-head, .footer {
+.masthead, .footer {
   display: flex; flex-wrap: wrap; align-items: baseline;
   justify-content: space-between;
 }
@@ -536,14 +536,57 @@ pre { font-size: 0.875rem; padding: 0.75rem 1rem;
 /* The result */
 
 /* the line the view tabs stand on is this section's own top edge */
-.result { border-block-start: 1px solid var(--rule); padding-block-start: 1rem; }
+/* the step down to the heading is a rail box's legend deep, so that the
+   heading's own words start where the border of the box beside them is
+   drawn: a legend sits inside its fieldset's border box and pushes that
+   border down by its own height, which no bounding box reports */
+.result { border-block-start: 1px solid var(--rule); padding-block-start: 2rem; }
 
 .result > * { margin-block: 0; }
 .result > * + * { margin-block-start: 1rem; }
 
-.result-head { column-gap: 1.5rem; row-gap: 0.25rem;
+/* The answer, and beside it the controls over it, with a rule down the
+   gap between them: the heading takes the words it needs and the
+   controls the rest of the line. */
+.result-head { display: flex; gap: 1.5rem;
                padding-block-end: 0.5rem;
                border-block-end: 1px solid var(--rule); }
+.result-head > .answer { display: flex; flex-direction: column;
+                         align-items: start; gap: 0.25rem; }
+.result-head > .view-controls { flex: 1;
+                                padding-inline-start: 1.5rem;
+                                border-inline-start: 1px solid var(--rule); }
+/* the answer's own parts too, which the nesting puts out of reach of
+   the rule above */
+.result-head > *, .result-head > .answer > * { margin-block: 0; }
+.result-head :is(p, summary) { color: var(--tx-2); }
+
+/* Only a phone takes the two apart, and the rule goes with the gap it
+   stood in. No width above that earns a rule of its own: the head is at
+   its narrowest where the rail stands beside it, and grows once the
+   rail moves above, so a breakpoint between the two would stack the
+   head where it has the most room. The controls wrap in their own
+   column instead. */
+@media (max-width: 40rem) {
+  .result-head { flex-direction: column; gap: 0.75rem; }
+  .result-head > .view-controls { padding-inline-start: 0;
+                                  border-inline-start: 0; }
+}
+
+/* The corpora a search left out. They are not a failure of it, so they
+   fold away under a mark that follows the line rather than the arrow
+   that would lead it, and says there is something to read without
+   spending a heading on it. The summary is labelled in words for
+   whoever the mark cannot reach. The character is drawn by the reader's
+   own font, which is why it is one with no emoji form: a warning sign
+   or a heavy exclamation mark comes in colour and takes none of ours. */
+.caveats > summary { cursor: pointer; padding-block: 0.25rem;
+                     list-style: none; }
+.caveats > summary::-webkit-details-marker { display: none; }
+.caveats > summary::after { content: "ⓘ"; margin-inline-start: 0.4em;
+                            color: var(--error); }
+.caveats ul { margin-block: 0.5rem 0.25rem; }
+.caveats pre { margin-block: 0.5rem 0; }
 
 /* TODO: should this row stick while the table scrolls? Narrow, the
    inspector sheet holds the foot of the viewport, so a stuck row would

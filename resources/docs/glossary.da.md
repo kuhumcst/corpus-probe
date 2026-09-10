@@ -14,7 +14,7 @@ cpos {#cpos}:
   Korpusposition: nummeret på et [token](/glossary#token), talt fra
   korpussets begyndelse. CWB bruger dette nummer som adressen på et
   token. Første kolonne i [KWIC'en](/glossary#kwic) viser positionen for
-  hvert match. En resultat-URL indeholder positioner, når forekomster er
+  hvert match. En resultat-URL indeholder positioner, når hits er
   foldet ud.
   [Afsnit 1.2 i CQP-manualen](https://cwb.sourceforge.io/files/CQP_Manual/1_2.html)
   beskriver korpuspositioner.
@@ -28,9 +28,10 @@ CQP {#cqp}:
   [attribut](/glossary#positional-attributes). Tekst i søgefeltet, der
   begynder som CQP, sendes til CQP, som du skrev den, bortset fra to
   navne: et sætningsmærke, `<s>`, og enheden i en `within`-klausul,
-  `within s`, som hvert korpus omdøber efter sin egen attribut. For ord
-  skriver grænsefladen forespørgslen for dig, og linjen under søgefeltet
-  viser den. [CQP-vejledningen](/cqp)
+  `within s`, som hvert korpus omdøber efter sin egen attribut. Når
+  teksten er CQP, viser søgeknappen {{Kør som CQP}}. For ord skriver
+  grænsefladen selv forespørgslen, og den udvidede søgetype viser sin
+  forespørgsel som CQP under sine tokens. [CQP-vejledningen](/cqp)
   viser syntaksen med eksempler.
   [CQP-manualen](https://cwb.sourceforge.io/files/CQP_Manual/) har den
   fulde syntaks.
@@ -40,15 +41,8 @@ CWB {#cwb}:
   der opbevarer korpusserne og besvarer forespørgslerne. corpus-probe er
   en brugerflade til CWB.
 
-Forekomst {#hit}:
-  Én forekomst af det søgte. En forekomst er én linje i
-  [KWIC'en](/glossary#kwic): [matchet](/glossary#match) med sin
-  [kontekst](/glossary#context). Overskriften på et resultat angiver
-  antallet af forekomster. En [stikprøve](/glossary#sample) beholder
-  nogle af forekomsterne.
-
 Frekvens {#frequency}:
-  Antallet af gange, en værdi forekommer i [forekomsterne](/glossary#hit)
+  Antallet af gange, en værdi forekommer i [hittene](/glossary#hit)
   eller i et korpus. Frekvensvisningen tæller værdierne af en attribut
   på en position i [matchet](/glossary#match). Den tæller i hvert korpus
   og i alle korpusser under ét. Den angiver også hver frekvens
@@ -56,8 +50,15 @@ Frekvens {#frequency}:
   [Afsnit 3.4 i CQP-manualen](https://cwb.sourceforge.io/files/CQP_Manual/3_4.html)
   beskriver frekvensfordelinger.
 
+Hit {#hit}:
+  Ét hit på det søgte. Et hit er én linje i
+  [KWIC'en](/glossary#kwic): [matchet](/glossary#match) med sin
+  [kontekst](/glossary#context). Overskriften på et resultat angiver
+  antallet af hits. En [stikprøve](/glossary#sample) beholder
+  nogle af hittene.
+
 Konkordans {#concordance}:
-  En liste over alle forekomster af det søgte. Hver forekomst vises i
+  En liste over alle hits på det søgte. Hvert hit vises i
   sin [kontekst](/glossary#context). Denne grænseflade viser en
   konkordans som en [KWIC](/glossary#kwic) og kalder den KWIC.
 
@@ -65,8 +66,8 @@ Kontekst {#context}:
   De [tokens](/glossary#token), der står på hver side af et
   [match](/glossary#match). Kontekstvælgeren sætter bredden: et antal
   ord eller den sætning eller det afsnit, som indeholder matchet.
-  [Positionen](/glossary#cpos) for en forekomst åbner mere kontekst til
-  den forekomst.
+  [Positionen](/glossary#cpos) for et hit åbner mere kontekst til
+  det hit.
   [Afsnit 2.3 i CQP-manualen](https://cwb.sourceforge.io/files/CQP_Manual/2_3.html)
   beskriver visningsindstillingerne i CQP, blandt andet konteksten.
 
@@ -79,27 +80,27 @@ Korpus {#corpus}:
   beskriver et korpus' datamodel.
 
 Korpusrækkefølge {#corpus-order}:
-  Den rækkefølge, [forekomsterne](/glossary#hit) har i korpusset. CWB
-  leverer forekomsterne i denne rækkefølge. Det er standardrækkefølgen i
+  Den rækkefølge, [hittene](/glossary#hit) har i korpusset. CWB
+  leverer hittene i denne rækkefølge. Det er standardrækkefølgen i
   en [KWIC](/glossary#kwic).
   [Afsnit 2.9 i CQP-manualen](https://cwb.sourceforge.io/files/CQP_Manual/2_9.html)
   beskriver de andre rækkefølger.
 
 KWIC {#kwic}:
   Key word in context, søgeord i kontekst: en
-  [konkordans](/glossary#concordance) med én
-  [forekomst](/glossary#hit) på hver linje. [Matchet](/glossary#match)
+  [konkordans](/glossary#concordance) med ét
+  [hit](/glossary#hit) på hver linje. [Matchet](/glossary#match)
   står i midten af linjen, og nogle ord [kontekst](/glossary#context)
   står på hver side. Du kan læse kolonnen af match fra top til bund. CWB
   kalder denne visning KWIC, og det gør denne grænseflade også.
-  KWIC-visningen viser forekomsterne i et resultat, og
+  KWIC-visningen viser hittene i et resultat, og
   [frekvensvisningen](/glossary#frequency) tæller dem.
   [Afsnit 2.3 i CQP-manualen](https://cwb.sourceforge.io/files/CQP_Manual/2_3.html)
   beskriver visningsindstillingerne for en KWIC.
 
 Match {#match}:
-  De [tokens](/glossary#token), som forespørgslen matchede i én
-  [forekomst](/glossary#hit). Matchet står i matchkolonnen i
+  De [tokens](/glossary#token), som forespørgslen matchede i ét
+  [hit](/glossary#hit). Matchet står i matchkolonnen i
   [KWIC'en](/glossary#kwic). En forespørgsel kan udpege ét token i
   matchet som *target* med `@`, og KWIC'en viser target med fed. Det
   ord, som feltet Sammen med beder om, er *keyword*, og KWIC'en
@@ -162,9 +163,9 @@ Regulært udtryk {#regex}:
   opsummerer syntaksen.
 
 Stikprøve {#sample}:
-  Et tilfældigt udvalg af et givet antal [forekomster](/glossary#hit).
+  Et tilfældigt udvalg af et givet antal [hits](/glossary#hit).
   Grænsefladen tager stikprøven, før den tæller og sorterer
-  forekomsterne. Derfor kan du læse en del af et resultat, som er for
+  hittene. Derfor kan du læse en del af et resultat, som er for
   stort til at læse i sin helhed. Udvalget ligger fast: den samme URL
   giver altid den samme stikprøve. Grænsefladen tager en stikprøve i
   hvert korpus for sig.

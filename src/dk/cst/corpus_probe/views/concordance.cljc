@@ -477,6 +477,28 @@
                                       (context-value width)
                                       (context-label ui width))))))
 
+(defn concordance-controls
+  "The controls over the concordance of `state`, for its head: how the
+  hits are read, and the word they must be near. Nil where no corpus
+  could be searched."
+  [{:keys [ui sort-modes asked result client?]}]
+  (let [{:keys [size near]} result]
+    (when (result/searched? result)
+      (if (zero? size)
+        ;; a result emptied by that word keeps the one control, or the
+        ;; reader could not take the word away again; it has nothing
+        ;; else to decide, having nothing to read
+        (when near
+          (result/view-controls ui client? nil (result/near-control ui near) true))
+        (result/view-controls ui client?
+                              (list (sort-control ui sort-modes (:sort asked))
+                                    " "
+                                    (context-control ui (:context result))
+                                    " "
+                                    (sample-control ui (:sample result)))
+                              (result/near-control ui near)
+                              near)))))
+
 (defn concordance-section
   "The concordance view of the search in `state`: its sort, context and
   sample controls, the pagination above and below the table, the
@@ -486,7 +508,7 @@
   The result answers the params the search was `:asked` with, not the
   form's `:params`, which the client's form leaves behind at a change of
   mode."
-  [{:keys [ui sort-modes asked result error langs client?
+  [{:keys [ui asked result error langs client?
            export-hrefs export-limit prev-href next-href]
     :as state}]
   (let [{:keys [counts hits size]} result
@@ -494,29 +516,14 @@
     (result/results-region
      state
      (result/result-heading ui asked result error)
-     (result/qualifiers ui asked result)
+     (concordance-controls state)
      (when (result/searched? result)
        ;; a search that found nothing has nothing to page, download or
        ;; count: the table would be a header over no rows and the exports
-       ;; header-only files. A result emptied by the word its hits had
-       ;; to be near keeps that one control, or the reader could not take
-       ;; the word away again
+       ;; header-only files
        (if (zero? size)
+         [:p (i18n/tr ui "No hits.")]
          (list
-          (when (:near result)
-            (result/view-controls ui client? nil
-                                  (result/near-control ui (:near result))
-                                  true))
-          [:p (i18n/tr ui "No hits.")])
-         (list
-          (result/view-controls ui client?
-                                (list (sort-control ui sort-modes (:sort asked))
-                                      " "
-                                      (context-control ui (:context result))
-                                      " "
-                                      (sample-control ui (:sample result)))
-                                (result/near-control ui (:near result))
-                                (:near result))
           (result/pagination ui prev-href next-href position)
           (concordance hits {:caption   (widgets/term ui :kwic false)
                              :ui        ui

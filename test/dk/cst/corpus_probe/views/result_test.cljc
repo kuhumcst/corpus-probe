@@ -33,45 +33,15 @@
   (is (= "1 hit" (result/hits-phrase en 1)))
   (is (= "0 hits" (result/hits-phrase en 0)))
   (testing "Danish, with its own digit grouping"
-    (is (= "1 forekomst" (result/hits-phrase da 1)))
-    (is (= "1.000 forekomster" (result/hits-phrase da 1000)))))
+    (is (= "1 hit" (result/hits-phrase da 1)))
+    (is (= "1.000 hits" (result/hits-phrase da 1000)))))
 
 (deftest hits-heading-test
   (testing "the heading is the answer alone, how many: the field above
             holds the query"
     (is (= "6 hits" (result/hits-heading en {:q "hund"} 6)))
-    (is (= "6 forekomster" (result/hits-heading da {:q "hund"} 6))))
-  (testing "which the line under it names only once the form has moved
-            on from it"
-    (let [asked {:q "hund" :mode "simple"}]
-      (is (nil? (result/question en {:asked asked :params asked})))
-      (is (nil? (result/question en {:asked  asked
-                                     :params {:q "hund " :mode "simple"}})))
-      (is (= [:q "hund"]
-             (result/question en {:asked  asked
-                                  :params {:q "hunde" :mode "simple"}})))
-      (testing "a switch that kept the query whole is no move, one that
-                dropped part of it is"
-        (is (nil? (result/question en {:asked  asked
-                                       :params {:mode "extended"}
-                                       :tokens [{:id 1 :conditions
-                                                 [{:id 1 :v "hund"}]}]})))
-        (is (= [:q "hund"]
-               (result/question en {:asked  asked
-                                    :params {:mode "extended"}
-                                    :tokens [{:id 1 :conditions
-                                              [{:id 1 :v "kat"}]}]}))))
-      (testing "and a page with no answer yet asks nothing"
-        (is (nil? (result/question en {:params {:q ""}}))))))
-  (testing "a CQP query is code, a list is its length, a word is quoted"
-    (is (= [:code "[lemma = \"hund\"]"]
-           (result/query-mark en {:q "[lemma = \"hund\"]"})))
-    (is (= "2 words" (result/query-mark en {:q "hund\nkat"})))
-    (is (= [:q "hund"] (result/query-mark en {:q "hund" :mode "simple"}))))
-  (testing "an extended search names the CQP its tokens compile to"
-    (is (= [:code "[lemma = \"hund\"]"]
-           (result/query-mark en {:mode "extended" :t1.attr "lemma"
-                                  :t1.v "hund"})))
+    (is (= "6 hits" (result/hits-heading da {:q "hund"} 6))))
+  (testing "an extended search is answered like any other"
     (is (= "6 hits"
            (text (result/hits-heading en {:mode    "extended"
                                           :t1.attr "lemma"
@@ -102,17 +72,11 @@
     (is (= "en tilfældig stikprøve på højst 100 pr. korpus"
            (result/sample-phrase da 100 ["PROBE" "VISER"])))))
 
-(deftest subset-phrase-test
-  (is (= (list [:code "lemma"] " " "before the match" " = " [:code "kat"])
-         (result/subset-phrase en {:anchor "match[-1]" :attr :lemma
-                                   :value  "kat"})))
-  (is (= "lemma før matchet = kat"
-         (text (result/subset-phrase da {:anchor "match[-1]" :attr :lemma
-                                         :value  "kat"}))))
-  (is (nil? (result/subset-phrase en nil)))
+(deftest position-label-test
+  (is (= "before the match" (result/position-label en "match[-1]")))
+  (is (= "over hele matchet" (result/position-label da "match..matchend")))
   (testing "a position nothing names is shown as CQP names it"
-    (is (= "target" (result/position-label en "target"))))
-  (is (= "over hele matchet" (result/position-label da "match..matchend"))))
+    (is (= "target" (result/position-label en "target")))))
 
 (deftest subset-inputs-test
   (is (= (list [:input {:type "hidden" :name "subset" :value "kat"}]
@@ -122,30 +86,16 @@
                                 :value  "kat"})))
   (is (nil? (result/subset-inputs nil))))
 
-(deftest near-phrase-test
-  (is (= (list "near" " " [:code "kat"])
-         (result/near-phrase en {:word "kat" :distance 5})))
-  (is (= "sammen med kat"
-         (text (result/near-phrase da {:word "kat" :distance 5}))))
-  (is (nil? (result/near-phrase en nil))))
-
 (deftest filter-phrase-test
   (is (= "" (result/filter-phrase {})))
   (is (= "text_author ukendt; text_year 1583, 1591"
          (result/filter-phrase {:filter {:text_year   #{"1591" "1583"}
                                          :text_author #{"ukendt"}}})))
-  (is (nil? (result/within-phrase en {})))
-  (is (= "within text_year 1591"
-         (result/within-phrase en {:filter {:text_year #{"1591"}}})))
-  (is (= "inden for text_year 1591"
-         (result/within-phrase da {:filter {:text_year #{"1591"}}})))
   (testing "patterns follow the values, between slashes"
     (is (= "text_title /Hav.*/; text_year 1583, 1591, /16../"
            (result/filter-phrase {:filter   {:text_year #{"1591" "1583"}}
                                   :patterns {:text_title ["Hav.*"]
-                                             :text_year  ["16.."]}})))
-    (is (= "within text_title /Hav.*/"
-           (result/within-phrase en {:patterns {:text_title ["Hav.*"]}}))))
+                                             :text_year  ["16.."]}}))))
   (testing "and a range is the two numbers asked for, last of all: the
             values it stands for are the corpus's own, and there may be
             hundreds of them"
@@ -154,47 +104,53 @@
     (is (= "text_year 1583, /16../, 1900–2024"
            (result/filter-phrase {:filter   {:text_year #{"1583"}}
                                   :patterns {:text_year ["16.."]}
-                                  :ranges   {:text_year [1900 2024]}})))
-    (is (= "within text_year 1900–2024"
-           (result/within-phrase en {:ranges {:text_year [1900 2024]}})))))
+                                  :ranges   {:text_year [1900 2024]}})))))
 
-(deftest qualifiers-test
-  (let [phrases (fn [ui params result]
-                  (map text (result/qualifiers ui params result)))]
-    (testing "only the corpora that could be searched are counted"
-      (is (= ["in 2 corpora"] (phrases en {} example-result))))
-    (testing "the attribute and the part of the form, when not the usual"
-      (is (= ["attribute lemma" "part of word" "in 2 corpora"]
-             (phrases en {:in "lemma" :match "infix"} example-result)))
-      (is (= ["in 2 corpora"]
-             (phrases en {:in "word" :match ""} example-result)))
-      (testing "and only where the mode read them: a CQP query names its
-                own attribute, and the options ride along as memory"
-        (is (= ["in 2 corpora"]
-               (phrases en {:q "[]" :in "lemma" :match "infix"}
-                        example-result)))
-        (is (= ["in 2 corpora"]
-               (phrases en {:mode "extended" :t1.v "x" :in "lemma"}
-                        example-result)))))
-    (testing "the filter, the narrowings and the sample, in that order"
-      (is (= ["in 2 corpora" "within text_year 1591"
-              "lemma at the start of the match = hund" "near og"
-              "a random sample of at most 100 per corpus"]
-             (phrases en {} (assoc example-result
-                                   :filter {:text_year #{"1591"}}
-                                   :subset {:anchor "match" :attr :lemma
-                                            :value  "hund"}
-                                   :near   {:word "og"}
-                                   :sample 100)))))
-    (testing "a search that found nothing sampled nothing, and saying it
-              drew a sample reads as the reason the result is empty"
-      (is (= ["in PROBE"]
-             (phrases en {} {:size   0 :sample 100
-                             :counts [{:corpus "PROBE" :size 0}]}))))
-    (testing "in Danish, the attribute name untranslated"
-      (is (= ["i 2 korpusser" "inden for text_year 1591"]
-             (phrases da {} (assoc example-result
-                                   :filter {:text_year #{"1591"}})))))))
+(deftest found-in-phrase-test
+  (testing "where the hits are, not where they were looked for: the
+            chooser above shows what was searched"
+    (is (= "in 2 corpora" (result/found-in-phrase en example-result)))
+    (is (= "i 2 korpusser" (result/found-in-phrase da example-result))))
+  (testing "one corpus is named rather than counted"
+    (is (= "in PROBE"
+           (result/found-in-phrase en {:counts [{:corpus "PROBE" :size 5}
+                                                {:corpus "VISER" :size 0}]}))))
+  (testing "a search that found nothing says nothing, a count of none
+            being no news, and a corpus that failed has no size to read"
+    (is (nil? (result/found-in-phrase en {:counts [{:corpus "PROBE" :size 0}]})))
+    (is (nil? (result/found-in-phrase
+               en {:counts [{:corpus "X" :error {:type :cqp}}]})))
+    (is (nil? (result/found-in-phrase en nil)))))
+
+(deftest reach-test
+  (testing "every corpus answering, the reach is a line and no more"
+    (is (= [:p "in PROBE"]
+           (result/reach en {:counts [{:corpus "PROBE" :size 5}]}))))
+  (testing "a corpus left out folds away under a count of them"
+    (let [[tag summary [_ items]] (result/reach en example-result)]
+      (is (= :details.caveats tag))
+      (is (= "in 2 corpora" (text (drop 2 summary))))
+      (testing "labelled in words, the mark that says there is something
+                here being the stylesheet's, which reaches nobody
+                listening"
+        (is (= "in 2 corpora, 2 corpora left out of the search"
+               (:aria-label (second summary)))))
+      (testing "one item for each way of failing, naming what it took and
+                carrying CQP's own words where they are the reason"
+        (is (= 1 (count items)))
+        (is (= "TALER, GONE: CQP errorno lemma" (text (first items)))))))
+  (testing "and it is said even where no corpus found anything to place"
+    (is (= :details.caveats
+           (first (result/reach en {:counts [{:corpus "PROBE" :size 0}
+                                             {:corpus "X"
+                                              :error {:type :timeout}}]})))))
+  (testing "a search that found nothing anywhere and failed nowhere has
+            no reach to report"
+    (is (nil? (result/reach en {:counts [{:corpus "PROBE" :size 0}]}))))
+  (testing "and one no corpus could run has none either: its errors are
+            the answer, headed by the region itself"
+    (is (nil? (result/reach en {:counts [{:corpus "X"
+                                          :error {:type :timeout}}]})))))
 
 (deftest counting-test
   (testing "a result is being counted while corpora remain"
@@ -203,15 +159,16 @@
     (is (not (result/counting? {}))))
   (testing "the heading gives the hits counted so far as a floor"
     (is (= "at least 6 hits" (result/hits-heading en {:q "hund"} 6 true)))
-    (is (= "mindst 6 forekomster" (result/hits-heading da {:q "hund"} 6 true))))
+    (is (= "mindst 6 hits" (result/hits-heading da {:q "hund"} 6 true))))
   (testing "the page is placed without a last page"
     (is (= "page 3" (result/page-phrase en {:page 2})))
     (is (= "side 3" (result/page-phrase da {:page 2}))))
   (testing "corpora still being counted count as searched"
     (is (result/searched? {:counts [] :remaining ["X"]}))
-    (is (= ["in 3 corpora"]
-           (map text (result/qualifiers en {} {:counts    [{:corpus "A" :size 1}]
-                                               :remaining ["B" "C"]}))))))
+    (testing "but not yet as corpora the hits are in: the line grows as
+              their counts arrive, beside a heading reading at least"
+      (is (= "in A" (result/found-in-phrase
+                     en {:counts [{:corpus "A" :size 1}] :remaining ["B" "C"]}))))))
 
 (deftest searched?-test
   (testing "a corpus that answered makes the counts an answer"
@@ -485,7 +442,8 @@
                :asked      {:q "hund"}
                :params     {:q "hund"}
                :result     example-result}
-        html  (result/results-region state "6 hits" ["in 2 corpora"] [:p "body"])]
+        html  (result/results-region state "6 hits" [:div.view-controls]
+                                     [:p "body"])]
     (testing "the region names itself and can be landed on"
       (is (= :section.result (first html)))
       (is (= {:id              "results"
@@ -496,23 +454,25 @@
       (is (= "true" (:aria-busy (second (result/results-region
                                          (assoc state :pending? true)
                                          "6 hits" nil nil))))))
-    (testing "its head holds the heading, the page's own h1, with the rest
-              of the question under it as a subheading"
-      (let [[tag [group h1 sub]] (nth html 2)]
+    (testing "its head holds the answer, the heading and how far the
+              search reached, and beside it the controls over that answer"
+      (let [[tag answer controls] (nth html 2)
+            [_ h1 reach] answer]
         (is (= :header.result-head tag))
-        (is (= :hgroup group))
+        (is (= :div.answer (first answer)))
         (is (= [:h1 {:id "results-heading"} "6 hits"] h1))
-        (is (= :p (first sub)))
-        (is (= "in 2 corpora" (text sub)))))
+        (is (= "in 2 corpora" (text (second reach))))
+        (is (= [:div.view-controls] controls))))
     (testing "the switch between the views is not one of its parts: it
               stands on the query line (see views-test)"
       (is (not (some #{:nav.tabs} (deep html)))))
     (testing "the status line is a live region that stands even when
               silent, before anything whose kind can change"
       (is (= [:div.status {:role "status"} nil] (nth html 3))))
-    (testing "the errors of individual corpora are headed sections before
-              the body"
-      (is (some #{[:h2 "CQP error"]} (deep html)))
+    (testing "the corpora that failed are folded into that reach, not
+              headed as errors of their own"
+      (is (not (some #{[:h2 "CQP error"]} (deep html))))
+      (is (some #{:details.caveats} (deep html)))
       (is (= [:p "body"] (last html))))
     (testing "the heading says at least, and a status line says what is
               still being counted"

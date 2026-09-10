@@ -31,15 +31,6 @@
     (is (= "No corpus selected"
            (frequency/frequency-heading en {:q "hund"} nil {:type :no-corpus})))))
 
-(deftest grouping-phrase-test
-  (testing "by what, where in the match, and against what"
-    (is (= "by word before the match"
-           (text (frequency/grouping-phrase en (assoc counted :at "match[-1]")))))
-    (is (= "efter lemma og text_year"
-           (text (frequency/grouping-phrase da {:attr :lemma :by :text_year}))))
-    (testing "the attribute names as the code they are"
-      (is (some #{[:code "word"]} (deep (frequency/grouping-phrase en counted)))))))
-
 (deftest frequency-section-test
   (let [html (frequency/frequency-section
               {:lang       "en"
@@ -54,13 +45,14 @@
               :tabindex        "-1"
               :aria-labelledby "results-heading"}
              (second html))))
-    (testing "its heading is the answer, and under it how the table counted
-              comes before the rest of the question"
-      (let [[tag [group h1 sub]] (nth html 2)]
+    (testing "its heading is the answer, and under it where the hits are;
+              how the table counted is its own controls' to say"
+      (let [[tag [_ h1 reach] controls] (nth html 2)]
         (is (= :header.result-head tag))
-        (is (= :hgroup group))
         (is (= "5 hits" (text (drop 2 h1))))
-        (is (= "by word · in PROBE" (text sub)))))
+        (is (= [:p "in PROBE"] reach))
+        (is (= :div.view-controls (first controls)))
+        (is (some #{"Group by"} (deep controls)))))
     (testing "the table's size is its caption's to say"
       (is (some #(and (vector? %) (= :caption (first %))
                       (= "Frequencies · 1 value" (text %)))
@@ -252,8 +244,6 @@
         (is (not (some #{[:th {:scope "row"} "tokens"]} html)))))))
 
 (deftest crosstab-caption-test
-  (is (= "by lemma at the start of the match and text_year"
-         (text (frequency/grouping-phrase en crosstab))))
   (is (re-find #"^Frequencies · 1 value · 2 columns"
                (text (frequency/table-caption en crosstab))))
   (testing "cut columns say so"

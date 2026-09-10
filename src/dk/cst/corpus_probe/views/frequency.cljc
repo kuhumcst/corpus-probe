@@ -83,15 +83,6 @@
          (str ", " (i18n/tr ui "the") " " (i18n/group-digits ui shown)
               " " (i18n/tr ui "most frequent shown")))))
 
-(defn grouping-phrase
-  "How the frequency `result` counted, as a phrase in `ui`: by which
-  attribute, where in the match, and against which second attribute when
-  it is a cross-tabulation."
-  [ui {:keys [attr at by]}]
-  (list (i18n/tr ui "by") " " [:code (name attr)]
-        (when at (str " " (result/position-label ui at)))
-        (when by (list " " (i18n/tr ui "and") " " [:code (name by)]))))
-
 (defn table-caption
   "The caption of the table of frequency `result`, in `ui`: its name, how
   many values it holds and shows, the columns likewise when it is counted
@@ -255,6 +246,24 @@
                          (reduce + (keep :size (filter :tokens counts))))
     (result/error-heading ui (or error (some :error counts)))))
 
+(defn frequency-controls
+  "The controls over the frequency table of `state`, for its head: what
+  it counts by and where, what it columns by, whether it counts texts,
+  and the word the hits must be near. Nil where nothing could be
+  counted."
+  [{:keys [ui attrs positions asked result client?]}]
+  (when (tabled? result)
+    (result/view-controls ui client?
+                          (list (attr-control ui attrs (:attr asked))
+                                " "
+                                (position-control ui positions (:at result))
+                                " "
+                                (by-control ui attrs (:by result))
+                                (when-not (:by result)
+                                  (list " " (docs-control ui (:docs result)))))
+                          (result/near-control ui (:near result))
+                          (:near result))))
+
 (defn frequency-section
   "The frequency view of the search in `state`: when any corpus could be
   counted, the grouping, position and column controls, the table,
@@ -264,33 +273,17 @@
 
   The table answers the params the search was `:asked` with, not the
   form's `:params`."
-  [{:keys [ui attrs positions asked result error export-hrefs client?]
-    :as   state}]
-  (let [tabled (tabled? result)]
-    (result/results-region
-     state
-     (frequency-heading ui asked result error)
-     ;; how the table counted comes first: it is what this view asks
-     ;; that the concordance of the same hits does not
-     (cond->> (result/qualifiers ui asked result)
-       tabled (cons (grouping-phrase ui result)))
-     (when tabled
-       (list
-        (result/view-controls ui client?
-                              (list (attr-control ui attrs (:attr asked))
-                                    " "
-                                    (position-control ui positions (:at result))
-                                    " "
-                                    (by-control ui attrs (:by result))
-                                    (when-not (:by result)
-                                      (list " "
-                                            (docs-control ui (:docs result)))))
-                              (result/near-control ui (:near result))
-                              (:near result))
-        (if (:by result)
-          (crosstab-table ui result)
-          (frequency-table ui result))
-        ;; what to do next with the table, so it follows the table
-        (result/download-links ui export-hrefs
-                               (when (< row-limit (count (:rows result)))
-                                 (i18n/tr ui "all values"))))))))
+  [{:keys [ui asked result error export-hrefs] :as state}]
+  (result/results-region
+   state
+   (frequency-heading ui asked result error)
+   (frequency-controls state)
+   (when (tabled? result)
+     (list
+      (if (:by result)
+        (crosstab-table ui result)
+        (frequency-table ui result))
+      ;; what to do next with the table, so it follows the table
+      (result/download-links ui export-hrefs
+                             (when (< row-limit (count (:rows result)))
+                               (i18n/tr ui "all values")))))))

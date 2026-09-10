@@ -32,9 +32,9 @@
                :spellcheck   "false"
                :enterkeyhint "search"
                :required     required?
-               ;; every keystroke into the state, so the answer can
-               ;; tell when the form has moved on from what ran (see
-               ;; dk.cst.corpus-probe.views.result/question)
+               ;; every keystroke into the state, so that what reads the
+               ;; query reads it as it is typed: the mode the shape of
+               ;; the text puts the form in, and the button naming it
                :on           {:input   [:set-query
                                         :event.target/value]
                               :keydown [:submit-on-enter

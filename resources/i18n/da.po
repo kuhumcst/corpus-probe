@@ -82,7 +82,7 @@ msgid "Corpus"
 msgstr "Korpus"
 
 msgid "Counting hits in"
-msgstr "Tæller forekomster i"
+msgstr "Tæller hits i"
 
 msgid "CQP error"
 msgstr "CQP-fejl"
@@ -175,7 +175,7 @@ msgid "no data"
 msgstr "ingen data"
 
 msgid "No hits."
-msgstr "Ingen forekomster."
+msgstr "Ingen hits."
 
 msgid "No values found."
 msgstr "Ingen værdier fundet."
@@ -251,6 +251,11 @@ msgid_plural "The corpora cannot be counted by {attr}."
 msgstr[0] "Korpusset kan ikke tælles efter {attr}."
 msgstr[1] "Korpusserne kan ikke tælles efter {attr}."
 
+msgid "{n} corpus left out of the search"
+msgid_plural "{n} corpora left out of the search"
+msgstr[0] "{n} korpus udeladt af søgningen"
+msgstr[1] "{n} korpusser udeladt af søgningen"
+
 msgid "The corpus cannot be sorted by {attr}."
 msgid_plural "The corpora cannot be sorted by {attr}."
 msgstr[0] "Korpusset kan ikke sorteres efter {attr}."
@@ -311,7 +316,7 @@ msgid "Sample"
 msgstr "Stikprøve"
 
 msgid "all hits"
-msgstr "alle forekomster"
+msgstr "alle hits"
 
 msgid "corpus order"
 msgstr "korpusrækkefølge"
@@ -435,8 +440,8 @@ msgstr "Ordfrekvenser i"
 
 msgid "hit"
 msgid_plural "hits"
-msgstr[0] "forekomst"
-msgstr[1] "forekomster"
+msgstr[0] "hit"
+msgstr[1] "hits"
 
 msgid "region"
 msgid_plural "regions"
@@ -473,9 +478,6 @@ msgstr "aktivt filter"
 
 msgid "Near"
 msgstr "Sammen med"
-
-msgid "near"
-msgstr "sammen med"
 
 msgid "word"
 msgid_plural "words"
@@ -567,20 +569,8 @@ msgstr "et regulært udtryk"
 msgid "Give {attribute} a range from {low} to {high}"
 msgstr "Angiv et interval for {attribute} fra {low} til {high}"
 
-msgid "whole word"
-msgstr "hele ordet"
-
 msgid "starts with"
 msgstr "begynder med"
-
-msgid "start of word"
-msgstr "ordets begyndelse"
-
-msgid "end of word"
-msgstr "ordets slutning"
-
-msgid "part of word"
-msgstr "del af ordet"
 
 
 msgid "Extended cannot read CQP. The query is not kept:"

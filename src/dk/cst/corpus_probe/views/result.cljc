@@ -1,10 +1,10 @@
 (ns dk.cst.corpus-probe.views.result
-  "What both views of a search result share: the results region with its
-  heading and the phrases naming what was asked, the switch between the
-  views, the controls over a result, the pager, the download links and
-  the error sections. Nothing here knows the search form: the region
-  answers the params a search was asked with, which the form may have
-  moved on from."
+  "What both views of a search result share: the results region under
+  its heading, the switch between the views, the controls over a result,
+  the pager, the download links and the error sections, and the phrases
+  a document title names a search by. Nothing here knows the search
+  form: the region answers the params a search was asked with, which the
+  form may have moved on from."
   (:require [clojure.string :as str]
             [dk.cst.corpus-probe.i18n :as i18n]
             [dk.cst.corpus-probe.query :as query]
@@ -34,17 +34,6 @@
                 (assoc (tokens/rows->params tokens)
                        :mode mode :within (:within params))
                 params))))
-
-(defn match-label
-  "What the `match` param value is called, in `ui`: how much of the
-  form a simple search must cover; the whole word for a value naming
-  none."
-  [ui match]
-  (case match
-    "prefix" (i18n/tr ui "start of word")
-    "suffix" (i18n/tr ui "end of word")
-    "infix"  (i18n/tr ui "part of word")
-    (i18n/tr ui "whole word")))
 
 (defn asked?
   "True when the search `params` ask for anything; a search asking
@@ -82,26 +71,6 @@
           (hits-phrase ui size))
      (i18n/tr ui "All tokens"))))
 
-(defn query-mark
-  "The query of `params` as the answer names it, in `ui`: CQP, and the
-  CQP an extended search compiles to, as code, a list as how many words
-  it holds, and a simple search quoted, a word spoken of, not used."
-  [ui params]
-  (let [phrase (query-phrase ui params)]
-    (case (mode/mode params)
-      ("cqp" "extended") [:code phrase]
-      "list"             phrase
-      [:q phrase])))
-
-(defn question
-  "The query the result of `state` answered, in `ui`, once the form
-  above has moved on from it: its `:asked` params are the ones the
-  search ran with, the form's query is read from its `:params` and
-  `:tokens`. Nil while the form still holds the query."
-  [ui {:keys [asked params tokens]}]
-  (when (not= (query/of asked) (form-query params tokens))
-    (query-mark ui asked)))
-
 (defn corpora-phrase
   "The names of `corpora` in words in `ui`: the one name, or how many
   there were."
@@ -109,6 +78,20 @@
   (if (= 1 (count corpora))
     (first corpora)
     (str (count corpora) " " (i18n/tr ui "corpora"))))
+
+(defn found-in-phrase
+  "Where the hits of a `result` are, in `ui`: the corpora holding any;
+  nil where the search found none."
+  [ui {:keys [counts]}]
+  ;; which corpora were searched is the chooser's business, and it shows
+  ;; them; this says which of them the hits are in, which nothing else does
+  (let [found (for [{:keys [corpus size]} counts
+                    ;; a corpus the search failed in has no size at all,
+                    ;; and its own error section below says so
+                    :when (pos? (or size 0))]
+                corpus)]
+    (when (seq found)
+      (str (i18n/tr ui "in") " " (corpora-phrase ui found)))))
 
 (defn page-phrase
   "Where in a paged `result` the reader is, in `ui`: the page, and of how
@@ -140,14 +123,7 @@
     "matchend[1]"     (i18n/tr ui "after the match")
     position))
 
-(defn subset-phrase
-  "That a result holds only the hits whose token at the :anchor of
-  `subset` has its :value as its :attr, in `ui`; nil without one."
-  [ui {:keys [anchor attr value] :as subset}]
-  (when subset
-    (list [:code (name attr)] " " (position-label ui anchor) " = "
-          [:code value])))
-
+;; TODO: give the subset a control of its own
 (defn subset-inputs
   "The `subset` narrowing as hidden inputs, so the form carries it; nil
   without one.
@@ -160,13 +136,6 @@
     (list [:input {:type "hidden" :name "subset" :value value}]
           [:input {:type "hidden" :name "subset-at" :value anchor}]
           [:input {:type "hidden" :name "subset-attr" :value (name attr)}])))
-
-(defn near-phrase
-  "That a result holds only the hits with the :word of `near` nearby,
-  in `ui`; nil without one."
-  [ui {:keys [word] :as near}]
-  (when near
-    (list (i18n/tr ui "near") " " [:code word])))
 
 (defn filter-phrase
   "How a search was narrowed by metadata, in words: each attribute of
@@ -189,42 +158,6 @@
                                                (get patterns attr))
                                           (when from
                                             [(str from "–" to)])))))))
-
-(defn within-phrase
-  "The `narrowing` of a result (see `filter-phrase`) as a qualifier of it
-  in `ui`, or nil without one: \"within text_year 1591\"."
-  [ui {:keys [filter patterns ranges] :as narrowing}]
-  (when (or (seq filter) (seq patterns) (seq ranges))
-    (str (i18n/tr ui "within") " " (filter-phrase narrowing))))
-
-;; TODO: should any of these phrases be optional, kept as a stored setting?
-(defn qualifiers
-  "The question a `result` answered, less the query itself, as short
-  phrases in `ui`: the attribute a simple search of `params` matched and
-  the part of the form, when not the usual ones; the corpora searched;
-  the metadata filter; the narrowings; the sample."
-  [ui {:keys [in match] :as params}
-   {:keys [counts size sample remaining] :as result}]
-  (let [searched (concat (map :corpus (filter :size counts)) remaining)
-        ;; an option the mode does not read may still ride in the params,
-        ;; as memory for the form's disabled control; the search never saw
-        ;; it, so the line must not say it did
-        reads?   (partial mode/reads? (mode/mode params))]
-    (remove nil?
-            [(when (and (reads? :in) (not (contains? #{nil "" "word"} in)))
-               (list (i18n/tr ui "attribute") " " [:code in]))
-             (when (and (reads? :match) (not (str/blank? match)))
-               (match-label ui match))
-             (when (seq searched)
-               (str (i18n/tr ui "in") " " (corpora-phrase ui searched)))
-             (within-phrase ui result)
-             (subset-phrase ui (:subset result))
-             (near-phrase ui (:near result))
-             ;; a search that found nothing sampled nothing, and saying it
-             ;; drew a sample of what it found reads as the reason it is
-             ;; empty
-             (when (pos? (or size 0))
-               (sample-phrase ui sample searched))])))
 
 (defn view-label
   "What the result view `k` is called, in `ui`: the concordance is KWIC,
@@ -436,11 +369,22 @@
   [message]
   (boolean (re-find #"Corpus ``.*'' is undefined" (str message))))
 
+(defn cqp-output
+  "The `message` of an error of `type` as the sample output of another
+  program; nil for a guard of ours, whose message is untranslated
+  English that never was CQP's."
+  [type message]
+  ;; the stylesheet scrolls this rather than letting cqp's column-aligned
+  ;; pointer reflow, and a scroll container a keyboard cannot reach is
+  ;; unreadable in the browsers that do not focus scrollers themselves
+  (when (and message (not= :rejected type))
+    [:pre {:tabindex "0"} [:samp message]]))
+
 (defn error-body
   "The parts of an `error` under its heading in `ui`: the `corpora` it
   concerns, the explanation of a type that carries no message, why a
   guard of ours refused, what a bare word in CQP gets told, and CQP's
-  own message verbatim as the sample output of another program."
+  own message verbatim."
   [ui {:keys [type message] :as error} corpora]
   (list
    (when (seq corpora)
@@ -454,13 +398,7 @@
      [:p (i18n/tr ui (str "CQP reads a bare word as the name of a query "
                           "result. To match a word, put it in quotation "
                           "marks."))])
-   ;; the stylesheet scrolls this rather than letting cqp's column-aligned
-   ;; pointer reflow, and a scroll container a keyboard cannot reach is
-   ;; unreadable in the browsers that do not focus scrollers themselves.
-   ;; Only CQP's own words go in it: a guard of ours is untranslated
-   ;; English that never was another program's output
-   (when (and message (not= :rejected type))
-     [:pre {:tabindex "0"} [:samp message]])))
+   (cqp-output type message)))
 
 (defn cqp-error-section
   "An `error` map as an error section in `ui`, naming the `corpora` it
@@ -468,6 +406,61 @@
   [ui error corpora]
   (widgets/error-section (error-heading ui error)
                          (error-body ui error corpora)))
+
+(defn caveat-sentence
+  "What became of the `n` corpora an `error` concerns, in `ui`, in one
+  sentence: the explanation of a type that carries one, why a guard of
+  ours refused, or the error's own name where that is all there is."
+  [ui error n]
+  (or (error-explanation ui (:type error))
+      (rejection-explanation ui error n)
+      (error-heading ui error)))
+
+(defn caveat
+  "One `error` and the `corpora` it took out of a search, as an item of
+  `reach`: the corpora named, what became of them, and CQP's own words
+  where it has them."
+  [ui {:keys [type message] :as error} corpora]
+  [:li
+   (interpose ", " (map (fn [c] [:strong c]) corpora))
+   ": " (caveat-sentence ui error (count corpora))
+   (cqp-output type message)])
+
+(defn left-out-phrase
+  "How many corpora, `n`, a search left out, in words in `ui`."
+  [ui n]
+  (i18n/trn ui
+            "{n} corpus left out of the search"
+            "{n} corpora left out of the search"
+            n {:n n}))
+
+(defn reach
+  "How far a `result` reaches, in `ui`: the corpora its hits are in, and
+  behind a disclosure the ones its search left out. Nil where there is
+  neither."
+  [ui {:keys [counts] :as result}]
+  ;; a corpus left out is not a failed search but a shorter one, so it is
+  ;; folded away under a mark rather than headed as an error. Where none
+  ;; could be searched there is no reach to report and the errors are the
+  ;; answer instead (see `results-region`)
+  (when (searched? result)
+    (let [found    (found-in-phrase ui result)
+          left-out (filter :error counts)
+          phrase   (when (seq left-out)
+                     (left-out-phrase ui (count left-out)))]
+      (cond
+        phrase
+        [:details.caveats
+         ;; the mark saying there is something here is the stylesheet's,
+         ;; and reaches nobody listening: the summary is labelled in
+         ;; words, as the chooser's summaries are
+         [:summary {:aria-label (if found (str found ", " phrase) phrase)}
+          (or found phrase)]
+         [:ul (for [[error corpora] (error-groups counts)]
+                (caveat ui error corpora))]]
+
+        found
+        [:p found]))))
 
 (defn result-heading
   "The heading naming the results region in `ui`: what the `result` of
@@ -482,12 +475,12 @@
 (defn results-region
   "The outcome of a search in `state` under `heading`, as a region named
   by that heading and focusable, so a GET search can land on it: a
-  header of the heading and the `subheading` phrases; a status line
-  while the result is still being counted; the errors; then `body`, the
-  view's own content. The switch between the views stands on the query
-  line instead (see dk.cst.corpus-probe.views/search-page)."
-  [{:keys [ui result error pending?] :as state}
-   heading subheading body]
+  header of the heading, where the hits are and the `controls` over
+  them; a status line while the result is still being counted; the
+  errors; then `body`, the view's own content. The switch between the
+  views stands on the query line instead (see
+  dk.cst.corpus-probe.views/search-page)."
+  [{:keys [ui result error pending?] :as state} heading controls body]
   ;; named by the heading alone: a screen reader landing here hears the
   ;; count, not the whole question, which the controls below restate
   [:section.result (cond-> {:id              url/results-id
@@ -498,20 +491,28 @@
                      ;; about them says so
                      pending? (assoc :aria-busy "true"))
    [:header.result-head
-    [:hgroup
+    ;; the answer, and beside it what can be done to it: two parts for
+    ;; the stylesheet to set a rule between
+    [:div.answer
      ;; the page's h1: the search page has no other, so what a search
-     ;; found is what the page is about
+     ;; found is what the page is about, and nothing else goes here:
+     ;; every other word of the question is in a control the reader can
+     ;; see from where they are
      [:h1 {:id "results-heading"} heading]
-     (when-let [phrases (seq (remove nil? (cons (question ui state)
-                                                subheading)))]
-       [:p (interpose " · " phrases)])]]
+     (reach ui result)]
+    controls]
    ;; always rendered, and before anything whose kind can change (see
    ;; dk.cst.corpus-probe.views.widgets/status)
    (widgets/status
     (when (counting? result)
       [:p (str (i18n/tr ui "Counting hits in") " "
                (corpora-phrase ui (:remaining result)) " …")]))
-   (when error (error-body ui error nil))
-   (for [[e corpora] (error-groups (:counts result))]
-     (cqp-error-section ui e corpora))
+   ;; an error that left nothing to show is the answer, and the heading
+   ;; already names it: what follows is the rest of that sentence, not a
+   ;; section with a heading of its own. Where hits were found the same
+   ;; errors are notes on how far the search reached (see `reach`)
+   (when-not (searched? result)
+     (list (when error (error-body ui error nil))
+           (for [[e corpora] (error-groups (:counts result))]
+             (error-body ui e corpora))))
    body])

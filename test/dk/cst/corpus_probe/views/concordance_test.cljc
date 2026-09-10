@@ -418,17 +418,19 @@
     (testing "and is busy while the answer to the next question is coming"
       (is (= "true" (:aria-busy (second (concordance/concordance-section
                                          (assoc state :pending? true)))))))
-    (testing "its head holds the heading, the page's own h1, with the rest
-              of the question under it as a subheading"
-      (let [[tag [group h1 sub]] (nth html 2)]
+    (testing "its head holds the answer, the heading and how far the
+              search reached, and beside it the controls over that answer"
+      (let [[tag [_ h1 reach] controls] (nth html 2)]
         (is (= :header.result-head tag))
-        (is (= :hgroup group))
         (is (= [:h1 {:id "results-heading"}] (subvec h1 0 2)))
         (is (= "6 hits" (text (drop 2 h1))))
-        (is (= :p (first sub)))
-        (is (= "in 2 corpora" (text sub)))))
-    (testing "errors are headed sections before the concordance"
-      (is (some #{[:h2 "CQP error"]} (deep html)))
+        (is (= "in 2 corpora" (text (second reach))))
+        (is (= :div.view-controls (first controls)))
+        (is (some #{"Sort"} (deep controls)))))
+    (testing "the corpora that failed fold into that reach rather than
+              standing as errors over the concordance"
+      (is (not (some #{[:h2 "CQP error"]} (deep html))))
+      (is (some #{:details.caveats} (deep html)))
       (is (some #{:table.kwic} (deep html))))
     (testing "the sort travels with the result, not with the query form"
       (is (some #{"corpus order"} (deep html)))
@@ -482,7 +484,20 @@
       (is (some #{"No hits."} (deep html)))
       (is (not (some #{:table.kwic} (deep html))))
       (is (not (some #{"/e?format=tsv"} (deep html))))
-      (is (not (some #{"/frequencies?q=x"} (deep html))))))
+      (is (not (some #{"/frequencies?q=x"} (deep html)))))
+    (testing "and no controls either, having nothing to decide about"
+      (is (nil? (concordance/concordance-controls
+                 {:ui en :result {:size 0 :counts [{:corpus "PROBE" :size 0}]}}))))
+    (testing "unless what emptied it is a narrowing, which keeps its own
+              control open, or the reader could not take it away again"
+      (let [html (concordance/concordance-controls
+                  {:ui     en
+                   :result {:size 0 :near {:word "kat"}
+                            :counts [{:corpus "PROBE" :size 0}]}})]
+        (is (= :div.view-controls (first html)))
+        (is (some #{"Near"} (deep html)))
+        (is (not (some #{"Sort"} (deep html))))
+        (is (some #(and (map? %) (:open %)) (deep html))))))
   (testing "a result still being counted says at least, what is still
             being counted, and where the reader is without a last page"
     (let [html (concordance/concordance-section

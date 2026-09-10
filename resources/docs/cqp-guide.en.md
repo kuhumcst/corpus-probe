@@ -9,10 +9,10 @@ with your own words.
 
 To run a query, type it in the field on the [search page](/search).
 Text that begins with a bracket, a quotation mark or a tag runs as CQP,
-and the line under the field says so. The controls under Matching are
+and the button reads {{Run as CQP}}. The controls under **Scope** are
 then gone: the query says what to match. To see how the form writes
-CQP, type words in order or one word per line: the line under the field
-holds that search as CQP.
+CQP, choose {{Extended}} under **Query type**: the line under your
+tokens holds that search as CQP.
 
 ## Word forms
 

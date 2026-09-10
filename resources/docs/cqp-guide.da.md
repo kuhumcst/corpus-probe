@@ -9,11 +9,11 @@ y med dine egne ord.
 
 For at køre en forespørgsel skal du skrive den i søgefeltet på
 [søgesiden](/search). Tekst, der begynder med en klamme, et
-anførselstegn eller et tag, kører som CQP, og linjen under søgefeltet siger
-det. Valgene under Matchning er så væk: forespørgslen siger selv, hvad
-der skal matches. For at se, hvordan formularen skriver CQP, skal du
-skrive ord i rækkefølge eller ét ord pr. linje: linjen under søgefeltet
-viser den søgning som CQP.
+anførselstegn eller et tag, kører som CQP, og knappen viser
+{{Kør som CQP}}. Så forsvinder valgene under **Afgrænsning**, da
+forespørgslen selv angiver, hvad den skal matche. For at se, hvordan
+formularen skriver CQP, skal du vælge {{Udvidet}} under **Søgetype**:
+linjen under dine tokens viser søgningen som CQP.
 
 ## Ordformer
 

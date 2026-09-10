@@ -57,10 +57,11 @@ CQP {#cqp}:
   [attribute](/glossary#positional-attributes). Text in the search
   field that begins as CQP does goes to CQP as you typed it, but for two
   names: a sentence tag, `<s>`, and the unit of a `within` clause,
-  `within s`, which each corpus renames after its own attribute. For
-  words, the interface writes the query for you, and the line under the
-  field shows it. The [CQP guide](/cqp) shows the
-  syntax by example. [The CQP
+  `within s`, which each corpus renames after its own attribute. When
+  the text is CQP, the search button reads {{Run as CQP}}. For words,
+  the interface writes the query itself, and the extended query type
+  shows its own query as CQP under its tokens. The [CQP
+  guide](/cqp) shows the syntax by example. [The CQP
   manual](https://cwb.sourceforge.io/files/CQP_Manual/) has all of it.
 
 CWB {#cwb}:

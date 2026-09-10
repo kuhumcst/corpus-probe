@@ -51,6 +51,10 @@ msgstr ""
 msgid "Source code"
 msgstr ""
 
+#: src/dk/cst/corpus_probe/views.cljc
+msgid "by"
+msgstr ""
+
 #: src/dk/cst/corpus_probe/views/chooser.cljc
 msgid "selected"
 msgstr ""
@@ -249,10 +253,6 @@ msgstr ""
 msgid "most frequent shown"
 msgstr ""
 
-#: src/dk/cst/corpus_probe/views.cljc src/dk/cst/corpus_probe/views/frequency.cljc
-msgid "by"
-msgstr ""
-
 #: src/dk/cst/corpus_probe/views/frequency.cljc
 msgid "column"
 msgid_plural "columns"
@@ -284,22 +284,6 @@ msgid "word"
 msgid_plural "words"
 msgstr[0] ""
 msgstr[1] ""
-
-#: src/dk/cst/corpus_probe/views/result.cljc
-msgid "start of word"
-msgstr ""
-
-#: src/dk/cst/corpus_probe/views/result.cljc
-msgid "end of word"
-msgstr ""
-
-#: src/dk/cst/corpus_probe/views/result.cljc
-msgid "part of word"
-msgstr ""
-
-#: src/dk/cst/corpus_probe/views/result.cljc
-msgid "whole word"
-msgstr ""
 
 #: src/dk/cst/corpus_probe/views/concordance.cljc src/dk/cst/corpus_probe/views/result.cljc
 msgid "hit"
@@ -353,10 +337,6 @@ msgstr ""
 
 #: src/dk/cst/corpus_probe/views/result.cljc
 msgid "after the match"
-msgstr ""
-
-#: src/dk/cst/corpus_probe/views/result.cljc
-msgid "near"
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views.cljc src/dk/cst/corpus_probe/views/frequency.cljc src/dk/cst/corpus_probe/views/result.cljc
@@ -480,6 +460,12 @@ msgstr[1] ""
 #: src/dk/cst/corpus_probe/views/result.cljc
 msgid "CQP reads a bare word as the name of a query result. To match a word, put it in quotation marks."
 msgstr ""
+
+#: src/dk/cst/corpus_probe/views/result.cljc
+msgid "{n} corpus left out of the search"
+msgid_plural "{n} corpora left out of the search"
+msgstr[0] ""
+msgstr[1] ""
 
 #: src/dk/cst/corpus_probe/views/result.cljc
 msgid "Counting hits in"
@@ -743,11 +729,11 @@ msgstr ""
 msgid "or"
 msgstr ""
 
-#: src/dk/cst/corpus_probe/views.cljc src/dk/cst/corpus_probe/views/frequency.cljc src/dk/cst/corpus_probe/views/search/tokens.cljc
+#: src/dk/cst/corpus_probe/views.cljc src/dk/cst/corpus_probe/views/search/tokens.cljc
 msgid "and"
 msgstr ""
 
-#: src/dk/cst/corpus_probe/views/corpus.cljc src/dk/cst/corpus_probe/views/result.cljc src/dk/cst/corpus_probe/views/search.cljc src/dk/cst/corpus_probe/views/search/tokens.cljc
+#: src/dk/cst/corpus_probe/views/corpus.cljc src/dk/cst/corpus_probe/views/search.cljc src/dk/cst/corpus_probe/views/search/tokens.cljc
 msgid "attribute"
 msgstr ""
 

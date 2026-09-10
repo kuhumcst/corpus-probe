@@ -38,8 +38,8 @@
   (testing "which form a count takes is the translation's to say"
     (is (= "region" (i18n/trn da "region" "regions" 1)))
     (is (= "regioner" (i18n/trn da "region" "regions" 2)))
-    (is (= "forekomst" (i18n/trn da "hit" "hits" 1)))
-    (is (= "forekomster" (i18n/trn da "hit" "hits" 9))))
+    (is (= "hit" (i18n/trn da "hit" "hits" 1)))
+    (is (= "hits" (i18n/trn da "hit" "hits" 9))))
   (testing "an untranslated pair falls back to its own English"
     (is (= "ox" (i18n/trn da "ox" "oxen" 1)))
     (is (= "oxen" (i18n/trn da "ox" "oxen" 3))))
