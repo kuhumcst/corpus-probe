@@ -82,11 +82,16 @@
 
 (defn link-row
   "A list of links read as one row: each of `links`, [key href label],
-  a link, the one keyed `current` marked as the page being shown."
+  a link carrying its key, the one keyed `current` marked as the page
+  being shown."
   [links current]
+  ;; the key travels as data rather than as a class, so a row can give
+  ;; each of its links a colour of its own (see `.tabs a` in style.css)
+  ;; without borrowing the meaning of a class the page already uses:
+  ;; `kwic` and `frequencies` are the concordance's and the table's
   [:ul.row
    (for [[k href label] links]
-     [:li [:a (cond-> {:href href}
+     [:li [:a (cond-> {:href href :data-key (name k)}
                 (= k current) (assoc :aria-current "page"))
            label]])])
 

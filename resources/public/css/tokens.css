@@ -9,6 +9,20 @@
   --status: #AD8301;   /* what is still happening */
   --mark:   #F6E2A0;   /* a match */
 
+  /* a hue of its own for each tab, so a place is known by its colour as
+     well as by its name. Flexoki's 400 and 600 steps met in the middle,
+     which is about as light as small text can be here and still hold
+     4.5 against the page (WCAG 1.4.3). Green and cyan carry too little
+     light to reach that even at 600, so those two go the other way and
+     darken it instead. Never the only mark of a tab: the current one is
+     drawn as a box and says so in the markup */
+  --tab-home:        color-mix(in srgb, #D14D41 50%, #AF3029); /* red */
+  --tab-search:      color-mix(in srgb, #4385BE 50%, #205EA6); /* blue */
+  --tab-corpora:     color-mix(in srgb, #66800B 90%, black);   /* green */
+  --tab-glossary:    color-mix(in srgb, #8B7EC8 50%, #5E409D); /* purple */
+  --tab-kwic:        color-mix(in srgb, #24837B 90%, black);   /* cyan */
+  --tab-frequencies: color-mix(in srgb, #CE5D97 50%, #A02F6F); /* magenta */
+
   --bg:     #F6F4F0;   /* the page */
   --field:  #FFFFFF;   /* a text field, and a surface lifted off the page */
   --tx:     #100F0F;

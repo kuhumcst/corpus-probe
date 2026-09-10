@@ -51,10 +51,11 @@
 
 (deftest link-row-test
   (let [html (widgets/link-row [[:a "/a" "A"] [:b "/b" "B"]] :b)]
-    (testing "a row of links, the current one marked"
+    (testing "a row of links, each carrying its key, the current one
+              marked"
       (is (= :ul.row (first html)))
-      (is (= [[:li [:a {:href "/a"} "A"]]
-              [:li [:a {:href "/b" :aria-current "page"} "B"]]]
+      (is (= [[:li [:a {:href "/a" :data-key "a"} "A"]]
+              [:li [:a {:href "/b" :data-key "b" :aria-current "page"} "B"]]]
              (second html))))
     (testing "and nothing marked when nothing is current"
       (is (not (some #(and (map? %) (:aria-current %))

@@ -83,8 +83,8 @@
    ;; the hrefs come from the handler: the search keeps its query across
    ;; the masthead, and only the handler knows what that query is
    (widgets/tabs (i18n/tr ui "Site")
-                 (for [[k p] nav-items] [p (get nav k p) (nav-label ui k)])
-                 path)
+                 (for [[k p] nav-items] [k (get nav k p) (nav-label ui k)])
+                 (some (fn [[k p]] (when (= p path) k)) nav-items))
    (language-switch ui path)])
 
 (defn year

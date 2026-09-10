@@ -357,6 +357,15 @@ legend, .inspector h3, .facts dt, thead th, .tabs a {
           block-size: var(--tab-depth); padding-inline: 1em;
           border: 1px solid transparent;
           border-radius: var(--radius) var(--radius) 0 0; }
+/* each tab in its own hue, by the key it carries (see
+   dk.cst.corpus-probe.views.widgets/link-row) */
+.tabs a[data-key="home"] { color: var(--tab-home); }
+.tabs a[data-key="search"] { color: var(--tab-search); }
+.tabs a[data-key="corpora-heading"] { color: var(--tab-corpora); }
+.tabs a[data-key="glossary"] { color: var(--tab-glossary); }
+.tabs a[data-key="kwic"] { color: var(--tab-kwic); }
+.tabs a[data-key="frequencies"] { color: var(--tab-frequencies); }
+
 /* the current tab alone draws the box, and paints its own foot in the
    page's colour, so the line breaks where it stands */
 .tabs [aria-current] { border-color: var(--rule);
