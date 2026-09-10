@@ -43,12 +43,14 @@ main:not(.search-page), .help { max-inline-size: 40rem; }
    holds, and a frequency table can be hundreds of columns wide. Such a
    table scrolls in a box of its own (see `.scroll`); the page does not
    grow to meet it, and the grid below does not size its columns to it.
-   The ceiling is for the concordance's own widths, which follow. */
-.search-page { inline-size: min(100%, 77rem); max-inline-size: 100%; }
-/* The page is as wide as the words that the reader can see, and no
-   wider. These are the context words that the reader asked for. The line
-   fades out a few more words on each side of the match. More width shows
-   only empty space.
+   The ceiling is for the concordance's own widths, which follow. It is
+   named so a reading that asks for less can keep it. */
+.search-page { --page-width: min(100%, 77rem);
+               inline-size: var(--page-width); max-inline-size: 100%; }
+/* The page is as wide as the words that the reader can see, where they
+   ask for more than it has already. These are the context words that
+   the reader asked for. The line fades out a few more words on each
+   side of the match.
 
    We set this width here. We do not measure it. This is a workaround,
    and it corrects a second workaround.
@@ -75,7 +77,11 @@ main:not(.search-page), .help { max-inline-size: 40rem; }
    TODO: a word is 42px here, which is the average in the toy corpora.
    Measure it again with the KU data, which has longer words. */
 .search-page:has(.scroll[data-context]) { inline-size: 100%; }
-.search-page:has(.scroll[data-context="5"]) { inline-size: 66rem; }
+/* the shortest reading asks for less than the page has already, and the
+   page keeps its own width rather than shrinking to meet it: 66rem has
+   no room for the rail, a whole query field and the tabs at once, so
+   both the rail and the field would move every time an answer arrived */
+.search-page:has(.scroll[data-context="5"]) { inline-size: var(--page-width); }
 .search-page:has(.scroll[data-context="10"]) { inline-size: 92rem; }
 .search-page:has(.scroll[data-context="20"]) { inline-size: 144rem; }
 
