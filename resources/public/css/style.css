@@ -9,6 +9,12 @@
   --line: 5.5rem;
   --box-pad: 0.75rem;
   --label-col: var(--line);
+  /* every bordered box is rounded by the same hand */
+  --radius: 0.25rem;
+  /* how deep a tab is. Set in em, so that it follows the type down
+     where a tab shrinks; what stands beside a tab takes it too, so that
+     every word in a row of them sits on one level */
+  --tab-depth: calc(2.875em + 1px);
   accent-color: var(--accent);
 }
 
@@ -30,14 +36,15 @@ main { padding-block-start: 1rem; margin-block-end: 3rem;
    prose inside the search page */
 main:not(.search-page), .help { max-inline-size: 40rem; }
 
-/* the measure holds the rail and a KWIC line of ordinary length; a
-   wider answer grows the page, as far as the padding allows. The
-   ceiling is not redundant: nested in the column flexes above it, this
-   box has no definite width to resolve `fit-content` against, so
-   without one a long line sizes the page to the line */
-.search-page { inline-size: fit-content;
-               min-inline-size: min(100%, 77rem);
-               max-inline-size: 100%; }
+/* the measure holds the rail and a KWIC line of ordinary length.
+
+   A definite width, not one measured from the content: a page that
+   takes its width from what it holds takes it from the widest thing it
+   holds, and a frequency table can be hundreds of columns wide. Such a
+   table scrolls in a box of its own (see `.scroll`); the page does not
+   grow to meet it, and the grid below does not size its columns to it.
+   The ceiling is for the concordance's own widths, which follow. */
+.search-page { inline-size: min(100%, 77rem); max-inline-size: 100%; }
 /* The page is as wide as the words that the reader can see, and no
    wider. These are the context words that the reader asked for. The line
    fades out a few more words on each side of the match. More width shows
@@ -49,13 +56,10 @@ main:not(.search-page), .help { max-inline-size: 40rem; }
    The two context columns have a large fixed width. No screen is that
    wide (refer to `.kwic-left`). This stops the table from moving
    sideways when more of the line comes in. But it also makes the table
-   width useless as a measure, because the table is always that wide. The
-   `fit-content` rule above can see only that width. The scroll region is
-   also a query container. The width of a query container does not change
-   with its content. So the rule above cannot measure through it.
-
-   The minimum width goes away for the same reason. A page sets a minimum
-   only when it has no line of its own to go by.
+   width useless as a measure, because the table is always that wide.
+   The scroll region is also a query container, and the width of a query
+   container does not change with its content. So nothing can measure
+   the line, and the widths are set by hand.
 
    Each width below gives space for 2 × (context + 3) + 1 words. The
    words are at the size of the concordance. Each width also includes the
@@ -65,13 +69,12 @@ main:not(.search-page), .help { max-inline-size: 40rem; }
 
    TODO: two changes can remove these rules. Show the words that are
    outside the reader's window in a different way. Then the columns do
-   not need a fixed width, and `fit-content` can measure the line. Or
-   read the attribute in one rule, when more browsers than Chrome support
+   not need a fixed width, and the line can be measured. Or read the
+   attribute in one rule, when more browsers than Chrome support
    `attr()` with a type.
    TODO: a word is 42px here, which is the average in the toy corpora.
    Measure it again with the KU data, which has longer words. */
-.search-page:has(.scroll[data-context]) { inline-size: 100%;
-                                          min-inline-size: 0; }
+.search-page:has(.scroll[data-context]) { inline-size: 100%; }
 .search-page:has(.scroll[data-context="5"]) { inline-size: 66rem; }
 .search-page:has(.scroll[data-context="10"]) { inline-size: 92rem; }
 .search-page:has(.scroll[data-context="20"]) { inline-size: 144rem; }
@@ -109,29 +112,55 @@ a:hover { text-decoration-color: currentColor; }
 abbr[title] { text-decoration-color: var(--rule); }
 a abbr[title] { text-decoration: none; }
 
-/* navigation rows are chrome, not text. Longhands, so the current item
-   keeps its bar under the pointer; `:where`, so its rule outweighs this */
-:where(.menu) a, .sitename {
+/* navigation rows are chrome, not text. Longhands, so a tab keeps its
+   shape under the pointer; `:where`, so its rule outweighs this */
+:where(.menu, .tabs) a {
   color: inherit; text-decoration-line: none;
 }
-:where(.menu) a:hover, .sitename:hover {
+:where(.menu, .tabs) a:hover {
   text-decoration-line: underline;
-}
-
-/* the current item gets a bar: bold would widen the word and shift the row */
-.masthead [aria-current], .views [aria-current] {
-  color: var(--accent);
-  text-decoration-line: underline; text-decoration-thickness: 2px;
-  text-decoration-color: currentColor; text-underline-offset: 0.3em;
 }
 
 .masthead, .result-head, .footer {
   display: flex; flex-wrap: wrap; align-items: baseline;
   justify-content: space-between;
 }
-.masthead { column-gap: 1.5rem; row-gap: 0.25rem; padding-block: 0.75rem;
+.masthead { column-gap: 1.5rem; row-gap: 0.25rem;
+            padding-block: 0.75rem 0;
             border-block-end: 1px solid var(--rule); }
-.sitename { font-weight: bold; }
+/* the tabs run down to the masthead's line, since they stand on it */
+.masthead .tabs { align-self: stretch; }
+@media (min-width: 40rem) {
+  /* three tracks, the tabs in the middle one: with nothing left of them
+     they would otherwise sit against the edge. The outer two are equal,
+     and only the last of them holds anything. The step above the row is
+     what keeps the masthead the depth it had */
+  .masthead { display: grid; grid-template-columns: 1fr auto 1fr;
+              padding-block-start: 1.125rem; }
+  .masthead .tabs { grid-column: 2; }
+  /* sharing that row, the language switch takes a tab's own box: the
+     same depth, standing on the same line and reaching a pixel past the
+     border as a tab does, with its words centred in it */
+  .masthead .languages { grid-column: 3; justify-self: end;
+                         align-self: end;
+                         display: flex; align-items: center;
+                         block-size: var(--tab-depth);
+                         margin-block-end: -1px; }
+  .masthead .languages p { margin-block: 0; }
+}
+/* narrow, the masthead wraps and the strip is no longer the row the
+   line runs under, so it takes a row and a line of its own, and what is
+   beside it keeps its own step off the line. Forced at a width where no
+   language's labels wrap of their own accord, or the two lines would
+   meet */
+@media (max-width: 40rem) {
+  .masthead .languages { padding-block-end: 0.75rem; }
+  /* four tabs are wider than a phone holds, so the row wraps rather
+     than running off the edge, and sits in the middle of its own row */
+  .masthead .tabs { flex: 1 0 100%; justify-content: center;
+                    border-block-end: 1px solid var(--rule); }
+  .masthead .tabs .row { flex-wrap: wrap; justify-content: center; }
+}
 .languages p { margin-block: 0.5rem; }
 
 /* the language buttons stand in a row of names and read as its links */
@@ -154,11 +183,25 @@ a abbr[title] { text-decoration: none; }
 @media (min-width: 64rem) {
   .search-page {
     display: grid;
-    grid-template-columns: 16rem minmax(0, 1fr);
+    /* the query keeps the measure and the tabs follow it, rather than
+       the tabs keeping to the far edge with the gap growing between.
+
+       The tabs' track is flexible, and floored at what they need. It
+       has to be flexible: the answer's row spans it, and a grid leaves
+       an item spanning a flexible track out of intrinsic track sizing.
+       Given an inflexible track to grow instead, a frequency table
+       hundreds of columns wide sizes the column to itself and takes the
+       query's own column down to nothing */
+    grid-template-columns: 16rem minmax(0, 40rem) minmax(auto, 1fr);
     /* the last row takes a tall rail's spare height, so the rail cannot
        push the answer down from the query row */
     grid-template-rows: auto auto 1fr;
-    grid-template-areas: "rail query" "rail status" "rail results";
+    /* the switch shares the query's line. The rows under it span both of
+       that line's columns, so the answer is as wide as it was before the
+       switch came here, and the widths set by hand above still hold */
+    grid-template-areas: "rail query   views"
+                         "rail status  status"
+                         "rail results results";
     column-gap: 2rem;
     align-items: start;  /* the rail keeps its height, so it sticks */
   }
@@ -166,15 +209,29 @@ a abbr[title] { text-decoration: none; }
   .search-page > .result,
   .search-page > .help   { grid-area: results; }
 
-  /* the query row keeps to the measure and starts where the boxes'
-     border runs, through the middle of their legends */
+  /* the measure is the column's, above. The field stands where a box's
+     own last control stands: its foot on their foot, and the box's
+     padding under it, which brings the line the tabs stand on out level
+     with the foot of the first box in the rail. The step down to it is
+     set, not measured: no rule can read a box's height. It holds while
+     that box holds one row, which is its resting state */
   .search-page .query { grid-area: query;
-                        max-inline-size: 40rem;
-                        margin-block: 0.75rem 1rem; }
-  /* token boxes carry the rail's border line already, and want the column */
-  .search-page .query-extended {
-    max-inline-size: none; margin-block-start: 0;
+                        margin-block: 1.375rem var(--box-pad); }
+  /* token boxes carry the rail's border line already, and want the
+     column, so the measure gives way where they stand */
+  .search-page:has(.query-extended) {
+    grid-template-columns: 16rem minmax(0, 1fr) auto;
   }
+  .search-page .query-extended { margin-block-start: 0; }
+  /* beside the query rather than at the far edge: which view to read
+     the answer in is part of asking for it. It stretches so its tab
+     stands on the answer's own top edge, and it takes back most of the
+     column gap, which is the rail's step and too wide a one here */
+  .search-page > .tabs { grid-area: views;
+                         align-self: stretch; justify-self: start;
+                         /* the same step that stands under the field:
+                            one gap around the query, on both sides */
+                         margin-inline-start: calc(var(--box-pad) - 2rem); }
   .search-page .navigation-status { grid-area: status; }
   .search-page .navigation-status:not(:empty) {
     margin-block-end: 1rem;
@@ -204,7 +261,7 @@ a abbr[title] { text-decoration: none; }
    specificity, so a control that must read as text overrides it */
 :where(input:not([type="checkbox"], [type="radio"]), select, textarea,
        button) {
-  border: 1px solid var(--rule); border-radius: 0.25rem;
+  border: 1px solid var(--rule); border-radius: var(--radius);
   padding: 0.25rem 0.5rem; background: var(--field); color: var(--tx);
 }
 :where(button, select) { background: var(--accent-tint);
@@ -247,13 +304,14 @@ label:has(:is(input, select):disabled) { color: var(--rule); }
 .box { --row-gap: 0.5rem;
        --label-col: calc(var(--line) - var(--box-pad) - 1px);
        display: flex; flex-direction: column; gap: var(--row-gap);
-       border: 1px solid var(--rule); border-radius: 2px;
+       border: 1px solid var(--rule); border-radius: var(--radius);
        padding: 0.5rem var(--box-pad) var(--box-pad); }
 
 /* The small-caps voice of the apparatus. A box shows its name on its
    border in the deep accent. A column shows its name over its data in
-   the same voice. A key beside its value is muted */
-legend, .inspector h3, .facts dt, thead th {
+   the same voice, and a tab names the section under it. A key beside
+   its value is muted */
+legend, .inspector h3, .facts dt, thead th, .tabs a {
   font-family: var(--sans); font-variant: all-small-caps;
   letter-spacing: 0.04em; font-weight: 600; color: var(--accent-deep);
 }
@@ -267,7 +325,43 @@ legend, .inspector h3, .facts dt, thead th {
 
 .row { list-style: none; display: flex; gap: 1.5em; padding: 0; }
 /* a link's line box is under the target size WCAG 2.5.8 asks for */
-.row a, .sitename { display: inline-block; padding-block: 0.2rem; }
+.row a { display: inline-block; padding-block: 0.2rem; }
+
+/* A tab strip: a row of links standing on the line that bounds the
+   section under it. The line is not the strip's own, since it runs
+   wider than the links do: it belongs to whatever draws the boundary
+   there, the masthead's border or the answer's top edge. The current
+   link is a box open at the bottom, and covers the line over its own
+   width, so the tab and the section below read as one shape. */
+
+/* the strip fills its place and the row sits at the foot of it, so a
+   tab is as deep as its own words and still lands on the line */
+.tabs { display: flex; align-items: flex-end; }
+.tabs .row { margin-block: 0; gap: 0; }
+/* every tab stands over the line rather than on it, and carries the
+   border transparent until it is the current one, or its words would
+   step down and the row shift as it became so. Positioned, not nudged
+   by a margin: the line belongs to the section under the strip, which
+   comes later in the document and would otherwise paint over the foot
+   that breaks it. The depth is one for every tab, wherever the strip
+   stands, so that a tab on the search page starts level with the field
+   beside it */
+.tabs a { position: relative; inset-block-end: -1px;
+          display: flex; align-items: center;
+          block-size: var(--tab-depth); padding-inline: 1em;
+          border: 1px solid transparent;
+          border-radius: var(--radius) var(--radius) 0 0; }
+/* the current tab alone draws the box, and paints its own foot in the
+   page's colour, so the line breaks where it stands */
+.tabs [aria-current] { border-color: var(--rule);
+                       border-block-end-color: var(--bg);
+                       background: var(--bg); }
+/* narrower than this a masthead of four tabs runs off the edge. A tab
+   shrinks whole rather than closing up: its padding and its depth are
+   set in em, so both follow the type down */
+@media (max-width: 28rem) {
+  .tabs a { font-size: 0.8rem; }
+}
 
 hgroup { display: flex; flex-direction: column; gap: 0.25rem; }
 hgroup > * { margin-block: 0; }
@@ -288,7 +382,7 @@ caption { caption-side: top; text-align: start; padding-block: 0.25rem;
 /* cqp's error text carries a column-aligned pointer, so no wrapping */
 pre { font-size: 0.875rem; padding: 0.75rem 1rem;
       background: var(--field); border: 1px solid var(--rule);
-      border-radius: 2px; overflow-x: auto; }
+      border-radius: var(--radius); overflow-x: auto; }
 
 /* The chooser: the corpus chooser and the metadata filter */
 
@@ -350,8 +444,17 @@ pre { font-size: 0.875rem; padding: 0.75rem 1rem;
                                           align-items: end; gap: 0.5rem; }
 .query > p > :is(input, textarea) { flex: 1; min-inline-size: 0; }
 .query > p > button[type="submit"] { margin-inline-start: auto; }
+/* the button's word changes with the reading of the query, and the
+   field beside it would resize under the reader's hands. Held wide
+   enough for the longest word it takes, down to the width where the
+   tabs give up their own ease: under that the field wants the room
+   more than it wants to stand still */
+@media (min-width: 28rem) {
+  .query > p > button[type="submit"] { min-inline-size: 7.5rem; }
+}
 
-.query > .cqp { color: var(--tx-2); }
+/* the CQP the extended form's tokens compile to, under them */
+.query > .cqp { color: var(--tx-2); font-size: 0.8125rem; }
 
 /* the field's rows follow its lines, so no handle to drag */
 .query textarea { resize: none; }
@@ -432,6 +535,9 @@ pre { font-size: 0.875rem; padding: 0.75rem 1rem;
 
 /* The result */
 
+/* the line the view tabs stand on is this section's own top edge */
+.result { border-block-start: 1px solid var(--rule); padding-block-start: 1rem; }
+
 .result > * { margin-block: 0; }
 .result > * + * { margin-block-start: 1rem; }
 
@@ -456,8 +562,14 @@ pre { font-size: 0.875rem; padding: 0.75rem 1rem;
 
 /* a wide table scrolls inside its box rather than reflow (WCAG 1.4.10);
    the padding is the strip an overlay scrollbar is drawn over, which
-   would otherwise cover the last line */
+   would otherwise cover the last line.
+
+   A query container, so the box keeps a width of its own: without that
+   the table's whole width reaches the page grid, which then sizes its
+   columns to a table hundreds of columns wide. A table this wide is
+   what the box is here to scroll */
 .scroll { overflow-x: auto; overscroll-behavior-x: contain;
+          container-type: inline-size;
           padding-block-end: 0.75rem; }
 
 /* The concordance is the exception. It moves with the cursor, not with
@@ -465,12 +577,12 @@ pre { font-size: 0.875rem; padding: 0.75rem 1rem;
    A reader who panned the region would see only empty text. The region
    still scrolls, but only when the cursor moves it.
 
-   The region is also a query container. The column names measure
-   themselves against it, and not against the window. On a wide screen
-   the search form takes a rail of its own. The strip that the reader
-   reads in is then narrower than the page. The page does not know how
-   much narrower */
-.scroll:has(> .kwic) { overflow-x: hidden; container-type: inline-size; }
+   It relies on the query container every scroll region now is. The
+   column names measure themselves against it, and not against the
+   window. On a wide screen the search form takes a rail of its own. The
+   strip that the reader reads in is then narrower than the page. The
+   page does not know how much narrower */
+.scroll:has(> .kwic) { overflow-x: hidden; }
 
 /* The concordance */
 
@@ -639,11 +751,14 @@ body:has(.inspector) { padding-block-end: var(--sheet-block-size); }
 /* a key is drawn as one; a label pressed on the screen, as the button is */
 kbd, kbd samp { font-family: inherit; }
 .key { font-size: 0.9em; padding: 0 0.3em;
-       border: 1px solid var(--rule); border-radius: 0.25rem; }
+       border: 1px solid var(--rule); border-radius: var(--radius); }
 .onscreen { background: var(--accent-tint); border-color: var(--accent); }
 
 /* a glossary's terms are its content, so they stay bold */
 .terms dt { font-weight: bold; }
 .terms dd + dt { margin-block-start: 0.75rem; }
+/* an item of a prose list is a paragraph's worth of reading, so the
+   items keep the step the terms above keep between them */
+:is(.document, .help) li + li { margin-block-start: 0.75rem; }
 /* the element a link named, for the reader without a script */
 .document :target { background: var(--mark); }

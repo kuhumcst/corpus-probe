@@ -1,9 +1,10 @@
 (ns dk.cst.corpus-probe.views.widgets
-  "The generic parts the views are built from: selects, a live region,
-  a pager, a link row, a definition list, side notes and count cells, a
-  checkbox over a group, an error section, attribute values, glossary
-  terms and the attribute maps every page shares. Nothing here knows
-  what it is listing: a caller hands in its words, already translated."
+  "The generic parts the views are built from: selects, a live region, a
+  pager, a link row and the tab strip made of one, a definition list,
+  side notes and count cells, a checkbox over a group, an error section,
+  attribute values, glossary terms and the attribute maps every page
+  shares. Nothing here knows what it is listing: a caller hands in its
+  words, already translated."
   (:require [clojure.string :as str]
             [dk.cst.corpus-probe.i18n :as i18n]
             [dk.cst.corpus-probe.url :as url]))
@@ -88,6 +89,17 @@
      [:li [:a (cond-> {:href href}
                 (= k current) (assoc :aria-current "page"))
            label]])])
+
+(defn tabs
+  "A `link-row` of `links` read as a tab strip named `label` in a
+  navigation landmark, `current` keying the one being shown, which is
+  drawn as a tab standing on the line the row sits on.
+
+  The line itself belongs to whatever draws the boundary there: the
+  masthead's own border, the answer's top edge. The tab covers a pixel
+  of it, so the two read as one shape."
+  [label links current]
+  [:nav.tabs {:aria-label label} (link-row links current)])
 
 (defn attribute-value
   "Render attribute value `v` semantically by its key `k`: a text title as

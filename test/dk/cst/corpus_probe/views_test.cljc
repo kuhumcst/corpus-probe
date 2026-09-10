@@ -59,7 +59,13 @@
             where the results will be"
     (is (not (some #{"results"} (deep (views/search-page base)))))
     (is (= :section.help (first (last (views/search-page base)))))
-    (is (some #{"Type a word."} (deep (views/search-page base)))))
+    (is (some #{"Type a word."} (deep (views/search-page base))))
+    ;; the switch is a control over an answer, and reaches one by its
+    ;; fragment, so without an answer it would point nowhere. The hrefs
+    ;; are there to be had either way, so only the answer holds it back
+    (is (not (some #{:nav.tabs}
+                   (deep (views/search-page
+                          (assoc base :view-hrefs view-hrefs)))))))
   (testing "and the help gives way to an answer"
     (is (not (some #{:section.help}
                    (deep (views/search-page
@@ -118,7 +124,13 @@
         (let [html (views/search-page (assoc state :view view))]
           (is (some #{"/search?q=hund#results"} (deep html)))
           (is (some #{"/search?q=hund&view=frequencies#results"}
-                    (deep html))))))))
+                    (deep html))))))
+    (testing "the switch stands on the query line, which is the page's
+              to lay out, before the answer it switches"
+      (let [html  (views/search-page state)
+            order (fn [x] (.indexOf (vec (deep html)) x))]
+        (is (= :nav.tabs (first (nth html 4))))
+        (is (< (order :nav.tabs) (order :section.result)))))))
 
 (deftest document-page-test
   (let [body [[:h1 {:id "corpus-search"} "Corpus search"] [:p "prose"]
@@ -158,7 +170,8 @@
 
 (def nav
   "The site navigation of a search page, as url/nav-hrefs builds it."
-  {:search          "/search?q=hund#results"
+  {:home            "/"
+   :search          "/search?q=hund#results"
    :corpora-heading "/corpora"
    :glossary        "/glossary"})
 
@@ -242,26 +255,27 @@
                 (filter #(and (map? %) (:href %))
                         (deep (views/site-header en path nav))))]
     (testing "the masthead is classed for the stylesheet, its navigation
-              chrome rather than text"
+              a tab strip standing on the masthead's own line"
       (is (= :header.masthead (first (views/site-header en "/" nav))))
-      (is (some #{:nav.menu} (deep (views/site-header en "/" nav)))))
-    (testing "the navigation carries the search, the site name does not"
+      (is (some #{:nav.tabs} (deep (views/site-header en "/" nav)))))
+    (testing "the navigation carries the search; the frontpage, which
+              stands where the site's name stood, does not"
       (is (= ["/" "/search?q=hund#results" "/corpora" "/glossary"]
              (map :href (links "/" nav))))
-      (testing "so the name is the way back to the frontpage"
-        (is (= "/" (:href (first (links "/search" nav)))))))
+      (is (= "/" (:href (first (links "/search" nav))))))
     (testing "no link names a language"
       (is (not (some #(.contains ^String (:href %) "lang=") (links "/" nav)))))
     (testing "the nav marks the page being served, and only it"
+      (is (= ["page" nil nil nil] (map :aria-current (links "/" nav))))
       (is (= [nil "page" nil nil] (map :aria-current (links "/search" nav))))
       (is (= [nil nil "page" nil] (map :aria-current (links "/corpora" nav))))
       (is (= [nil nil nil "page"] (map :aria-current (links "/glossary" nav))))
       (testing "a page no nav item names marks nothing"
-        (is (= [nil nil nil nil] (map :aria-current (links "/" nav))))
         (is (= [nil nil nil nil]
                (map :aria-current (links "/corpora/viser" nav))))))
     (testing "the masthead is in the page's own language"
       (let [da (deep (views/site-header da "/" nav))]
+        (is (some #{"Om"} da))
         (is (some #{"Søgning"} da))
         (is (some #{"Korpusser"} da))
         (is (some #{"Ordliste"} da))
@@ -269,8 +283,9 @@
           (is (not (some #{"Frekvenser"} da))))))
     (testing "the masthead claims no heading: each page names itself"
       (is (not (some #{:h1} (deep (views/site-header en "/" nav))))))
-    (testing "the app's own name is not translated"
-      (is (some #{"corpus-probe"} (deep (views/site-header da "/" nav)))))))
+    (testing "and no longer names the site: the frontpage is a tab like
+              the rest of them"
+      (is (not (some #{"corpus-probe"} (deep (views/site-header da "/" nav))))))))
 
 (deftest page-title-test
   (is (= "corpus-probe" (views/page-title)))

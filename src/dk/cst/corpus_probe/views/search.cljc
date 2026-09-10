@@ -16,68 +16,40 @@
             [dk.cst.corpus-probe.views.search.tokens :as tokens-views]
             [dk.cst.corpus-probe.views.widgets :as widgets]))
 
-(def reading-id
-  "The id of the line under the query field saying how its text is read,
-  by which the field is described."
-  "reading")
-
 (defn query-field
   "The query field of the search form in `ui`, holding `text`: a text
   area, so that a list can be typed one word per line, `required?` when
-  a blank query means nothing, and described by the element whose id is
-  `described-by` when given."
-  [ui text required? described-by]
+  a blank query means nothing."
+  [ui text required?]
   (let [text  (str text)
-        attrs (cond-> {:id           "q"
-                       :name         "q"
-                       :rows         (min 8 (inc (count (re-seq #"\r\n|[\r\n]"
-                                                                text))))
-                       :aria-label   (i18n/tr ui "Query")
-                       :placeholder  (i18n/tr ui "words, a list or CQP")
-                       :autocomplete "off"
-                       :spellcheck   "false"
-                       :enterkeyhint "search"
-                       :required     required?
-                       ;; every keystroke into the state, so the answer can
-                       ;; tell when the form has moved on from what ran (see
-                       ;; dk.cst.corpus-probe.views.result/question)
-                       :on           {:input   [:set-query
-                                                :event.target/value]
-                                      :keydown [:submit-on-enter
-                                                :event/key
-                                                :event/shift?
-                                                :event/composing?]}
-                       ;; required passes whitespace, so a blank of any
-                       ;; length is reported by the field itself
-                       :replicant/on-render
-                       [:set-validity (when (and required?
-                                                 (str/blank? text))
-                                        (i18n/tr ui "Type a query"))]}
-                described-by (assoc :aria-describedby described-by))]
+        attrs {:id           "q"
+               :name         "q"
+               :rows         (min 8 (inc (count (re-seq #"\r\n|[\r\n]"
+                                                        text))))
+               :aria-label   (i18n/tr ui "Query")
+               :placeholder  (i18n/tr ui "words, a list or CQP")
+               :autocomplete "off"
+               :spellcheck   "false"
+               :enterkeyhint "search"
+               :required     required?
+               ;; every keystroke into the state, so the answer can
+               ;; tell when the form has moved on from what ran (see
+               ;; dk.cst.corpus-probe.views.result/question)
+               :on           {:input   [:set-query
+                                        :event.target/value]
+                              :keydown [:submit-on-enter
+                                        :event/key
+                                        :event/shift?
+                                        :event/composing?]}
+               ;; required passes whitespace, so a blank of any
+               ;; length is reported by the field itself
+               :replicant/on-render
+               [:set-validity (when (and required? (str/blank? text))
+                                (i18n/tr ui "Type a query"))]}]
     ;; the text is the element's content, a text area having no value
     ;; attribute; the client sets the value property too, since the
     ;; content is only what the area starts with
     [:textarea #?(:clj attrs :cljs (assoc attrs :value text)) text]))
-
-(defn reading-line
-  "How the field's text in `params` is read, as a line under it in `ui`:
-  as CQP, or as words in order or any one of them with the CQP they run
-  as; nil for a blank field or one word, which read as they look."
-  [ui params]
-  (let [query (query/of params)
-        ;; a paragraph rather than an output, as `cqp-line` is
-        line  (fn [reading]
-                [:p.cqp {:id reading-id} reading " · " (i18n/tr ui "As CQP")
-                 ": " [:code (query/->cqp query)]])
-        n     (fn [xs] (i18n/group-digits ui (count xs)))]
-    (case (mode/mode params)
-      "cqp"  [:p.cqp {:id reading-id} (i18n/tr ui "Read as CQP")]
-      "list" (let [words (:conditions (first (:tokens query)))]
-               (when (next words)
-                 (line (i18n/tr ui "Any one of {n} words" {:n (n words)}))))
-      (let [tokens (:tokens query)]
-        (when (next tokens)
-          (line (i18n/tr ui "{n} words in order" {:n (n tokens)})))))))
 
 (defn attribute-control
   "The control choosing which positional attribute a simple search
@@ -392,7 +364,13 @@
         ;; the blank query the frequency view allows is for counting a
         ;; result the reader is already looking at
         required? (boolean (or (not= :frequencies view) seeded?))
-        button    [:button {:type "submit"} (i18n/trx ui "button" "Search")]
+        ;; the button says what pressing it does. A text shaped like CQP
+        ;; runs as CQP, and the form says so nowhere else: the boxes it
+        ;; takes away are an absence, not a statement
+        button    [:button {:type "submit"}
+                   (if (= "cqp" (mode/mode params))
+                     (i18n/trx ui "button" "Run as CQP")
+                     (i18n/trx ui "button" "Search"))]
         held      (into (filter-views/filter-pairs (:selected filter-controls))
                         (:unticked values))]
     ;; HTML's own landmark for a search form, so a screen reader can jump
@@ -412,11 +390,10 @@
                                             required? tokens)
                (tokens-views/add-token-row ui client? button)
                (cqp-line ui params tokens))
-         (let [line (reading-line ui params)]
-           (list [:p (query-field ui q required?
-                                  (when line reading-id))
-                  " " button]
-                 line)))]
+         ;; TODO: a line here said how the text was read, and said
+         ;; nothing at all for the single word most searches are. Find a
+         ;; reading that earns its place, or leave it to the button
+         [:p (query-field ui q required?) " " button])]
       ;; one wrapper, which the wide layout makes a rail beside the answer
       [:div.rail
        (modes-fieldset ui params client? switch)

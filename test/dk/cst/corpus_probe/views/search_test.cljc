@@ -165,7 +165,21 @@
       (let [da (deep (form (assoc state :ui da)))]
         (is (some #{"Søg"} da))
         (is (some #{"Søgeudtryk"} da))
-        (is (not (some #(and (map? %) (= "lang" (:name %))) da)))))))
+        (is (not (some #(and (map? %) (= "lang" (:name %))) da)))))
+    ;; the reading the form shows nowhere else: a text shaped like CQP
+    ;; takes the matching box away, and an absence says nothing
+    (testing "the button says that a query shaped like CQP runs as CQP"
+      (let [label (fn [ui q]
+                    (->> (deep (form {:ui ui :folders [] :params {:q q}}))
+                         (some #(when (and (vector? %) (= :button (first %)))
+                                  (last %)))))]
+        (is (= "Run as CQP" (label en "[word = \"hund\"]")))
+        (is (= "Kør som CQP" (label da "[]")))
+        (testing "and says nothing of the sort of any other shape"
+          (is (= "Search" (label en "hund")))
+          (is (= "Search" (label en "hund kat")))
+          (is (= "Search" (label en "hund\nkat")))
+          (is (= "Søg" (label da "hund"))))))))
 
 (deftest change-mode-button-test
   (let [button (fn [state]
@@ -269,41 +283,16 @@
   (testing "nothing for no query"
     (is (nil? (search/cqp-line en {:mode "extended"}
                                [{:id 1 :conditions [{:id 1}]}]))))
-  (testing "and under the field, how its text is read (see
-            `reading-line-test`), where that wants saying"
+  (testing "and only under those: the simple field has no line of its
+            own, the tabs standing where one would (see views-test)"
     (let [outputs (fn [state]
                     (filter #(and (vector? %) (= :p.cqp (first %)))
                             (deep (form (assoc state :ui en :folders [])))))]
       (is (empty? (outputs {:params {:q "hund"}})))
-      (is (= 1 (count (outputs {:params {:q "a\nb"}}))))
+      (is (empty? (outputs {:params {:q "a\nb"}})))
       (is (= 1 (count (outputs {:params {:mode "extended"}
                                 :tokens [{:id 1 :conditions
                                           [{:id 1 :v "hund"}]}]})))))))
-
-(deftest reading-line-test
-  (testing "words in order and a list say what they are, with the CQP they
-            run as, and CQP that it is CQP"
-    (is (= "2 words in order · As CQP: [word = \"lille\"] [word = \"hund\"]"
-           (text (search/reading-line en {:q "lille hund"}))))
-    (is (= "Any one of 3 words · As CQP: [lemma = \"(a|b|c)\"]"
-           (text (search/reading-line en {:q "a\nb\nc" :in "lemma"}))))
-    (is (= [:p.cqp {:id "reading"} "Read as CQP"]
-           (search/reading-line en {:q "[] []"})))
-    (is (= "2 ord i rækkefølge · Som CQP: [word = \"a\"] [word = \"b\"]"
-           (text (search/reading-line da {:q "a b"})))))
-  (testing "nothing for a blank field or one word, which read as they look"
-    (is (nil? (search/reading-line en {})))
-    (is (nil? (search/reading-line en {:q "  "})))
-    (is (nil? (search/reading-line en {:q "hund"})))
-    (is (nil? (search/reading-line en {:q "hund\n"}))))
-  (testing "the field is described by the line, where there is one"
-    (let [described (fn [params]
-                      (->> (deep (form {:ui en :folders [] :params params}))
-                           (some #(when (and (map? %) (= "q" (:id %)))
-                                    (:aria-describedby %)))))]
-      (is (= "reading" (described {:q "lille hund"})))
-      (is (= "reading" (described {:q "[]"})))
-      (is (nil? (described {:q "hund"}))))))
 
 (deftest switch-notice-test
   (testing "nothing to say is nothing, the line's empty state"
@@ -433,13 +422,13 @@
                                                 :event/composing?]}
                        :replicant/on-render [:set-validity nil]}
             "hund"]
-           (search/query-field en "hund" true nil)))
+           (search/query-field en "hund" true)))
     (testing "the text is rendered as typed, so the render never moves it"
-      (is (= "hund " (last (search/query-field en "hund " true nil))))
-      (is (= "hund\r\nkat" (last (search/query-field en "hund\r\nkat" true nil))))))
+      (is (= "hund " (last (search/query-field en "hund " true))))
+      (is (= "hund\r\nkat" (last (search/query-field en "hund\r\nkat" true))))))
   (testing "a row, and one more for every line break, the empty line a
             Shift+Enter has just opened included, up to eight"
-    (let [rows (fn [text] (:rows (second (search/query-field en text true nil))))]
+    (let [rows (fn [text] (:rows (second (search/query-field en text true))))]
       (is (= 1 (rows nil)))
       (is (= 1 (rows "")))
       (is (= 2 (rows "hund\n")))
@@ -448,22 +437,17 @@
       (is (= 8 (rows (str/join "\n" (range 20)))))))
   (testing "not required from the frequency view, which counts every token
             of a blank one"
-    (is (false? (:required (second (search/query-field en nil false nil))))))
+    (is (false? (:required (second (search/query-field en nil false))))))
   (testing "a blank of any length is refused by the field itself, in the
             interface's words, where a query is required"
     (let [validity (fn [text required?]
                      (:replicant/on-render
-                      (second (search/query-field en text required? nil))))]
+                      (second (search/query-field en text required?))))]
       (is (= [:set-validity "Type a query"] (validity "" true)))
       (is (= [:set-validity "Type a query"] (validity " \n\r\n " true)))
       (is (= [:set-validity nil] (validity "hund" true)))
       (is (= [:set-validity nil] (validity "" false)))
       (is (= [:set-validity "Skriv en forespørgsel"]
-             (:replicant/on-render (second (search/query-field da "" true nil)))))))
-  (testing "described by the line under it, when told its id"
-    (is (= "reading"
-           (:aria-describedby (second (search/query-field en "a b" true
-                                                          "reading")))))
-    (is (nil? (:aria-describedby (second (search/query-field en "a b" true nil))))))
+             (:replicant/on-render (second (search/query-field da "" true)))))))
   (is (= "ord, en liste eller CQP"
-         (:placeholder (second (search/query-field da nil true nil))))))
+         (:placeholder (second (search/query-field da nil true))))))

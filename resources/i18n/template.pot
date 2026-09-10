@@ -16,6 +16,10 @@ msgid "Language"
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views.cljc
+msgid "About"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views.cljc
 msgid "Search"
 msgstr ""
 
@@ -493,22 +497,6 @@ msgstr ""
 msgid "Query"
 msgstr ""
 
-#: src/dk/cst/corpus_probe/views/search.cljc
-msgid "As CQP"
-msgstr ""
-
-#: src/dk/cst/corpus_probe/views/search.cljc
-msgid "Read as CQP"
-msgstr ""
-
-#: src/dk/cst/corpus_probe/views/search.cljc
-msgid "Any one of {n} words"
-msgstr ""
-
-#: src/dk/cst/corpus_probe/views/search.cljc
-msgid "{n} words in order"
-msgstr ""
-
 #: src/dk/cst/corpus_probe/views/concordance.cljc src/dk/cst/corpus_probe/views/search.cljc
 msgid "paragraph"
 msgstr ""
@@ -547,6 +535,10 @@ msgstr ""
 
 #: src/dk/cst/corpus_probe/views/search.cljc
 msgid "Loading …"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/search.cljc
+msgid "As CQP"
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/search.cljc
@@ -619,6 +611,10 @@ msgstr ""
 
 #: src/dk/cst/corpus_probe/views/search.cljc
 msgid "legend|Preferences"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/search.cljc
+msgid "button|Run as CQP"
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/search.cljc

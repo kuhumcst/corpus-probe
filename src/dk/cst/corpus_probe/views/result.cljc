@@ -228,10 +228,12 @@
 
 (defn view-label
   "What the result view `k` is called, in `ui`: the concordance is KWIC,
-  expanded but not linked, since the label is itself a link."
+  the word bare rather than in an <abbr>. A title inside a link leaves
+  the link no name of its own, and a tooltip is a thing no keyboard
+  reaches; the glossary is where the jargon is spelled out."
   [ui k]
   (case k
-    :kwic        (widgets/term ui :kwic false)
+    :kwic        "KWIC"
     :frequencies (i18n/tr ui "Frequencies")
     (name k)))
 
@@ -243,9 +245,9 @@
   (when (seq hrefs)
     ;; links, not a tablist: each view is its own URL and its own question
     ;; to CQP, so following one is a navigation, not a panel already loaded
-    [:nav.views.menu {:aria-label (i18n/tr ui "Result view")}
-     (widgets/link-row (for [[k href] hrefs] [k href (view-label ui k)])
-                       view)]))
+    (widgets/tabs (i18n/tr ui "Result view")
+                  (for [[k href] hrefs] [k href (view-label ui k)])
+                  view)))
 
 (defn apply-button
   "The button applying a result's controls where no `client?` runs to
@@ -480,10 +482,11 @@
 (defn results-region
   "The outcome of a search in `state` under `heading`, as a region named
   by that heading and focusable, so a GET search can land on it: a
-  header of the heading, the `subheading` phrases and the view switch;
-  a status line while the result is still being counted; the errors;
-  then `body`, the view's own content."
-  [{:keys [ui view view-hrefs result error pending?] :as state}
+  header of the heading and the `subheading` phrases; a status line
+  while the result is still being counted; the errors; then `body`, the
+  view's own content. The switch between the views stands on the query
+  line instead (see dk.cst.corpus-probe.views/search-page)."
+  [{:keys [ui result error pending?] :as state}
    heading subheading body]
   ;; named by the heading alone: a screen reader landing here hears the
   ;; count, not the whole question, which the controls below restate
@@ -501,8 +504,7 @@
      [:h1 {:id "results-heading"} heading]
      (when-let [phrases (seq (remove nil? (cons (question ui state)
                                                 subheading)))]
-       [:p (interpose " · " phrases)])]
-    (view-switch ui view view-hrefs)]
+       [:p (interpose " · " phrases)])]]
    ;; always rendered, and before anything whose kind can change (see
    ;; dk.cst.corpus-probe.views.widgets/status)
    (widgets/status

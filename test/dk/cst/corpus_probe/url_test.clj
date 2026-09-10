@@ -306,7 +306,8 @@
 
 (deftest nav-hrefs-test
   (testing "the search keeps the current query, the rest are their pages"
-    (is (= {:search          "/search?q=hund&corpus=PROBE#results"
+    (is (= {:home            "/"
+            :search          "/search?q=hund&corpus=PROBE#results"
             :corpora-heading "/corpora"
             :glossary        "/glossary"}
            (url/nav-hrefs {:q "hund" :corpus ["PROBE"] :sort "word"}))))

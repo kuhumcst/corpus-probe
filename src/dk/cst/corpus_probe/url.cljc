@@ -441,7 +441,8 @@
   lose it."
   [params]
   (let [asked (search-params params)]
-    {:search          (if (seq asked)
+    {:home            home
+     :search          (if (seq asked)
                         (results-href asked)
                         search)
      :corpora-heading corpora

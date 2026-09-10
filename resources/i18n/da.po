@@ -280,6 +280,9 @@ msgstr "strukturelle attributter"
 msgid "Structural attributes"
 msgstr "Strukturelle attributter"
 
+msgid "About"
+msgstr "Om"
+
 msgid "Search"
 msgstr "Søgning"
 
@@ -348,6 +351,9 @@ msgstr "match"
 
 msgid "button|Search"
 msgstr "Søg"
+
+msgid "button|Run as CQP"
+msgstr "Kør som CQP"
 
 msgid "button|Save"
 msgstr "Gem"
@@ -603,15 +609,6 @@ msgstr "Hjælp"
 
 msgid "words, a list or CQP"
 msgstr "ord, en liste eller CQP"
-
-msgid "Read as CQP"
-msgstr "Læses som CQP"
-
-msgid "Any one of {n} words"
-msgstr "Et af {n} ord"
-
-msgid "{n} words in order"
-msgstr "{n} ord i rækkefølge"
 
 msgid "CQP reads a bare word as the name of a query result. To match a word, put it in quotation marks."
 msgstr "CQP læser et ord uden anførselstegn som navnet på et søgeresultat. Sæt ordet i anførselstegn for at søge efter det."

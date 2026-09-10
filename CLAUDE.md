@@ -41,8 +41,15 @@ files hold absolute paths, and a move of the checkout invalidates them.
   interceptor identity check, and the JVM then needs a restart.
 - After a reload of a handler namespace, call `(restart!)`. The route table
   holds the handler functions from the previous start.
-- After a PO file edit, remove `.shadow-cljs/builds/app`, then build the
-  client again. The build inlines the translation tables with a macro.
+- A PO file edit takes two reloads, and both are easy to miss. Remove
+  `.shadow-cljs/builds/app` and build the client again, because the build
+  inlines the translation tables with a macro. Then reload
+  `dk.cst.corpus-probe.i18n`, because the server reads its tables once when
+  the namespace loads. `(restart!)` does not re-read them. Skip the second
+  and the server sends the English msgid while the client renders the
+  translation, so a new label flashes from one to the other on every load.
+  The test suite does not catch it, running in a fresh JVM that reads the
+  PO files as they are.
 - Do not test CSS with an injected `<style>` element. The
   Content-Security-Policy is `style-src 'self'`, so the sheet never parses and
   `s.sheet` is null. Edit `resources/public/css/style.css` and reload.

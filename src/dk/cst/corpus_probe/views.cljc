@@ -54,10 +54,13 @@
 (def nav-items
   "The top-level navigation, in display order: the key naming each page
   (which is also the key its URL arrives under) and its path."
-  ;; TODO: the CQP guide is linked from the search help and the glossary
-  ;; only, and a reader who has searched has neither in view. Does it
-  ;; belong here, as a fourth entry?
-  [[:search url/search]
+  ;; TODO: two questions of what belongs here. The CQP guide is linked
+  ;; from the glossary and the frontpage, both tabs, so a reader is two
+  ;; clicks from it wherever they stand: does it want a tab anyway? And
+  ;; the frontpage is a tab while it is only a page to read, standing
+  ;; where a site's name stands: may it become one?
+  [[:home url/home]
+   [:search url/search]
    [:corpora-heading url/corpora]
    [:glossary url/glossary]])
 
@@ -65,26 +68,23 @@
   "What the `nav-items` entry `k` is called, in `ui`."
   [ui k]
   (case k
+    :home            (i18n/tr ui "About")
     :search          (i18n/tr ui "Search")
     :corpora-heading (i18n/tr ui "Corpora")
     :glossary        (i18n/tr ui "Glossary")
     (name k)))
 
 (defn site-header
-  "The site masthead shared by every page, in `ui`: the site name
-  linking home, the navigation over `nav` (each `nav-items` key to its
-  href, the page at `path` marked current) and the language switch
-  returning to `path`."
+  "The site masthead shared by every page, in `ui`: the navigation over
+  `nav` (each `nav-items` key to its href, the page at `path` marked
+  current) and the language switch returning to `path`."
   [ui path nav]
   [:header.masthead
-   ;; a link home, not a heading: HTML has no element for a site's name.
-   ;; It keeps no query; the navigation beside it carries a search onward
-   [:a.sitename {:href url/home} "corpus-probe"]
    ;; the hrefs come from the handler: the search keeps its query across
    ;; the masthead, and only the handler knows what that query is
-   [:nav.menu {:aria-label (i18n/tr ui "Site")}
-    (widgets/link-row (for [[k p] nav-items] [p (get nav k p) (nav-label ui k)])
-                      path)]
+   (widgets/tabs (i18n/tr ui "Site")
+                 (for [[k p] nav-items] [p (get nav k p) (nav-label ui k)])
+                 path)
    (language-switch ui path)])
 
 (defn year
@@ -126,17 +126,20 @@
   form with the corpus chooser over its `:folders`, the inspector while
   a token is `:selected`, and the results region by `:view` once the
   `:params` described a search, else the `:help`."
-  [{:keys [ui view folders params lists result error selected client?]
+  [{:keys [ui view view-hrefs folders params lists result error selected
+           client?]
     :as state}]
   (let [{:keys [corpora]} lists
-        corpus  (set (:corpus params))
+        corpus    (set (:corpus params))
+        ;; an error stands where the answer would, so it is answered too
+        answered? (boolean (or result error))
         ;; the list's state is named for the chooser's options, and what
         ;; it holds beyond them the chooser ignores
-        chooser (corpus-views/corpus-chooser
-                 ui folders (assoc corpora
-                                   :selected corpus
-                                   :held     (into corpus (:unticked corpora))
-                                   :client?  client?))]
+        chooser   (corpus-views/corpus-chooser
+                   ui folders (assoc corpora
+                                     :selected corpus
+                                     :held     (into corpus (:unticked corpora))
+                                     :client?  client?))]
     ;; no h1 of its own: the results region heads the page once there is
     ;; an answer, and the search landmark says what the page is until then
     [:main.search-page (cond-> widgets/main-attrs
@@ -155,12 +158,17 @@
      ;; before the hits in the document, so reading order and visual
      ;; order agree; the panel takes the form's column while it is open
      (when client? (concordance/inspector ui selected))
+     ;; on the query line, not in the result's own header: the grid
+     ;; gives it a column beside the query, and the rows under it span
+     ;; both, so the answer is as wide as it was. It is a control over
+     ;; an answer, so it waits for one
+     (when answered? (result/view-switch ui view view-hrefs))
      ;; the help stands where the answer will, until there is one: the
      ;; reader who has not searched yet is the one with room to read it
      (cond
-       (not (or result error)) (search/help ui (:help state))
-       (= :frequencies view)   (frequency/frequency-section state)
-       :else                   (concordance/concordance-section state))]))
+       (not answered?)       (search/help ui (:help state))
+       (= :frequencies view) (frequency/frequency-section state)
+       :else                 (concordance/concordance-section state))]))
 
 (defn document-page
   "The main content of a document page, the frontpage or the glossary:

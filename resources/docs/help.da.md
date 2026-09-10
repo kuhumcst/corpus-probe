@@ -2,14 +2,13 @@ For at søge skal du vælge ét eller flere korpusser under **Korpusser**
 og skrive din søgning i søgefeltet ovenfor:
 
 - Hvis du skriver flere ord, finder søgningen dem i samme rækkefølge.
+  Tryk på [[Enter]] eller klik {{Søg}} for at søge.
 - Hvis du skriver ét ord på hver linje, finder søgningen et hvilket som
   helst af dem. Tryk på [[Shift+Enter]] for at skifte linje.
 - Hvis teksten begynder med en klamme, et anførselstegn eller et
   [tag](/glossary#structural-attributes), er den en
-  [CQP](/glossary#cqp)-forespørgsel. [CQP-vejledningen](/cqp) viser
-  syntaksen med eksempler.
-
-Tryk på [[Enter]] eller klik {{Søg}} for at søge.
+  [CQP](/glossary#cqp)-forespørgsel, og knappen viser {{Kør som CQP}}
+  i stedet.
 
 ## Udvidet søgning
 

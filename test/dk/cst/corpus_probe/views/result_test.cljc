@@ -224,17 +224,17 @@
     (is (not (result/searched? nil)))))
 
 (deftest view-label-test
-  (is (= [:abbr {:title "key word in context"} "KWIC"]
-         (result/view-label en :kwic)))
-  (is (= [:abbr {:title "søgeord i kontekst"} "KWIC"]
-         (result/view-label da :kwic)))
+  (testing "the jargon stands bare, so that the tab's link keeps a name
+            of its own, and untranslated in either language"
+    (is (= "KWIC" (result/view-label en :kwic)))
+    (is (= "KWIC" (result/view-label da :kwic))))
   (is (= "Frekvenser" (result/view-label da :frequencies))))
 
 (deftest view-switch-test
   (let [html (result/view-switch en :kwic [[:kwic "/?v=k"] [:frequencies "/?v=f"]])]
-    (testing "a named navigation over a row of links, chrome rather than
-              text, the view shown marked"
-      (is (= :nav.views.menu (first html)))
+    (testing "a named navigation over a row of links, read as a tab
+              strip, the view shown marked and so drawn as the tab"
+      (is (= :nav.tabs (first html)))
       (is (= "Result view" (:aria-label (second html))))
       (is (some #{:ul.row} (deep html)))
       (is (some #(and (map? %) (= "/?v=k" (:href %)) (= "page" (:aria-current %)))
@@ -497,14 +497,16 @@
                                          (assoc state :pending? true)
                                          "6 hits" nil nil))))))
     (testing "its head holds the heading, the page's own h1, with the rest
-              of the question under it as a subheading, and the views"
-      (let [[tag [group h1 sub] views] (nth html 2)]
+              of the question under it as a subheading"
+      (let [[tag [group h1 sub]] (nth html 2)]
         (is (= :header.result-head tag))
         (is (= :hgroup group))
         (is (= [:h1 {:id "results-heading"} "6 hits"] h1))
         (is (= :p (first sub)))
-        (is (= "in 2 corpora" (text sub)))
-        (is (= :nav.views.menu (first views)))))
+        (is (= "in 2 corpora" (text sub)))))
+    (testing "the switch between the views is not one of its parts: it
+              stands on the query line (see views-test)"
+      (is (not (some #{:nav.tabs} (deep html)))))
     (testing "the status line is a live region that stands even when
               silent, before anything whose kind can change"
       (is (= [:div.status {:role "status"} nil] (nth html 3))))

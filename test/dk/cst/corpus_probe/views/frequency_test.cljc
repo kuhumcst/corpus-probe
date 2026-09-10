@@ -65,13 +65,9 @@
       (is (some #(and (vector? %) (= :caption (first %))
                       (= "Frequencies · 1 value" (text %)))
                 (deep html))))
-    (testing "the view switch marks the frequency view as the current one"
-      (is (some #(and (map? %) (= "/?view=frequencies" (:href %))
-                      (= "page" (:aria-current %)))
-                (deep html)))
-      (is (some #(and (map? %) (= "/?view=kwic" (:href %))
-                      (not (:aria-current %)))
-                (deep html))))))
+    (testing "the switch between the views is the page's, on the query
+              line, not the section's (see views-test)"
+      (is (not (some #{:nav.tabs} (deep html)))))))
 
 (deftest attr-control-test
   (let [html (frequency/attr-control en

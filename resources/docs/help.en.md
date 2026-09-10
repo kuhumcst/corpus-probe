@@ -1,15 +1,14 @@
 To search, select one or more corpora under **Corpora**, and type your
 search in the search field above:
 
-- If you type several words, the search finds them in that order.
+- If you type several words, the search finds them in that order. Press
+  [[Enter]] or click {{Search}} to run it.
 - If you type one word on each line, the search finds any one of them.
   To start a new line, press [[Shift+Enter]].
 - If the text starts with a bracket, a quotation mark or a
   [tag](/glossary#structural-attributes), it is a
-  [CQP](/glossary#cqp) query. The [CQP guide](/cqp) shows the syntax by
-  example.
-
-To search, press [[Enter]] or click {{Search}}.
+  [CQP](/glossary#cqp) query, and the button reads {{Run as CQP}}
+  instead.
 
 ## Extended search
 

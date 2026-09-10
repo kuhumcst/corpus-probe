@@ -405,10 +405,9 @@
     (testing "what to do next with the hits follows them, not precedes them"
       (let [order (fn [x] (.indexOf (vec (deep html)) x))]
         (is (< (order :table.kwic) (order :p.downloads)))))
-    (testing "the other view of the same hits is offered above them"
-      (let [order (fn [x] (.indexOf (vec (deep html)) x))]
-        (is (some #{:nav.views.menu} (deep html)))
-        (is (< (order :nav.views.menu) (order :table.kwic)))))
+    (testing "the other view of the same hits is offered by the page, on
+              the query line, not by the section (see views-test)"
+      (is (not (some #{:nav.tabs} (deep html)))))
     (testing "a cut export is announced"
       (is (some #{" the first 5 hits"} (deep html))))
     (testing "the region names itself and can be landed on"
@@ -420,15 +419,14 @@
       (is (= "true" (:aria-busy (second (concordance/concordance-section
                                          (assoc state :pending? true)))))))
     (testing "its head holds the heading, the page's own h1, with the rest
-              of the question under it as a subheading, and the views"
-      (let [[tag [group h1 sub] views] (nth html 2)]
+              of the question under it as a subheading"
+      (let [[tag [group h1 sub]] (nth html 2)]
         (is (= :header.result-head tag))
         (is (= :hgroup group))
         (is (= [:h1 {:id "results-heading"}] (subvec h1 0 2)))
         (is (= "6 hits" (text (drop 2 h1))))
         (is (= :p (first sub)))
-        (is (= "in 2 corpora" (text sub)))
-        (is (= :nav.views.menu (first views)))))
+        (is (= "in 2 corpora" (text sub)))))
     (testing "errors are headed sections before the concordance"
       (is (some #{[:h2 "CQP error"]} (deep html)))
       (is (some #{:table.kwic} (deep html))))
