@@ -130,7 +130,15 @@
       (let [html  (views/search-page state)
             order (fn [x] (.indexOf (vec (deep html)) x))]
         (is (= :nav.tabs (first (nth html 4))))
-        (is (< (order :nav.tabs) (order :section.result)))))))
+        (is (< (order :nav.tabs) (order :section.result)))))
+    (testing "but an answer with nothing in it reads the same either
+              way, so neither view is offered"
+      (let [tabs? (fn [m] (some #{:nav.tabs} (deep (views/search-page m))))]
+        (is (not (tabs? (assoc state :result
+                               (assoc result :size 0
+                                      :counts [{:corpus "PROBE" :size 0}])))))
+        (is (not (tabs? (assoc base :view-hrefs view-hrefs
+                               :error {:type :timeout}))))))))
 
 (deftest document-page-test
   (let [body [[:h1 {:id "corpus-search"} "Corpus search"] [:p "prose"]

@@ -253,16 +253,18 @@
   counted."
   [{:keys [ui attrs positions asked result client?]}]
   (when (tabled? result)
-    (result/view-controls ui client?
-                          (list (attr-control ui attrs (:attr asked))
-                                " "
-                                (position-control ui positions (:at result))
-                                " "
-                                (by-control ui attrs (:by result))
-                                (when-not (:by result)
-                                  (list " " (docs-control ui (:docs result)))))
-                          (result/near-control ui (:near result))
-                          (:near result))))
+    (if (result/found? result)
+      (result/view-controls ui client?
+                            (list (attr-control ui attrs (:attr asked))
+                                  " "
+                                  (position-control ui positions (:at result))
+                                  " "
+                                  (by-control ui attrs (:by result))
+                                  (when-not (:by result)
+                                    (list " " (docs-control ui (:docs result)))))
+                            (result/near-control ui (:near result))
+                            (:near result))
+      (result/empty-controls ui client? (:near result)))))
 
 (defn frequency-section
   "The frequency view of the search in `state`: when any corpus could be
@@ -279,11 +281,14 @@
    (frequency-heading ui asked result error)
    (frequency-controls state)
    (when (tabled? result)
-     (list
-      (if (:by result)
-        (crosstab-table ui result)
-        (frequency-table ui result))
-      ;; what to do next with the table, so it follows the table
-      (result/download-links ui export-hrefs
-                             (when (< row-limit (count (:rows result)))
-                               (i18n/tr ui "all values")))))))
+     ;; no rows to table, and the exports would be header-only files
+     (if-not (result/found? result)
+       [:p (i18n/tr ui "No hits.")]
+       (list
+        (if (:by result)
+          (crosstab-table ui result)
+          (frequency-table ui result))
+        ;; what to do next with the table, so it follows the table
+        (result/download-links ui export-hrefs
+                               (when (< row-limit (count (:rows result)))
+                                 (i18n/tr ui "all values"))))))))

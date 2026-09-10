@@ -79,19 +79,27 @@
     (first corpora)
     (str (count corpora) " " (i18n/tr ui "corpora"))))
 
+(defn found-in
+  "The corpora of `result` its hits are in; empty for a search that found
+  none. A corpus that failed has no size at all."
+  [{:keys [counts]}]
+  (for [{:keys [corpus size] :or {size 0}} counts
+        :when (pos? size)]
+    corpus))
+
+(defn found?
+  "True when a `result` found hits, so there is something to read."
+  [result]
+  (boolean (seq (found-in result))))
+
 (defn found-in-phrase
   "Where the hits of a `result` are, in `ui`: the corpora holding any;
   nil where the search found none."
-  [ui {:keys [counts]}]
+  [ui result]
   ;; which corpora were searched is the chooser's business, and it shows
   ;; them; this says which of them the hits are in, which nothing else does
-  (let [found (for [{:keys [corpus size]} counts
-                    ;; a corpus the search failed in has no size at all,
-                    ;; and its own error section below says so
-                    :when (pos? (or size 0))]
-                corpus)]
-    (when (seq found)
-      (str (i18n/tr ui "in") " " (corpora-phrase ui found)))))
+  (when-let [found (seq (found-in result))]
+    (str (i18n/tr ui "in") " " (corpora-phrase ui found))))
 
 (defn page-phrase
   "Where in a paged `result` the reader is, in `ui`: the page, and of how
@@ -237,6 +245,16 @@
      (widgets/select url/form-id "distance" (i18n/tr ui "within")
                      (for [n (sort (conj (set near-distances) distance))]
                        (widgets/option distance n (words n)))))))
+
+(defn empty-controls
+  "The controls over a result that found nothing, in `ui`: the `near`
+  word alone, where there is one, with the `apply-button` where no
+  `client?` runs."
+  [ui client? near]
+  ;; nothing to read is nothing to decide, except that this word may be
+  ;; why there is nothing, so it stays where the reader can remove it
+  (when near
+    (view-controls ui client? nil (near-control ui near) true)))
 
 (defn pager-links
   "The page links of a result around `position` (where in the sequence

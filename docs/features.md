@@ -186,6 +186,12 @@ narrowing and the sample travel with the search into the frequency view
 and the exports. Without a script, the controls apply through a button.
 A browser with a script never shows this button.
 
+A search that found nothing, and one that failed everywhere, show no
+table, no downloads and no switch between the views. The one control
+that stays is the word the hits must be near, when the search set one.
+That word may be why nothing was found, so the reader has to be able to
+remove it.
+
 ## Several corpora
 
 A search of several corpora queries them one at a time until the page

@@ -482,14 +482,9 @@
   hits are read, and the word they must be near. Nil where no corpus
   could be searched."
   [{:keys [ui sort-modes asked result client?]}]
-  (let [{:keys [size near]} result]
+  (let [{:keys [near]} result]
     (when (result/searched? result)
-      (if (zero? size)
-        ;; a result emptied by that word keeps the one control, or the
-        ;; reader could not take the word away again; it has nothing
-        ;; else to decide, having nothing to read
-        (when near
-          (result/view-controls ui client? nil (result/near-control ui near) true))
+      (if (result/found? result)
         (result/view-controls ui client?
                               (list (sort-control ui sort-modes (:sort asked))
                                     " "
@@ -497,7 +492,8 @@
                                     " "
                                     (sample-control ui (:sample result)))
                               (result/near-control ui near)
-                              near)))))
+                              near)
+        (result/empty-controls ui client? near)))))
 
 (defn concordance-section
   "The concordance view of the search in `state`: its sort, context and
@@ -521,7 +517,7 @@
        ;; a search that found nothing has nothing to page, download or
        ;; count: the table would be a header over no rows and the exports
        ;; header-only files
-       (if (zero? size)
+       (if-not (result/found? result)
          [:p (i18n/tr ui "No hits.")]
          (list
           (result/pagination ui prev-href next-href position)

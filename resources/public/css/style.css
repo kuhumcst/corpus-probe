@@ -542,6 +542,12 @@ pre { font-size: 0.875rem; padding: 0.75rem 1rem;
    border down by its own height, which no bounding box reports */
 .result { border-block-start: 1px solid var(--rule); padding-block-start: 2rem; }
 
+/* nothing found: prose, and as wide as prose. No tab stands on the line
+   here, so it is hidden rather than removed: its width is part of the
+   step to the heading */
+.result:not(:has(table)) { max-inline-size: 40rem;
+                           border-block-start-color: transparent; }
+
 .result > * { margin-block: 0; }
 .result > * + * { margin-block-start: 1rem; }
 

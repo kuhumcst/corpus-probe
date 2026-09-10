@@ -12,6 +12,13 @@
    :counts [{:corpus "PROBE" :tokens 47 :size 5}]
    :rows   [{:value "hund" :freqs {"PROBE" 3} :total 3}]})
 
+(def counted-none
+  "A frequency result of a corpus that could be counted and held nothing."
+  {:attr   :word
+   :query  "\"ijjk\""
+   :counts [{:corpus "PROBE" :tokens 47 :size 0}]
+   :rows   []})
+
 (deftest tabled?-test
   (is (frequency/tabled? counted))
   (is (not (frequency/tabled? {:counts [{:corpus "X" :error {:type :timeout}}]})))
@@ -59,7 +66,27 @@
                 (deep html))))
     (testing "the switch between the views is the page's, on the query
               line, not the section's (see views-test)"
-      (is (not (some #{:nav.tabs} (deep html)))))))
+      (is (not (some #{:nav.tabs} (deep html))))))
+  (testing "a search that found nothing offers no table and no
+            downloads, the one being a header over no rows and the
+            other a header-only file"
+    (let [html (frequency/frequency-section
+                {:lang         "en"
+                 :asked        {:q "ijjk"}
+                 :result       counted-none
+                 :export-hrefs {:tsv "/e?format=tsv"}})]
+      (is (some #{"No hits."} (deep html)))
+      (is (not (some #{:table.frequencies} (deep html))))
+      (is (not (some #{"/e?format=tsv"} (deep html)))))
+    (testing "and no controls either, nothing being counted to regroup"
+      (is (nil? (frequency/frequency-controls {:ui en :result counted-none})))
+      (testing "except the word the hits must be near, which stays, and
+                open, so the reader can remove what may have emptied it"
+        (let [html (frequency/frequency-controls
+                    {:ui     en
+                     :result (assoc counted-none :near {:word "kat"})})]
+          (is (some #{"Near"} (deep html)))
+          (is (not (some #{"Group by"} (deep html)))))))))
 
 (deftest attr-control-test
   (let [html (frequency/attr-control en

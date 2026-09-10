@@ -180,6 +180,16 @@
               {:counts [{:corpus "X" :error {:type :timeout}}]})))
     (is (not (result/searched? nil)))))
 
+(deftest found?-test
+  (testing "a corpus holding a hit is something to read"
+    (is (result/found? example-result))
+    (is (result/found? {:counts [{:corpus "PROBE" :size 5}
+                                 {:corpus "VISER" :size 0}]})))
+  (testing "an answer of none is not, nor is a search that failed"
+    (is (not (result/found? {:counts [{:corpus "PROBE" :size 0}]})))
+    (is (not (result/found? {:counts [{:corpus "X" :error {:type :timeout}}]})))
+    (is (not (result/found? nil)))))
+
 (deftest view-label-test
   (testing "the jargon stands bare, so that the tab's link keeps a name
             of its own, and untranslated in either language"
@@ -385,6 +395,16 @@
   (testing "in Danish"
     (is (some #{"Sammen med"} (deep (result/near-control da nil))))
     (is (some #{"1 ord"} (deep (result/near-control da nil))))))
+
+(deftest empty-controls-test
+  (testing "a result emptied by a narrowing keeps that control, open, or
+            the reader could not take the word away again"
+    (let [html (result/empty-controls en false {:word "kat"})]
+      (is (= :div.view-controls (first html)))
+      (is (some #{"Near"} (deep html)))
+      (is (some #(and (map? %) (:open %)) (deep html)))))
+  (testing "one emptied by the query itself has nothing to decide"
+    (is (nil? (result/empty-controls en false nil)))))
 
 (deftest bare-word-error-test
   (testing "a bare word in a CQP query is refused as a corpus, which the

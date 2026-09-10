@@ -160,9 +160,9 @@
      (when client? (concordance/inspector ui selected))
      ;; on the query line, not in the result's own header: the grid
      ;; gives it a column beside the query, and the rows under it span
-     ;; both, so the answer is as wide as it was. It is a control over
-     ;; an answer, so it waits for one
-     (when answered? (result/view-switch ui view view-hrefs))
+     ;; both, so the answer is as wide as it was. It waits for hits:
+     ;; a result with none reads the same in either view
+     (when (result/found? result) (result/view-switch ui view view-hrefs))
      ;; the help stands where the answer will, until there is one: the
      ;; reader who has not searched yet is the one with room to read it
      (cond
