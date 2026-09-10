@@ -83,12 +83,18 @@
                           :title))))
     (testing "the token an anchor falls on is marked and named as such"
       (let [[_ attrs] (concordance/token {:anchored {0 :target}} hit source 0 m)]
-        (is (= "target" (:class attrs)))
+        (is (= ["target"] (:class attrs)))
         (is (= "target · NCSI" (:title attrs))))
       (is (= "keyword" (:title (second (concordance/token {:anchored {0 :keyword}}
                                                           hit source 0
                                                           {:word "hund"})))))
-      (is (= "keyword" (concordance/anchor-class :keyword))))))
+      (is (= "keyword" (concordance/anchor-class :keyword))))
+    (testing "a token outside the reader's window carries its fade step, the
+              classes a collection: Replicant warns on a space separated
+              string, once for every token of the page"
+      (is (= ["faded" "fade-3"]
+             (:class (second (concordance/token {:faded {0 3}}
+                                                hit source 0 m))))))))
 
 (deftest position-data-test
   (is (= {:data-cpos "9" :data-matchend "10"}
@@ -191,7 +197,7 @@
       (let [row (concordance/hit-row client
                                      (assoc sample-hit
                                             :anchors {:matchend 9 :target 8}))]
-        (is (some #(and (map? %) (= "target" (:class %)))
+        (is (some #(and (map? %) (= ["target"] (:class %)))
                   (deep (nth row 3))))))))
 
 (deftest concordance-test

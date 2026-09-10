@@ -182,7 +182,7 @@
                   out    (conj "faded" (str "fade-" out)))
         attrs   (cond-> (token-data m)
                   title         (assoc :title title)
-                  (seq classes) (assoc :class (str/join " " classes)))]
+                  (seq classes) (assoc :class classes))]
     (if-not client?
       ;; no handler: nothing answers a click here, and the string renderer
       ;; would drop one anyway
