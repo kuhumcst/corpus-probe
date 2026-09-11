@@ -80,9 +80,9 @@
 
 (defn pattern-row
   "The controls narrowing the values of `attr` in `ui`: a `pattern` they
-  must match and, over `rows` that are all numbers, the `bounds` ([from
-  to]) they must lie between; `hidden?` keeps the row in the document
-  while only what is in force is shown."
+  must match and, over `rows` that are all numbers or `bounds` ([from
+  to]) already in force, the bounds they must lie between; `hidden?`
+  keeps the row in the document while only what is in force is shown."
   [ui attr rows pattern bounds hidden?]
   (let [;; no label of its own: `label` is the placeholder and, with the
         ;; attribute after it, the accessible name, as chooser/filter-box.
@@ -105,7 +105,9 @@
                        {:type        "text"
                         :inputmode   "numeric"
                         :pattern     "-?[0-9]*"
-                        :placeholder placeholder
+                        ;; the end of the span where there is one to show,
+                        ;; and what the field is for where there is not
+                        :placeholder (or placeholder label)
                         :title       (i18n/tr ui "a whole number")}))]
     [:div.pattern (widgets/hidden-attrs hidden?)
      [:p.pattern-match
@@ -115,13 +117,16 @@
       ;; what the field takes has a glossary entry of its own, which a
       ;; placeholder of one word cannot say
       (widgets/help (i18n/tr ui "a regular expression") "regex")]
-     (when (numeric-values? rows)
-       ;; the span of the values as the placeholders, which says both that
-       ;; the fields take a number and which numbers are there to ask for;
-       ;; write one end and the other fills with the end it shows, so that
-       ;; what the fields hold is what the search will read
-       (let [[lo hi :as span] (value-span rows)
-             [from to]        (range-bounds span bounds)]
+     ;; the span of the values as the placeholders, which says both that
+     ;; the fields take a number and which numbers are there to ask for;
+     ;; write one end and the other fills with the end it shows, so that
+     ;; what the fields hold is what the search will read
+     (let [[lo hi :as span] (when (numeric-values? rows) (value-span rows))
+           [from to]        (range-bounds span bounds)]
+       ;; where a range can be asked for, and where one already stands: an
+       ;; attribute whose values are not listed cannot say that they are
+       ;; numbers, and dropping the fields would drop the range with them
+       (when (or span (in-force? nil bounds))
          [:p.pattern-range
           (bound :from from (i18n/tr ui "from") lo)
           ;; the dash says the two are one range; both are named already,
@@ -210,58 +215,113 @@
                        :mixed?      (boolean (some :in-force? nodes))}))
 
 (defn filterable?
-  "True when `filters` offer anything to filter by or hold a selection
-  to show, which decides whether the fieldset is rendered at all."
-  [{:keys [attrs unlisted selected]}]
-  (boolean (or (seq attrs) (seq unlisted) (seq selected))))
+  "True when `filters` offer anything to filter by, or hold a narrowing
+  of the reader's own to show, which decides whether the chooser is
+  rendered at all.
 
-(defn filter-fieldset
-  "The metadata filter fieldset of the search form: the chooser over the
-  tree of `filters` (see dk.cst.corpus-probe.search.frequency/filter-options!)
-  with the chooser `opts`, what is `:held` among them as pairs, worded
-  in `ui`; nil without metadata. `:selected` maps each attribute to its
-  chosen values, `:patterns` to the pattern in force and `:ranges` to
-  the [from to]; `:pending?` marks the fieldset busy while the client
-  fetches the options of a changed corpus selection."
+  A pattern or a range counts whether or not a box is ticked under it: a
+  field out of the document is a constraint dropped from the search while
+  the state still holds it, and the reader is left with nowhere to see it
+  or take it back. Asked with `in-force?`, since every keystroke lands in
+  the state and a field typed into and emptied again narrows nothing."
+  [{:keys [attrs unlisted selected patterns ranges]}]
+  (boolean (or (seq attrs) (seq unlisted) (seq selected)
+               (some #(in-force? (get patterns %) (get ranges %))
+                     (concat (keys patterns) (keys ranges))))))
+
+(def box-id
+  "The id of the metadata box, which emptying the filter leaves the
+  reader on: the chooser goes as the last thing in it is taken back, and
+  the control they worked to take it back goes with the chooser."
+  "metadata")
+
+(defn empty-fieldset
+  "The metadata fieldset with no chooser in it, in `ui`: the box the
+  chooser would have stood in, saying why it is empty over the `corpora`
+  chosen for it to read metadata from, or that the first answer is on
+  its way while `pending?`.
+
+  The box stands in every state, so the rail neither grows nor shrinks
+  as corpora are ticked, and a reader who has chosen none is still told
+  where filtering by metadata lives."
+  [ui corpora pending?]
+  [:fieldset.filters.box {:id        box-id
+                          :tabindex  "-1"
+                          :data-list "values"}
+   [:legend (widgets/term ui :metadata false)]
+   [:p (cond
+         pending?
+         (i18n/tr ui "Loading …")
+
+         (seq corpora)
+         (i18n/trn ui
+                   "The corpus you chose carries no metadata."
+                   "The corpora you chose carry no metadata."
+                   (count corpora))
+
+         :else
+         (i18n/tr ui "Choose corpora to filter by metadata."))]])
+
+(defn filter-chooser
+  "The chooser over the tree of `filters` (see
+  dk.cst.corpus-probe.search.frequency/filter-options!) with the chooser
+  `opts`, what is `:held` among them as pairs, worded in `ui`.
+
+  `:selected` maps each attribute to its chosen values, `:patterns` to
+  the pattern in force and `:ranges` to the [from to]; `:pending?` marks
+  it busy while the client fetches the options of a changed selection."
   [ui {:keys [unlisted selected patterns ranges] :as filters}
    {:keys [held pending?] :as opts}]
-  (when (filterable? filters)
-    (let [selected (filter-pairs selected)
-          nodes    (filter-tree filters (or held selected))
-          noun     #(i18n/trn ui "value" "values" %)]
-      (chooser/chooser
-       ui :values nodes
-       (assoc opts
-              :class     "filters"
-              :selected  selected
-              :busy?     pending?
-              :legend    (widgets/term ui :metadata false)
-              :noun      noun
-              :not-found (i18n/tr ui "No values found.")
-              :invalid   (range-fault ui nodes ranges)
-              :control   (fn [_] (clear-toggle ui nodes selected))
-              ;; a pattern or a range narrows the attribute as its boxes
-              ;; do, so its own box reads as neither all nor none, which
-              ;; is what the summary would otherwise need words for
-              :toggle    (fn [{:keys [id offered in-force?]}]
-                           (widgets/select-all
-                            (str (i18n/tr ui "All values of") " " (name id))
-                            offered selected
-                            [:toggle-filter-values [id (mapv second offered)]]
-                            {:mixed? in-force?}))
-              :item      (partial filter-item ui selected)
-              :summary   (fn [{:keys [label] :as node}]
-                           (list [:code label] " "
-                                 (chooser/node-count ui noun selected node)))
-              :extra     (fn [{:keys [id items in-force?]} resting?]
-                           (pattern-row ui id items
-                                        (get patterns id) (get ranges id)
-                                        (and resting? (not in-force?))))
-              ;; a caveat about the control rather than part of it, which
-              ;; is what <small> is for: these attributes are not on
-              ;; offer here
-              :after     (when (seq unlisted)
-                           [:p [:small (i18n/tr ui "Too many values to list: ")
-                                (interpose ", "
-                                           (map (fn [attr] [:code (name attr)])
-                                                unlisted))]]))))))
+  (let [selected (filter-pairs selected)
+        nodes    (filter-tree filters (or held selected))
+        noun     #(i18n/trn ui "value" "values" %)]
+    (chooser/chooser
+     ui :values nodes
+     (assoc opts
+            :class     "filters"
+            :selected  selected
+            :busy?     pending?
+            :legend    (widgets/term ui :metadata false)
+            :noun      noun
+            :not-found (i18n/tr ui "No values found.")
+            :invalid   (range-fault ui nodes ranges)
+            :control   (fn [_] (clear-toggle ui nodes selected))
+            ;; a pattern or a range narrows the attribute as its boxes
+            ;; do, so its own box reads as neither all nor none, which
+            ;; is what the summary would otherwise need words for
+            :toggle    (fn [{:keys [id offered in-force?]}]
+                         (widgets/select-all
+                          (str (i18n/tr ui "All values of") " " (name id))
+                          offered selected
+                          [:toggle-filter-values [id (mapv second offered)]]
+                          {:mixed? in-force?}))
+            :item      (partial filter-item ui selected)
+            :summary   (fn [{:keys [label] :as node}]
+                         (list [:code label] " "
+                               (chooser/node-count ui noun selected node)))
+            :extra     (fn [{:keys [id items in-force?]} resting?]
+                         (pattern-row ui id items
+                                      (get patterns id) (get ranges id)
+                                      (and resting? (not in-force?))))
+            ;; a caveat about the control rather than part of it, which
+            ;; is what <small> is for: these attributes are not on
+            ;; offer here
+            :after     (when (seq unlisted)
+                         [:p [:small (i18n/tr ui "Too many values to list: ")
+                              (interpose ", "
+                                         (map (fn [attr] [:code (name attr)])
+                                              unlisted))]])))))
+
+(defn filter-fieldset
+  "The metadata filter fieldset of the search form in `ui`: the chooser
+  over `filters` with the chooser `opts` (see `filter-chooser`), or the
+  empty box where there is nothing to filter by, which the `:corpora`
+  chosen word (see `empty-fieldset`)."
+  [ui filters {:keys [pending? corpora] :as opts}]
+  ;; the attributes it holds stay while the next ones are fetched, the
+  ;; box saying it is busy instead: a list emptied and filled again takes
+  ;; its own control with it, and the row moves sideways under the hand
+  ;; of a reader who is still ticking corpora
+  (if (filterable? filters)
+    (filter-chooser ui filters opts)
+    (empty-fieldset ui corpora pending?)))

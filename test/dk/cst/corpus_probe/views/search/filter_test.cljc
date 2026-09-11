@@ -56,6 +56,15 @@
                                                [{:value "Havfruens sang"}]
                                                nil nil false)))))
       (is (not (filter-views/numeric-values? []))))
+    (testing "but a range already in force keeps its fields with no values
+              listed at all: nothing else can say that they are numbers,
+              and the fields are where the range is carried"
+      (let [held (deep (filter-views/pattern-row en :text_year []
+                                                 nil ["1500" nil] false))]
+        (is (= [["ff.text_year" "1500" "from"] ["ft.text_year" "" "to"]]
+               (->> held
+                    (filter #(and (map? %) (:inputmode %)))
+                    (map (juxt :name :value :placeholder)))))))
     (testing "hidden at rest, the row stays in the document"
       (is (= {:hidden true}
              (second (filter-views/pattern-row en :text_year years nil nil true)))))
@@ -151,16 +160,58 @@
       (is (true? (:in-force? b))))))
 
 (deftest filter-fieldset-test
-  (testing "no metadata renders nothing, which is what the client asks
-            before deciding whether fresh filters are worth fetching"
-    (is (nil? (filter-views/filter-fieldset en nil {})))
-    (is (nil? (filter-views/filter-fieldset en {:attrs    []
-                                          :unlisted []
-                                          :selected {}}
-                                      {})))
-    (is (false? (filter-views/filterable? {:attrs [] :unlisted [] :selected {}})))
-    (is (true? (filter-views/filterable? {:attrs [] :unlisted [:text_title] :selected {}})))
-    (is (true? (filter-views/filterable? {:attrs [] :unlisted [] :selected {:a #{"1"}}}))))
+  (testing "nothing to filter by is the box saying so, and saying which of
+            the two reasons it is: the rail then keeps its height however
+            the corpora are ticked"
+    (let [box  (fn [opts] (filter-views/filter-fieldset en nil opts))
+          said (fn [opts] (filter string? (deep (box opts))))]
+      (is (= :fieldset.filters.box (first (box {}))))
+      (is (= "values" (:data-list (second (box {})))))
+      (is (some #{"Choose corpora to filter by metadata."} (said {})))
+      (is (some #{"The corpus you chose carries no metadata."}
+                (said {:corpora ["PROBE"]})))
+      (is (some #{"The corpora you chose carry no metadata."}
+                (said {:corpora ["PROBE" "ANDEN"]}))))
+    (is (= :fieldset.filters.box
+           (first (filter-views/filter-fieldset en {:attrs    []
+                                                    :unlisted []
+                                                    :selected {}}
+                                                {}))))
+    (testing "and says the answer is on its way while it has none yet"
+      (is (some #{"Loading …"}
+                (filter string? (deep (filter-views/filter-fieldset
+                                       en nil {:pending? true}))))))
+    (testing "but a filter the reader set holds the chooser, with no corpus
+              chosen to offer anything: values, patterns and ranges alike,
+              since a field out of the document is a constraint dropped
+              from the search while the state still holds it"
+      (is (false? (filter-views/filterable? {:attrs    []
+                                             :unlisted []
+                                             :selected {}})))
+      (is (true? (filter-views/filterable? {:attrs    []
+                                            :unlisted [:text_title]
+                                            :selected {}})))
+      (is (true? (filter-views/filterable? {:attrs    []
+                                            :unlisted []
+                                            :selected {:a #{"1"}}})))
+      (is (true? (filter-views/filterable? {:patterns {:a "1."}})))
+      (is (true? (filter-views/filterable? {:ranges {:a ["1500" nil]}})))
+      ;; every keystroke lands in the state, so a field typed into and
+      ;; emptied again narrows nothing and holds nothing open
+      (is (false? (filter-views/filterable? {:patterns {:a ""}
+                                             :ranges   {:b [nil ""]}})))
+      (testing "and the narrowing is in the document where it was left,
+                under an attribute marked as narrowed by it"
+        (let [html (deep (filter-views/filter-fieldset
+                          en {:attrs    [] :unlisted [] :selected {}
+                              :patterns {:text_year "15.."} :ranges {}}
+                          {:client? true}))]
+          (is (some #(and (map? %) (= "fp.text_year" (:name %))
+                          (= "15.." (:value %)))
+                    html))
+          (is (some #(and (vector? %) (= :small.note (first %))
+                          (= "active filter" (:title (second %))))
+                    html))))))
   (let [selected {:text_year  #{"1591" "1600"}
                   :text_title #{"Havfruens sang"}}
         html (filter-views/filter-fieldset
@@ -258,15 +309,26 @@
         (is (= [:li :li :li] (hidden {:selected {} :patterns {:a "1."}} {})))
         (testing "and while the reader is choosing nothing is hidden"
           (is (= [] (hidden {:selected {}} {:choosing? true}))))))
-    (testing "it is marked busy while its attributes are being fetched"
-      (let [busy (fn [opts] (->> (deep (filter-views/filter-fieldset
-                                        "en" {:attrs [{:name :a :rows []}]
-                                              :unlisted [] :selected {}}
-                                        opts))
-                                 (filter #(and (map? %) (contains? % :open)))
-                                 first :aria-busy))]
-        (is (= "true" (busy {:pending? true})))
-        (is (nil? (busy {})))))
+    (testing "it is marked busy while the next attributes are fetched, and
+              keeps the ones it has: a list emptied and filled again takes
+              its own control with it, and the row then moves sideways
+              under the hand of a reader still ticking corpora"
+      (let [html  (fn [opts]
+                    (deep (filter-views/filter-fieldset
+                           en {:attrs    [{:name :a :rows [{:value "1"}]}]
+                               :unlisted [] :selected {}}
+                           (merge {:client? true :choosing? true} opts))))
+            busy  (fn [html] (->> html
+                                  (filter #(and (map? %) (contains? % :open)))
+                                  first :aria-busy))
+            boxes (fn [html] (->> html
+                                  (filter #(and (map? %)
+                                                (= "checkbox" (:type %))))
+                                  (map #(or (:name %) (:aria-label %)))))]
+        (is (= "true" (busy (html {:pending? true}))))
+        (is (nil? (busy (html {}))))
+        (is (some #{"Clear filter"} (boxes (html {:pending? true}))))
+        (is (= (boxes (html {})) (boxes (html {:pending? true}))))))
     (testing "each attribute carries a control over the values it shows"
       (let [alls (->> (deep (filter-views/filter-fieldset
                              "en"

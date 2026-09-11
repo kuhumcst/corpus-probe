@@ -52,6 +52,9 @@ msgstr "efter"
 msgid "charset"
 msgstr "tegnsæt"
 
+msgid "Choose corpora to filter by metadata."
+msgstr "Vælg korpusser for at filtrere efter metadata."
+
 msgid "Clear filter"
 msgstr "Ryd filter"
 
@@ -251,6 +254,11 @@ msgstr "gentag"
 
 msgid "Left out of the search"
 msgstr "Ikke med i søgningen"
+
+msgid "The corpus you chose carries no metadata."
+msgid_plural "The corpora you chose carry no metadata."
+msgstr[0] "Det valgte korpus har ingen metadata."
+msgstr[1] "De valgte korpusser har ingen metadata."
 
 msgid "The corpus cannot be counted by {attr}."
 msgid_plural "The corpora cannot be counted by {attr}."

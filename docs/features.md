@@ -285,6 +285,29 @@ number to another. That is how a reader asks for a decade of years, or
 a year of dates. It is also the only way to an attribute with too many
 values to list.
 
+The filter offers the metadata of the corpora that the chooser shows as
+chosen. A URL that names no corpus searches every corpus, but a form
+that shows none has chosen none, and offers nothing to filter by. The
+empty box keeps its place in the rail. It says that the reader has
+chosen no corpus, or that the corpora they chose carry no metadata.
+
+A filter that the reader set stays on screen. A ticked value stays, and
+so do a pattern and a range. It makes no difference whether the corpora
+still offer the attribute, or whether any corpus is chosen at all. A
+field out of the document is a constraint that the form no longer
+submits, while the state still holds it. It would come back on the next
+corpus that the reader ticks, and they would not know why. When the
+reader takes back the last of the filter, the chooser goes, and the
+control they used goes with it. Focus moves to the box.
+
+The client reads the filter over `/api/filters` when the corpus
+selection has settled. It does not wait for the reader to open the box.
+The box keeps the attributes that it has until the answer arrives, and
+marks itself busy. It does not empty itself first. An emptied list loses
+its own control, and the row then moves sideways while the reader is
+still ticking corpora. No corpus carries no metadata, and the client
+answers that without asking.
+
 ## Startup checks
 
 At startup, the server checks the installation and logs the result. It

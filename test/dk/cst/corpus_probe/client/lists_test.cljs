@@ -167,16 +167,12 @@
 (deftest filters-stale?-test
   (testing "fresh while the filters describe the selection"
     (is (not (lists/filters-stale? (at-rest ["VISER"])))))
-  (testing "stale once the selection has changed and the reader is looking"
+  (testing "stale once the selection has changed"
     (is (lists/filters-stale? (assoc (at-rest ["VISER"])
                                      :filters-for ["TALER"]))))
-  (testing "not while the filter is shut with something on show"
-    (is (not (lists/filters-stale? (assoc (at-rest ["VISER"] false)
-                                          :filters-for ["TALER"])))))
-  (testing "but always when nothing is on show at all"
-    (is (lists/filters-stale? (-> (at-rest ["VISER"] false)
-                                  (assoc :filters-for ["TALER"])
-                                  (assoc :filter-controls {})))))
-  (testing "and never for no corpora"
-    (is (not (lists/filters-stale? (assoc (at-rest []) :filters-for
-                                          ["TALER"]))))))
+  (testing "whether or not the reader has the filter open"
+    (is (lists/filters-stale? (assoc (at-rest ["VISER"] false)
+                                     :filters-for ["TALER"]))))
+  (testing "and for no corpora, which offer no metadata"
+    (is (lists/filters-stale? (assoc (at-rest []) :filters-for ["TALER"])))
+    (is (not (lists/filters-stale? (at-rest []))))))

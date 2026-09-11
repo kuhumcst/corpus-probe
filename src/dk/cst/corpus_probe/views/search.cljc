@@ -501,6 +501,7 @@
                                      (assoc values
                                             :held     held
                                             :pending? filters-pending?
+                                            :corpora  (:corpus params)
                                             :client?  client?))
        (settings-fieldset state ui)]]
      (settings-form params)

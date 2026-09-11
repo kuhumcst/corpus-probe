@@ -532,10 +532,6 @@ msgid "Recent searches cleared"
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/search.cljc
-msgid "Loading …"
-msgstr ""
-
-#: src/dk/cst/corpus_probe/views/search.cljc
 msgid "As CQP"
 msgstr ""
 
@@ -665,6 +661,20 @@ msgstr ""
 
 #: src/dk/cst/corpus_probe/views/search/filter.cljc
 msgid "Clear filter"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/search.cljc src/dk/cst/corpus_probe/views/search/filter.cljc
+msgid "Loading …"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/search/filter.cljc
+msgid "The corpus you chose carries no metadata."
+msgid_plural "The corpora you chose carry no metadata."
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/dk/cst/corpus_probe/views/search/filter.cljc
+msgid "Choose corpora to filter by metadata."
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/frequency.cljc src/dk/cst/corpus_probe/views/search/filter.cljc

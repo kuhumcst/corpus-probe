@@ -8,7 +8,8 @@
             [dk.cst.corpus-probe.storage.settings :as settings]
             [dk.cst.corpus-probe.url :as url]
             [dk.cst.corpus-probe.views :as views]
-            [dk.cst.corpus-probe.views.concordance :as concordance]))
+            [dk.cst.corpus-probe.views.concordance :as concordance]
+            [dk.cst.corpus-probe.views.search.filter :as filter-views]))
 
 (def hit
   {:corpus  "PROBE" :cpos 9
@@ -378,10 +379,11 @@
 
 (deftest selection-test
   (testing "a corpus toggled joins the sorted selection, is noted for the
-            chooser, and asks the filters to refresh"
+            chooser, leaves the filters pending, and asks them to refresh"
     (let [{state' :state :keys [effects]}
           (actions/toggle-corpora state ["ANDEN"])]
       (is (= ["ANDEN" "PROBE"] (get-in state' [:params :corpus])))
+      (is (true? (:filters-pending? state')))
       (is (= [[:refresh-filters]] effects))
       (is (= ["PROBE"]
              (get-in (:state (actions/toggle-corpora state' ["ANDEN"]))
@@ -426,14 +428,51 @@
     (is (identical? state
                     (:state (actions/act state [:leave :corpora false]))))))
 
+(deftest emptied-filter-test
+  (let [alone (-> state
+                  (assoc-in [:params :corpus] [])
+                  (assoc :filter-controls {:attrs    [] :unlisted []
+                                           :selected {:text_year #{"1591"}}
+                                           :patterns {} :ranges {}}))]
+    (testing "the last of a filter taken back leaves the reader on the
+              metadata box: with no corpus chosen the filter is the only
+              thing holding the chooser, so the control they worked to
+              take it back goes with it and focus would fall to the page"
+      (is (= [[:focus filter-views/box-id]]
+             (:effects (actions/act alone [:clear-filter]))))
+      (is (= [[:focus filter-views/box-id]]
+             (:effects (actions/act alone [:toggle-filter-values
+                                           [:text_year ["1591"]]]))))
+      (is (= [[:focus filter-views/box-id]]
+             (:effects (actions/act (assoc-in alone [:filter-controls]
+                                              {:attrs [] :unlisted []
+                                               :selected {}
+                                               :patterns {:text_year "15.."}
+                                               :ranges {}})
+                                    [:set-filter-pattern :text_year ""])))))
+    (testing "and nowhere else: a filter still standing keeps its controls,
+              and so does one the corpora still offer attributes for"
+      (is (nil? (:effects (actions/act alone [:toggle-filter-values
+                                              [:text_year ["1583"]]]))))
+      (is (nil? (:effects (actions/act state [:clear-filter])))))))
+
 (deftest filters-test
   (let [looking (update-in state [:lists :values :open] conj :root)
         moved   (assoc-in looking [:params :corpus] ["ANDEN"])]
     (testing "the debounce elapsing fetches only when the filters are stale"
-      (is (= {:state state} (actions/filters-due state)))
+      (is (= {:state (assoc state :filters-pending? false)}
+             (actions/filters-due state)))
       (is (= {:state   (assoc moved :filters-pending? true)
               :effects [[:fetch-filters ["ANDEN"]]]}
              (actions/filters-due moved))))
+    (testing "a selection of no corpora is answered without asking: the
+              union over nothing is nothing"
+      (let [{state' :state :keys [effects]}
+            (actions/filters-due (assoc-in looking [:params :corpus] []))]
+        (is (nil? effects))
+        (is (= [] (:filters-for state')))
+        (is (false? (:filters-pending? state')))
+        (is (empty? (get-in state' [:filter-controls :attrs])))))
     (testing "filters arriving for the selection replace the attributes and
               remember it"
       (let [arrived (actions/filters-arrived

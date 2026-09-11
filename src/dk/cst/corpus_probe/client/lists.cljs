@@ -159,13 +159,12 @@
 
 (defn filters-stale?
   "True when the metadata filters `state` holds are not the ones the
-  corpora now selected offer, and the reader is looking at them: a
-  selection is changed several times before anyone asks what metadata
-  it carries. Looking is the filter standing open, or nothing on show at
-  all, which a reader cannot open to ask; and never for no corpora,
-  which a search cannot run on and the server answers with nothing."
-  [{:keys [filters-for filter-controls] :as state}]
-  (and (or (contains? (get-in state [:lists :values :open]) :root)
-           (not (filter-views/filterable? filter-controls)))
-       (seq (chosen-corpora state))
-       (not= (chosen-corpora state) filters-for)))
+  corpora now selected offer, `:filters-for` naming the selection they
+  were read for.
+
+  Asked of the selection rather than of the reader opening the filter:
+  what a selection carries is fetched, and a reader who has to wait for
+  the answer at the moment they look reads the last selection's
+  attributes until it lands."
+  [{:keys [filters-for] :as state}]
+  (not= (chosen-corpora state) filters-for))

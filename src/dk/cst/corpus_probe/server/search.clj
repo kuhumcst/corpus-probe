@@ -341,10 +341,15 @@
   could not keep as `:switch`, for the form's status line."
   [ctx {:keys [params arrived entries known] :as req} attrs]
   (let [{:keys [form held]} arrived
-        shown   (shown-params req)
-        p-attrs (corpus/attr-names corpus/positional? attrs)]
+        shown    (shown-params req)
+        ;; the filter is about the corpora the chooser shows chosen, not
+        ;; about the ones a search would read: a request naming none
+        ;; searches them all, while a form showing none has nothing to
+        ;; filter by, which is what `serve-filters` answers the client
+        [chosen] (corpus/split-known entries (:corpus shown))
+        p-attrs  (corpus/attr-names corpus/positional? attrs)]
     {:folders         (corpus/corpus-tree! ctx entries)
-     :filter-controls (filter-controls! ctx known params)
+     :filter-controls (filter-controls! ctx chosen params)
      :search-attrs    p-attrs
      :tokens          (query/form-rows (when (= "extended" form) held))
      :switch          (select-keys arrived [:loss :unread])

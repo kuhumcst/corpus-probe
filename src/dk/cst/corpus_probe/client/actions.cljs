@@ -352,13 +352,18 @@
   are already selected, the change noted for the chooser (see
   dk.cst.corpus-probe.client.lists/tick) and the metadata filters asked
   to refresh: one rule for a corpus and a folder, so a folder only partly
-  selected fills rather than clearing the part the reader already had."
+  selected fills rather than clearing the part the reader already had.
+
+  The filters are pending from the tick rather than from the fetch it
+  leads to: what this selection carries is unknown the moment it
+  changes, and the attributes of the one before it are no stand-in."
   [state ids]
   (let [corpus     (get-in state [:params :corpus])
         unticking? (every? (set corpus) ids)]
     {:state   (-> state
                   (assoc-in [:params :corpus]
                             (lists/select-corpora corpus ids (not unticking?)))
+                  (assoc :filters-pending? true)
                   (lists/tick :corpora ids unticking?))
      :effects [[:refresh-filters]]}))
 
@@ -422,22 +427,24 @@
 
 (defn refreshed
   "Answer the step with `state`, and ask the metadata filters to refresh
-  when the list `k` worked is the metadata filter: what metadata
-  a selection offers is fetched rather than known, and only once a
-  reader looks at it."
+  when the list `k` worked is the metadata filter: a fetch that failed
+  left them describing a selection that is no longer the one chosen, and
+  a reader opening the filter is the moment it is worth asking again."
   [k state]
   (cond-> {:state state}
     (= :values k) (assoc :effects [[:refresh-filters]])))
 
-(defn filters-due
-  "Fetch the metadata filters the selection of `state` now offers, when
-  they are stale (see dk.cst.corpus-probe.client.lists/filters-stale?);
-  nothing otherwise."
-  [state]
-  (if (lists/filters-stale? state)
-    {:state   (assoc state :filters-pending? true)
-     :effects [[:fetch-filters (lists/chosen-corpora state)]]}
-    {:state state}))
+(defn emptied
+  "Answer the step that took `state` to `state'`, leaving the reader on
+  the metadata box where the step emptied the filter: with no corpus
+  chosen the filter is the only thing holding the chooser, so taking the
+  last of it back takes away the control that took it back, and focus
+  would fall to the document."
+  [state state']
+  (cond-> {:state state'}
+    (and (filter-views/filterable? (:filter-controls state))
+         (not (filter-views/filterable? (:filter-controls state'))))
+    (assoc :effects [[:focus filter-views/box-id]])))
 
 (defn filters-arrived
   "Apply `options`, the metadata filters fetched for `corpora`, to
@@ -454,6 +461,26 @@
         ;; afresh, unless the reader is in the list by now
         (cond-> (not (get-in state [:lists :values :choosing?]))
           (lists/settle :values)))))
+
+(defn filters-due
+  "Fetch the metadata filters the selection of `state` now offers, when
+  they are stale (see dk.cst.corpus-probe.client.lists/filters-stale?).
+
+  No corpus carries no metadata, which is answered here rather than
+  asked over the wire. A selection ticked away and back again is the one
+  the filters already describe, and nothing is pending on it."
+  [state]
+  (let [corpora (lists/chosen-corpora state)]
+    (cond
+      (not (lists/filters-stale? state))
+      {:state (assoc state :filters-pending? false)}
+
+      (empty? corpora)
+      {:state (filters-arrived state corpora {:attrs [] :unlisted []})}
+
+      :else
+      {:state   (assoc state :filters-pending? true)
+       :effects [[:fetch-filters corpora]]})))
 
 (defn remember
   "The `state` with the search it shows at the head of the searches it
@@ -683,11 +710,13 @@
       :apply-view           {:state   (assoc-in state [:params (keyword x)] y)
                              :effects [[:apply-view url/form-id]]}
       :toggle-corpora       (toggle-corpora state x)
+      ;; every way the filter is worked can be the way it is emptied
       :toggle-filter-values (let [[attr values] x]
-                              {:state (toggle-filter-values state attr values)})
-      :set-filter-pattern   {:state (set-filter-pattern state x y)}
-      :set-filter-bound     {:state (set-filter-bound state x y z)}
-      :clear-filter         {:state (clear-filter state)}
+                              (emptied state (toggle-filter-values
+                                              state attr values)))
+      :set-filter-pattern   (emptied state (set-filter-pattern state x y))
+      :set-filter-bound     (emptied state (set-filter-bound state x y z))
+      :clear-filter         (emptied state (clear-filter state))
       :engage               (refreshed x (lists/engage state x))
       :toggle-open          (refreshed x (lists/toggle-open state x y z))
       :filter               {:state (lists/apply-filter state x y)}
