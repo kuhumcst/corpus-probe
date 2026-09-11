@@ -154,39 +154,42 @@
         shown    (take row-limit rows)
         groups   (cond-> readable total? (concat [:total]))
         span     (cond-> 2 sized inc docs inc)]
-    [:table.frequencies
-     (table-caption ui result)
-     [:colgroup]
-     (for [_ groups] [:colgroup {:span span}])
-     [:thead
-      [:tr
-       [:th {:scope "col" :rowspan 2} [:code (name attr)]]
-       (for [{:keys [corpus]} readable]
-         [:th {:scope "colgroup" :colspan span}
-          [:a {:href (url/corpus corpus)}
-           [:code corpus]]])
-       (when total?
-         [:th {:scope "colgroup" :colspan span} (i18n/tr ui "total")])]
-      [:tr
-       (for [_ groups]
-         (list [:th {:scope "col"} (widgets/term ui :frequency false)]
-               [:th {:scope "col"} (widgets/term ui :per-million false)]
-               (when sized [:th {:scope "col"} (i18n/tr ui "tokens")])
-               (when docs [:th {:scope "col"} (i18n/tr ui "texts")])))]]
-     [:tbody
-      (for [{:keys [value freqs total href] :as row} shown]
-        [:tr
-         (value-cell attr value href)
-         (for [{:keys [corpus tokens]} readable]
-           (frequency-cells ui (get freqs corpus 0)
-                            (stats/row-tokens sized tokens corpus row)
-                            sized
-                            (when docs (stats/row-docs corpus row))))
-         (when total?
-           (frequency-cells ui total
-                            (stats/row-tokens sized tokens row)
-                            sized
-                            (when docs (stats/row-docs row))))])]]))
+    ;; a column group per corpus, so a registry of any size is wider than
+    ;; the page, which must not scroll sideways with it
+    (widgets/table-box
+     [:table.frequencies
+      (table-caption ui result)
+      [:colgroup]
+      (for [_ groups] [:colgroup {:span span}])
+      [:thead
+       [:tr
+        [:th {:scope "col" :rowspan 2} [:code (name attr)]]
+        (for [{:keys [corpus]} readable]
+          [:th {:scope "colgroup" :colspan span}
+           [:a {:href (url/corpus corpus)}
+            [:code corpus]]])
+        (when total?
+          [:th {:scope "colgroup" :colspan span} (i18n/tr ui "total")])]
+       [:tr
+        (for [_ groups]
+          (list [:th {:scope "col"} (widgets/term ui :frequency false)]
+                [:th {:scope "col"} (widgets/term ui :per-million false)]
+                (when sized [:th {:scope "col"} (i18n/tr ui "tokens")])
+                (when docs [:th {:scope "col"} (i18n/tr ui "texts")])))]]
+      [:tbody
+       (for [{:keys [value freqs total href] :as row} shown]
+         [:tr
+          (value-cell attr value href)
+          (for [{:keys [corpus tokens]} readable]
+            (frequency-cells ui (get freqs corpus 0)
+                             (stats/row-tokens sized tokens corpus row)
+                             sized
+                             (when docs (stats/row-docs corpus row))))
+          (when total?
+            (frequency-cells ui total
+                             (stats/row-tokens sized tokens row)
+                             sized
+                             (when docs (stats/row-docs row))))])]])))
 
 (defn crosstab-table
   "The cross-tabulated frequency `result` (see
@@ -208,7 +211,7 @@
                                               ")")))))]
     ;; a column per year is wider than the page, which must not scroll
     ;; sideways with it
-    [:div.scroll
+    (widgets/table-box
      [:table.frequencies.crosstab
       (table-caption ui result)
       [:thead
@@ -229,7 +232,7 @@
           (value-cell attr value href)
           (for [{col :value col-tokens :tokens} columns]
             (cell (get cells col 0) col-tokens))
-          (cell total tokens)])]]]))
+          (cell total tokens)])]])))
 
 (defn tabled?
   "True when any corpus of frequency `result` could be counted, so its

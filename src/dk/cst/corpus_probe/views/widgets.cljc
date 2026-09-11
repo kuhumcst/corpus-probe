@@ -178,6 +178,15 @@
   [ui n & more]
   (into [:td.num (i18n/group-digits ui n)] more))
 
+(defn table-box
+  "The box a table stands in: the frame, and inside it the region that
+  scrolls `content`, which opens with the region's attributes if any."
+  [& content]
+  ;; two elements: a table wider than the page would otherwise scroll the
+  ;; line under its column headings out past the border (style.css,
+  ;; `.table-box`)
+  [:div.table-box (into [:div.scroll] content)])
+
 (defn size-data
   "The token count `n` as a <data> element, in `ui`: grouped digits for
   people, the plain number in `value` for machines."

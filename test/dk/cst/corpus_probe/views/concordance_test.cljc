@@ -7,6 +7,12 @@
             [dk.cst.corpus-probe.url :as url]
             [dk.cst.corpus-probe.views.concordance :as concordance]))
 
+(defn region
+  "The region that scrolls inside the box `concordance` frames it with:
+  what these tests read, the box itself being only the frame."
+  [& args]
+  (second (apply concordance/concordance args)))
+
 (deftest token-title-test
   (testing "non-word attributes join into the tooltip"
     (is (= "NCSI · hund" (concordance/token-title {:word "hund" :pos "NCSI"
@@ -214,13 +220,16 @@
 
 (deftest concordance-test
   (let [hits   [sample-hit (assoc sample-hit :corpus "VISER" :cpos 3)]
-        html   (concordance/concordance hits {:lang    "en"
+        box    (concordance/concordance hits {:lang    "en"
                                               :caption "Concordance"
                                               :langs   {"VISER" "da"}})
+        html   (second box)
         table  (nth html 3)
         groups (nth table 3)]
-    (testing "the table scrolls inside a named region of its own, focusable
-              but not a tab stop: nothing there is scrolled by hand"
+    (testing "the table stands in a box and scrolls inside a named region
+              of its own, focusable but not a tab stop: nothing there is
+              scrolled by hand"
+      (is (= :div.table-box (first box)))
       (is (= :div.scroll (first html)))
       (is (= {:id              concordance/region-id
               :role            "region"
@@ -237,11 +246,10 @@
     (testing "the region says how wide a line was asked for, which is how
               wide a page it takes to read it; a unit of text by name"
       (is (not (contains? (second html) :data-context)))
-      (is (= 20 (:data-context (second (concordance/concordance
-                                        hits {:ui en :context 20})))))
-      (is (= "sentence" (:data-context (second (concordance/concordance
-                                                hits {:ui en
-                                                      :context :sentence}))))))
+      (is (= 20 (:data-context (second (region hits {:ui en :context 20})))))
+      (is (= "sentence" (:data-context (second (region hits
+                                                       {:ui en
+                                                        :context :sentence}))))))
     (testing "the caption names the region as well as the table, spoken
               but not seen: the view controls name it on screen"
       (is (= :table.kwic (first table)))
@@ -282,7 +290,7 @@
     (testing "and by how many hits its corpus holds in all, beside the
               name and styled as the counts in the chooser are; a corpus
               whose query failed has none to show"
-      (let [groups (-> (concordance/concordance
+      (let [groups (-> (region
                         hits
                         {:ui     en
                          :counts [{:corpus "PROBE" :size 1113}
@@ -296,7 +304,7 @@
       (is (nil? (:lang (second (first groups)))))
       (is (= "da" (:lang (second (second groups))))))
     (testing "hits without a corpus form one plain group without a header"
-      (let [group (first (nth (nth (concordance/concordance
+      (let [group (first (nth (nth (region
                                     [(dissoc sample-hit :corpus)]
                                     {:ui en})
                                    3)
@@ -325,7 +333,7 @@
                           :title))))))
 
 (deftest key-help-test
-  (let [html (concordance/concordance [sample-hit] client)]
+  (let [html (region [sample-hit] client)]
     (testing "where the script runs, the region says in words what only a
               reader who can see the cursor move would know: it is spoken,
               never seen, and describes the region rather than the token,

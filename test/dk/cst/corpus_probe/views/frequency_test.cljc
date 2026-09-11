@@ -188,7 +188,8 @@
            (frequency/frequency-heading en sample-result nil)))))
 
 (deftest frequency-table-test
-  (let [table (frequency/frequency-table en sample-result)
+  ;; the box frames the region, and the region scrolls the table
+  (let [[_ [_ table]] (frequency/frequency-table en sample-result)
         [_ _ _ colgroups thead tbody] table
         row   (first (nth tbody 1))]
     (testing "a column group per readable corpus and one for the total"
@@ -254,8 +255,9 @@
 
 (deftest crosstab-table-test
   (let [html (frequency/crosstab-table en crosstab)]
-    (testing "it scrolls inside its own region"
-      (is (= :div.scroll (first html))))
+    (testing "it stands in a box and scrolls inside the region it frames"
+      (is (= :div.table-box (first html)))
+      (is (= :div.scroll (first (second html)))))
     (testing "a column per value of the second attribute, headed by it"
       (is (some #{[:th {:scope "col"} [:time "2023"]]} (deep html)))
       (is (some #{[:th {:scope "col"} "total"]} (deep html))))

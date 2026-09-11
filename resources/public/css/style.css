@@ -9,6 +9,9 @@
      box narrows its column by its padding and edge to keep the line */
   --line: 5.5rem;
   --box-pad: 0.75rem;
+  /* The space above and below the text in a table cell. In em, so that
+     a heading set larger than its rows keeps the same proportion */
+  --cell-pad: 0.4em;
   --label-col: var(--line);
   /* every bordered box is rounded by the same hand */
   --radius: 0.25rem;
@@ -656,10 +659,11 @@ pre { font-size: 0.875rem; padding: 0.75rem 1rem;
 
 /* The answer, and beside it the controls over it, with a rule down the
    gap between them: the heading takes the words it needs and the
-   controls the rest of the line. */
-.result-head { display: flex; gap: 1.5rem;
-               padding-block-end: 0.5rem;
-               border-block-end: 1px solid var(--rule); }
+   controls the rest of the line.
+
+   No line under it. The table below it is a box of its own, and an
+   answer with no table needs no line either. */
+.result-head { display: flex; gap: 1.5rem; }
 .result-head > .answer { display: flex; flex-direction: column;
                          align-items: start; gap: 0.25rem; }
 .result-head > .view-controls { flex: 1;
@@ -712,14 +716,34 @@ pre { font-size: 0.875rem; padding: 0.75rem 1rem;
 .pager > li:not(.pager-prev, .pager-next) { grid-column: 2; }
 .pager-next { grid-column: 3; justify-self: start; }
 
-/* a wide table scrolls inside its box rather than reflow (WCAG 1.4.10);
-   the padding is the strip an overlay scrollbar is drawn over, which
-   would otherwise cover the last line.
+/* The border around a table, drawn like the boxes in the rail. The
+   element inside it does the scrolling. A table stands apart, with more
+   space above and below it than the section gives anything else.
 
-   A query container, so the box keeps a width of its own: without that
-   the table's whole width reaches the page grid, which then sizes its
-   columns to a table hundreds of columns wide. A table this wide is
-   what the box is here to scroll */
+   These are two elements and not one because the line under the column
+   headings is as wide as the table. A single element would scroll that
+   line out under its own border whenever the table is wider than the
+   page. */
+.table-box { --table-pad: 0.5rem;
+             border: 1px solid var(--rule); border-radius: var(--radius);
+             padding: var(--table-pad) var(--box-pad);
+             margin-block: 2rem; }
+
+/* The box pads the space above the column headings. Put the same
+   amount below them. Without it they sit close to the line under them
+   and far from the top of the box. Only the last row, so that a heading
+   of two rows keeps its normal spacing between them. */
+.table-box thead tr:last-child th {
+  padding-block-end: calc(var(--cell-pad) + var(--table-pad));
+}
+
+/* A wide table scrolls here rather than reflow (WCAG 1.4.10).
+
+   This is a query container, so its width does not come from the table.
+   Without that, a table hundreds of columns wide would set the width of
+   the page grid. The padding at the foot is the strip that an overlay
+   scrollbar is drawn over. It belongs to this element and not to the
+   box, because a scrollbar is drawn inside whatever scrolls. */
 .scroll { overflow-x: auto; overscroll-behavior-x: contain;
           container-type: inline-size;
           padding-block-end: 0.75rem; }
@@ -729,10 +753,9 @@ pre { font-size: 0.875rem; padding: 0.75rem 1rem;
    A reader who panned the region would see only empty text. The region
    still scrolls, but only when the cursor moves it.
 
-   It also stands alone: a wider step than the section's own on each side,
-   and no strip held for a scrollbar that is never drawn here */
-.scroll:has(> .kwic) { overflow-x: hidden; padding-block-end: 0;
-                       margin-block: 2rem; }
+   It keeps no strip at the foot, because nobody scrolls this region by
+   hand. */
+.scroll:has(> .kwic) { overflow-x: hidden; padding-block-end: 0; }
 
 /* The concordance */
 
@@ -742,12 +765,8 @@ pre { font-size: 0.875rem; padding: 0.75rem 1rem;
    need a line to work along (WCAG 1.4.10 exempts content that needs two
    dimensions to mean anything, which a KWIC line does).
 
-   The last row ends on a line, as the column names stand on one, so the
-   table is a block of its own rather than rows fading into the page. It
-   is the table's, not the region's: it runs the table's width and is cut
-   by the region, which is the width a reader sees */
-.kwic { font-size: 0.875rem; white-space: nowrap; inline-size: 100%;
-        border-block-end: 1px solid var(--rule); }
+   No line under the last row. The box around the table draws one. */
+.kwic { font-size: 0.875rem; white-space: nowrap; inline-size: 100%; }
 /* These two columns have a width of their own. It is wider than any page
    (refer to dk.cst.corpus-probe.server.request/reach-limit). A page
    holds more words than the reader's window shows. The browser lays out
@@ -760,7 +779,7 @@ pre { font-size: 0.875rem; padding: 0.75rem 1rem;
    `.search-page:has`) */
 .kwic :is(.kwic-left, .kwic-right) { inline-size: 50%;
                                      min-inline-size: 900ch; }
-.kwic th, .kwic td { padding: 0.4em 0.25em; }
+.kwic th, .kwic td { padding: var(--cell-pad) 0.25em; }
 .kwic th { text-align: left; }
 /* scoped, or the heading rule above wins and the left heading flips */
 .kwic .kwic-left { text-align: right; }
@@ -875,7 +894,7 @@ body:has(.inspector) { padding-block-end: var(--sheet-block-size); }
 /* Frequency and corpus tables */
 
 .attributes, .frequencies { font-size: 0.9rem; }
-:is(.attributes, .frequencies) :is(th, td) { padding: 0.4em 0.5em;
+:is(.attributes, .frequencies) :is(th, td) { padding: var(--cell-pad) 0.5em;
                                              text-align: left; }
 :is(.attributes, .frequencies) .num { text-align: right; }
 

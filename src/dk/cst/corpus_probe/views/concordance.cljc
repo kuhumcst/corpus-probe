@@ -379,30 +379,28 @@
     ;; cursor alone; not a tab stop, since there is nothing to scroll by
     ;; hand, but focusable because the panel sends focus back here on
     ;; closing, and named because a focusable region needs a name
-    [:div.scroll (cond-> {:id              region-id
-                          :role            "region"
-                          :tabindex        "-1"
-                          :aria-labelledby caption-id
-                          ;; the panel describes what the cursor is on, so
-                          ;; it has nothing to describe once the cursor is
-                          ;; left behind
-                          :on              {:focusout [:leave-concordance]}}
-                   ;; the width of line that the reader asked for. The
-                   ;; page needs this to set its own width (style.css,
-                   ;; `.search-page:has(...)`)
-                   context
-                   (assoc :data-context (context-value context))
-                   ;; the token the reader is on stays in the middle, so
-                   ;; the scroll follows the cursor; the reach travels
-                   ;; with it, since a page that has just come back wider
-                   ;; has grown under the reader and must not be glided
-                   client?
-                   (assoc :replicant/on-render
-                          [:centre-match (cursor-id (:cursor opts))
-                           (:reach opts)]
-                          ;; on the region, not on the token: the cursor
-                          ;; would say it again at every word
-                          :aria-describedby keys-id))
+    (widgets/table-box
+     (cond-> {:id              region-id
+              :role            "region"
+              :tabindex        "-1"
+              :aria-labelledby caption-id
+              ;; the panel describes what the cursor is on, so it has
+              ;; nothing to describe once the cursor is left behind
+              :on              {:focusout [:leave-concordance]}}
+       ;; the width of line that the reader asked for. The page needs
+       ;; this to set its own width (style.css, `.search-page:has(...)`)
+       context
+       (assoc :data-context (context-value context))
+       ;; the token the reader is on stays in the middle, so the scroll
+       ;; follows the cursor; the reach travels with it, since a page
+       ;; that has just come back wider has grown under the reader and
+       ;; must not be glided
+       client?
+       (assoc :replicant/on-render
+              [:centre-match (cursor-id (:cursor opts)) (:reach opts)]
+              ;; on the region, not on the token: the cursor would say
+              ;; it again at every word
+              :aria-describedby keys-id))
      ;; only where the script is running: without it there is no cursor,
      ;; and the keys the help names do nothing
      (when client? (key-help ui))
@@ -413,7 +411,7 @@
       (when caption
         [:caption.spoken {:id caption-id} caption])
       (column-headers ui)
-      (map (partial corpus-group opts) (partition-by :corpus hits))]]))
+      (map (partial corpus-group opts) (partition-by :corpus hits))])))
 
 (defn sort-label
   "What the sort mode `value` (see
