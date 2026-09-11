@@ -92,7 +92,7 @@
       (is (every? paths [url/home url/search url/corpora url/glossary
                          url/cqp-guide url/preferences
                          url/filters-api url/counts-api
-                         "/css/*path" "/js/*path"])))
+                         "/css/*path" "/js/*path" "/fonts/*path"])))
     (testing "each route names itself, once"
       (is (= (count routes)
              (count (distinct (map #(nth % 4) routes))))))))
@@ -131,12 +131,26 @@
 
 (deftest serve-file-test
   (let [file (fn [path]
-               (server/serve-file "text/css; charset=utf-8" "css"
+               (server/serve-file "text/css; charset=utf-8" "css" nil
                                   {:path-params {:path path}}))]
-    (testing "a stylesheet is served as such"
+    (testing "a stylesheet is served as such, and is not kept"
       (is (= 200 (:status (file "style.css"))))
       (is (= "text/css; charset=utf-8"
-             (get-in (file "style.css") [:headers "Content-Type"]))))
+             (get-in (file "style.css") [:headers "Content-Type"])))
+      (is (= "no-store" (get-in (file "style.css") [:headers "Cache-Control"]))))
     (testing "a path out of the directory, or to nothing, is not found"
       (is (= 404 (:status (file "../config.edn"))))
-      (is (= 404 (:status (file "nonesuch.css")))))))
+      (is (= 404 (:status (file "nonesuch.css"))))))
+  (testing "the font is served as the bytes it is, and kept, since a face
+            that is refetched is a face `font-display: optional` never
+            reaches a second load to apply on"
+    (let [{:keys [status headers body]}
+          (server/serve-file "font/woff2" "fonts" server/font-cache
+                             {:path-params {:path "figtree-latin.woff2"}})
+          head (with-open [in body] (.readNBytes in 4))]
+      (is (= 200 status))
+      (is (= "font/woff2" (get headers "Content-Type")))
+      (is (= (str "public, max-age=" server/font-cache)
+             (get headers "Cache-Control")))
+      ;; the signature of a woff2, which a body read as text would lose
+      (is (= "wOF2" (String. head "ISO-8859-1"))))))

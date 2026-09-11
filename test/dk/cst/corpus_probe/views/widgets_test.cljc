@@ -27,28 +27,6 @@
     (is (= [:div.status {:class "navigation-status" :role "status"} nil]
            (widgets/status "navigation-status" nil)))))
 
-(deftest pager-test
-  (testing "no links renders nothing"
-    (is (nil? (widgets/pager nil nil "page 1 of 1"))))
-  (testing "links carry the rel values browsers use for a sequence, each
-            in a column of its own"
-    (let [html (widgets/pager ["/?page=0" "prev"] ["/?page=2" "next"]
-                              "page 2 of 3")]
-      (is (= :ul.row.pager (first html)))
-      (is (some #{[:li.pager-prev [:a {:href "/?page=0" :rel "prev"} "prev"]]}
-                (deep html)))
-      (is (some #{[:li.pager-next [:a {:href "/?page=2" :rel "next"} "next"]]}
-                (deep html)))))
-  (testing "the position rides between the two directions"
-    (is (= [:li "page 2 of 3"]
-           (nth (widgets/pager ["/?page=0" "p"] ["/?page=2" "n"] "page 2 of 3")
-                2))))
-  (testing "a direction that is out of range is left out, not held open"
-    (let [html (widgets/pager nil ["/?page=1" "next"] "page 1 of 3")]
-      (is (= 2 (count (filter #(and (vector? %) (#{:li :li.pager-next} (first %)))
-                              (deep html)))))
-      (is (not (some #{"prev"} (deep html)))))))
-
 (deftest link-row-test
   (let [html (widgets/link-row [[:a "/a" "A"] [:b "/b" "B"]] :b)]
     (testing "a row of links, each carrying its key, the current one

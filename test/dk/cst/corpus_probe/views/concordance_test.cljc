@@ -200,6 +200,18 @@
         (is (some #(and (map? %) (= ["target"] (:class %)))
                   (deep (nth row 3))))))))
 
+(deftest caption-test
+  (testing "a result of one page is named by the term alone"
+    (is (= [:abbr {:title "key word in context"} "KWIC"]
+           (concordance/caption en {:page 0 :pages 1} false))))
+  (testing "one of several says which page it holds: the pager stands under
+            the table, so a reader who hears it meets the rows first"
+    (is (= (list [:abbr {:title "key word in context"} "KWIC"]
+                 " · " "page 1 of 2")
+           (concordance/caption en {:page 0 :pages 2} true)))
+    (is (= "side 2 af 2"
+           (last (concordance/caption da {:page 1 :pages 2} true))))))
+
 (deftest concordance-test
   (let [hits   [sample-hit (assoc sample-hit :corpus "VISER" :cpos 3)]
         html   (concordance/concordance hits {:lang    "en"
@@ -242,16 +254,21 @@
               [:tr
                [:th.kwic-cpos {:scope "col"}
                 [:abbr {:title "corpus position"} "cpos"]]
-               ;; a measure the long names can wrap at on a narrow screen,
-               ;; which their own cells are far too wide to give them
-               [:th.kwic-left {:scope "col"} [:span.measure "left context"]]
+               ;; an arrow heads each context, its name spoken: the words
+               ;; take more room than a heading here has
+               [:th.kwic-left {:scope "col"}
+                (list [:span.spoken "left context"]
+                      [:span.kwic-arrow {:aria-hidden "true"
+                                         :title     "left context"} "←"])]
                [:th.kwic-match {:scope "col"} "match"]
-               [:th.kwic-right {:scope "col"} [:span.measure "right context"]]]]
+               [:th.kwic-right {:scope "col"}
+                (list [:span.spoken "right context"]
+                      [:span.kwic-arrow {:aria-hidden "true"
+                                         :title     "right context"} "→"])]]]
              (nth table 2))))
     (testing "a heading carries its column's class, so a rule about the
               column reaches the heading too"
-      (is (= [:th.kwic-right {:scope "col"} [:span.measure "right context"]]
-             (get-in table [2 1 4]))))
+      (is (= :th.kwic-right (first (get-in table [2 1 4])))))
     (testing "hits are grouped by corpus, each group headed by its name"
       (is (= 2 (count groups)))
       ;; the count is an explicit nil where the search has none, the
@@ -447,12 +464,14 @@
       (is (some #(and (map? %) (= "sample" (:id %))
                       (= url/form-id (:form %)))
                 (deep html))))
-    (testing "the page links are rendered above the table as well as below"
-      (is (= 2 (count (filter #(and (vector? %) (= :ul.row.pager (first %)))
-                              (deep html))))))
-    (testing "but only the first is a landmark, since both would share a name"
-      (is (= 1 (count (filter #(and (vector? %) (= :nav.pagination.menu (first %)))
-                              (deep html))))))
+    (testing "the pager stands under the table, where a reader who has read
+              it is, and is a landmark, being the only one"
+      (is (= 1 (count (filter #(and (vector? %) (= :ul.row.pager (first %)))
+                              (deep html)))))
+      (is (= 1 (count (filter #(and (vector? %) (= :nav.pagination (first %)))
+                              (deep html)))))
+      (let [order (fn [x] (.indexOf (vec (deep html)) x))]
+        (is (< (order :table.kwic) (order :ul.row.pager)))))
     (testing "the errors come before the concordance"
       (let [order (fn [x] (.indexOf (vec (deep html)) x))]
         (is (< (order [:h2 "CQP error"]) (order :table.kwic)))))

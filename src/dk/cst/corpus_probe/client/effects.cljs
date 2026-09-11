@@ -175,6 +175,36 @@
                     (cancel! pending-timer)
                     (set! (.-href js/location) href)))))))
 
+(defn align-pager!
+  "Start pager `el` where the strip the concordance is read in starts
+  (see `reading-strip`), so that its middle stands under the match at
+  rest rather than in the middle of the region.
+
+  A width, not an attribute, so it is written on render as the other
+  measured things are. Nothing to line up with starts it at the edge."
+  [el]
+  (let [cpos (some-> (.querySelector js/document ".kwic .kwic-cpos")
+                     (.getBoundingClientRect)
+                     (.-width))]
+    (.setProperty (.-style el) "padding-inline-start" (str (or cpos 0) "px"))))
+
+(defn go-to-page!
+  "Go to page `n` of the result on screen, as its pager's own links do:
+  the URL in the bar with the page named in it, landing on the answer.
+
+  The bar holds the citation the server wrote, which is the one thing
+  here that knows every param the search was asked with. The first page
+  is the default and no canonical URL says it."
+  [dispatch! n]
+  (let [url    (js/URL. js/location.href)
+        params (.-searchParams url)]
+    (if (= "1" n)
+      (.delete params "page")
+      (.set params "page" n))
+    (navigate! dispatch! (str (.-pathname url) (.-search url)
+                              url/results-fragment)
+               true)))
+
 (defn set-cookie!
   "Store `v` under setting `k` in the cookie the server reads (see
   dk.cst.corpus-probe.url/cookie), so a reload and every later visit
@@ -467,6 +497,8 @@
       :fetch-wider        (apply fetch-wider! dispatch! args)
       :refresh-filters    (refresh-filters! dispatch!)
       :navigate           (apply navigate! dispatch! args)
+      :go-to-page         (apply go-to-page! dispatch! args)
+      :align-pager        (align-pager! (:replicant/node data))
       :set-cookie         (apply set-cookie! args)
       :push-url           (apply push-url! args)
       :set-title          (apply set-title! args)

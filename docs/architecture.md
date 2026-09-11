@@ -17,6 +17,7 @@ plan the app was built from and the CWB research behind it.
 | `/api/counts` | the counts the client asks for after the first paint |
 | `/api/filters` | the metadata filters the selected corpora offer |
 | `/css/*path`, `/js/*path` | the compiled assets |
+| `/fonts/*path` | the page's face, the one asset a browser is told to keep |
 
 The table itself is `dk.cst.corpus-probe.server/routes`. The paths live in
 `dk.cst.corpus-probe.url`, so the server and the client build them by one rule.

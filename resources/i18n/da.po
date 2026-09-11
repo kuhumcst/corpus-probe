@@ -198,6 +198,9 @@ msgstr "Positionelle attributter"
 msgid "page"
 msgstr "side"
 
+msgid "Go to page"
+msgstr "Gå til side"
+
 msgid "Pagination"
 msgstr "Sidenavigation"
 

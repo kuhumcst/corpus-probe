@@ -257,44 +257,73 @@
             (is (nil? (second html)))
             (is (details html))))))))
 
-(deftest pager-links-test
+(deftest pager-test
   (testing "no links renders nothing"
-    (is (nil? (result/pager-links en nil nil "page 1 of 1"))))
-  (testing "links carry the rel values browsers use for a sequence"
-    (let [html (result/pager-links en "/?page=0" "/?page=2" "page 2 of 3")]
-      (is (some #{"prev"} (deep html)))
-      (is (some #{"next"} (deep html)))
-      (is (some #{"next →"} (deep html)))))
+    (is (nil? (result/pager en nil nil "page 1 of 1"))))
+  (testing "the links are a named navigation landmark"
+    (let [html (result/pager en "/?page=0" "/?page=2" "page 2 of 3")]
+      (is (= :nav.pagination (first html)))
+      (is (= "Pagination" (:aria-label (second html))))
+      (is (= "Sidenavigation"
+             (:aria-label (second (result/pager da "/?page=0" nil "x")))))))
+  (testing "links carry the rel values browsers use for a sequence, each
+            in a column of its own"
+    (let [html (result/pager en "/?page=0" "/?page=2" "page 2 of 3")]
+      (is (some #{:ul.row.pager} (deep html)))
+      (is (some #{[:li.pager-prev
+                   [:a {:href "/?page=0" :rel "prev"} "← previous"]]}
+                (deep html)))
+      (is (some #{[:li.pager-next
+                   [:a {:href "/?page=2" :rel "next"} "next →"]]}
+                (deep html)))))
   (testing "the position rides between the two directions"
-    (let [html (result/pager-links en "/?page=0" "/?page=2" "page 2 of 3")]
+    (let [html (result/pager en "/?page=0" "/?page=2" "page 2 of 3")]
       (is (= [:li "page 2 of 3"]
              (second (filter #(and (vector? %)
                                    (#{:li :li.pager-prev :li.pager-next}
                                     (first %)))
                              (deep html)))))))
   (testing "a direction that is out of range is left out, not held open"
-    (let [html (result/pager-links en nil "/?page=1" "page 1 of 3")]
+    (let [html (result/pager en nil "/?page=1" "page 1 of 3")]
       (is (= 2 (count (filter #(and (vector? %)
                                     (#{:li :li.pager-prev :li.pager-next}
                                      (first %)))
                               (deep html)))))
       (is (not (some #{"prev"} (deep html))))))
   (testing "in Danish"
-    (let [html (result/pager-links da "/?page=0" "/?page=2" "side 2 af 3")]
+    (let [html (result/pager da "/?page=0" "/?page=2" "side 2 af 3")]
       (is (some #{"← forrige"} (deep html)))
       (is (some #{"næste →"} (deep html))))))
 
-(deftest pagination-test
-  (testing "nothing to page is no landmark at all"
-    (is (nil? (result/pagination en nil nil "page 1 of 1"))))
-  (testing "the links are wrapped in a navigation landmark, named, chrome
-            rather than text"
-    (let [html (result/pagination en "/?page=0" "/?page=2" "page 2 of 3")]
-      (is (= :nav.pagination.menu (first html)))
-      (is (= "Pagination" (:aria-label (second html))))
-      (is (= "Sidenavigation"
-             (:aria-label (second (result/pagination da "/?page=0" nil "x")))))
-      (is (some #{:ul.row.pager} (deep html))))))
+(deftest page-control-test
+  (testing "a result still being counted knows of no pages to offer, so it
+            says where the reader is and no more"
+    (is (= "page 2" (result/page-control en true {:page 1})))
+    (is (= "side 2" (result/page-control da true {:page 1}))))
+  (testing "without a client there is nothing to follow the select, the
+            pager's own links being what remains"
+    (is (= "page 2 of 6" (result/page-control en false {:page 1 :pages 6}))))
+  (testing "a page each, the one being read chosen, every option reading as
+            the phrase it replaces so the closed select says the same"
+    (let [options (nth (result/page-control en true {:page 1 :pages 3}) 2)]
+      (is (= [[:option {:value 1 :selected false} "1 of 3"]
+              [:option {:value 2 :selected true} "2 of 3"]
+              [:option {:value 3 :selected false} "3 of 3"]]
+             options))
+      (is (= "1 af 6"
+             (last (first (nth (result/page-control da true {:page 0 :pages 6})
+                               2)))))))
+  (testing "the select is named by what choosing does, nothing beside it
+            being left to name it, and is followed rather than submitted:
+            no name to submit under and no form to submit with"
+    (let [attrs (second (result/page-control en true {:page 0 :pages 2}))]
+      (is (= "Go to page" (:aria-label attrs)))
+      (is (= "Gå til side"
+             (:aria-label (second (result/page-control da true {:page 0
+                                                                :pages 2})))))
+      (is (= {:change [:go-to-page :event.target/value]} (:on attrs)))
+      (is (nil? (:name attrs)))
+      (is (nil? (:form attrs))))))
 
 (deftest download-links-test
   (is (nil? (result/download-links en nil nil)))

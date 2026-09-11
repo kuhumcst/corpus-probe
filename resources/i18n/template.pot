@@ -352,15 +352,19 @@ msgid "Near"
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/result.cljc
+msgid "Go to page"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/result.cljc
+msgid "Pagination"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/result.cljc
 msgid "previous"
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/result.cljc
 msgid "next"
-msgstr ""
-
-#: src/dk/cst/corpus_probe/views/result.cljc
-msgid "Pagination"
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/result.cljc

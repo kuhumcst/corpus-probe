@@ -1,6 +1,7 @@
-/* The page's layout and voice: serif prose, a quieter sans for the
-   apparatus, one role per colour, hairlines rather than fills. Colours
-   and families are tokens.css's; a part's breakpoints stand with it. */
+/* The page's layout and voice: one face throughout, apparatus and prose
+   alike, with the corpus and the code that asks for it in the other, one
+   role per colour, hairlines rather than fills. Colours and families are
+   tokens.css's; a part's breakpoints stand with it. */
 
 :root {
   --sheet-block-size: 45vh;   /* also the room kept under the sheet */
@@ -21,11 +22,17 @@
 /* Shell and page */
 
 /* root and body are columns so the footer can sink to the foot of a
-   short page; body keeps no measure, so the chrome spans the screen */
+   short page; body keeps no measure, so the chrome spans the screen.
+
+   Figures are asked to stand on the line: Corbel, which Windows answers
+   the page's stack with, sets old-style ones by default, and a count
+   with digits hanging below the line reads as prose rather than as a
+   number. A face whose figures already line ignores this */
 html { display: flex; flex-direction: column; min-block-size: 100%; }
 body { flex: 1; display: flex; flex-direction: column;
        padding-inline: 1.5rem;
-       font-family: var(--serif); line-height: 1.5;
+       font-family: var(--face); line-height: 1.5;
+       font-variant-numeric: lining-nums;
        color: var(--tx); background: var(--bg); }
 @media (max-width: 40rem) { body { padding-inline: 1rem; } }
 #footer { margin-block-start: auto; }
@@ -92,12 +99,6 @@ main:not(.search-page), .help { max-inline-size: 40rem; }
 /* a GET search lands on #results: keep it clear of the viewport edge */
 :target { scroll-margin-block-start: 1rem; }
 
-/* the apparatus speaks in sans, set on containers so a control inside
-   the concordance keeps the concordance's face */
-.masthead, .footer, search, .inspector, .view-controls, nav, summary {
-  font-family: var(--sans);
-}
-
 /* bare `monospace` makes the user agent shrink the text; a stack does not */
 code, pre, .kwic { font-family: var(--mono); }
 code { font-size: 0.9em; }
@@ -114,16 +115,18 @@ a { color: var(--link);
     text-underline-offset: 0.15em; }
 a:hover { text-decoration-color: currentColor; }
 
-/* an abbreviation inside a link takes the link's underline, not both */
-abbr[title] { text-decoration-color: var(--rule); }
-a abbr[title] { text-decoration: none; }
+/* the pointer is what says an expansion is there to be read. Inside a
+   link the abbreviation takes the link's underline and the link's
+   pointer: what it says of itself would cover what the link says */
+abbr[title] { cursor: help; text-decoration-color: var(--rule); }
+a abbr[title] { cursor: inherit; text-decoration: none; }
 
 /* navigation rows are chrome, not text. Longhands, so a tab keeps its
    shape under the pointer; `:where`, so its rule outweighs this */
-:where(.menu, .tabs) a {
+:where(.tabs, .pager) a {
   color: inherit; text-decoration-line: none;
 }
-:where(.menu, .tabs) a:hover {
+:where(.tabs, .pager) a:hover {
   text-decoration-line: underline;
 }
 
@@ -316,9 +319,12 @@ label:has(:is(input, select):disabled) { color: var(--rule); }
 /* The small-caps voice of the apparatus. A box shows its name on its
    border in the deep accent. A column shows its name over its data in
    the same voice, and a tab names the section under it. A key beside
-   its value is muted */
+   its value is muted.
+
+   The face is named rather than inherited: a column name stands over the
+   corpus's own text and is apparatus, not part of it */
 legend, .inspector h3, .facts dt, thead th, .tabs a {
-  font-family: var(--sans); font-variant: all-small-caps;
+  font-family: var(--face); font-variant: all-small-caps;
   letter-spacing: 0.04em; font-weight: 600; color: var(--accent-deep);
 }
 .facts dt { color: var(--tx-2); }
@@ -392,7 +398,7 @@ table { border-collapse: collapse; }
    name is apparatus. The tables set their data smaller than the page */
 thead th { border-block-end: 1px solid var(--rule); font-size: 1rem; }
 caption { caption-side: top; text-align: start; padding-block: 0.25rem;
-          font-family: var(--sans); color: var(--tx-2); }
+          color: var(--tx-2); }
 
 /* cqp's error text carries a column-aligned pointer, so no wrapping */
 pre { font-size: 0.875rem; padding: 0.75rem 1rem;
@@ -641,12 +647,10 @@ pre { font-size: 0.875rem; padding: 0.75rem 1rem;
    A reader who panned the region would see only empty text. The region
    still scrolls, but only when the cursor moves it.
 
-   It relies on the query container every scroll region now is. The
-   column names measure themselves against it, and not against the
-   window. On a wide screen the search form takes a rail of its own. The
-   strip that the reader reads in is then narrower than the page. The
-   page does not know how much narrower */
-.scroll:has(> .kwic) { overflow-x: hidden; }
+   It also stands alone: a wider step than the section's own on each side,
+   and no strip held for a scrollbar that is never drawn here */
+.scroll:has(> .kwic) { overflow-x: hidden; padding-block-end: 0;
+                       margin-block: 2rem; }
 
 /* The concordance */
 
@@ -654,8 +658,14 @@ pre { font-size: 0.875rem; padding: 0.75rem 1rem;
    line does not wrap at any width: a concordance is read down the match,
    which wrapping buries mid-paragraph, and the fade and the travel both
    need a line to work along (WCAG 1.4.10 exempts content that needs two
-   dimensions to mean anything, which a KWIC line does) */
-.kwic { font-size: 0.875rem; white-space: nowrap; inline-size: 100%; }
+   dimensions to mean anything, which a KWIC line does).
+
+   The last row ends on a line, as the column names stand on one, so the
+   table is a block of its own rather than rows fading into the page. It
+   is the table's, not the region's: it runs the table's width and is cut
+   by the region, which is the width a reader sees */
+.kwic { font-size: 0.875rem; white-space: nowrap; inline-size: 100%;
+        border-block-end: 1px solid var(--rule); }
 /* These two columns have a width of their own. It is wider than any page
    (refer to dk.cst.corpus-probe.server.request/reach-limit). A page
    holds more words than the reader's window shows. The browser lays out
@@ -677,35 +687,28 @@ pre { font-size: 0.875rem; padding: 0.75rem 1rem;
    around them. It does not stop at the letters */
 .kwic mark { padding: 0.15em 0.3em; border-radius: 2px; }
 
-/* The two contexts are aligned against the match. Their names thus come
-   together at the middle, and they read as one line. This padding holds
-   each name away from the match. The columns are wider than the screen,
+/* The two contexts are aligned against the match, so their arrows come
+   together at the middle, one on each side of it. This padding holds
+   each arrow away from the match. The columns are wider than the screen,
    so the space is there. Padding cannot make these columns wider.
 
    Do not pad the match itself. Its column is only as wide as its
    content. More padding there would push the two contexts apart in every
    row */
-.kwic thead { --name-gap: 1.5em; }
-.kwic thead .kwic-left { padding-inline-end: var(--name-gap); }
-.kwic thead .kwic-right { padding-inline-start: var(--name-gap); }
-/* Sometimes the concordance is narrower than the three names side by
-   side. The ends of the names then go under the position column and off
-   the edge. The two long names take two lines instead.
-
-   A measure makes them wrap. Without it they do not wrap at all, because
-   their cells are wider than any screen. Keep the measure below the
-   shorter of the two names. If you do not, one name keeps its line while
-   the other one breaks. Two lines are their own separation, so the names
-   need less space between them */
-@container (max-width: 32rem) {
-  .kwic thead { --name-gap: 1em; }
-  .kwic thead .measure { display: inline-block; white-space: normal;
-                         max-inline-size: 6em; }
-}
+.kwic thead { --arrow-gap: 1.5em; }
+.kwic thead .kwic-left { padding-inline-end: var(--arrow-gap); }
+.kwic thead .kwic-right { padding-inline-start: var(--arrow-gap); }
+/* an arrow at the size of the words beside it is a faint mark, and it
+   rides high in the line: drawn larger, and let down to the heading it
+   stands with. Its title names the column, as an abbreviation's does */
+.kwic thead .kwic-arrow { font-size: 1.375em; line-height: 1;
+                          vertical-align: -0.1em; cursor: help; }
 /* no padding at the sides: it is the start of this cell's content box
    that its pinned name can be held at, so any padding there is a step
-   the name takes the moment the table begins to scroll */
-.kwic .kwic-corpus th { font-family: var(--sans); font-weight: 600;
+   the name takes the moment the table begins to scroll. The face is the
+   page's, not the table's: a corpus heads its hits rather than being one
+   of them, and only the name itself is code */
+.kwic .kwic-corpus th { font-family: var(--face); font-weight: 600;
                         padding-block-start: 0.75em; padding-inline: 0; }
 .kwic .kwic-hit:hover { background: var(--accent-pale); }
 
@@ -795,7 +798,7 @@ body:has(.inspector) { padding-block-end: var(--sheet-block-size); }
 
 /* Frequency and corpus tables */
 
-.attributes, .frequencies { font-family: var(--sans); font-size: 0.9rem; }
+.attributes, .frequencies { font-size: 0.9rem; }
 :is(.attributes, .frequencies) :is(th, td) { padding: 0.4em 0.5em;
                                              text-align: left; }
 :is(.attributes, .frequencies) .num { text-align: right; }

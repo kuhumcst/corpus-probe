@@ -620,6 +620,8 @@
       :pending              {:state (assoc state :pending? true)}
       :set-fragment         {:state (assoc state :fragment x)}
       :navigate             {:state state :effects [[:navigate x y]]}
+      :go-to-page           {:state state :effects [[:go-to-page x]]}
+      :align-pager          {:state state :effects [[:align-pager]]}
       :form-changed         (form-changed state x)
       :set-autosave         (set-autosave state x)
       :set-preference       (set-preference state x y z)

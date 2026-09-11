@@ -1,10 +1,10 @@
 (ns dk.cst.corpus-probe.views.widgets
   "The generic parts the views are built from: selects, a live region, a
-  pager, a link row and the tab strip made of one, a definition list,
-  side notes and count cells, a checkbox over a group, an error section,
-  attribute values, glossary terms and the attribute maps every page
-  shares. Nothing here knows what it is listing: a caller hands in its
-  words, already translated."
+  link row and the tab strip made of one, a definition list, side notes
+  and count cells, a checkbox over a group, an error section, attribute
+  values, glossary terms and the attribute maps every page shares.
+  Nothing here knows what it is listing: a caller hands in its words,
+  already translated."
   (:require [clojure.string :as str]
             [dk.cst.corpus-probe.i18n :as i18n]
             [dk.cst.corpus-probe.url :as url]))
@@ -66,19 +66,6 @@
    [:div.status {:role "status"} content])
   ([placement content]
    [:div.status {:class placement :role "status"} content]))
-
-(defn pager
-  "The links from `position` (where in a sequence the reader is) to the
-  page before and the page after, `prev` and `next` each [href label]
-  or nil where out of range; nil without either."
-  [prev next position]
-  (when (or prev next)
-    [:ul.row.pager
-     (when-let [[href label] prev]
-       [:li.pager-prev [:a {:href href :rel "prev"} label]])
-     [:li position]
-     (when-let [[href label] next]
-       [:li.pager-next [:a {:href href :rel "next"} label]])]))
 
 (defn link-row
   "A list of links read as one row: each of `links`, [key href label],

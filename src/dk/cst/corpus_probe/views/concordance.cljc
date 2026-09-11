@@ -292,21 +292,29 @@
             (list " " (widgets/count-badge (i18n/group-digits ui size))))]]])
      (map (partial hit-row opts) hits)]))
 
+(defn context-heading
+  "A context column's heading: `arrow`, which points away from the match
+  and into the context, with `s` naming the column to a reader who hears
+  the table and to a pointer resting on the arrow."
+  [arrow s]
+  ;; the title is hidden with the arrow that carries it, so the name is
+  ;; spoken the once, as the heading, and never again as a description
+  (list [:span.spoken s]
+        [:span.kwic-arrow {:aria-hidden "true" :title s} arrow]))
+
 (defn column-headers
   "The concordance's column headings in `ui`."
   [ui]
   ;; each heading carries the class of its column, so a rule about a
-  ;; column also reaches its heading. The two long names have a box of
-  ;; their own: a narrow screen has no room for the three names side by
-  ;; side, and a name cannot wrap inside a cell that is wider than the
-  ;; screen
+  ;; column also reaches its heading
   [:thead
    [:tr
     [:th.kwic-cpos {:scope "col"} (widgets/term ui :cpos false)]
-    [:th.kwic-left {:scope "col"} [:span.measure (i18n/tr ui "left context")]]
+    [:th.kwic-left {:scope "col"}
+     (context-heading "←" (i18n/tr ui "left context"))]
     [:th.kwic-match {:scope "col"} (widgets/term ui :match false)]
     [:th.kwic-right {:scope "col"}
-     [:span.measure (i18n/tr ui "right context")]]]])
+     (context-heading "→" (i18n/tr ui "right context"))]]])
 
 (defn context-value
   "The context width `context` as a URL param and as an attribute value.
@@ -317,6 +325,17 @@
 (def caption-id
   "The id of the concordance's caption, which names its scroll region."
   "concordance-caption")
+
+(defn caption
+  "What the concordance is called, in `ui`: the term, and which page of
+  `result` it holds where there is more than one (`paged?`).
+
+  The pager stands under the table, so a reader who hears the page rather
+  than seeing it would otherwise meet the rows before the page they are
+  on (see dk.cst.corpus-probe.views.result/page-phrase)."
+  [ui result paged?]
+  (cond-> (widgets/term ui :kwic false)
+    paged? (list " · " (result/page-phrase ui result))))
 
 (def region-id
   "The id of the region the concordance scrolls in. The client focuses it
@@ -497,9 +516,9 @@
 
 (defn concordance-section
   "The concordance view of the search in `state`: its sort, context and
-  sample controls, the pagination above and below the table, the
-  concordance itself and the download links, worded in the state's `:ui`
-  and wrapped in dk.cst.corpus-probe.views.result/results-region.
+  sample controls, the concordance itself, the pager under it and the
+  download links, worded in the state's `:ui` and wrapped in
+  dk.cst.corpus-probe.views.result/results-region.
 
   The result answers the params the search was `:asked` with, not the
   form's `:params`, which the client's form leaves behind at a change of
@@ -508,7 +527,8 @@
            export-hrefs export-limit prev-href next-href]
     :as state}]
   (let [{:keys [counts hits size]} result
-        position (when result (result/page-phrase ui result))]
+        paged?   (boolean (or prev-href next-href))
+        position (when result (result/page-control ui client? result))]
     (result/results-region
      state
      (result/result-heading ui result error)
@@ -520,8 +540,7 @@
        (if-not (result/found? result)
          [:p (i18n/tr ui "No hits.")]
          (list
-          (result/pagination ui prev-href next-href position)
-          (concordance hits {:caption   (widgets/term ui :kwic false)
+          (concordance hits {:caption   (caption ui result paged?)
                              :ui        ui
                              :langs     langs
                              :counts    counts
@@ -529,7 +548,7 @@
                              :reach     (:reach result)
                              :client?   client?
                              :cursor    (:cursor state)})
-          (result/pager-links ui prev-href next-href position)
+          (result/pager ui prev-href next-href position)
           ;; what to do next with these hits, so it follows them: reading
           ;; the concordance is the task, taking it elsewhere is the one
           ;; after

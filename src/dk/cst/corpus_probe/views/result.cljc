@@ -253,25 +253,45 @@
   (when near
     (view-controls ui client? nil (near-control ui near) true)))
 
-(defn pager-links
-  "The page links of a result around `position` (where in the sequence
-  the reader is), labelled in `ui`; nil when neither `prev-href` nor
-  `next-href` is in range."
-  [ui prev-href next-href position]
-  (widgets/pager (when prev-href
-                   [prev-href (str "← " (i18n/tr ui "previous"))])
-                 (when next-href
-                   [next-href (str (i18n/tr ui "next") " →")])
-                 position))
+(defn page-control
+  "Which page of `result` is shown, in `ui`, and the way to any other: a
+  select over its pages, followed rather than submitted and so only where
+  a `client?` runs to follow it. A result still being counted knows of no
+  last page yet and says where the reader is instead (see `page-phrase`)."
+  [ui client? {:keys [page pages] :as result}]
+  (if-not (and client? pages)
+    (page-phrase ui result)
+    ;; no name and no form: the pager's own links are followed, and a page
+    ;; submitted with the form would ride along with every other control,
+    ;; a new query then landing on page 6 of its own result.
+    ;; Named with the verb, since choosing here goes somewhere and WCAG
+    ;; 3.2.2 asks that a control which does that says so before it is used
+    [:select {:aria-label (i18n/tr ui "Go to page")
+              :on         {:change [:go-to-page :event.target/value]}}
+     (for [n (range 1 (inc pages))]
+       (widgets/option (inc page) n
+                       (str n " " (i18n/tr ui "of") " " pages)))]))
 
-(defn pagination
-  "The `pager-links` around `position` from `prev-href` and `next-href`,
-  as a navigation landmark named in `ui`."
+(defn pager
+  "The page links of a result around `position` (where in the sequence
+  the reader is), labelled in `ui` and named as a navigation landmark:
+  `prev-href` and `next-href`, each nil where there is no such page, and
+  the pager itself nil where neither is."
   [ui prev-href next-href position]
-  (when-let [links (pager-links ui prev-href next-href position)]
-    ;; the one pager that is a landmark: two landmarks named Pagination
-    ;; cannot be told apart, so the repeat below the table is the bare list
-    [:nav.pagination.menu {:aria-label (i18n/tr ui "Pagination")} links]))
+  (when (or prev-href next-href)
+    [:nav.pagination {:aria-label (i18n/tr ui "Pagination")}
+     ;; started where the words of the concordance start, so that its
+     ;; middle stands under the match (see client.effects/align-pager!)
+     [:ul.row.pager {:replicant/on-render [:align-pager]}
+      (when prev-href
+        [:li.pager-prev
+         [:a {:href prev-href :rel "prev"}
+          (str "← " (i18n/tr ui "previous"))]])
+      [:li position]
+      (when next-href
+        [:li.pager-next
+         [:a {:href next-href :rel "next"}
+          (str (i18n/tr ui "next") " →")]])]]))
 
 (defn download-links
   "Links downloading the current table in each format of `hrefs` (format

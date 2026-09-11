@@ -6,7 +6,8 @@
   Hostile corpus content survives the round trip because each channel is
   protected: `correct-quote-escaping` fixes the SSR body and
   `script-safe` escapes the `<` that transit passes through verbatim."
-  (:require [clojure.string :as str]
+  (:require [clojure.java.io :as io]
+            [clojure.string :as str]
             [cognitect.transit :as transit]
             [dk.cst.corpus-probe.cwb :as cwb]
             [dk.cst.corpus-probe.i18n :as i18n]
@@ -129,13 +130,21 @@
   {:status 400 :body "bad request"})
 
 (defn resource-response
-  "A 200 response serving classpath `resource` as `content-type`, uncached
-  so dev assets always refetch."
-  [content-type resource]
-  {:status  200
-   :headers {"Content-Type"  content-type
-             "Cache-Control" "no-store"}
-   :body    (slurp resource)})
+  "A 200 response serving classpath `resource` as `content-type`, kept by
+  the reader's browser for `seconds` or, with none, not at all, so that a
+  dev asset always refetches.
+
+  The body is the bytes of the file rather than its text: a font is not
+  text, and reading it as such corrupts it."
+  ([content-type resource]
+   (resource-response content-type resource nil))
+  ([content-type resource seconds]
+   {:status  200
+    :headers {"Content-Type"  content-type
+              "Cache-Control" (if seconds
+                                (str "public, max-age=" seconds)
+                                "no-store")}
+    :body    (io/input-stream resource)}))
 
 (defn download-response
   "A 200 response serving `body` (text, or a function writing it to the

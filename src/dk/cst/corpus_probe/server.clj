@@ -131,17 +131,24 @@
                 (seq cookies) (assoc "Set-Cookie" cookies))
      :body    ""}))
 
+(def font-cache
+  "How long a browser may keep a font, in seconds: `optional` never
+  applies a face that no load has kept (see the @font-face rule in
+  tokens.css)."
+  (* 60 60 24 7))
+
 (defn serve-file
   "Serve the file under public/`dir` named by the splat `:path` of
-  `request` as `content-type`: a stylesheet, or a compiled client asset.
+  `request` as `content-type`, kept for `seconds` where it is worth
+  keeping: a stylesheet, a compiled client asset, or a font.
 
   Rejects `..` segments directly: `io/resource` follows them out of the
   directory, so a normalising router is not relied on as the only guard."
-  [content-type dir request]
+  [content-type dir seconds request]
   (let [path (get-in request [:path-params :path])]
     (if-let [resource (and (not (str/includes? path ".."))
                            (io/resource (str "public/" dir "/" path)))]
-      (response/resource-response content-type resource)
+      (response/resource-response content-type resource seconds)
       response/not-found)))
 
 (defn routes
@@ -171,12 +178,17 @@
      :route-name ::counts]
     ["/css/*path"                 :get (partial serve-file
                                                 "text/css; charset=utf-8"
-                                                "css")
+                                                "css" nil)
      :route-name ::css]
     ["/js/*path"                  :get (partial serve-file
                                                 "text/javascript; charset=utf-8"
-                                                "js")
-     :route-name ::js]})
+                                                "js" nil)
+     :route-name ::js]
+    ;; the licence beside the font is there for whoever has the repo, the
+    ;; OFL asking that it travel with the face; nothing links it
+    ["/fonts/*path"               :get (partial serve-file "font/woff2"
+                                                "fonts" font-cache)
+     :route-name ::fonts]})
 
 (defonce ^{:doc "The running Pedestal connector, nil when stopped."}
   server
