@@ -449,17 +449,27 @@
 
 (defn sample-control
   "The sample control of the concordance in `ui`: a select over the
-  `sample-sizes` with `sample` chosen, or the whole result when it names
+  `sample-sizes` with `shown` chosen, or the whole result when it names
   none. A size the list does not hold is offered beside them, so a URL
   naming one shows as the sample it is. It names the form it submits
-  with, as `sort-control` does."
-  [ui sample]
-  (let [sizes (sort (cond-> (set sample-sizes) sample (conj sample)))]
-    (widgets/select url/form-id "sample" (i18n/tr ui "Sample")
-                    (list
-                     (widgets/option (or sample "") "" (i18n/tr ui "all hits"))
-                     (for [n sizes]
-                       (widgets/option sample n (i18n/group-digits ui n)))))))
+  with, as `sort-control` does.
+
+  The list is the `sample` the result holds and `shown` only the mark on
+  it, so that a reader's choice, which is `shown` until the search they
+  asked for arrives, cannot take an option out of the list under them:
+  Replicant writes what changed in its own last hiccup, and options that
+  shift leave the mark where the browser put it."
+  ([ui sample]
+   (sample-control ui sample sample))
+  ([ui sample shown]
+   ;; the form holds a size as a string, the result as the number it is
+   (let [sample (cond-> sample (string? sample) parse-long)
+         sizes  (sort (cond-> (set sample-sizes) sample (conj sample)))]
+     (widgets/select url/form-id "sample" (i18n/tr ui "Sample")
+                     (list
+                      (widgets/option (or shown "") "" (i18n/tr ui "all hits"))
+                      (for [n sizes]
+                        (widgets/option shown n (i18n/group-digits ui n))))))))
 
 (def context-widths
   "The widths of context the concordance offers, in display order: a few
@@ -480,36 +490,56 @@
 
 (defn context-control
   "The context control of the concordance in `ui`: a select over the
-  `context-widths` with `context` (a number of words or a unit keyword)
+  `context-widths` with `shown` (a number of words or a unit keyword)
   chosen, named by `context-label`. A number of words the list does not
   hold is offered among the numbers, in order. It names the form it
-  submits with, as `sort-control` does."
-  [ui context]
-  (let [widths (if (or (keyword? context) (some #{context} context-widths))
-                 context-widths
-                 (into (vec (sort (conj (filterv number? context-widths)
-                                        context)))
-                       (filter keyword? context-widths)))]
-    (widgets/select url/form-id "context" (i18n/tr ui "Context")
-                    (for [width widths]
-                      (widgets/option (context-value context)
+  submits with, as `sort-control` does.
+
+  The list is the `context` the result holds and `shown` only the mark on
+  it, for the reason `sample-control` gives."
+  ([ui context]
+   (context-control ui context context))
+  ([ui context shown]
+   ;; the form holds both a width and a unit as a string, the result holds
+   ;; a number and a keyword
+   (let [context (cond-> context
+                   (string? context) (as-> s (or (parse-long s) (keyword s))))
+         widths  (if (or (keyword? context) (some #{context} context-widths))
+                   context-widths
+                   (into (vec (sort (conj (filterv number? context-widths)
+                                          context)))
+                         (filter keyword? context-widths)))]
+     (widgets/select url/form-id "context" (i18n/tr ui "Context")
+                     (for [width widths]
+                       (widgets/option (context-value shown)
                                       (context-value width)
-                                      (context-label ui width))))))
+                                      (context-label ui width)))))))
 
 (defn concordance-controls
   "The controls over the concordance of `state`, for its head: how the
   hits are read, and the word they must be near. Nil where no corpus
   could be searched."
-  [{:keys [ui sort-modes asked result client?]}]
-  (let [{:keys [near]} result]
+  [{:keys [ui sort-modes asked params result client?]}]
+  ;; what the form holds over what the result answers: a control the
+  ;; reader has changed holds their choice until the search they asked
+  ;; for arrives with it (see dk.cst.corpus-probe.client.actions/act)
+  (let [near (result/held-near params result)]
     (when (result/searched? result)
       (if (result/found? result)
         (result/view-controls ui client?
-                              (list (sort-control ui sort-modes (:sort asked))
+                              (list (sort-control ui sort-modes
+                                                  (result/held params :sort
+                                                               (:sort asked)))
                                     " "
-                                    (context-control ui (:context result))
+                                    (context-control ui (:context result)
+                                                     (result/held
+                                                      params :context
+                                                      (:context result)))
                                     " "
-                                    (sample-control ui (:sample result)))
+                                    (sample-control ui (:sample result)
+                                                    (result/held
+                                                     params :sample
+                                                     (:sample result))))
                               (result/near-control ui near)
                               near)
         (result/empty-controls ui client? near)))))

@@ -23,6 +23,18 @@
   filters-timer
   (atom nil))
 
+(defonce ^{:doc "The pending debounce of a page turn, so that a reader
+  arrowing down the page select turns to the page they stop on rather
+  than to every page they pass."}
+  page-timer
+  (atom nil))
+
+(defonce ^{:doc "The pending debounce of a view being applied, so that a
+  reader working the sort, the context or the sample runs the search they
+  stop on rather than one per step."}
+  view-timer
+  (atom nil))
+
 (defonce ^{:doc "The AbortController of the routed navigation being
   fetched, if there is one, so that starting another can call off the one
   it replaces."}
@@ -43,12 +55,21 @@
   ;; minutes: nothing is said until a reader has begun to wonder
   400)
 
-(def filters-debounce-ms
-  "How long the corpus selection must hold still before the metadata
-  filters it offers are fetched: long enough that ticking several boxes
-  is one request, short enough that a reader who has stopped is not left
-  waiting."
-  300)
+(def settle-ms
+  "How long a control must hold still before what it asks for is asked
+  (see `debounce!`): long enough that a reader still working it is not
+  taken at every step, short enough that one who has stopped is not left
+  waiting.
+
+  Every control here is worked in steps. A closed select reports every
+  option a key passes over, so arrowing from the first page to the fourth
+  would otherwise ask for three pages, and doing the same to the sort
+  would run three searches.
+
+  A held key repeats far faster than this, so the value is set by the
+  reader who taps instead: long enough to cover the gap between two
+  presses, short enough not to read as lag once they have stopped."
+  200)
 
 (defn read-transit
   "Decode transit-JSON string `s`."
@@ -135,11 +156,11 @@
                     (dispatch! [:wider-failed])))))))
 
 (defn refresh-filters!
-  "Ask, once the corpus selection has held still for
-  `filters-debounce-ms`, whether the metadata filters want fetching:
-  `[:filters-due]` through `dispatch!`."
+  "Ask, once the corpus selection has held still (see `settle-ms`),
+  whether the metadata filters want fetching: `[:filters-due]` through
+  `dispatch!`."
   [dispatch!]
-  (debounce! filters-timer filters-debounce-ms #(dispatch! [:filters-due])))
+  (debounce! filters-timer settle-ms #(dispatch! [:filters-due])))
 
 (defn navigate!
   "Fetch the route at `href` as data and dispatch its arrival through
@@ -189,8 +210,9 @@
     (.setProperty (.-style el) "padding-inline-start" (str (or cpos 0) "px"))))
 
 (defn go-to-page!
-  "Go to page `n` of the result on screen, as its pager's own links do:
-  the URL in the bar with the page named in it, landing on the answer.
+  "Go to page `n` of the result on screen once the select has held still
+  (see `settle-ms`), as its pager's own links do: the URL in the bar with
+  the page named in it, landing on the answer.
 
   The bar holds the citation the server wrote, which is the one thing
   here that knows every param the search was asked with. The first page
@@ -201,9 +223,11 @@
     (if (= "1" n)
       (.delete params "page")
       (.set params "page" n))
-    (navigate! dispatch! (str (.-pathname url) (.-search url)
-                              url/results-fragment)
-               true)))
+    (debounce! page-timer settle-ms
+               #(navigate! dispatch!
+                           (str (.-pathname url) (.-search url)
+                                url/results-fragment)
+                           true))))
 
 (defn set-cookie!
   "Store `v` under setting `k` in the cookie the server reads (see
@@ -281,12 +305,27 @@
   (set! (.-lang (.-documentElement js/document)) lang))
 
 (defn resubmit!
-  "Submit the form with `form-id` again, as it now stands, at once: a
-  <select> reports only the value a reader settled on. Through the form
-  rather than a built URL, so that the sort or the grouping travels with
-  everything else the form holds, by the routed path a press would take."
+  "Submit the form with `form-id` again, as it now stands, at once: what
+  a reader asks for themselves, by pressing Enter, is not waited on.
+
+  Through the form rather than a built URL, so that the sort or the
+  grouping travels with everything else the form holds, by the routed
+  path a press would take."
   [form-id]
   (some-> (.getElementById js/document form-id) (.requestSubmit)))
+
+(defn apply-view!
+  "Submit the form with `form-id` for a change to view control `node`:
+  once it has held still where it is a select (see `settle-ms`), at once
+  where it is anything else.
+
+  Only a select reports what a reader is still working: a closed one
+  reports every option a key passes over. A box and a field report a
+  decision that has been made, and waiting on those is lag for nothing."
+  [node form-id]
+  (if (= "SELECT" (.-tagName node))
+    (debounce! view-timer settle-ms #(resubmit! form-id))
+    (resubmit! form-id)))
 
 (defn prevent-default!
   "Keep the browser from answering `event` itself."
@@ -504,6 +543,7 @@
       :set-title          (apply set-title! args)
       :set-lang           (apply set-lang! args)
       :resubmit           (apply resubmit! args)
+      :apply-view         (apply apply-view! (:replicant/node data) args)
       :set-validity       (apply set-validity! (:replicant/node data) args)
       :set-checkbox-state (apply set-checkbox-state! (:replicant/node data)
                                  args)

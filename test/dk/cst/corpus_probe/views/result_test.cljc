@@ -227,7 +227,8 @@
         (is (not (some #{"Apply"} (deep html))))
         (is (not (some #(and (vector? %) (= :button (first %))) (deep html))))))
     (testing "and the control itself is what applies it"
-      (is (some #(and (map? %) (= [:apply-view] (get-in % [:on :change])))
+      (is (some #(and (map? %) (= [:apply-view "sort" :event.target/value]
+                                  (get-in % [:on :change])))
                 (deep (sort* "en")))))
     (testing "what narrows a result sits behind a disclosure, closed until
               a narrowing is in force, open while one is"
@@ -391,7 +392,31 @@
                                            :message "CQP Error:"}
                                        ["PROBE"]))))))
 
+(deftest held-test
+  (testing "the form's value where it holds one, the result's where it
+            holds none, and none at all for the blank a control says none
+            with"
+    (is (= "word" (result/held {:sort "word"} :sort "corpus")))
+    (is (= "corpus" (result/held {} :sort "corpus")))
+    (is (nil? (result/held {:sort ""} :sort "corpus")))
+    (is (= 5 (result/held {} :context 5))))
+  (testing "a proximity is two fields in the form and a pair in the
+            result, so it is read as one thing"
+    (is (= {:word "kat" :distance 3}
+           (result/held-near {} {:near {:word "kat" :distance 3}})))
+    (is (= {:word "hund" :distance "5"}
+           (result/held-near {:near "hund" :distance "5"}
+                             {:near {:word "kat" :distance 3}})))
+    (is (nil? (result/held-near {:near ""} {:near {:word "kat"}})))
+    (is (nil? (result/held-near {} {})))))
+
 (deftest near-control-test
+  (testing "a distance the form holds is a string, and is the number it
+            names: one sorted among the distances as a string throws"
+    (let [html (result/near-control en {:word "kat" :distance "3"})]
+      (is (some #(and (map? %) (= 3 (:value %)) (:selected %)) (deep html)))
+      (is (= [1 2 3 5 10]
+             (keep #(when (number? (:value %)) (:value %)) (deep html))))))
   (testing "no word in force: an empty field and the default distance"
     (let [html (result/near-control en nil)]
       (is (some #(and (map? %) (= "near" (:name %)) (= "" (:value %))
@@ -406,11 +431,13 @@
                 (deep html)))
       (is (some #(and (map? %) (= 3 (:value %)) (:selected %)) (deep html)))
       (is (some #(and (map? %) (= "distance" (:name %))
-                      (= [:apply-view] (get-in % [:on :change])))
+                      (= [:apply-view "distance" :event.target/value]
+                         (get-in % [:on :change])))
                 (deep html))))
     (testing "and so does the word, once the reader is done typing it"
       (is (some #(and (map? %) (= "near" (:name %))
-                      (= [:apply-view] (get-in % [:on :change])))
+                      (= [:apply-view "near" :event.target/value]
+                         (get-in % [:on :change])))
                 (deep (result/near-control en {:word "kat" :distance 3}))))))
   (testing "a distance the list lacks is offered beside them, in order"
     (is (= [1 2 3 4 5 10]

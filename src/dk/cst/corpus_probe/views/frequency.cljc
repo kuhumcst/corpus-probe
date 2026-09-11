@@ -110,10 +110,12 @@
   does."
   [ui docs?]
   [:label
+   ;; whether it is ticked, not the value it submits: a box that is not
+   ;; ticked sends nothing at all, and nothing cannot say it was unticked
    [:input {:type    "checkbox" :name "docs" :value "on"
             :checked docs?
             :form    url/form-id
-            :on      {:change [:apply-view]}}]
+            :on      {:change [:apply-view "docs" :event.target/checked]}}]
    " " (i18n/tr ui "count texts")])
 
 (defn frequency-cells
@@ -249,20 +251,30 @@
   it counts by and where, what it columns by, whether it counts texts,
   and the word the hits must be near. Nil where nothing could be
   counted."
-  [{:keys [ui attrs positions asked result client?]}]
-  (when (tabled? result)
-    (if (result/found? result)
-      (result/view-controls ui client?
-                            (list (attr-control ui attrs (:attr asked))
-                                  " "
-                                  (position-control ui positions (:at result))
-                                  " "
-                                  (by-control ui attrs (:by result))
-                                  (when-not (:by result)
-                                    (list " " (docs-control ui (:docs result)))))
-                            (result/near-control ui (:near result))
-                            (:near result))
-      (result/empty-controls ui client? (:near result)))))
+  [{:keys [ui attrs positions asked params result client?]}]
+  ;; what the form holds over what the table answers, as the concordance's
+  ;; controls do (see
+  ;; dk.cst.corpus-probe.views.concordance/concordance-controls)
+  (let [near (result/held-near params result)
+        docs (if (contains? params :docs) (:docs params) (:docs result))
+        by   (result/held params :by (:by result))]
+    (when (tabled? result)
+      (if (result/found? result)
+        (result/view-controls ui client?
+                              (list (attr-control ui attrs
+                                                  (result/held params :attr
+                                                               (:attr asked)))
+                                    " "
+                                    (position-control ui positions
+                                                      (result/held params :at
+                                                                   (:at result)))
+                                    " "
+                                    (by-control ui attrs by)
+                                    (when-not by
+                                      (list " " (docs-control ui (boolean docs)))))
+                              (result/near-control ui near)
+                              near)
+        (result/empty-controls ui client? near)))))
 
 (defn frequency-section
   "The frequency view of the search in `state`: when any corpus could be

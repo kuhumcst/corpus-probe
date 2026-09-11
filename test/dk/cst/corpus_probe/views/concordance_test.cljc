@@ -356,7 +356,8 @@
       (is (some #(and (map? %) (= "word" (:value %)) (:selected %)) (deep html)))
       (is (some #{"corpus order"} (deep html)))
       (is (some #(and (map? %) (= "sort" (:name %)) (= url/form-id (:form %))
-                      (= [:apply-view] (get-in % [:on :change])))
+                      (= [:apply-view "sort" :event.target/value]
+                         (get-in % [:on :change])))
                 (deep html))))))
 
 (deftest sample-control-test
@@ -368,14 +369,28 @@
     (is (= concordance/sample-sizes
            (keep #(when (number? (:value %)) (:value %))
                  (deep (concordance/sample-control en nil))))))
-  (testing "the chosen size is the one marked, and it submits the query
-            form as the sort control does"
-    (let [html (concordance/sample-control en 100)]
+  (testing "the reader's own choice marks an option without taking one out
+            of the list: an option that shifts keeps the mark the browser
+            gave it, since Replicant writes what changed in its own last
+            hiccup rather than what differs from the page"
+    (let [html (concordance/sample-control en 52 "100")]
+      (is (= [50 52 100 500 1000]
+             (keep #(when (number? (:value %)) (:value %)) (deep html))))
       (is (some #(and (map? %) (= 100 (:value %)) (:selected %)) (deep html)))
-      (is (some #(and (map? %) (= "sample" (:name %))
-                      (= url/form-id (:form %))
-                      (= [:apply-view] (get-in % [:on :change])))
-                (deep html)))))
+      (is (not (some #(and (map? %) (= 52 (:value %)) (:selected %))
+                     (deep html))))))
+  (testing "a size the form holds is a string, and is the number it names:
+            a size sorted among numbers as a string throws"
+    (let [html (concordance/sample-control en "48")]
+      (is (some #(and (map? %) (= 48 (:value %)) (:selected %)) (deep html)))
+      (is (= [48 50 100 500 1000]
+             (keep #(when (number? (:value %)) (:value %)) (deep html))))))
+  (testing "it submits the query form as the sort control does"
+    (is (some #(and (map? %) (= "sample" (:name %))
+                    (= url/form-id (:form %))
+                    (= [:apply-view "sample" :event.target/value]
+                       (get-in % [:on :change])))
+              (deep (concordance/sample-control en 100)))))
   (testing "a size the list does not hold is offered beside them, in
             order, so a hand-written URL shows as the sample it is"
     (is (= [50 77 100 500 1000]
@@ -395,10 +410,22 @@
               numbers, in order"
       (is (= ["5" "7" "10" "20" "sentence" "paragraph"]
              (values (concordance/context-control en 7)))))
+    (testing "the form holds a width and a unit alike, as strings, and
+              each is made into what it means: a string sorted among the
+              numbers throws, and a unit that stays one is offered twice"
+      (is (= ["5" "10" "20" "sentence" "paragraph"]
+             (values (concordance/context-control en "5"))))
+      (is (some #(and (map? %) (= 5 (:value %)) (:selected %))
+                (deep (concordance/context-control en "5"))))
+      (is (= ["5" "10" "20" "sentence" "paragraph"]
+             (values (concordance/context-control en "sentence"))))
+      (is (some #(and (map? %) (= "sentence" (:value %)) (:selected %))
+                (deep (concordance/context-control en "sentence")))))
     (testing "it submits the query form as the sort control does"
       (is (some #(and (map? %) (= "context" (:name %))
                       (= url/form-id (:form %))
-                      (= [:apply-view] (get-in % [:on :change])))
+                      (= [:apply-view "context" :event.target/value]
+                         (get-in % [:on :change])))
                 (deep (concordance/context-control en 5)))))
     (testing "in Danish"
       (is (some #{"sætning" "5 ord" "Kontekst"}

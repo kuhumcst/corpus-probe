@@ -101,7 +101,8 @@
                      (deep html)))))
     (testing "it submits the query form and applies itself"
       (is (some #(and (map? %) (= "attr" (:name %)) (= url/form-id (:form %))
-                      (= [:apply-view] (get-in % [:on :change])))
+                      (= [:apply-view "attr" :event.target/value]
+                         (get-in % [:on :change])))
                 (deep html))))))
 
 (def sample-result
@@ -128,7 +129,8 @@
     (testing "it submits the query form and applies itself, as the
               grouping does"
       (is (some #(and (map? %) (= "at" (:name %)) (= url/form-id (:form %))
-                      (= [:apply-view] (get-in % [:on :change])))
+                      (= [:apply-view "at" :event.target/value]
+                         (get-in % [:on :change])))
                 (deep html))))
     (testing "in Danish"
       (is (some #{"før matchet"} (deep (frequency/position-control da positions nil)))))))
@@ -158,10 +160,13 @@
       (is (not (some #{[:th {:scope "col"} "texts"]}
                      (deep (frequency/frequency-table en counted)))))
       (is (some #{[:colgroup {:span 2}]} (deep (frequency/frequency-table en counted))))))
-  (testing "the control applies itself through the query form"
+  (testing "the control applies itself through the query form, carrying
+            whether it is ticked rather than the value it submits: an
+            unticked box submits nothing, which cannot say it was unticked"
     (is (some #(and (map? %) (= "docs" (:name %)) (:checked %)
                     (= url/form-id (:form %))
-                    (= [:apply-view] (get-in % [:on :change])))
+                    (= [:apply-view "docs" :event.target/checked]
+                       (get-in % [:on :change])))
               (deep (frequency/docs-control en true))))
     (is (some #{"tæl tekster"} (deep (frequency/docs-control da false))))))
 
@@ -228,7 +233,8 @@
       (is (some #(and (map? %) (= "text_year" (:value %)) (:selected %))
                 (deep html)))
       (is (some #(and (map? %) (= "by" (:name %)) (= url/form-id (:form %))
-                      (= [:apply-view] (get-in % [:on :change])))
+                      (= [:apply-view "by" :event.target/value]
+                         (get-in % [:on :change])))
                 (deep html))))
     (is (some #{"kolonner"} (deep (frequency/by-control da attrs nil))))))
 

@@ -219,12 +219,39 @@
   "The distances the near control offers, in display order."
   [1 2 3 5 10])
 
+(defn held
+  "What a view control shows: what `params` hold under `k`, since the
+  reader may have changed it since the result came back, else `fallback`,
+  which is what the result answers. A blank is how a control says none.
+
+  A form holds every value as a string and a result holds what it means,
+  so each control makes what it is handed into its own (see
+  `near-control`, and `sample-control` and `context-control` in
+  dk.cst.corpus-probe.views.concordance)."
+  [params k fallback]
+  (let [v (get params k)]
+    (cond
+      (nil? v) fallback
+      (= "" v) nil
+      :else    v)))
+
+(defn held-near
+  "The proximity a result's controls show: the word and the distance the
+  form holds where the reader has changed them, else the `:near` of
+  `result`. One thing with two spellings, two fields in a form and a pair
+  in a result."
+  [params result]
+  (when-let [word (held params :near (:word (:near result)))]
+    {:word     word
+     :distance (held params :distance (:distance (:near result)))}))
+
 (defn near-control
   "The proximity control of a result in `ui`: the word every hit must
   have nearby and how many words away it may be, from the :word and
   :distance of `near`, over the `near-distances`."
   [ui {:keys [word distance]}]
-  (let [distance (or distance url/default-distance)
+  (let [distance (or (cond-> distance (string? distance) parse-long)
+                     url/default-distance)
         words    (fn [n] (str n " " (i18n/trn ui "word" "words" n)))]
     (list
      [:label {:for "near"} (i18n/tr ui "Near")]
@@ -237,7 +264,7 @@
               :form         url/form-id
               :value        (or word "")
               :autocomplete "off"
-              :on           {:change [:apply-view]}}]
+              :on           {:change [:apply-view "near" :event.target/value]}}]
      " "
      (widgets/select url/form-id "distance" (i18n/tr ui "within")
                      (for [n (sort (conj (set near-distances) distance))]

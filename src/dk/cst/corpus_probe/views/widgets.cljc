@@ -34,9 +34,13 @@
 
 (defn option
   "The option `value` of a select, called `label`, chosen when it is what
-  is `selected`."
+  is `selected`.
+
+  Compared as written, not as typed: an option's value is a string in the
+  DOM, so a control that a reader has changed says \"5\" where the result
+  it was rendered from says 5."
   [selected value label]
-  [:option {:value value :selected (= value selected)} label])
+  [:option {:value value :selected (= (str value) (str selected))} label])
 
 (defn select
   "A select named `id` over `options` (see `option`), its `label` before
@@ -46,9 +50,12 @@
    (select form-id id label options true))
   ([form-id id label options visible?]
    ;; the form attribute lets it stand beside the result it acts on
-   ;; rather than inside the query form
+   ;; rather than inside the query form. The value goes into the state
+   ;; the form is drawn from before the search is asked for, or the next
+   ;; render would draw the reader's choice away again
    (let [control [:select {:id id :name id :form form-id
-                           :on {:change [:apply-view]}}
+                           :on {:change [:apply-view id
+                                         :event.target/value]}}
                   options]]
      (if visible?
        (list [:label {:for id} label] " " control)

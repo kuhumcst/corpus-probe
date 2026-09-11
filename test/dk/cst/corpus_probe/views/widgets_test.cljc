@@ -12,11 +12,13 @@
   (let [html (widgets/select "search-form" "sort" "Sort"
                              [(widgets/option "word" "word" "match")])]
     (testing "a label for the control, then the control, named for the
-              form it submits with and applying itself on change"
+              form it submits with and applying itself on change, its
+              value going into the state the form is drawn from first"
       (is (some #{[:label {:for "sort"} "Sort"]} (deep html)))
       (is (some #(and (map? %) (= "sort" (:id %)) (= "sort" (:name %))
                       (= "search-form" (:form %))
-                      (= [:apply-view] (get-in % [:on :change])))
+                      (= [:apply-view "sort" :event.target/value]
+                         (get-in % [:on :change])))
                 (deep html))))))
 
 (deftest status-test

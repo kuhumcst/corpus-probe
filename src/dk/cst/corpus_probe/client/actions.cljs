@@ -591,7 +591,11 @@
       :submit-on-enter      (submit-on-enter state x y z)
       :set-condition        {:state (set-condition state x y)}
       :set-token            {:state (set-token state x y)}
-      :apply-view           {:state state :effects [[:resubmit url/form-id]]}
+      ;; the control's own value first: the form is submitted once it has
+      ;; held still, and a render landing in between draws every control
+      ;; from the state, so a choice the state does not hold is drawn away
+      :apply-view           {:state   (assoc-in state [:params (keyword x)] y)
+                             :effects [[:apply-view url/form-id]]}
       :toggle-corpora       (toggle-corpora state x)
       :toggle-filter-values (let [[attr values] x]
                               {:state (toggle-filter-values state attr values)})

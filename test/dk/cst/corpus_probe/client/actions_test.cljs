@@ -61,7 +61,7 @@
                   [:submit-on-enter "Enter" false false]
                   [:set-condition [1 1 :v] "hund"]
                   [:set-token [1 :min] "2"]
-                  [:apply-view]
+                  [:apply-view "sort" "word"]
                   [:toggle-corpora ["PROBE"]]
                   [:toggle-filter-values [:text_year ["1591"]]]
                   [:clear-filter]
@@ -360,7 +360,8 @@
         (is (= :cqp (ffirst (get-in ext [:switch :loss]))))))))
 
 (deftest enter-test
-  (testing "Enter in the field submits, Shift+Enter and composing do not"
+  (testing "Enter in the field submits at once, not through the wait a view
+            control is applied after: the reader has asked for this one"
     (is (= [[:prevent-default] [:resubmit url/form-id]]
            (:effects (actions/submit-on-enter state "Enter" false false))))
     (is (nil? (:effects (actions/submit-on-enter state "Enter" true false))))
@@ -491,8 +492,14 @@
       (let [said (:state (actions/act state [:set-preference "settings"
                                              "sort=word" "/search"]))]
         (is (nil? (:announcement (:state (actions/act said [:pending])))))))
-    (is (= [[:resubmit url/form-id]]
-           (:effects (actions/act state [:apply-view]))))
+    ;; the control's value is taken into the form's own params before the
+    ;; search is asked for: the submit waits for the control to hold still,
+    ;; and a render landing in between draws every control from the state
+    (let [applied (actions/act state [:apply-view "sort" "word"])]
+      (is (= "word" (get-in applied [:state :params :sort])))
+      (is (= [[:apply-view url/form-id]] (:effects applied))))
+    (is (= false (get-in (actions/act state [:apply-view "docs" false])
+                         [:state :params :docs])))
     (is (= [[:leave-concordance]]
            (:effects (actions/act state [:leave-concordance]))))
     ;; a resize moves the strip the concordance is read in, not the state
