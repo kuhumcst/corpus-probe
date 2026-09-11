@@ -1,4 +1,4 @@
-(ns dk.cst.corpus-probe.settings
+(ns dk.cst.corpus-probe.storage.settings
   "The settings a reader stores as their own defaults: which of a
   search's params they are, and how they are written into the one value
   a cookie holds.

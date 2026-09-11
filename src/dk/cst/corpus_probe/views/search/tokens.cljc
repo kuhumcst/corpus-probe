@@ -227,7 +227,7 @@
                     :removable?  (and client? (boolean (next conditions)))}]
     [:fieldset.token-box.box
      [:legend (str (i18n/tr ui "Token") " " i)]
-     [:ol
+     [:ol widgets/list-attrs
       (map-indexed (fn [j condition]
                      (let [c (inc j)]
                        ;; without the client a condition is removed by
@@ -253,7 +253,7 @@
      (for [[attr values] (sort value-lists)]
        [:datalist {:id (value-list-id attr)}
         (for [value values] [:option {:value value}])])
-     [:ol
+     [:ol widgets/list-attrs
       (map-indexed (fn [i {:keys [id] :as token}]
                      (let [i (inc i)]
                        ;; keyed by id, not place, so taking a token away

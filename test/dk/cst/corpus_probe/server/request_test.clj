@@ -4,7 +4,7 @@
   (:require [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]
             [dk.cst.corpus-probe.server.request :as request]
-            [dk.cst.corpus-probe.settings :as settings]
+            [dk.cst.corpus-probe.storage.settings :as settings]
             [dk.cst.corpus-probe.url :as url]))
 
 (deftest position-param-test

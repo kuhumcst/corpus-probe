@@ -32,6 +32,15 @@
   [hidden?]
   (cond-> {} hidden? (assoc :hidden true)))
 
+(def list-attrs
+  "The attributes a list carries where the stylesheet takes its markers
+  off.
+
+  Safari reads a list with no markers as no list at all, and a reader
+  who hears the page is then told neither that it is a list nor how many
+  items it holds. The role says what the element already is."
+  {:role "list"})
+
 (defn option
   "The option `value` of a select, called `label`, chosen when it is what
   is `selected`.
@@ -83,7 +92,7 @@
   ;; each of its links a colour of its own (see `.tabs a` in style.css)
   ;; without borrowing the meaning of a class the page already uses:
   ;; `kwic` and `frequencies` are the concordance's and the table's
-  [:ul.row
+  [:ul.row list-attrs
    (for [[k href label] links]
      [:li [:a (cond-> {:href href :data-key (name k)}
                 (= k current) (assoc :aria-current "page"))

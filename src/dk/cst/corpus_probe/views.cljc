@@ -140,7 +140,8 @@
   "The search page's main content from application `state`: the query
   form with the corpus chooser over its `:folders`, the inspector while
   a token is `:selected`, and the results region by `:view` once the
-  `:params` described a search, else the `:help`."
+  `:params` described a search, else the `:help`; and the searches made
+  lately, `:recent`, wherever there are no hits to read."
   [{:keys [ui view view-hrefs folders params lists result error selected
            client?]
     :as state}]
@@ -171,8 +172,10 @@
                           (result/subset-inputs (:subset result)))
                          chooser)
      ;; always rendered, and before everything the answer replaces: a
-     ;; live region created already full announces nothing
+     ;; live region created already full announces nothing, and one
+     ;; standing after an element that changes tag is made again
      (widgets/status "spoken" (result-announcement state))
+     (search/recent-announcement ui (:announcement state))
      ;; before the hits in the document, so reading order and visual
      ;; order agree; the panel takes the form's column while it is open
      (when client? (concordance/inspector ui selected))
@@ -186,7 +189,12 @@
      (cond
        (not answered?)       (search/help ui (:help state))
        (= :frequencies view) (frequency/frequency-section state)
-       :else                 (concordance/concordance-section state))]))
+       :else                 (concordance/concordance-section state))
+     ;; the same question the switch above asks, so the two are never in
+     ;; the column at once; and only where the client runs, since nothing
+     ;; remembers a search without it
+     (when (and client? (not (result/found? result)))
+       (search/recent-searches ui (:recent state)))]))
 
 (defn document-page
   "The main content of a document page, the frontpage or the glossary:

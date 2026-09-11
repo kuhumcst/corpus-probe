@@ -123,10 +123,10 @@ a abbr[title] { cursor: inherit; text-decoration: none; }
 
 /* navigation rows are chrome, not text. Longhands, so a tab keeps its
    shape under the pointer; `:where`, so its rule outweighs this */
-:where(.tabs, .pager) a {
+:where(.tabs, .pager, .recent) a {
   color: inherit; text-decoration-line: none;
 }
-:where(.tabs, .pager) a:hover {
+:where(.tabs, .pager, .recent) a:hover {
   text-decoration-line: underline;
 }
 
@@ -218,6 +218,19 @@ a abbr[title] { cursor: inherit; text-decoration: none; }
   .search-page > .result,
   .search-page > .help   { grid-area: results; }
 
+  /* the searches made lately take the tabs' column and the whole height
+     of it: the rows under the query line span both columns to give an
+     answer the width it needs, and there is no answer while this
+     stands there. The column is the rail's own width, so the page reads
+     as a reading held between two rails */
+  .search-page:has(.recent) {
+    grid-template-columns: 16rem minmax(0, 40rem) 16rem;
+    grid-template-areas: "rail query   views"
+                         "rail status  views"
+                         "rail results views";
+  }
+  .search-page > .recent { grid-area: views; }
+
   /* the measure is the column's, above. The field stands where a box's
      own last control stands: its foot on their foot, and the box's
      padding under it, which brings the line the tabs stand on out level
@@ -230,6 +243,12 @@ a abbr[title] { cursor: inherit; text-decoration: none; }
      column, so the measure gives way where they stand */
   .search-page:has(.query-extended) {
     grid-template-columns: 16rem minmax(0, 1fr) auto;
+  }
+  /* the tokens take the column they want, and the rail beside them
+     keeps the width a rail has: a track sized to what the searches say
+     would be as wide as the longest of them */
+  .search-page:has(.query-extended):has(.recent) {
+    grid-template-columns: 16rem minmax(0, 1fr) 16rem;
   }
   .search-page .query-extended { margin-block-start: 0; }
   /* beside the query rather than at the far edge: which view to read
@@ -323,11 +342,30 @@ label:has(:is(input, select):disabled) { color: var(--rule); }
 
    The face is named rather than inherited: a column name stands over the
    corpus's own text and is apparatus, not part of it */
-legend, .inspector h3, .facts dt, thead th, .tabs a {
+legend, .inspector h3, .recent > h2, .facts dt, thead th, .tabs a {
   font-family: var(--face); font-variant: all-small-caps;
   letter-spacing: 0.04em; font-weight: 600; color: var(--accent-deep);
 }
 .facts dt { color: var(--tx-2); }
+
+/* a box that is no fieldset wears its name where a legend would sit: on
+   the border line, over the paper the border is drawn on, and starting
+   where the box's own content starts, which is where a browser puts a
+   legend and so where the name beside it stands.
+
+   A legend is laid out in the border itself, and the box's line is
+   drawn through the middle of it. A heading cannot be, so it is taken
+   out of the flow instead, and the box holds the room it would have
+   stood in: the padding below it, and the margin above, which is what
+   puts the line where a fieldset beside it draws its own */
+.inspector .box, .recent { position: relative; }
+.inspector .box { padding-block-start: 0.75rem; margin-block-start: 0.4rem; }
+.inspector h3, .recent > h2 {
+  position: absolute; inset-block-start: -0.55em;
+  inset-inline-start: var(--box-pad);
+  margin: 0; padding-inline: 0.3em; background: var(--bg);
+  font-size: 1rem; line-height: 1;
+}
 
 /* a live region is rendered even when empty, so its changes are
    announced; while empty it takes no step */
@@ -335,6 +373,8 @@ legend, .inspector h3, .facts dt, thead th, .tabs a {
 .status:empty { margin-block-start: calc(-1 * var(--row-gap, 0px)); }
 .error h2 { color: var(--error); }
 
+/* a list this unmarks carries its role in the markup, or Safari reads it
+   as no list at all (see dk.cst.corpus-probe.views.widgets/list-attrs) */
 .row { list-style: none; display: flex; gap: 1.5em; padding: 0; }
 /* a link's line box is under the target size WCAG 2.5.8 asks for */
 .row a { display: inline-block; padding-block: 0.2rem; }
@@ -541,8 +581,50 @@ pre { font-size: 0.875rem; padding: 0.75rem 1rem;
 .token-actions > button { justify-self: start; }
 .token-actions > button:last-child { justify-self: end; }
 
+/* The searches a reader has made lately, in the column the result's
+   tabs take once there is an answer to read. A hairline between the
+   entries, as everywhere else a list is read down rather than across.
+   The box keeps its own rhythm, being no part of the form whose rule
+   takes the margins off what stands in it.
+
+   The margin is half the legend the boxes in the rail wear, so this
+   box's line and theirs are one line across the page. Set, not
+   measured: no rule can read the height of a legend */
+.recent { --row-gap: 0.75rem;
+          padding-block-start: 1rem; margin-block-start: 0.75rem; }
+.recent > * { margin-block: 0; }
+/* The list takes as much of the screen as the box can take and still
+   stand on it. What is past that is a scroll away, and the line at the
+   edge gives out to say so.
+
+   The fade is measured from the top of the list in the same length the
+   cap is, rather than from its foot: a list shorter than the cap then
+   ends before the fade begins, and the last search a reader has made is
+   not dimmed for standing last. */
+.recent > ol { --shown: 60vh;
+               list-style: none; padding: 0;
+               display: flex; flex-direction: column; gap: 0.75rem;
+               max-block-size: var(--shown);
+               overflow-y: auto; overscroll-behavior: contain;
+               mask-image: linear-gradient(to bottom,
+                                           #000 calc(var(--shown) - 1.5rem),
+                                           transparent var(--shown)); }
+.recent li + li { padding-block-start: 0.75rem;
+                  border-block-start: 1px solid var(--rule); }
+.recent a { display: block; }
+/* the question keeps to one line: in a rail this narrow a pasted list
+   of words would take a paragraph of its own */
+.recent-query { display: block; white-space: nowrap;
+                overflow: hidden; text-overflow: ellipsis; }
+.recent-facts { display: block; color: var(--tx-2); }
+.recent-clear { display: flex; }
+.recent-clear > button { flex: 1; }
+
 @media (max-width: 63.999rem) {
   main > search { margin-block-end: 1.5rem; }
+  /* stacked, the box is last rather than beside the answer, so the step
+     it keeps is the one above it */
+  .search-page > .recent { margin-block-start: 1.5rem; }
 }
 
 /* middle: the rail's boxes share rows under the query */
@@ -777,12 +859,6 @@ body:has(.inspector) { padding-block-end: var(--sheet-block-size); }
 .inspector-close { grid-column: 2; justify-self: end;
                    align-self: center; }
 
-/* the heading is set on the border by hand; only a legend gets there itself */
-.inspector .box { position: relative; padding-block-start: 0.75rem;
-                  margin-block-start: 0.4rem; }
-.inspector h3 { position: absolute; inset-block-start: -0.55em;
-                inset-inline-start: 0.5rem; margin: 0; padding-inline: 0.3em;
-                background: var(--bg); font-size: 1rem; line-height: 1; }
 .inspector .box > p { margin-block: 0; }
 
 /* the panel's line is the rail's; a longer key widens the column */

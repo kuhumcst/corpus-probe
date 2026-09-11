@@ -516,6 +516,22 @@ msgid "Help"
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/search.cljc
+msgid "Recent searches"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/search.cljc
+msgid "Your searches appear here."
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/search.cljc
+msgid "button|Clear"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/search.cljc
+msgid "Recent searches cleared"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/search.cljc
 msgid "Loading …"
 msgstr ""
 

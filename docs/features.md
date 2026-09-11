@@ -385,6 +385,15 @@ clipped and never seen. It holds the query and the heading, "hund. 3
 hits": a live region announces changes alone, and two searches running
 to the same count would otherwise leave the line unchanged.
 
+A search that found nothing, or that could not be run at all, leaves the
+query selected in the field, so that whatever the reader tries instead
+replaces it in one keystroke. Only a search they asked for themselves,
+from the field or from the button beside it: a control next to the
+result is where the reader is working, and a page they reached by a link
+is not a search of theirs, so neither has the caret taken away from it. A
+search still being counted has not answered yet, and the field is offered
+only once the count says there was nothing.
+
 **Save automatically** is that storing as you go. It is on until the
 reader says otherwise, so only turning it off is stored. Turned off, the
 Save button is the only way to store anything; turned on, it stores the
@@ -398,3 +407,53 @@ The stored settings fill a form that asks for nothing: the bare
 URL is still a citation, and it finds the same hits for everybody. A
 seeded form runs no search of its own, because the reader has asked for
 none yet.
+
+## Recent searches
+
+The search page shows the searches the reader has made lately, in the
+column that the result tabs take. It holds that column whenever the tabs
+are not in it: before any search, and after one that found nothing or
+could not be run, which is where a reader most wants the search that did
+find something.
+
+The rail names each search by what it asked, and under that by the
+corpora it was asked of, the metadata filter it was narrowed by and the
+hits it found. A reader who has searched nothing keeps the rail anyway,
+saying that their searches appear there, with the Clear button quiet:
+the place is worth knowing about before there is anything in it, and the
+column does not fill up under the reader as they search.
+
+An entry is a question that the form asked. The reader's settings say
+how an answer is read; these say what was asked. So an entry holds the
+query, the corpora and the metadata filter, and holds nothing of the
+sort, the context, the view or the page, which belong to the reading of
+an answer. It holds none of the narrowings either: a sample of the hits,
+a nearby word and the subset behind a frequency row all narrow an answer
+to a question that the history holds already. Thus working a control
+beside a result never writes an entry.
+
+Emptying the field puts the page back to that start without a submit:
+the answer goes, the guide and the rail take its place, the address in
+the bar stops citing a result that is no longer on screen and the title
+stops naming it. The form itself is left as it stands, so the corpora
+the reader chose are still chosen. The address goes onto the history
+rather than over it, so a field emptied by accident has a way back. The
+guide travels with every search page for this, a kilobyte of it: fetching
+it at the moment the field empties would land on whatever the reader
+typed next.
+
+The canonical query string of the question is both the entry's link and
+its name. The same question asked again moves to the head of the list
+instead of repeating. It takes the count with it, and a narrowed answer
+counts a part of what the question found, so it reports no count and the
+count that the question has stands. The list holds ten searches. The
+oldest go when it is longer than that, or when it no longer fits.
+
+The history is stored in the browser, not in a cookie. No request needs
+it, and a search of a pasted list of words is longer than a cookie may
+be. Thus it needs a script: a reader without one has no rail, as they
+have no inspector. **Clear** forgets the whole list, and forgetting is
+storing nothing, as it is for the settings. The box goes as it is
+cleared, and the button that was pressed goes with it, so focus is put
+on the page rather than dropped, and a live region says what happened,
+clipped and never seen, as the Preferences box does when it stores.

@@ -33,7 +33,7 @@ The islands are ordered, and no namespace requires an island later in the
 order:
 
 ```
-cqp, hiccup, stats, i18n, query, url, settings, docs, cwb, search, views,
+cqp, hiccup, stats, i18n, query, url, storage, docs, cwb, search, views,
 client, server
 ```
 
@@ -56,8 +56,13 @@ corpus-probe/
 │   │                               ;   (the extended form's rows), params
 │   ├── url.cljc                    ; paths, landing ids and the one query
 │   │                               ;   string a search has
-│   ├── settings.cljc               ; the search params a reader stores as
-│   │                               ;   their own defaults, in one cookie
+│   ├── storage.cljc                ; what the app keeps in a reader's
+│   │                               ;   browser: the cookie it writes and
+│   │                               ;   the size a store refuses
+│   ├── storage/                    ; settings (the params a reader stores
+│   │                               ;   as their own defaults, in a cookie),
+│   │                               ;   recent (the searches made lately,
+│   │                               ;   in the browser's own store)
 │   ├── docs.clj                    ; the Markdown documents as hiccup
 │   ├── docs/markdown.clj           ; CommonMark plus a definition list
 │   ├── cwb.clj                     ; child-process driver (§5), errors,

@@ -1,11 +1,13 @@
 (ns dk.cst.corpus-probe.client.actions-test
   (:require [clojure.test :refer [deftest is testing]]
             [dk.cst.corpus-probe.client.actions :as actions]
+            [dk.cst.corpus-probe.hiccup :refer [deep]]
             [dk.cst.corpus-probe.client.lists-test :refer [filters folders]]
             [dk.cst.corpus-probe.query :as query]
             [dk.cst.corpus-probe.query.tokens :as tokens]
-            [dk.cst.corpus-probe.settings :as settings]
+            [dk.cst.corpus-probe.storage.settings :as settings]
             [dk.cst.corpus-probe.url :as url]
+            [dk.cst.corpus-probe.views :as views]
             [dk.cst.corpus-probe.views.concordance :as concordance]))
 
 (def hit
@@ -49,7 +51,7 @@
     :set-query :submit-on-enter :set-condition :set-token :apply-view
     :toggle-corpora :toggle-filter-values :clear-filter :engage
     :toggle-open :filter :leave :swallow-enter :inspect :close
-    :move-cursor :leave-concordance})
+    :move-cursor :leave-concordance :forget-searches})
 
 (deftest act-covers-every-view-action-test
   (let [examples [[:set-mode "extended" {:q "hund" :mode "extended"}]
@@ -73,7 +75,8 @@
                   [:inspect {:token {:word "hund"}} [["PROBE" 9] 0]]
                   [:close]
                   [:move-cursor [["PROBE" 9] 0] "ArrowRight" false]
-                  [:leave-concordance]]]
+                  [:leave-concordance]
+                  [:forget-searches]]]
     (testing "one example per action the views emit, and each is answered"
       (is (= view-actions (set (map first examples))))
       (doseq [[kind :as action] examples]
@@ -114,7 +117,8 @@
               [:set-lang "en"]
               [:sync-url]
               [:fetch-counts]
-              [:land]]
+              [:land]
+              [:select-query]]
              effects)))
     (testing "a popstate pushes nothing"
       (is (= [:set-title "hund"]
@@ -455,7 +459,130 @@
                                        :next-href nil})]
     (is (= {"PROBE" 2} (get-in state' [:result :counts])))
     (is (not (contains? (:result state') :remaining)))
-    (is (= [[:set-title "hund (2)"]] effects))))
+    ;; the count is what says whether the search found anything, so the
+    ;; field is offered again only once it has
+    (is (= [[:set-title "hund (2)"] [:select-query]] effects))))
+
+(def answered
+  "A search page as the server sends one that found something."
+  (assoc data
+         :route  :search
+         :asked  {:q "hund" :corpus ["PROBE"] :sort "word"}
+         :result {:hits   [hit other]
+                  :size   2
+                  :counts [{:corpus "PROBE" :size 2}]
+                  :filter {:text_year #{"1591"}}}))
+
+(deftest remember-test
+  (let [{state' :state :keys [effects]}
+        (actions/remember (actions/data->state answered "http://localhost/"))]
+    (testing "the question asked, what it was narrowed by and what it
+              found, stored"
+      (is (= [{:params "q=hund&corpus=PROBE"
+               :hits   2
+               :filter "text_year 1591"}]
+             (:recent state')))
+      (is (= [[:store-recent]] effects)))
+    (testing "a search still being counted is remembered without a count,
+              and takes one when the count arrives"
+      (let [counting (assoc-in (actions/data->state answered "http://localhost/")
+                               [:result :remaining] ["PROBE"])
+            state''  (:state (actions/remember counting))]
+        (is (= [{:params "q=hund&corpus=PROBE" :filter "text_year 1591"}]
+               (:recent state'')))
+        (is (= [{:params "q=hund&corpus=PROBE"
+                 :hits   47
+                 :filter "text_year 1591"}]
+               (:recent (:state (actions/counts-arrived
+                                 state'' {:title  "hund (47)"
+                                          :counts [{:corpus "PROBE" :size 47}]
+                                          :size   47
+                                          :pages  1}))))))))
+  (testing "a sample of the hits is the same question, and counts a part
+            of what it found: the entry keeps the count it had"
+    (let [sampled (-> (actions/data->state answered "http://localhost/")
+                      (assoc-in [:asked :sample] "1")
+                      (assoc-in [:result :size] 1))]
+      (is (= [{:params "q=hund&corpus=PROBE" :hits 2 :filter "text_year 1591"}]
+             (:recent (:state (actions/remember
+                               (assoc sampled :recent
+                                      [{:params "q=hund&corpus=PROBE"
+                                        :hits   2}]))))))))
+  (testing "nothing to remember on another page, before an answer, or
+            where no corpus could be searched"
+    (doseq [[what state] {"a corpus page" (assoc answered :route :corpora)
+                          "a bare form"   (dissoc answered :result)
+                          "a failure"     (assoc answered :result
+                                                 {:counts [{:corpus "PROBE"
+                                                            :error {}}]})}]
+      (let [{state' :state :keys [effects]} (actions/remember state)]
+        (is (nil? (:recent state')) what)
+        (is (nil? effects) what))))
+  (testing "forgetting is storing nothing, and the box takes the focus
+            the button it quietens cannot hold, with what happened said"
+    (let [{state' :state :keys [effects]}
+          (actions/forget-searches {:recent [{:params "q=hund"}]})]
+      (is (= [] (:recent state')))
+      (is (= :cleared (:announcement state')))
+      (is (= [[:store-recent] [:focus "recent"]] effects))))
+  (testing "and the saying of it belongs to the act, so the next one
+            takes it away"
+    (is (nil? (:announcement (:state (actions/act {:announcement :cleared}
+                                                  [:pending])))))))
+
+(deftest set-query-test
+  (let [answered (actions/data->state answered "http://localhost/search?q=hund")]
+    (testing "every keystroke goes into the state, the answer standing
+              while the field still asks something"
+      (let [{state' :state :keys [effects]} (actions/set-query answered "hun")]
+        (is (= "hun" (get-in state' [:params :q])))
+        (is (some? (:result state')))
+        (is (nil? effects))))
+    (testing "emptying the field is starting over: the answer goes, and
+              the address that cited it goes with it, onto the history"
+      (doseq [blank ["" "  " "\n"]]
+        (let [{state' :state :keys [effects]} (actions/set-query answered blank)]
+          (is (= blank (get-in state' [:params :q])) blank)
+          (is (not-any? state' actions/answer-keys) blank)
+          ;; the title named the answer too, and no server titled this
+          (is (= [[:set-title "Search · corpus-probe"]
+                  [:push-url "/search"]
+                  [:sync-url]]
+                 effects)
+              blank))))
+    (testing "and the form is left as it stands, so the corpora a reader
+              chose are still chosen"
+      (is (= ["PROBE"] (get-in (:state (actions/set-query answered ""))
+                               [:params :corpus]))))
+    (testing "a field emptied where nothing was answered does nothing but
+              hold what was typed"
+      (let [{state' :state :keys [effects]}
+            (actions/set-query (dissoc answered :result :error) "")]
+        (is (nil? effects))
+        (is (= "" (get-in state' [:params :q])))))))
+
+(deftest cleared-page-test
+  (testing "what a cleared field leaves on the page: the guide and the
+            searches made lately, where the answer stood"
+    (let [state (-> (assoc answered :help [[:p "Type a word."]])
+                    (actions/data->state "http://localhost/search?q=hund")
+                    (assoc :recent [{:params "q=kat"}])
+                    (actions/set-query "")
+                    (:state))
+          html  (deep (views/search-page state))]
+      (is (not (some #{:section.result} html)))
+      (is (not (some #{:nav.tabs} html)))
+      (is (some #{:section.help} html))
+      (is (some #{"Type a word."} html))
+      (is (some #{:nav.recent.box} html)))))
+
+(deftest recent-carried-test
+  (testing "the searches remembered are the client's own, and are carried
+            across a page arriving, which brings none of its own"
+    (is (= [{:params "q=kat"}]
+           (:recent (:state (actions/page-arrived {:recent [{:params "q=kat"}]}
+                                                  data "http://localhost/search"
+                                                  false)))))))
 
 (deftest pass-through-test
   (testing "the world's answers and the listeners' asks"

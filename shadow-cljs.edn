@@ -11,4 +11,4 @@
           ;; test`, then `node target/test.js`
           :test {:target    :node-test
                  :output-to "target/test.js"
-                 :ns-regexp "(cqp|hiccup|stats|query.*|client.*)-test$"}}}
+                 :ns-regexp "(cqp|hiccup|stats|query.*|storage.*|client.*)-test$"}}}

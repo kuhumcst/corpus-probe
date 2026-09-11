@@ -58,7 +58,7 @@
   (testing "no query renders no results region at all, but the help
             where the results will be"
     (is (not (some #{"results"} (deep (views/search-page base)))))
-    (is (= :section.help (first (last (views/search-page base)))))
+    (is (some #{:section.help} (deep (views/search-page base))))
     (is (some #{"Type a word."} (deep (views/search-page base))))
     ;; the switch is a control over an answer, and reaches one by its
     ;; fragment, so without an answer it would point nowhere. The hrefs
@@ -66,12 +66,36 @@
     (is (not (some #{:nav.tabs}
                    (deep (views/search-page
                           (assoc base :view-hrefs view-hrefs)))))))
+  (testing "the searches made lately take the tabs' column wherever the
+            tabs are not in it: before a search, and after one that
+            found nothing, which is where a reader wants the one that
+            found something"
+    (let [recent  (assoc base :client? true :recent [{:params "q=hund"}])
+          shown?  #(some #{:nav.recent.box} (deep (views/search-page %)))
+          nothing {:size 0 :page 0 :pages 1 :hits []
+                   :counts [{:corpus "PROBE" :size 0}]}
+          hits    {:size 3 :page 0 :pages 1 :hits []
+                   :counts [{:corpus "PROBE" :size 3}]}]
+      (is (shown? recent))
+      (is (shown? (assoc recent :result nothing)))
+      (is (shown? (assoc recent :error {:type :no-corpus})))
+      (is (not (shown? (assoc recent :result hits :view-hrefs view-hrefs))))
+      (testing "the box keeps its place before there is anything in it,
+                but only where the client runs: without one nothing
+                remembers a search, so nothing will ever stand there"
+        (is (shown? (assoc recent :recent [])))
+        (is (not (shown? (dissoc recent :client?)))))
+      (testing "last in the document, so the answer to what was asked is
+                the page's first heading and the rail's is under it"
+        (let [html (deep (views/search-page (assoc recent :result nothing)))]
+          (is (< (.indexOf html :h1) (.indexOf html :nav.recent.box)))))))
   (testing "and the help gives way to an answer"
     (is (not (some #{:section.help}
                    (deep (views/search-page
                           (assoc base :error {:type :timeout})))))))
   (testing "a page without a help document simply has none"
-    (is (nil? (last (views/search-page (dissoc base :help))))))
+    (is (not (some #{:section.help}
+                   (deep (views/search-page (dissoc base :help)))))))
   (testing "an error is shown as the outcome of the search"
     (let [html (views/search-page (assoc base :error {:type :cqp
                                                       :message "boom"}))]
@@ -81,8 +105,9 @@
             selected, and only where the client runs, marking the page"
     (let [selected {:token {:word "hund"} :corpus "PROBE"}
           html     (views/search-page (assoc base :client? true
-                                             :selected selected))]
-      (is (= :aside.inspector (first (nth html 4))))
+                                             :selected selected))
+          flat     (deep html)]
+      (is (< (.indexOf flat :aside.inspector) (.indexOf flat :section.help)))
       (is (= "inspecting" (:class (second html))))
       (is (not (some #{:aside.inspector}
                      (deep (views/search-page (assoc base :selected selected))))))
@@ -150,7 +175,8 @@
               to lay out, before the answer it switches"
       (let [html  (views/search-page state)
             order (fn [x] (.indexOf (vec (deep html)) x))]
-        (is (= :nav.tabs (first (nth html 5))))
+        ;; a child of the page itself, which is the grid that places it
+        (is (some #(and (vector? %) (= :nav.tabs (first %))) html))
         (is (< (order :nav.tabs) (order :section.result)))))
     (testing "but an answer with nothing in it reads the same either
               way, so neither view is offered"

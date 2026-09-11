@@ -5,7 +5,7 @@
             [dk.cst.corpus-probe.test.hiccup :refer [da en text]]
             [dk.cst.corpus-probe.i18n :as i18n]
             [dk.cst.corpus-probe.query.mode :as mode]
-            [dk.cst.corpus-probe.settings :as settings]
+            [dk.cst.corpus-probe.storage.settings :as settings]
             [dk.cst.corpus-probe.url :as url]
             [dk.cst.corpus-probe.views.corpus :as corpus-views]
             [dk.cst.corpus-probe.views.search :as search]))
@@ -340,6 +340,73 @@
     (testing "it is not in the form: it stands where the results will"
       (is (not (some #{:section.help}
                      (deep (form {:lang "en" :folders [] :params {}}))))))))
+
+(deftest recent-searches-test
+  (testing "a reader who has searched nothing keeps the box, which says
+            what will stand in it, and has nothing to clear"
+    (let [html (search/recent-searches en [])
+          clear (fn [html] (->> (deep html)
+                                (filter #(and (map? %) (contains? % :disabled)))
+                                (first)))]
+      (is (= :nav.recent.box (first html)))
+      (is (some #{"Your searches appear here."} (deep html)))
+      (is (some #{"Dine søgninger vises her."}
+                (deep (search/recent-searches da nil))))
+      (is (not (some #{:ol} (deep html))))
+      (is (true? (:disabled (clear html))))
+      (is (false? (:disabled (clear (search/recent-searches
+                                     en [{:params "q=hund"}])))))))
+  (let [entries [{:params "q=hund&corpus=PROBE,VISER"
+                  :hits   3412
+                  :filter "text_year 1591"}
+                 {:params "q=kat"}]
+        html    (search/recent-searches en entries)]
+    (testing "a navigation landmark named by its own heading, which
+              clearing it leaves the reader on"
+      (is (= search/recent-id (:aria-labelledby (second html))))
+      (is (= search/recent-box-id (:id (second html))))
+      (is (= "-1" (:tabindex (second html))))
+      (is (some #{[:h2 {:id search/recent-id} "Recent searches"]} (deep html))))
+    (testing "each search leads to its result, and says what it asked,
+              where, what narrowed it and what came back"
+      (is (some #{{:href "/search?q=hund&corpus=PROBE,VISER#results"}}
+                (deep html)))
+      (is (some #{[:span.recent-query "hund"]} (deep html)))
+      (is (some #{[:small.recent-facts
+                   "2 corpora · text_year 1591 · 3,412 hits"]}
+                (deep html))))
+    (testing "a query written in CQP is named as the code it is, and a
+              list by how many words it holds"
+      (is (some #{[:span.recent-query [:code "[pos=\"NOUN\"]"]]}
+                (deep (search/recent-searches
+                       en [{:params "q=%5Bpos%3D%22NOUN%22%5D"}]))))
+      (is (some #{[:span.recent-query "2 words"]}
+                (deep (search/recent-searches
+                       en [{:params "q=hund%0Akat"}])))))
+    (testing "a search that reported nothing of itself says only what it
+              asked"
+      (is (some #{[:span.recent-query "kat"]} (deep html)))
+      (is (= 1 (count (filter #{:small.recent-facts} (deep html))))))
+    (testing "and the whole history is forgotten at once"
+      (is (some #(and (map? %) (= [:forget-searches] (get-in % [:on :click])))
+                (deep html)))))
+  (testing "the clearing is spoken, since a list turned into a sentence
+            announces nothing, the region rendered before it has
+            anything to say"
+    (is (= [:div.status {:class "spoken" :role "status"} nil]
+           (search/recent-announcement en nil)))
+    (is (some #{"Recent searches cleared"}
+              (deep (search/recent-announcement en :cleared))))
+    (is (some #{"Seneste søgninger ryddet"}
+              (deep (search/recent-announcement da :cleared))))
+    (testing "and nothing is said of anything else that happened"
+      (is (nil? (last (search/recent-announcement en :saved))))))
+  (testing "in the reader's language"
+    (is (some #{"Seneste søgninger"}
+              (deep (search/recent-searches da [{:params "q=hund"}]))))
+    (is (some #{"3.412 hits"}
+              (deep (search/recent-searches da [{:params "q=hund"
+                                                 :hits   3412}]))))))
 
 (deftest navigation-status-test
   (testing "the region is rendered before it has anything to announce,

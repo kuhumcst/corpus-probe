@@ -9,7 +9,8 @@
             [dk.cst.corpus-probe.cwb.corpus :as corpus]
             [dk.cst.corpus-probe.i18n :as i18n]
             [dk.cst.corpus-probe.search.batch :as batch]
-            [dk.cst.corpus-probe.settings :as settings]
+            [dk.cst.corpus-probe.storage :as storage]
+            [dk.cst.corpus-probe.storage.settings :as settings]
             [dk.cst.corpus-probe.url :as url]))
 
 (defn multi-param?
@@ -282,7 +283,7 @@
         (keep (fn [[k valid?]]
                 (let [v (get params k)]
                   (when (and (some? v) (valid? v))
-                    (url/cookie k v)))))
+                    (storage/cookie k v)))))
         preference-keys))
 
 (defn safe-return

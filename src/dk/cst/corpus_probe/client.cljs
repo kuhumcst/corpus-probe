@@ -117,15 +117,22 @@
   (render!))
 
 (defn init!
-  "Boot the client: seed the state from the bootstrap payload, install the
-  listeners and the dispatch, render on every change of the state, and
-  arrive on the page as a fetched one does."
+  "Boot the client: seed the state from the bootstrap payload and the
+  searches the browser remembers, install the listeners and the
+  dispatch, render on every change of the state, and arrive on the page
+  as a fetched one does."
   []
   ;; the views render tokens and disclosures as controls only where this
   ;; script is running to answer them
-  (reset! state (actions/data->state (read-payload) js/location.href))
-  (router/listen! dispatch! (keys lists/lists))
-  (r/set-dispatch! dispatch!)
-  (add-watch state ::render (fn [_ _ _ _] (render!)))
-  (render!)
-  (effects/perform! dispatch! {:state @state} [[:sync-url]]))
+  (let [;; a result the reader arrived at directly is a search of theirs
+        ;; like any other, and is remembered before the first render
+        booted (actions/remember
+                (assoc (actions/data->state (read-payload) js/location.href)
+                       :recent (effects/read-recent!)))]
+    (reset! state (:state booted))
+    (router/listen! dispatch! (keys lists/lists))
+    (r/set-dispatch! dispatch!)
+    (add-watch state ::render (fn [_ _ _ _] (render!)))
+    (render!)
+    (effects/perform! dispatch! {:state @state}
+                      (into [[:sync-url]] (:effects booted)))))

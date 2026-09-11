@@ -157,7 +157,7 @@
   control."
   [{:keys [item summary extra toggle open? on-toggle] :as opts}
    {:keys [label items nodes hidden?] :as node}]
-  (let [entries    [:ul.chooser-list
+  (let [entries    [:ul.chooser-list widgets/list-attrs
                     (map item items)
                     (map (fn [n] [:li (node-view opts n)]) nodes)]
         ;; nested details with native checkboxes, not the ARIA tree

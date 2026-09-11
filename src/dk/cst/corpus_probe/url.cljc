@@ -63,22 +63,6 @@
   changes state and sends the reader back where they were."
   "/preferences")
 
-(def cookie-max-age
-  "How long a stored preference outlives the visit that set it, in
-  seconds: a year, so a reader states it once."
-  31536000)
-
-(defn cookie
-  "The Set-Cookie string storing `v` under setting `k` for
-  `cookie-max-age`, site-wide and on same-site requests only, as the
-  server writes it in a header and the client to the document."
-  [k v]
-  ;; a setting stored as nothing is forgotten, so storing and clearing
-  ;; are one path and a reset needs no writer of its own
-  (str (name k) "=" v ";Path=/"
-       ";Max-Age=" (if (str/blank? (str v)) 0 cookie-max-age)
-       ";SameSite=Lax"))
-
 (def filters-api
   "The metadata filters the chosen corpora offer, for the client."
   "/api/filters")
@@ -218,7 +202,7 @@
   carries it: a URL says the same by naming no corpus. But a form is not
   a search, since a chooser with every box ticked and one with none are
   different and only one of them can be searched, so the stored settings
-  say it (see dk.cst.corpus-probe.settings/string)."
+  say it (see dk.cst.corpus-probe.storage.settings/string)."
   "all")
 
 (defn with-corpora

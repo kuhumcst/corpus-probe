@@ -309,7 +309,8 @@
     [:nav.pagination {:aria-label (i18n/tr ui "Pagination")}
      ;; started where the words of the concordance start, so that its
      ;; middle stands under the match (see client.effects/align-pager!)
-     [:ul.row.pager {:replicant/on-render [:align-pager]}
+     [:ul.row.pager (assoc widgets/list-attrs
+                           :replicant/on-render [:align-pager])
       (when prev-href
         [:li.pager-prev
          [:a {:href prev-href :rel "prev"}

@@ -8,10 +8,13 @@
             [dk.cst.corpus-probe.query :as query]
             [dk.cst.corpus-probe.query.mode :as mode]
             [dk.cst.corpus-probe.query.tokens :as tokens]
-            [dk.cst.corpus-probe.settings :as settings]
+            [dk.cst.corpus-probe.storage.recent :as recent]
+            [dk.cst.corpus-probe.storage.settings :as settings]
             [dk.cst.corpus-probe.url :as url]
+            [dk.cst.corpus-probe.views :as views]
             [dk.cst.corpus-probe.views.chooser :as chooser]
             [dk.cst.corpus-probe.views.concordance :as concordance]
+            [dk.cst.corpus-probe.views.result :as result-views]
             [dk.cst.corpus-probe.views.search :as search-views]
             [dk.cst.corpus-probe.views.search.filter :as filter-views]))
 
@@ -452,17 +455,95 @@
         (cond-> (not (get-in state [:lists :values :choosing?]))
           (lists/settle :values)))))
 
+(defn remember
+  "The `state` with the search it shows at the head of the searches it
+  remembers, and the effect storing them; nothing to remember on another
+  page, before an answer, or where no corpus could be searched.
+
+  Called again when the count finishes: the same question moves to the
+  head it already holds and takes the count with it. A narrowed answer
+  counts a part of what the question found, so it reports no count and
+  the count the question has stands (see
+  dk.cst.corpus-probe.storage.recent/remember)."
+  [{:keys [route asked result] :as state}]
+  (let [hits  (when-not (or (recent/refined? asked)
+                            (result-views/counting? result))
+                (:size result))
+        entry (and (= :search route)
+                   (result-views/searched? result)
+                   (recent/entry asked
+                                 {:hits   hits
+                                  :filter (not-empty
+                                           (result-views/filter-phrase
+                                            result))}))]
+    (if entry
+      {:state   (update state :recent recent/remember entry)
+       :effects [[:store-recent]]}
+      {:state state})))
+
+(def answer-keys
+  "What the state holds of an answer: the answer itself or the error that
+  stands where it would, the links that cite it, and the token of it the
+  panel describes."
+  [:result :error :selected :view-hrefs :export-hrefs :prev-href :next-href])
+
+(defn set-query
+  "The state with `text` in the query field, and the answer taken out of
+  it where the text asks nothing at all.
+
+  Emptying the field is how a reader starts over (see
+  dk.cst.corpus-probe.client.router/cleared?, the same rule at a
+  submit), so the page goes back to the guide and the searches made
+  lately without being asked a second time. The address goes back with
+  it, onto the history rather than over it: it cited a result that is no
+  longer on screen, and a field emptied by accident has a way back."
+  [{:keys [result error] :as state} text]
+  ;; every keystroke into the state, so the answer can tell when the
+  ;; form has moved on from what ran; the field keeps what was typed,
+  ;; since Replicant leaves an unchanged value alone
+  (let [state (assoc-in state [:params :q] text)]
+    (if (and (or result error) (nil? (query/of (:params state))))
+      (let [state (apply dissoc state answer-keys)]
+        {:state   state
+         ;; the title named the answer too, and this is the one page the
+         ;; client arrives at without the server having titled it
+         :effects [[:set-title (views/title state)]
+                   [:push-url url/search]
+                   [:sync-url]]})
+      {:state state})))
+
+(defn forget-searches
+  "The `state` with the searches it remembers forgotten, and the empty
+  history stored: forgetting is storing nothing, as it is for the
+  settings.
+
+  The box takes focus where the button that had it goes quiet: a browser
+  drops focus from a control it disables, and the box they are still in
+  is a better place for it than the head of the page (see
+  dk.cst.corpus-probe.views.search/recent-announcement for what is said
+  of the clearing)."
+  [state]
+  {:state   (assoc state :recent [] :announcement :cleared)
+   :effects [[:store-recent] [:focus search-views/recent-box-id]]})
+
 (defn counts-arrived
   "Put `counted`, the count of the search on screen, in `state`, with the
-  document title it decides."
+  document title it decides and the count in what the search is
+  remembered by (see `remember`)."
   [state counted]
-  {:state   (-> state
-                (update :result #(-> (merge % (select-keys counted
-                                                           [:counts :size
-                                                            :pages]))
-                                     (dissoc :remaining)))
-                (merge (select-keys counted [:prev-href :next-href])))
-   :effects [[:set-title (:title counted)]]})
+  (let [counted-state (-> state
+                          (update :result
+                                  #(-> (merge % (select-keys counted
+                                                             [:counts :size
+                                                              :pages]))
+                                       (dissoc :remaining)))
+                          (merge (select-keys counted [:prev-href :next-href])))
+        remembered    (remember counted-state)]
+    {:state   (:state remembered)
+     ;; a search that was still being counted when it arrived has only
+     ;; now said that it found nothing
+     :effects (into [[:set-title (:title counted)] [:select-query]]
+                    (:effects remembered))}))
 
 (defn data->state
   "Server `data` as the state this client renders from at the absolute
@@ -497,8 +578,8 @@
   stays as it is. Every other preference is fetched again: the language
   because the server words the title and the summaries, a reset because
   the form it leaves behind is the bare one (see
-  dk.cst.corpus-probe.settings/return). Onto the history only where it
-  took the reader somewhere else."
+  dk.cst.corpus-probe.storage.settings/return). Onto the history only
+  where it took the reader somewhere else."
   [state k v return]
   (let [k (keyword k)]
     (if (and (= settings/cookie-key k) (not (settings/reset? {k v})))
@@ -555,16 +636,24 @@
   ;; the link back to the search is built from the page being rendered,
   ;; so a corpus or a document has none of its own and would drop the
   ;; result at the first step away from it
-  (let [cited  (router/cited-href href)
-        search (when (not= :search (:route data))
-                 (get-in state [:nav :search]))
-        data   (cond-> data search (assoc-in [:nav :search] search))]
-    {:state   (data->state data cited)
-     :effects (cond->> [[:set-title (:title data)]
-                        [:set-lang (:lang data)]
-                        [:sync-url]
-                        [:fetch-counts]
-                        [:land]]
+  (let [cited   (router/cited-href href)
+        search  (when (not= :search (:route data))
+                  (get-in state [:nav :search]))
+        data    (cond-> data search (assoc-in [:nav :search] search))
+        ;; the searches remembered are the client's own, and no page
+        ;; carries them, so they are carried across the page arriving
+        arrived (remember (assoc (data->state data cited)
+                                 :recent (:recent state)))]
+    {:state   (:state arrived)
+     :effects (cond->> (into [[:set-title (:title data)]
+                              [:set-lang (:lang data)]
+                              [:sync-url]
+                              [:fetch-counts]
+                              [:land]
+                              ;; after the landing, which is what decides
+                              ;; where the reader is when it asks
+                              [:select-query]]
+                             (:effects arrived))
                 push? (into [[:push-url cited]]))}))
 
 (defn act
@@ -584,10 +673,7 @@
       :remove-token         (remove-token state x)
       :add-condition        (add-condition state x)
       :remove-condition     (let [[i id] x] (remove-condition state i id))
-      ;; so the answer can tell when the form has moved on from what ran;
-      ;; the field keeps what was typed, since Replicant leaves an
-      ;; unchanged value alone
-      :set-query            {:state (assoc-in state [:params :q] x)}
+      :set-query            (set-query state x)
       :submit-on-enter      (submit-on-enter state x y z)
       :set-condition        {:state (set-condition state x y)}
       :set-token            {:state (set-token state x y)}
@@ -626,6 +712,7 @@
       :navigate             {:state state :effects [[:navigate x y]]}
       :go-to-page           {:state state :effects [[:go-to-page x]]}
       :align-pager          {:state state :effects [[:align-pager]]}
+      :forget-searches      (forget-searches state)
       :form-changed         (form-changed state x)
       :set-autosave         (set-autosave state x)
       :set-preference       (set-preference state x y z)

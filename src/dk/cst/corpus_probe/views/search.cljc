@@ -1,20 +1,27 @@
 (ns dk.cst.corpus-probe.views.search
   "The search form: one text field read by its shape, or the tokens of
   the extended search, the boxes deciding how the query is read, the
-  corpus chooser the page hands in and the metadata filter; and the help
-  that stands where the results will until there are any."
+  corpus chooser the page hands in and the metadata filter; and what
+  stands there until a search answers: the help, and the searches the
+  reader has made lately."
   (:require [clojure.string :as str]
             [dk.cst.corpus-probe.cqp :as cqp]
             [dk.cst.corpus-probe.i18n :as i18n]
             [dk.cst.corpus-probe.query :as query]
             [dk.cst.corpus-probe.query.mode :as mode]
             [dk.cst.corpus-probe.query.tokens :as tokens]
-            [dk.cst.corpus-probe.settings :as settings]
+            [dk.cst.corpus-probe.storage.recent :as recent]
+            [dk.cst.corpus-probe.storage.settings :as settings]
             [dk.cst.corpus-probe.url :as url]
             [dk.cst.corpus-probe.views.result :as result]
             [dk.cst.corpus-probe.views.search.filter :as filter-views]
             [dk.cst.corpus-probe.views.search.tokens :as tokens-views]
             [dk.cst.corpus-probe.views.widgets :as widgets]))
+
+(def query-id
+  "The id of the query field, which is also the name of the param it
+  submits, so that the client can put the caret back in it."
+  "q")
 
 (defn query-field
   "The query field of the search form in `ui`, holding `text`: a text
@@ -22,8 +29,8 @@
   a blank query means nothing."
   [ui text required?]
   (let [text  (str text)
-        attrs {:id           "q"
-               :name         "q"
+        attrs {:id           query-id
+               :name         query-id
                :rows         (min 8 (inc (count (re-seq #"\r\n|[\r\n]"
                                                         text))))
                :aria-label   (i18n/tr ui "Query")
@@ -108,6 +115,95 @@
   ;; page want one, and of what?
   (when (seq blocks)
     [:section.help {:aria-label (i18n/tr ui "Help")} blocks]))
+
+(def recent-id
+  "The id of the heading naming the history, which the landmark around it
+  is named by."
+  "recent-searches")
+
+(def recent-box-id
+  "The id of the history's box, which clearing leaves the reader on: the
+  button they pressed goes quiet as they press it, and a quiet button
+  holds no focus."
+  "recent")
+
+(defn recent-facts
+  "What the remembered search `entry`, whose question is `asked`, says of
+  itself under its query in `ui`: the corpora it was asked of, the
+  metadata filter it was narrowed by and the hits it found, where each
+  is known."
+  [ui asked {:keys [hits] narrowing :filter}]
+  (->> [(when-let [corpora (seq (url/corpora-param (:corpus asked)))]
+          (result/corpora-phrase ui corpora))
+        (not-empty narrowing)
+        (when hits (result/hits-phrase ui hits))]
+       (remove nil?)
+       (str/join " · ")))
+
+(defn recent-query
+  "The question `asked` as the history names it in `ui` (see
+  dk.cst.corpus-probe.views.result/query-phrase): a query written in CQP
+  as the code it is, and what a reader typed as they typed it."
+  [ui asked]
+  (let [phrase (result/query-phrase ui asked)]
+    (if (#{"cqp" "extended"} (mode/mode asked))
+      [:code phrase]
+      phrase)))
+
+(defn recent-search
+  "One remembered `entry` as a link in `ui`: the question it asked, and
+  under it what the answer was (see `recent-facts`)."
+  [ui entry]
+  ;; the params are read for the words alone; the link is the string as
+  ;; it was written (see dk.cst.corpus-probe.storage.recent/href)
+  (let [asked (url/form-decode (:params entry))]
+    [:li [:a {:href (recent/href entry)}
+          [:span.recent-query (recent-query ui asked)]
+          (when-let [facts (not-empty (recent-facts ui asked entry))]
+            [:small.recent-facts facts])]]))
+
+(defn recent-searches
+  "The searches a reader has made lately, `entries`, newest first, as a
+  navigation landmark in `ui`; what will stand there for a reader who
+  has made none.
+
+  It stands in the column the result's own tabs take, and gives that
+  column up as soon as there are hits to read in them. Its place is kept
+  while it is empty, so that a reader is told the searches are being
+  kept before there are any, and the column does not fill as they
+  search."
+  [ui entries]
+  ;; TODO: two questions this leaves. A reader with an answer on screen
+  ;; reaches the history by emptying the field, which is the way back to
+  ;; the bare page and is said nowhere. And the list is forgotten whole
+  ;; or not at all: is one entry worth a control of its own?
+  [:nav.recent.box {:id              recent-box-id
+                    :tabindex        "-1"
+                    :aria-labelledby recent-id}
+   [:h2 {:id recent-id} (i18n/tr ui "Recent searches")]
+   (if (seq entries)
+     [:ol widgets/list-attrs (for [entry entries] (recent-search ui entry))]
+     [:p.recent-empty (i18n/tr ui "Your searches appear here.")])
+   [:p.recent-clear
+    ;; nothing to forget is a button that says so by going quiet, as the
+    ;; preferences box's do
+    [:button {:type     "button"
+              :disabled (empty? entries)
+              :on       {:click [:forget-searches]}}
+     (i18n/trx ui "button" "Clear")]]])
+
+(defn recent-announcement
+  "The live region saying the history was cleared, in `ui`, when that is
+  what `announcement` names; spoken and never seen.
+
+  Clearing leaves a list turned into a sentence and a button gone quiet,
+  neither of which is announced, so a reader not watching the screen is
+  otherwise told nothing. Off screen because one who is watching has the
+  box to look at. Outside the box, which is rebuilt as it empties."
+  [ui announcement]
+  (widgets/status "spoken"
+                  (when (= :cleared announcement)
+                    (i18n/tr ui "Recent searches cleared"))))
 
 (defn navigation-status
   "The live region reporting a routed navigation in flight in `ui`,

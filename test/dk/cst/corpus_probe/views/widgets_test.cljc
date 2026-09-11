@@ -36,7 +36,9 @@
       (is (= :ul.row (first html)))
       (is (= [[:li [:a {:href "/a" :data-key "a"} "A"]]
               [:li [:a {:href "/b" :data-key "b" :aria-current "page"} "B"]]]
-             (second html))))
+             (nth html 2)))
+      (testing "and reading as a list, whose markers the sheet takes off"
+        (is (= widgets/list-attrs (second html)))))
     (testing "and nothing marked when nothing is current"
       (is (not (some #(and (map? %) (:aria-current %))
                      (deep (widgets/link-row [[:a "/a" "A"]] nil))))))))
@@ -152,4 +154,6 @@
     (is (= {} (widgets/lang-attrs nil))))
   (testing "hidden keeps the element in the document"
     (is (= {:hidden true} (widgets/hidden-attrs true)))
-    (is (= {} (widgets/hidden-attrs false)))))
+    (is (= {} (widgets/hidden-attrs false))))
+  (testing "a list says it is one where its markers are gone"
+    (is (= {:role "list"} widgets/list-attrs))))

@@ -231,6 +231,12 @@ msgstr "Præferencer"
 msgid "Settings saved"
 msgstr "Indstillinger gemt"
 
+msgid "Recent searches cleared"
+msgstr "Seneste søgninger ryddet"
+
+msgid "Your searches appear here."
+msgstr "Dine søgninger vises her."
+
 msgid "save automatically"
 msgstr "gem automatisk"
 
@@ -365,6 +371,12 @@ msgstr "Gem"
 
 msgid "button|Reset"
 msgstr "Nulstil"
+
+msgid "button|Clear"
+msgstr "Ryd"
+
+msgid "Recent searches"
+msgstr "Seneste søgninger"
 
 msgid "text"
 msgstr "tekst"

@@ -1,14 +1,19 @@
 (ns dk.cst.corpus-probe.client.effects
   "The edge of the client: everything that touches the world, the timers,
   the fetches, focus, the history, the document's title and language,
-  the cookie, and `perform!`, which runs the effects an action answered
-  with. Nothing here reads or writes the state: a fetch comes back as an
-  action, so what to keep of a late answer is the pure step's decision."
+  the cookie, the store the searches made lately are kept in, and
+  `perform!`, which runs the effects an action answered with. Nothing
+  here reads or writes the state: a fetch comes back as an action, so
+  what to keep of a late answer is the pure step's decision."
   (:require [cognitect.transit :as transit]
             [dk.cst.corpus-probe.client.router :as router]
             [dk.cst.corpus-probe.query.mode :as mode]
+            [dk.cst.corpus-probe.storage :as storage]
+            [dk.cst.corpus-probe.storage.recent :as recent]
             [dk.cst.corpus-probe.url :as url]
             [dk.cst.corpus-probe.views.concordance :as concordance]
+            [dk.cst.corpus-probe.views.result :as result-views]
+            [dk.cst.corpus-probe.views.search :as search]
             [dk.cst.corpus-probe.views.widgets :as widgets]))
 
 (defonce ^{:doc "The wait before a routed navigation is worth reporting,
@@ -231,10 +236,30 @@
 
 (defn set-cookie!
   "Store `v` under setting `k` in the cookie the server reads (see
-  dk.cst.corpus-probe.url/cookie), so a reload and every later visit
+  dk.cst.corpus-probe.storage/cookie), so a reload and every later visit
   carry the setting too."
   [k v]
-  (set! (.-cookie js/document) (url/cookie k v)))
+  (set! (.-cookie js/document) (storage/cookie k v)))
+
+(defn read-recent!
+  "The searches the browser remembers (see
+  dk.cst.corpus-probe.storage.recent/entries); none where it keeps no
+  store, a browser told to keep none throwing at the reading of it."
+  []
+  (recent/entries (try
+                    (.getItem js/localStorage recent/store-key)
+                    (catch :default _ nil))))
+
+(defn store-recent!
+  "Store the history `state` holds, so a later visit finds it.
+
+  A store that refuses what it is given, being full or being kept by
+  nobody, leaves the history to this visit: it is the reader's note of
+  where they have been, and no answer depends on it."
+  [state]
+  (try
+    (.setItem js/localStorage recent/store-key (recent/string (:recent state)))
+    (catch :default _ nil)))
 
 (defn reduced-motion?
   "True when the reader has asked their system for less animation."
@@ -498,6 +523,28 @@
             (some-> (.getElementById js/document widgets/main-id)
                     (.focus #js {:preventScroll true})))))))
 
+(defn select-query!
+  "Select what the query field holds, where the search in `state` found
+  nothing and the reader asked for it themselves: what they try instead
+  replaces what did not work, in one keystroke.
+
+  Only from the field or the button that runs it. A control beside the
+  result is where the reader is working, and a page they arrived at by a
+  link is not a search of theirs, so neither takes the caret away from
+  where it is. A result still being counted has not answered yet."
+  [state]
+  (let [active (.-activeElement js/document)
+        asked? (and active
+                    (= url/form-id (some-> active (.-form) (.-id)))
+                    (or (= search/query-id (.-id active))
+                        (= "submit" (.-type active))))
+        result (:result state)]
+    (when (and asked? (not (result-views/counting? result))
+               (not (result-views/found? result)))
+      (some-> (.getElementById js/document search/query-id)
+              (doto (.focus))
+              (.select)))))
+
 (defn sync-url!
   "Write the canonical query string of the page on screen into the bar,
   replacing history so the URL stays shareable without new entries, and
@@ -539,6 +586,7 @@
       :go-to-page         (apply go-to-page! dispatch! args)
       :align-pager        (align-pager! (:replicant/node data))
       :set-cookie         (apply set-cookie! args)
+      :store-recent       (store-recent! state)
       :push-url           (apply push-url! args)
       :set-title          (apply set-title! args)
       :set-lang           (apply set-lang! args)
@@ -551,4 +599,5 @@
       :recentre           (recentre! state)
       :leave-concordance  (leave-concordance! dispatch!)
       :land               (land!)
+      :select-query       (select-query! state)
       :sync-url           (sync-url! state))))

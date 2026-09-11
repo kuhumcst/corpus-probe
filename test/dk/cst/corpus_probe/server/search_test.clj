@@ -11,7 +11,7 @@
             [dk.cst.corpus-probe.search.frequency :as frequency]
             [dk.cst.corpus-probe.server.request :as request]
             [dk.cst.corpus-probe.server.search :as search]
-            [dk.cst.corpus-probe.settings :as settings]
+            [dk.cst.corpus-probe.storage.settings :as settings]
             [dk.cst.corpus-probe.test.cwb :refer [ctx when-cwb]]
             [dk.cst.corpus-probe.url :as url]
             [taoensso.telemere :as t])
@@ -268,6 +268,23 @@
          (is (= [{:id 1 :conditions [{:id 1}]}] tokens))
          (testing "with the text kept as memory, uncited"
            (is (= "[lemma = \"hund\"]" (:q params)))))))))
+
+(deftest ships-the-help-test
+  (when-cwb
+   (let [data (fn [query-string]
+                (transit->
+                 (:body (search/serve-search
+                         ctx {:query-params (query-pairs query-string)
+                              :query-string query-string
+                              :headers      {"accept" url/transit-type}}))))]
+     (testing "the guide travels with a search that found something, so
+               that the client can put the page back to it when the
+               reader empties the field (see
+               dk.cst.corpus-probe.client.actions/set-query)"
+       (let [answered (data "q=hund&corpus=PROBE")]
+         (is (seq (:result answered)))
+         (is (seq (:help answered)))
+         (is (= (:help answered) (:help (data "")))))))))
 
 (deftest citation-redirect-test
   (when-cwb

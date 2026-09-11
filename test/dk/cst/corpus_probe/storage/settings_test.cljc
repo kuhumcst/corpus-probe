@@ -1,9 +1,9 @@
-(ns dk.cst.corpus-probe.settings-test
+(ns dk.cst.corpus-probe.storage.settings-test
   "The settings a reader stores: which params they hold, how they are
   written into one value and read back, and where a preference leaves
   the reader."
   (:require [clojure.test :refer [deftest is testing]]
-            [dk.cst.corpus-probe.settings :as settings]
+            [dk.cst.corpus-probe.storage.settings :as settings]
             [dk.cst.corpus-probe.url :as url]))
 
 (deftest string-test

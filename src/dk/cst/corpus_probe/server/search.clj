@@ -18,7 +18,7 @@
             [dk.cst.corpus-probe.search.frequency :as frequency]
             [dk.cst.corpus-probe.server.request :as request]
             [dk.cst.corpus-probe.server.response :as response]
-            [dk.cst.corpus-probe.settings :as settings]
+            [dk.cst.corpus-probe.storage.settings :as settings]
             [dk.cst.corpus-probe.url :as url]
             [dk.cst.corpus-probe.views :as views]
             [dk.cst.corpus-probe.views.frequency :as frequency-views]))
@@ -469,13 +469,17 @@
                                       url/search
                                       (url/results-href cited))}
                   (seq cookies) (assoc "Set-Cookie" cookies))}
-      (let [{:keys [result error] :as data} (search-view-data ctx req cited)
+      (let [data (search-view-data ctx req cited)
             ;; the masthead's navigation takes the citation; the client
-            ;; does not read it
-            data (cond-> (assoc (dissoc data :cited) :route :search)
-                   (not (or result error))
-                   (assoc :help (docs/document
-                                 "help" (request/request-languages request))))]
+            ;; does not read it. The help travels whatever the search
+            ;; found, a kilobyte of it: the client puts the page back to
+            ;; the guide the moment the reader empties the field, and
+            ;; fetching it then would land on what they type next (see
+            ;; dk.cst.corpus-probe.client.actions/set-query)
+            data (assoc (dissoc data :cited)
+                        :route :search
+                        :help (docs/document
+                               "help" (request/request-languages request)))]
         (cond-> (response/page-response request (views/title data) data cited)
           (seq cookies) (assoc-in [:headers "Set-Cookie"] cookies))))))
 
