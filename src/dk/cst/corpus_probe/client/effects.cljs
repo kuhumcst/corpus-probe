@@ -212,6 +212,8 @@
   (let [cpos (some-> (.querySelector js/document ".kwic .kwic-cpos")
                      (.getBoundingClientRect)
                      (.-width))]
+    ;; set on the style object and never as a style attribute string,
+    ;; which style-src 'self' refuses to parse
     (.setProperty (.-style el) "padding-inline-start" (str (or cpos 0) "px"))))
 
 (defn go-to-page!

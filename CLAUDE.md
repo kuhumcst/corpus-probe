@@ -53,6 +53,13 @@ files hold absolute paths, and a move of the checkout invalidates them.
 - Do not test CSS with an injected `<style>` element. The
   Content-Security-Policy is `style-src 'self'`, so the sheet never parses and
   `s.sheet` is null. Edit `resources/public/css/style.css` and reload.
+- That same policy refuses only the CSS it has to parse from a string: a
+  `<style>` element and a `style` attribute set with `setAttribute`. A
+  property set on an element's style object is allowed, and so is
+  `insertRule` on a sheet the page already serves. This is what
+  `client.effects/align-pager!` relies on, so do not read a `style-src`
+  violation in the console as that line failing. The shadow-cljs HUD writes
+  style attributes, and is the dev-only source of those violations.
 - Do not read headers with `curl -I`. Pedestal answers HEAD without the
   Content-Type and Cache-Control that a GET carries. Use
   `curl -s -D- -o /dev/null`.
