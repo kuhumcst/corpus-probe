@@ -697,6 +697,7 @@ pre { font-size: 0.875rem; padding: 0.75rem 1rem;
 /* the note on which hits these are, muted like the reach line and
    centred over the table */
 .result > .subset { color: var(--tx-2); text-align: center; }
+.result > .downloads { text-align: center; }
 
 /* Only a phone takes the two apart, and the rule goes with the gap it
    stood in. No width above that earns a rule of its own: the head is at
