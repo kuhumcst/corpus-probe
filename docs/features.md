@@ -58,6 +58,20 @@ positional attribute of the searched corpora, for example lemma. A
 simple search of several words is kept within one sentence, as the CQP
 manual advises, or within a paragraph or a text when the reader selects
 one. The search uses the name that each corpus gives its sentences.
+Any search, CQP included, can ask that every hit have a given word
+nearby, within a number of words on either side. The control is a row
+of the Scope box, before the case box: the word, and the distance
+beside a plus-minus sign. The word is read as the row above reads the
+query, in its attribute, with its affix and its case, so a lemma search
+near a lemma finds every form of it, and the field's placeholder names
+the attribute in force. CQP and the extended form have no such row, so
+the word is read there as a whole form of the word attribute, case
+included. A blank word asks nothing, and the distance is disabled until
+there is one, so nothing rides along with an empty field. This is how
+the manual finds a word near a hit, with its command `set target`. The
+word is marked as the keyword anchor, and the concordance underlines
+it. A search that found nothing keeps the word where it was asked,
+since it may be why nothing was found.
 Until the reader makes a search, a key to the readings of the field and
 to the extended form stands where the results will be, with a link to
 the CQP guide, a page of CQP examples.
@@ -180,36 +194,32 @@ search page.
 
 ## Result controls
 
-A result has its own controls, in two rows. The first row sets how the
-hits are read: the sort, the context and the sample. The sort can order
-the hits by the match read from its end, which puts the words that
-share a suffix together. This is the `reverse` option of the CQP
-command `sort`. The sort can also order the hits by any positional
-attribute of the searched corpora, for example lemma or pos. A corpus
-that lacks the attribute reports an error, so a silent corpus order
-never stands in for the order that was asked. The context can be
-a number of words, or a sentence or a paragraph, under the attribute
-that each corpus has for it. The second row is behind a disclosure. It
-narrows the hits to those with a given word nearby, within a few tokens
-on each side. This is how the manual finds a word near a hit, with its
-command `set target`. The word is marked as the keyword anchor, and the
-concordance underlines it. The disclosure opens by itself while a
-narrowing is in force. A target that the reader marks with `@` in a CQP
-query is shown in bold, as `cqp` itself shows both anchors. The
-narrowing and the sample travel with the search into the frequency view
-and the exports. Without a script, the controls apply through a button.
-A browser with a script never shows this button.
+A result has its own controls, in one row, which set how the hits are
+read: the sort, the context and the sample. The sample is a number
+field, blank for all the hits. The sort can order the hits
+by the match read from its end, which puts the words that share a
+suffix together. This is the `reverse` option of the CQP command
+`sort`. The sort can also order the hits by any positional attribute of
+the searched corpora, for example lemma or pos. A corpus that lacks the
+attribute reports an error, so a silent corpus order never stands in
+for the order that was asked. The context can be a number of words, or
+a sentence or a paragraph, under the attribute that each corpus has for
+it. A target that the reader marks with `@` in a CQP query is shown in
+bold, as `cqp` itself shows both anchors. The sample travels with the
+search into the frequency view and the exports. Without a script, the
+controls apply through a button. A browser with a script never shows
+this button.
 
 A search that found nothing, and one that failed everywhere, show no
-table, no downloads and no switch between the views. The one control
-that stays is the word the hits must be near, when the search set one.
-That word may be why nothing was found, so the reader has to be able to
-remove it.
+table, no downloads, no controls and no switch between the views.
 
 ## Several corpora
 
 A search of several corpora queries them one at a time until the page
-is full. The corpora after the page are only counted. Without a script,
+is full. The corpora after the page are only counted. Beside the count
+stands a sign. It opens, on a row of its own under the controls, the
+corpora the hits are in and the corpora the search left out, which
+colour the sign. Without a script,
 the page waits for every count. With a script, the page arrives as soon
 as it is full, and the count follows. Until it arrives, the heading
 says "at least" and the hits counted so far, and a status line says how
@@ -229,8 +239,16 @@ The frequency view counts at each position that CQP has:
 The command `count` gives the whole match. The command `group` sees
 only the first token.
 Each row links to the hits that it counted. Thus a table is a way into
-a concordance, not the end of one. A checkbox adds the number of texts
-in which each value occurs.
+a concordance, not the end of one. The concordance then says so over
+its hits, "Showing only the hits where the lemma is "hund" first in the
+match", with a link to all of them, and its title says the same.
+That
+slice has no control of its own: it is a way of reading one answer,
+not a question a reader would compose. It stays while the sort, the
+context or the sample change, and goes when the question changes, so a
+new query is not sliced by it. Without a script it rides along until
+the link is followed. A checkbox adds the number of texts in which
+each value occurs.
 
 When the table groups by a structural attribute, for example the year,
 each value has text of its own. The table then measures the rate per
@@ -241,7 +259,9 @@ of the attribute. Under a metadata filter, the app counts the tokens
 of the kept regions with the CQP command `group` instead.
 
 The table can count one attribute against another, for example lemma
-by year. The control `columns` selects the second attribute. Each
+by year. The select after the position chooses the second attribute:
+it reads "per corpus" until one is chosen, and "per text_year" then, so
+the row of controls reads as one sentence. Each
 value of the second attribute is then a column, and the corpora are
 summed. This is the CQP command `group ... by ...`. When the second
 attribute is structural, the first row holds the tokens of each
@@ -440,20 +460,22 @@ could not be run, which is where a reader most wants the search that did
 find something.
 
 The rail names each search by what it asked, and under that by the
-corpora it was asked of, the metadata filter it was narrowed by and the
-hits it found. A reader who has searched nothing keeps the rail anyway,
+corpora it was asked of, the word its hits had to be near, the metadata
+filter it was narrowed by and the hits it found. A reader who has
+searched nothing keeps the rail anyway,
 saying that their searches appear there, with the Clear button quiet:
 the place is worth knowing about before there is anything in it, and the
 column does not fill up under the reader as they search.
 
 An entry is a question that the form asked. The reader's settings say
 how an answer is read; these say what was asked. So an entry holds the
-query, the corpora and the metadata filter, and holds nothing of the
-sort, the context, the view or the page, which belong to the reading of
-an answer. It holds none of the narrowings either: a sample of the hits,
-a nearby word and the subset behind a frequency row all narrow an answer
-to a question that the history holds already. Thus working a control
-beside a result never writes an entry.
+query, the word its hits must be near, the corpora and the metadata
+filter, and holds nothing of the sort, the context, the view or the
+page, which belong to the reading of an answer. It holds none of the
+narrowings either: a sample of the hits and the subset behind a
+frequency row both narrow an answer to a question that the history
+holds already. Thus working a control beside a result never writes an
+entry.
 
 Emptying the field puts the page back to that start without a submit:
 the answer goes, the guide and the rail take its place, the address in

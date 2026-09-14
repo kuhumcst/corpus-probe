@@ -54,7 +54,8 @@
       (let [[tag [_ h1 reach] controls] (nth html 2)]
         (is (= :header.result-head tag))
         (is (= "5 hits" (text (drop 2 h1))))
-        (is (= [:p "in PROBE"] reach))
+        (is (= :details.caveats (first reach)))
+        (is (= [:p "in PROBE"] (nth reach 3)))
         (is (= :div.view-controls (first controls)))
         (is (some #{"Group by"} (deep controls)))))
     (testing "the table's size is its caption's to say"
@@ -75,15 +76,12 @@
       (is (some #{"No hits."} (deep html)))
       (is (not (some #{:table.frequencies} (deep html))))
       (is (not (some #{"/e?format=tsv"} (deep html)))))
-    (testing "and no controls either, nothing being counted to regroup"
+    (testing "and no controls either, nothing being counted to regroup;
+              the word the hits had to be near stays in the form"
       (is (nil? (frequency/frequency-controls {:ui en :result counted-none})))
-      (testing "except the word the hits must be near, which stays, and
-                open, so the reader can remove what may have emptied it"
-        (let [html (frequency/frequency-controls
-                    {:ui     en
-                     :result (assoc counted-none :near {:word "kat"})})]
-          (is (some #{"Near"} (deep html)))
-          (is (not (some #{"Group by"} (deep html)))))))))
+      (is (nil? (frequency/frequency-controls
+                 {:ui     en
+                  :result (assoc counted-none :near {:word "kat"})}))))))
 
 (deftest attr-control-test
   (let [html (frequency/attr-control en
@@ -119,8 +117,8 @@
                    "matchend[1]"]
         html      (frequency/position-control en positions "matchend[1]")]
     (testing "one option per position, worded, the chosen one marked"
-      (is (= ["before the match" "at the start of the match"
-              "over the whole match" "at the end of the match"
+      (is (= ["before the match" "first in the match"
+              "the whole match" "last in the match"
               "after the match"]
              (keep #(when (and (vector? %) (= :option (first %))) (last %))
                    (deep html))))
@@ -221,12 +219,15 @@
   (let [attrs [{:type :positional :name :word}
                {:type :structural :name :text_year}]
         html  (frequency/by-control en attrs :text_year)]
-    (testing "the corpora are the columns unless an attribute is chosen"
+    (testing "the corpora are the columns unless an attribute is chosen,
+              each option saying what it does"
       (is (some #(and (map? %) (= "" (:value %)) (not (:selected %)))
                 (deep html)))
       (is (some #(and (map? %) (= "" (:value %)) (:selected %))
                 (deep (frequency/by-control en attrs nil))))
-      (is (some #{"corpora"} (deep html))))
+      (is (some #{"per corpus"} (deep html)))
+      (is (some #{"per text_year"} (deep html)))
+      (is (some #{"pr. korpus"} (deep (frequency/by-control da attrs nil)))))
     (testing "the structural attributes come first"
       (is (= ["structural attributes" "positional attributes"]
              (keep :label (deep html)))))
@@ -237,7 +238,11 @@
                       (= [:apply-view "by" :event.target/value]
                          (get-in % [:on :change])))
                 (deep html))))
-    (is (some #{"kolonner"} (deep (frequency/by-control da attrs nil))))))
+    (testing "named for a screen reader alone, the options carrying the
+              sense for everyone else"
+      (is (= :select (first html)))
+      (is (= "kolonner" (:aria-label (second (frequency/by-control da attrs
+                                                                   nil))))))))
 
 (def crosstab
   "A frequency result counted against a second, structural attribute."

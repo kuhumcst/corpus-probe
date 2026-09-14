@@ -351,15 +351,15 @@
 
 (defn search-params
   "The `params` that identify a search, for linking the views of the same
-  hits: its corpora, its query as any mode reads it, the metadata filter,
-  the narrowings of its hits and the sample of them. Which hits there are
-  is part of the search; the order they are read in, and the reader's
-  language, are not."
+  hits: its corpora, its query as any mode reads it, the nearby word
+  with it, the metadata filter, the subset of its hits and the sample of
+  them. Which hits there are is part of the search; the order they are
+  read in, and the reader's language, are not."
   [params]
   ;; the sample too, though a frequency table draws none: returning to
   ;; the concordance returns to the sample it was left in
   (into (select-keys params [:corpus :subset :subset-at :subset-attr
-                             :near :distance :sample])
+                             :sample])
         (filter (comp (some-fn mode/query-key? metadata-key?) key))
         params))
 
@@ -403,6 +403,13 @@
                        :subset      value
                        :subset-at   anchor
                        :subset-attr (name attr))))
+
+(defn all-hits-href
+  "The URL of the search `params` describe less the subset of its hits
+  and the page within them: every hit a frequency row's count was part
+  of."
+  [params]
+  (results-href (dissoc params :subset :subset-at :subset-attr :page)))
 
 (defn view-hrefs
   "Each result view (see `result-views`) of the search described by

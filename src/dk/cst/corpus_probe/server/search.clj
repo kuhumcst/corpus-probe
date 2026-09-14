@@ -75,8 +75,7 @@
                   :ranges   (request/range-params params)
                   :within   (query/within query)
                   :subset   (request/subset-param params)
-                  :near     (request/near-param (:near params)
-                                                (:distance params))}}))
+                  :near     (request/near-param params)}}))
 
 (defn read-request!
   "What the search page `request` asks of `ctx`: the search it describes
@@ -385,23 +384,27 @@
   "The links out of the search page for `req` (see `read-request!`),
   cited as `cited` (see `citation`): to each view of the result as
   `:view-hrefs`, to its exports as `:export-hrefs` once `outcome` holds
-  a result, and, for a concordance, to the pages before and after as
-  `:prev-href` and `:next-href`."
+  a result, to all the hits as `:all-hits-href` when the result is a
+  subset of them, and, for a concordance, to the pages before and after
+  as `:prev-href` and `:next-href`."
   [{:keys [view params page attr at] :as req} cited outcome]
   (let [result  (:result outcome)
         exports (fn [view params]
                   (when result
-                    (url/export-hrefs view url/export-formats params)))]
+                    (url/export-hrefs view url/export-formats params)))
+        shared  {:view-hrefs    (url/view-hrefs cited)
+                 :all-hits-href (when (:subset result)
+                                  (url/all-hits-href cited))}]
     (if (= :frequencies view)
-      {:view-hrefs   (url/view-hrefs cited)
-       :export-hrefs (exports :frequencies
-                              (assoc (url/search-params cited)
-                                     :attr attr
-                                     :at   at
-                                     :by   (:by params)
-                                     :docs (:docs params)))}
-      (merge {:view-hrefs   (url/view-hrefs cited)
-              :export-hrefs (exports :kwic
+      (assoc shared
+             :export-hrefs (exports :frequencies
+                                    (assoc (url/search-params cited)
+                                           :attr attr
+                                           :at   at
+                                           :by   (:by params)
+                                           :docs (:docs params))))
+      (merge shared
+             {:export-hrefs (exports :kwic
                                      (assoc (url/search-params cited)
                                             :sort    (:sort params)
                                             :context (:context params)))}

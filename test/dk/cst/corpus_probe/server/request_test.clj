@@ -34,16 +34,25 @@
     (is (= 5 (request/context-param "chapter")))))
 
 (deftest near-param-test
-  (testing "a word and how far away it may be"
-    (is (= {:word "kat" :distance 3} (request/near-param " kat " "3"))))
-  (testing "a distance that is not a positive integer is the default"
-    (let [default (parse-long (:distance url/defaults))]
-      (is (= {:word "kat" :distance default} (request/near-param "kat" nil)))
-      (is (= {:word "kat" :distance default} (request/near-param "kat" "0")))
-      (is (= {:word "kat" :distance default} (request/near-param "kat" "x")))))
-  (testing "no word, nothing to be near"
-    (is (nil? (request/near-param "" "5")))
-    (is (nil? (request/near-param nil nil)))))
+  (let [kat {:attr :word :op "is" :value "kat" :ci? false}]
+    (testing "a word and how far away it may be"
+      (is (= {:condition kat :distance 3}
+             (request/near-param {:near " kat " :distance "3"}))))
+    (testing "read as the simple search reads its words"
+      (is (= {:attr :lemma :op "prefix" :value "kat" :ci? true}
+             (:condition (request/near-param {:near  "kat" :in "lemma"
+                                              :match "prefix" :ci "on"})))))
+    (testing "a distance that is not a positive integer is the default"
+      (let [default (parse-long (:distance url/defaults))]
+        (is (= {:condition kat :distance default}
+               (request/near-param {:near "kat"})))
+        (is (= {:condition kat :distance default}
+               (request/near-param {:near "kat" :distance "0"})))
+        (is (= {:condition kat :distance default}
+               (request/near-param {:near "kat" :distance "x"})))))
+    (testing "no word, nothing to be near"
+      (is (nil? (request/near-param {:near "" :distance "5"})))
+      (is (nil? (request/near-param {}))))))
 
 (deftest view-param-test
   (is (= :kwic (request/view-param nil)))

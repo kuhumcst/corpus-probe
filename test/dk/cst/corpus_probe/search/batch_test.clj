@@ -135,7 +135,9 @@
                                           :subset  {:anchor "match"
                                                     :attr   :lemma
                                                     :value  "hund"}
-                                          :near    {:word "kat" :distance 5}
+                                          :near    {:condition {:attr  :word
+                                                                :value "kat"}
+                                                    :distance  5}
                                           :sample  100}))))))
 
 (deftest kwic-batch-near-test
@@ -144,9 +146,11 @@
     (is (= [:setup :corpus :query :near :sample :size :sort :cat :dump]
            (mapv first (batch/kwic-batch "PROBE" "\"hund\""
                                          {:p-attrs [:word]
-                                          :near    {:word "kat" :distance 5}
+                                          :near    {:condition {:attr  :word
+                                                                :value "kat"}
+                                                    :distance  5}
                                           :sample  100})))))
-  (let [near {:word "kat" :distance 5}
+  (let [near {:condition {:attr :word :value "kat"} :distance 5}
         b    (batch-commands (batch/kwic-batch "PROBE" "\"hund\""
                                                {:p-attrs [:word] :near near}))]
     (is (= [(command/near-command near)] (:near b)))))
@@ -159,7 +163,9 @@
                                          {:subset {:anchor "match"
                                                    :attr   :lemma
                                                    :value  "hund"}
-                                          :near   {:word "kat" :distance 5}
+                                          :near   {:condition {:attr  :word
+                                                               :value "kat"}
+                                                   :distance  5}
                                           :sample 10})))))
   (testing "which is what every batch over a result opens with"
     (is (= [:corpus :query :size]
@@ -173,7 +179,10 @@
   (let [counting [(command/count-command "match" :lemma)
                   (command/count-command "match" :lemma {:within :text})]
         b        (batch/count-batch "PROBE" "\"hund\""
-                                    {:sample 10 :near {:word "kat" :distance 5}}
+                                    {:sample 10
+                                     :near   {:condition {:attr  :word
+                                                          :value "kat"}
+                                              :distance  5}}
                                     counting)
         sections (batch-commands b)]
     (testing "the query and its narrowings, then a count section a command"

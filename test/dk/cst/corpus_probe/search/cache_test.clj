@@ -88,9 +88,14 @@
                   (k "[]" {:subset {:anchor "match" :attr :lemma
                                     :value  "hund"}}))))
       (testing "and a nearby word, which decides which matches are kept"
-        (is (not= (k "[]" {}) (k "[]" {:near {:word "kat" :distance 5}})))
-        (is (not= (k "[]" {:near {:word "kat" :distance 5}})
-                  (k "[]" {:near {:word "kat" :distance 2}})))))
+        (let [kat {:attr :word :value "kat"}]
+          (is (not= (k "[]" {})
+                    (k "[]" {:near {:condition kat :distance 5}})))
+          (is (not= (k "[]" {:near {:condition kat :distance 5}})
+                    (k "[]" {:near {:condition kat :distance 2}})))
+          (is (not= (k "[]" {:near {:condition kat :distance 5}})
+                    (k "[]" {:near {:condition (assoc kat :attr :lemma)
+                                    :distance  5}}))))))
     (testing "how they are ordered or displayed does not, since the count
               is the same either way"
       (is (= (k "[]" {}) (k "[]" {:sort "word"})))

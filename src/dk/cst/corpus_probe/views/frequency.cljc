@@ -7,6 +7,7 @@
             [dk.cst.corpus-probe.stats :as stats]
             [dk.cst.corpus-probe.url :as url]
             [dk.cst.corpus-probe.views.result :as result]
+            [dk.cst.corpus-probe.views.search.tokens :as tokens-views]
             [dk.cst.corpus-probe.views.widgets :as widgets]))
 
 (def row-limit
@@ -16,16 +17,17 @@
   500)
 
 (defn attr-option
-  "One attribute description `m` as an option, selected when its name is
-  `selected` (a string)."
-  [selected {attr :name :as m}]
-  (widgets/option selected (name attr) (name attr)))
+  "One attribute description `m` as an option in `ui`, labelled as the
+  search form labels it, selected when its name is `selected` (a
+  string)."
+  [ui selected {attr :name :as m}]
+  (widgets/option selected (name attr)
+                  (tokens-views/attribute-label ui (name attr))))
 
 (defn attr-control
   "The grouping control in `ui`: a select over the attribute
   descriptions `attrs` with `selected` (a string) chosen, the positional
-  and the structural attributes in their own option groups, under CWB's
-  names for them.
+  and the structural attributes in their own option groups.
 
   It names the form it submits with, so it can sit beside the table it
   regroups rather than inside the query form."
@@ -35,10 +37,10 @@
                     (list
                      (when (seq p)
                        [:optgroup {:label (i18n/tr ui "positional attributes")}
-                        (map (partial attr-option selected) p)])
+                        (map (partial attr-option ui selected) p)])
                      (when (seq s)
                        [:optgroup {:label (i18n/tr ui "structural attributes")}
-                        (map (partial attr-option selected) s)])))))
+                        (map (partial attr-option ui selected) s)])))))
 
 (defn position-control
   "The control choosing where in the match the table counts, in `ui`: a
@@ -62,16 +64,24 @@
   mostly for."
   [ui attrs by]
   (let [{p :positional s :structural} (group-by :type attrs)
-        selected (or (some-> by name) "")]
+        selected (or (some-> by name) "")
+        per      (fn [{attr :name}]
+                   (widgets/option selected (name attr)
+                                   (i18n/tr ui "per {attr}"
+                                            {:attr (tokens-views/attribute-label
+                                                    ui (name attr))})))]
     (widgets/select url/form-id "by" (i18n/tr ui "columns")
                     (list
-                     (widgets/option selected "" (i18n/tr ui "corpora"))
+                     (widgets/option selected "" (i18n/tr ui "per corpus"))
                      (when (seq s)
                        [:optgroup {:label (i18n/tr ui "structural attributes")}
-                        (map (partial attr-option selected) s)])
+                        (map per s)])
                      (when (seq p)
                        [:optgroup {:label (i18n/tr ui "positional attributes")}
-                        (map (partial attr-option selected) p)])))))
+                        (map per p)]))
+                    ;; the options carry the meaning, so the label is for
+                    ;; screen readers only
+                    false)))
 
 (defn shown-phrase
   "That `shown` of `n` things, called `things` (the word for that many
@@ -251,33 +261,25 @@
 
 (defn frequency-controls
   "The controls over the frequency table of `state`, for its head: what
-  it counts by and where, what it columns by, whether it counts texts,
-  and the word the hits must be near. Nil where nothing could be
-  counted."
+  it counts by and where, what it columns by and whether it counts
+  texts. Nil where nothing was counted."
   [{:keys [ui attrs positions asked params result client?]}]
   ;; what the form holds over what the table answers, as the concordance's
   ;; controls do (see
   ;; dk.cst.corpus-probe.views.concordance/concordance-controls)
-  (let [near (result/held-near params result)
-        docs (if (contains? params :docs) (:docs params) (:docs result))
+  (let [docs (if (contains? params :docs) (:docs params) (:docs result))
         by   (result/held params :by (:by result))]
-    (when (tabled? result)
-      (if (result/found? result)
-        (result/view-controls ui client?
-                              (list (attr-control ui attrs
-                                                  (result/held params :attr
-                                                               (:attr asked)))
-                                    " "
-                                    (position-control ui positions
-                                                      (result/held params :at
-                                                                   (:at result)))
-                                    " "
-                                    (by-control ui attrs by)
-                                    (when-not by
-                                      (list " " (docs-control ui (boolean docs)))))
-                              (result/near-control ui near)
-                              near)
-        (result/empty-controls ui client? near)))))
+    (when (and (tabled? result) (result/found? result))
+      (result/view-controls ui client?
+                            (list (attr-control ui attrs
+                                                (result/held params :attr
+                                                             (:attr asked)))
+                                  (position-control ui positions
+                                                    (result/held params :at
+                                                                 (:at result)))
+                                  (by-control ui attrs by)
+                                  (when-not by
+                                    (docs-control ui (boolean docs))))))))
 
 (defn frequency-section
   "The frequency view of the search in `state`: when any corpus could be

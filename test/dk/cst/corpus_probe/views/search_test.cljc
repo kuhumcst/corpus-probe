@@ -130,15 +130,57 @@
         (testing "and one the list lacks is offered rather than replaced"
           (is (= [["word" false] ["pos" false] ["lemma" false] ["msd" true]]
                  (options (assoc-in state [:params :in] "msd")))))))
-    (testing "no matching box at all for a query that writes its own, so
-              no simple option rides along with a CQP one"
+    (testing "no simple option for a query that writes its own, so none
+              rides along with a CQP one; the nearby word, which narrows
+              any query, is all the box holds then"
       ;; what the reader ticked is held in the params and comes back with
       ;; the mode that reads it, so taking the control away loses nothing
       (let [html (deep (form (-> state
                                  (assoc-in [:params :q] "[]")
                                  (assoc-in [:params :ci] "on"))))]
-        (is (not (some #{:fieldset.matching.box} html)))
-        (is (not (some #(and (map? %) (= "ci" (:name %))) html)))))
+        (is (some #{:fieldset.matching.box} html))
+        (is (not (some #(and (map? %) (= "ci" (:name %))) html)))
+        (is (some #(and (map? %) (= "near" (:name %))) html))))
+    (testing "the nearby word is the last row of the sentence, before the
+              case box: a label, the word, and how far off either side"
+      (let [row   (fn [state]
+                    (some #(when (and (vector? %)
+                                      (= :p.matching-near (first %)))
+                             %)
+                          (deep (form state))))
+            field (fn [state name]
+                    (some #(when (and (map? %) (= name (:name %))) %)
+                          (deep (row state))))
+            order (fn [x] (.indexOf (vec (deep html)) x))]
+        (is (< (order :p.matching-within) (order :p.matching-near)
+               (order :p.matching-case)))
+        (is (some #{[:label {:for "near"} "near"]} (deep (row state))))
+        (is (some #{"nær"} (deep (row (assoc state :ui da)))))
+        (is (= "" (:value (field state "near"))))
+        (is (= url/default-distance (:value (field state "distance"))))
+        (testing "the word typed goes into the state, so the distance can
+                  follow: disabled while the word is blank, which asks
+                  nothing, so that nothing is submitted with it"
+          (is (= [:set-param "near" :event.target/value]
+                 (get-in (field state "near") [:on :input])))
+          (is (true? (:disabled (field state "distance"))))
+          (let [set (assoc state :params {:q "hund" :near "kat"
+                                          :distance "3"})]
+            (is (= "kat" (:value (field set "near"))))
+            (is (= 3 (:value (field set "distance"))))
+            (is (false? (:disabled (field set "distance"))))))
+        (testing "the placeholder names the attribute the row above reads
+                  the query in, which is the word's reading too"
+          (is (= "word" (:placeholder (field state "near"))))
+          (is (= "ord" (:placeholder (field (assoc state :ui da) "near"))))
+          (is (= "lemma" (:placeholder
+                          (field (assoc-in state [:params :in] "lemma")
+                                 "near"))))
+          (testing "and the attribute select tells the state as it changes"
+            (is (some #(and (map? %) (= "in" (:name %))
+                            (= [:set-param "in" :event.target/value]
+                               (get-in % [:on :change])))
+                      (deep html)))))))
     (testing "two status regions in the form, each empty until it has
               something to say: what a change of mode could not keep, and
               what the preferences box says without showing it; the

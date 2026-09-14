@@ -27,19 +27,20 @@
 
 (def narrowings
   "The params a reader narrows an answer by, working from beside it: a
-  random sample of the hits, a word they must have nearby, and the
-  subset behind a frequency row.
+  random sample of the hits, and the subset behind a frequency row. The
+  nearby word is not among them: it is set in the search form, and so
+  belongs to the question.
 
   They name which hits a URL holds, so
   dk.cst.corpus-probe.url/search-params keeps them; they narrow an
   answer to a question the history holds already, so this drops them,
   and working a control beside a result writes no entry of its own."
-  [:sample :near :subset])
+  [:sample :subset])
 
 (def qualifiers
   "The params saying how a `narrowings` param narrows, which narrow
   nothing on their own."
-  [:distance :subset-at :subset-attr])
+  [:subset-at :subset-attr])
 
 (defn asked
   "The params of search `params` that name the question it asked: what

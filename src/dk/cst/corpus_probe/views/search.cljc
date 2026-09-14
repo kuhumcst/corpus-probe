@@ -63,7 +63,10 @@
   matches, in `ui`: a select over `attrs` with `selected` chosen, named
   for a screen reader only, since it stands in a sentence."
   [ui attrs selected]
-  [:select {:name "in" :aria-label (i18n/tr ui "attribute")}
+  ;; stored as chosen, since the near field's placeholder shows it
+  [:select {:name       "in"
+            :aria-label (i18n/tr ui "attribute")
+            :on         {:change [:set-param "in" :event.target/value]}}
    (tokens-views/attribute-options ui attrs selected)])
 
 (defn unit-label
@@ -107,6 +110,21 @@
    (for [value tokens/match-ops]
      (widgets/option (or match "") value (match-option-label ui value)))])
 
+(defn near-distance
+  "The distance `params` give the nearby word, in words, or the default
+  when they give none."
+  [params]
+  (or (some-> (:distance params) parse-long) url/default-distance))
+
+(defn near-phrase
+  "The nearby word of `params` and its distance as a phrase in `ui`: 5
+  words from kat; nil without a word."
+  [ui {:keys [near] :as params}]
+  (when-not (str/blank? near)
+    (let [distance (near-distance params)]
+      (str distance " " (i18n/trn ui "word from" "words from" distance)
+           " " near))))
+
 (defn help
   "The search help, the hiccup `blocks` of its document, as a region
   named in `ui`; nil without a help document."
@@ -129,12 +147,13 @@
 
 (defn recent-facts
   "What the remembered search `entry`, whose question is `asked`, says of
-  itself under its query in `ui`: the corpora it was asked of, the
-  metadata filter it was narrowed by and the hits it found, where each
-  is known."
+  itself under its query in `ui`: the corpora it was asked of, the word
+  its hits had to be near, the metadata filter it was narrowed by and
+  the hits it found, where each is known."
   [ui asked {:keys [hits] narrowing :filter}]
   (->> [(when-let [corpora (seq (url/corpora-param (:corpus asked)))]
           (result/corpora-phrase ui corpora))
+        (near-phrase ui asked)
         (not-empty narrowing)
         (when hits (result/hits-phrase ui hits))]
        (remove nil?)
@@ -320,30 +339,54 @@
    (widgets/status
     (switch-notice ui (mode/mode params) (:loss switch) (:unread switch)))])
 
+(defn near-control
+  "The nearby-word control in `ui`, holding what `params` say: the word
+  and its distance. The distance is disabled while the word is blank,
+  since a blank word asks for nothing."
+  [ui {:keys [near in] :as params}]
+  [:p.matching-near
+   [:label {:for "near"} (i18n/tr ui "near")]
+   ;; one grid item: the word field takes the width the distance leaves
+   [:span.matching-fields
+    [:input {:type         "search" :name "near" :id "near"
+             :value        (or near "")
+             :placeholder  (tokens-views/attribute-label
+                            ui (if (str/blank? in) "word" in))
+             :autocomplete "off"
+             ;; stored as typed, so the distance field can enable itself
+             :on           {:input [:set-param "near" :event.target/value]}}]
+    ;; the sign is decoration; the field's name says either side
+    [:span.matching-distance [:span {:aria-hidden "true"} "±"]
+     [:input {:type       "number" :name "distance" :min 1
+              :value      (near-distance params)
+              :disabled   (str/blank? near)
+              :aria-label (i18n/tr ui "words either side")}]]]])
+
 (defn matching-fieldset
   "The matching box of the search form in `ui`, read as a sentence: find
   how much of which positional attribute among `attrs`, within which
-  unit of text, and the case under it, prefilled from `params`; only
-  the parts the mode reads, and no box for a mode reading none."
+  unit of text, near which word, and the case under it, prefilled from
+  `params`; only the parts the mode reads."
   [ui attrs {:keys [in ci match within] :as params}]
   (let [live? (partial mode/reads? (mode/mode params))]
     ;; a control the mode does not read is left out rather than disabled:
     ;; it is then not submitted either, and the params keep what was
     ;; chosen for the mode that reads it
-    (when (some live? [:in :match :within :ci])
-      [:fieldset.matching.box
-       [:legend (i18n/trx ui "legend" "Scope")]
-       (when (or (live? :match) (live? :in))
-         [:p.matching-find [:span (i18n/tr ui "find")]
-          (when (live? :match) (match-control ui match))
-          (when (live? :in) (attribute-control ui attrs in))])
-       (when (live? :within)
-         [:p.matching-within (within-control ui within)])
-       (when (live? :ci)
-         [:p.matching-case
-          [:label [:input {:type    "checkbox" :name "ci" :value "on"
-                           :checked (some? ci)}]
-           (i18n/tr ui "ignore case")]])])))
+    [:fieldset.matching.box
+     [:legend (i18n/trx ui "legend" "Scope")]
+     (when (or (live? :match) (live? :in))
+       [:p.matching-find [:span (i18n/tr ui "find")]
+        (when (live? :match) (match-control ui match))
+        (when (live? :in) (attribute-control ui attrs in))])
+     (when (live? :within)
+       [:p.matching-within (within-control ui within)])
+     (when (live? :near)
+       (near-control ui params))
+     (when (live? :ci)
+       [:p.matching-case
+        [:label [:input {:type    "checkbox" :name "ci" :value "on"
+                         :checked (some? ci)}]
+         (i18n/tr ui "ignore case")]])]))
 
 (defn settings-now
   "The settings the form of `state` shows, as they would be stored,

@@ -41,13 +41,19 @@
 (deftest near-command-test
   (is (= (str "set Last keyword nearest [word = \"kat\" %c] within 5 words"
               " from match; delete Last without keyword;")
-         (command/near-command {:word "kat" :distance 5})))
-  (testing "the word is escaped like every spliced value"
-    (is (str/includes? (command/near-command {:word "a.b\n" :distance 2})
-                       "[word = \"a\\.b\\n\" %c]")))
+         (command/near-command {:condition {:value "kat" :ci? true}
+                                :distance  5})))
+  (testing "the condition is compiled as a query's is: the attribute, the
+            affix and the case flag, the value escaped like every
+            spliced value"
+    (is (str/includes? (command/near-command {:condition {:attr  :lemma
+                                                           :op    "prefix"
+                                                           :value "a.b\n"}
+                                              :distance  2})
+                       "[lemma = \"a\\.b\\n.*\"]")))
   (testing "no word, no command"
     (is (nil? (command/near-command nil)))
-    (is (nil? (command/near-command {:word " " :distance 5})))))
+    (is (nil? (command/near-command {:condition {:value " "} :distance 5})))))
 
 (deftest filter-query-test
   (testing "one attribute anchors and expands to its own region"
@@ -207,14 +213,15 @@
 
 (deftest narrowing-test
   (let [subset {:anchor "match" :attr :lemma :value "hund"}
-        near   {:word "kat" :distance 5}]
+        near   {:condition {:value "kat"} :distance 5}]
     (testing "the subset comes first, so the word is looked for beside the
               hits that are kept"
       (is (= [:subset :near]
              (mapv first (command/narrowing {:subset subset :near near})))))
     (testing "nothing asked for, nothing to run"
       (is (= [] (command/narrowing {})))
-      (is (= [] (command/narrowing {:near {:word " " :distance 5}}))))))
+      (is (= [] (command/narrowing {:near {:condition {:value " "}
+                                           :distance  5}}))))))
 
 (deftest sort-attr-test
   (is (= :lemma (command/sort-attr "lemma")))

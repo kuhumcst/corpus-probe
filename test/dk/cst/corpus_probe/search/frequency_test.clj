@@ -209,7 +209,8 @@
   (when-cwb
    (let [nouns  "[pos = \"N.*\"]"
          phrase "[pos = \"D\"] [pos = \"A.*\"]? [pos = \"N.*\"]"
-         near   {:word "katten" :distance 5}]
+         near   {:condition {:attr :word :value "katten" :ci? true}
+                 :distance  5}]
      (testing "a breakdown kept within a sentence is of the matches the
                concordance keeps"
        ;; a full stop ends one sentence and Hunde opens the next

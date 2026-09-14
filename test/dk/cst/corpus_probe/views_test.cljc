@@ -396,6 +396,15 @@
              (title 6)))
       (testing "and a search that found nothing drew nothing, so it does not"
         (is (= "hund · 0 hits · PROBE · corpus-probe" (title 0))))))
+  (testing "a slice of the hits, the subset a frequency row counted, is
+            named as the page names it"
+    (is (= (str "hund · 2 hits · Showing only the hits where the lemma is"
+                " \"hund\" first in the match · PROBE · corpus-probe")
+           (views/search-title en {:q "hund" :corpus ["PROBE"]}
+                               {:size   2 :page 0
+                                :counts [{:corpus "PROBE" :size 2}]
+                                :subset {:anchor "match" :attr :lemma
+                                         :value  "hund"}}))))
   (testing "a list is titled by its length, a title being one line"
     (is (= "2 words · corpus-probe" (views/search-title en {:q "hund\nkat\n"}))))
   (testing "an extended search names the CQP its rows compiled to"

@@ -115,7 +115,7 @@
     (is (= (:context url/defaults) (str (:context batch/kwic-defaults))))
     (is (= (:sort url/defaults) (ffirst command/sort-modes)))
     (is (= (:distance url/defaults)
-           (str (:distance (request/near-param "kat" nil)))))
+           (str (:distance (request/near-param {:near "kat"})))))
     (is (= (:view url/defaults) (second (first url/result-views))))
     (is (= (request/view-param nil)
            (request/view-param (:view url/defaults))))
@@ -284,6 +284,15 @@
     (testing "the grouping and the order are the table's, not the hits'"
       (is (not (str/includes? href "attr=lemma&")))
       (is (not (str/includes? href "sort="))))))
+
+(deftest all-hits-href-test
+  (testing "the way out of a subset: the same search read the same way,
+            less the subset and the page within it"
+    (is (= "/search?q=hund&corpus=PROBE&sort=word#results"
+           (url/all-hits-href {:q         "hund" :corpus ["PROBE"]
+                               :subset    "kat" :subset-at "match[-1]"
+                               :subset-attr "lemma" :sort "word"
+                               :page      "3"})))))
 
 (deftest export-hrefs-test
   (testing "the view of the search as a file, one URL per format"

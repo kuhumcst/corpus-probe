@@ -6,6 +6,7 @@
   anything that fails falls back to a real navigation."
   (:require [clojure.string :as str]
             [dk.cst.corpus-probe.query :as query]
+            [dk.cst.corpus-probe.storage.recent :as recent]
             [dk.cst.corpus-probe.url :as url]))
 
 (defonce ^{:doc "The path and query of the page on screen, so that a
@@ -137,20 +138,27 @@
         (map #(.-value %))
         (.querySelectorAll form "input[name=corpus]:not(:disabled)")))
 
-(defn submit-query-string
-  "The query string of a submit of `form`, as the URL cites it (see
+(defn submit-params
+  "The params a submit of `form` asks with, as the URL cites them (see
   dk.cst.corpus-probe.url/canonical): what the browser would submit, less
-  what says nothing."
+  what says nothing, and less the subset when the query differs from the
+  one on screen. The form carries the subset so that a change of sort
+  keeps it (see dk.cst.corpus-probe.views.result/subset-inputs), but it
+  belongs to the old result, not to a new query."
   [form]
-  (url/query-string (url/canonical (form-params form)
-                                   (selectable-corpora form))))
+  (let [selectable (selectable-corpora form)
+        params     (url/canonical (form-params form) selectable)
+        shown      (url/canonical (location-params) selectable)]
+    (cond-> params
+      (not= (recent/asked params) (recent/asked shown))
+      (dissoc :subset :subset-at :subset-attr))))
 
 (defn submit-href
   "The address a GET submit of `form` asks for: its action with the query
-  string of its fields (see `submit-query-string`)."
+  string of its `submit-params`."
   [form]
   (let [url (js/URL. (.-action form))]
-    (set! (.-search url) (submit-query-string form))
+    (set! (.-search url) (url/query-string (submit-params form)))
     (.-href url)))
 
 (defn routed-submit?

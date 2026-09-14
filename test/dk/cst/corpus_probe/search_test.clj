@@ -127,7 +127,8 @@
   (when-cwb
    ;; two noun phrases, only one of them within five words of Katten
    (let [q    "[pos = \"D\"] [pos = \"A.*\"]? [pos = \"N.*\"]"
-         near {:word "katten" :distance 5}
+         near {:condition {:attr :word :value "katten" :ci? true}
+               :distance  5}
          page (search/kwic! ctx "PROBE" q {:near near})]
      (testing "only the hits with the word nearby remain, the word marked
                as their keyword, in the count as in the concordance"
@@ -144,7 +145,8 @@
    (let [q      "[pos = \"N.*\"]"
          none   "[word = \"nonesuch\"]"
          filter {:text_year #{"1591"}}
-         near   {:word "katten" :distance 5}
+         near   {:condition {:attr :word :value "katten" :ci? true}
+                 :distance  5}
          subset {:anchor "match" :attr :lemma :value "hund"}]
      (testing "a narrowing of nothing is nothing, not CQP's refusal to
                narrow an empty result"
@@ -369,7 +371,7 @@
                      (fn [& _] (throw (ex-info "counted again" {})))]
          (is (= 5 (search/size! ctx "PROBE" q)))))
      (testing "a narrowing of nothing is remembered like any other count"
-       (let [opts {:near {:word "x" :distance 5}}]
+       (let [opts {:near {:condition {:attr :word :value "x"} :distance 5}}]
          (is (= 0 (search/size! ctx "PROBE" "\"nonesuch\"" opts)))
          (is (= 0 (search/known-size ctx "PROBE" "\"nonesuch\"" opts))))))))
 

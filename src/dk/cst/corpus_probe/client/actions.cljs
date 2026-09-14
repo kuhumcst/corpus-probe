@@ -512,7 +512,8 @@
   "What the state holds of an answer: the answer itself or the error that
   stands where it would, the links that cite it, and the token of it the
   panel describes."
-  [:result :error :selected :view-hrefs :export-hrefs :prev-href :next-href])
+  [:result :error :selected :view-hrefs :export-hrefs :all-hits-href
+   :prev-href :next-href])
 
 (defn set-query
   "The state with `text` in the query field, and the answer taken out of
@@ -704,6 +705,8 @@
       :submit-on-enter      (submit-on-enter state x y z)
       :set-condition        {:state (set-condition state x y)}
       :set-token            {:state (set-token state x y)}
+      ;; stores what a control holds, without submitting the form
+      :set-param            {:state (assoc-in state [:params (keyword x)] y)}
       ;; the control's own value first: the form is submitted once it has
       ;; held still, and a render landing in between draws every control
       ;; from the state, so a choice the state does not hold is drawn away

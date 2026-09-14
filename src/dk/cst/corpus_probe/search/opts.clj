@@ -46,6 +46,20 @@
                       {:corpus corpus :attr attr :reason :no-attr})))
     subset))
 
+(defn corpus-near!
+  "The narrowing `near` as `corpus` via `ctx` may run it: the attribute
+  its condition matches checked against the corpus's positional
+  attributes, since the name is spliced into a command outside the
+  QueryLock; nil for none."
+  [ctx corpus near]
+  (when near
+    (let [attr (:attr (:condition near))]
+      (when-not (corpus/positional?
+                 (corpus/attribute (corpus/attributes! ctx corpus) attr))
+        (throw (ex-info "Not a positional attribute of this corpus"
+                        {:corpus corpus :attr attr :reason :no-attr}))))
+    near))
+
 (defn corpus-sort!
   "The sort mode `mode` as `corpus` via `ctx` may run it: the positional
   attribute it names, if any, checked against the corpus's inventory,
@@ -158,6 +172,7 @@
                         :filter       (corpus-filter! ctx corpus opts)
                         :subset       (corpus-subset! ctx corpus
                                                       (:subset opts))
+                        :near         (corpus-near! ctx corpus (:near opts))
                         :sort         (corpus-sort! ctx corpus
                                                     (:sort opts))))))
 
@@ -171,5 +186,5 @@
      (corpus-query! ctx corpus query within)
      {:filter (corpus-filter! ctx corpus opts)
       :subset (corpus-subset! ctx corpus subset)
-      :near   near
+      :near   (corpus-near! ctx corpus near)
       :sample sample}]))

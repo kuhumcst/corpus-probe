@@ -122,25 +122,52 @@
   [ui position]
   (case position
     "match[-1]"       (i18n/tr ui "before the match")
-    "match"           (i18n/tr ui "at the start of the match")
-    "match..matchend" (i18n/tr ui "over the whole match")
-    "matchend"        (i18n/tr ui "at the end of the match")
+    "match"           (i18n/tr ui "first in the match")
+    "match..matchend" (i18n/tr ui "the whole match")
+    "matchend"        (i18n/tr ui "last in the match")
     "matchend[1]"     (i18n/tr ui "after the match")
     position))
 
-;; TODO: give the subset a control of its own
 (defn subset-inputs
-  "The `subset` narrowing as hidden inputs, so the form carries it; nil
-  without one.
-
-  It reaches a result by link alone (see
-  dk.cst.corpus-probe.url/subset-href) and has no control of its own, so
-  without these a change of sort or context drops it without a word."
+  "The `subset` narrowing as hidden inputs, so that the form keeps it
+  through a change of sort or context; nil without one. It has no control
+  of its own: it is reached by a link from a frequency row, the page
+  describes it (see `subset-note`), and a new query drops it (see
+  dk.cst.corpus-probe.client.router/submit-params)."
   [{:keys [anchor attr value] :as subset}]
   (when subset
     (list [:input {:type "hidden" :name "subset" :value value}]
           [:input {:type "hidden" :name "subset-at" :value anchor}]
           [:input {:type "hidden" :name "subset-attr" :value (name attr)}])))
+
+(defn attribute-definite
+  "The positional attribute `attr` with its article, in `ui`: the word,
+  the lemma; any other under the name its corpus gives it."
+  [ui attr]
+  (case attr
+    :word  (i18n/tr ui "the word")
+    :lemma (i18n/tr ui "the lemma")
+    :pos   (i18n/tr ui "the POS")
+    :msd   (i18n/tr ui "the morphology")
+    (name attr)))
+
+(defn subset-phrase
+  "The `subset` of a result in words, in `ui`: Showing only the hits
+  where the lemma is \"hund\" first in the match; nil without one."
+  [ui {:keys [anchor attr value] :as subset}]
+  (when subset
+    (i18n/tr ui "Showing only the hits where {attr} is \"{value}\" {position}"
+             {:attr     (attribute-definite ui attr)
+              :value    value
+              :position (position-label ui anchor)})))
+
+(defn subset-note
+  "The line above a result's hits saying that they are its `subset` (see
+  `subset-phrase`), followed by a link to all the hits at `href` in
+  parentheses; nil without a subset."
+  [ui href subset]
+  (when-let [phrase (subset-phrase ui subset)]
+    [:p.subset phrase " (" [:a {:href href} (i18n/tr ui "show all")] ")"]))
 
 (defn filter-phrase
   "How a search was narrowed by metadata, in words: each attribute of
@@ -200,24 +227,12 @@
 
 (defn view-controls
   "The controls of a result in `ui`: the `reading` ones (hiccup), which
-  decide how the hits are read, and behind a disclosure the `narrowing`
-  ones (hiccup; nil for none), which keep only some of them, `open?`
-  saying whether that disclosure starts open, as it must while a
-  narrowing is in force; each row with the `apply-button` where no
-  `client?` runs. Nil without either."
-  [ui client? reading narrowing open?]
-  (when (or reading narrowing)
+  decide how the hits are read, with the `apply-button` where no
+  `client?` runs. Nil without any."
+  [ui client? reading]
+  (when reading
     [:div.view-controls
-     (when reading
-       [:p reading (apply-button ui client?)])
-     (when narrowing
-       [:details {:open (boolean open?)}
-        [:summary (i18n/tr ui "Narrow the result")]
-        [:p narrowing (apply-button ui client?)]])]))
-
-(def near-distances
-  "The distances the near control offers, in display order."
-  [1 2 3 5 10])
+     [:p reading (apply-button ui client?)]]))
 
 (defn held
   "What a view control shows: what `params` hold under `k`, since the
@@ -226,7 +241,7 @@
 
   A form holds every value as a string and a result holds what it means,
   so each control makes what it is handed into its own (see
-  `near-control`, and `sample-control` and `context-control` in
+  `sample-control` and `context-control` in
   dk.cst.corpus-probe.views.concordance)."
   [params k fallback]
   (let [v (get params k)]
@@ -234,51 +249,6 @@
       (nil? v) fallback
       (= "" v) nil
       :else    v)))
-
-(defn held-near
-  "The proximity a result's controls show: the word and the distance the
-  form holds where the reader has changed them, else the `:near` of
-  `result`. One thing with two spellings, two fields in a form and a pair
-  in a result."
-  [params result]
-  (when-let [word (held params :near (:word (:near result)))]
-    {:word     word
-     :distance (held params :distance (:distance (:near result)))}))
-
-(defn near-control
-  "The proximity control of a result in `ui`: the word every hit must
-  have nearby and how many words away it may be, from the :word and
-  :distance of `near`, over the `near-distances`."
-  [ui {:keys [word distance]}]
-  (let [distance (or (cond-> distance (string? distance) parse-long)
-                     url/default-distance)
-        words    (fn [n] (str n " " (i18n/trn ui "word" "words" n)))]
-    (list
-     [:label {:for "near"} (i18n/tr ui "Near")]
-     " "
-     ;; applies on change, not on Enter alone: implicit submission does
-     ;; not reach a form from a field that only names it
-     [:input {:id           "near"
-              :name         "near"
-              :type         "search"
-              :form         url/form-id
-              :value        (or word "")
-              :autocomplete "off"
-              :on           {:change [:apply-view "near" :event.target/value]}}]
-     " "
-     (widgets/select url/form-id "distance" (i18n/tr ui "within")
-                     (for [n (sort (conj (set near-distances) distance))]
-                       (widgets/option distance n (words n)))))))
-
-(defn empty-controls
-  "The controls over a result that found nothing, in `ui`: the `near`
-  word alone, where there is one, with the `apply-button` where no
-  `client?` runs."
-  [ui client? near]
-  ;; nothing to read is nothing to decide, except that this word may be
-  ;; why there is nothing, so it stays where the reader can remove it
-  (when near
-    (view-controls ui client? nil (near-control ui near) true)))
 
 (defn page-control
   "Which page of `result` is shown, in `ui`, and the way to any other: a
@@ -498,9 +468,9 @@
             n {:n n}))
 
 (defn reach
-  "How far a `result` reaches, in `ui`: the corpora its hits are in, and
-  behind a disclosure the ones its search left out. Nil where there is
-  neither."
+  "The disclosure behind the sign beside the count, in `ui`: the corpora
+  the `result`'s hits are in, and the ones the search left out, which
+  give it the class `left-out`. Nil where there is neither."
   [ui {:keys [counts] :as result}]
   ;; a corpus left out is not a failed search but a shorter one, so it is
   ;; folded away under a mark rather than headed as an error. Where none
@@ -511,19 +481,16 @@
           left-out (filter :error counts)
           phrase   (when (seq left-out)
                      (left-out-phrase ui (count left-out)))]
-      (cond
-        phrase
-        [:details.caveats
-         ;; the mark saying there is something here is the stylesheet's,
-         ;; and reaches nobody listening: the summary is labelled in
-         ;; words, as the chooser's summaries are
-         [:summary {:aria-label (if found (str found ", " phrase) phrase)}
-          (or found phrase)]
-         [:ul (for [[error corpora] (error-groups counts)]
-                (caveat ui error corpora))]]
-
-        found
-        [:p found]))))
+      (when (or found phrase)
+        [:details.caveats {:class (when phrase "left-out")}
+         ;; the sign is drawn by the stylesheet, so screen readers get
+         ;; the words, hidden from view; the title shows them on hover
+         (let [words (str/join ", " (remove nil? [found phrase]))]
+           [:summary {:title words} [:span.spoken words]])
+         (when found [:p found])
+         (when phrase
+           [:ul (for [[error corpora] (error-groups counts)]
+                  (caveat ui error corpora))])]))))
 
 (defn result-heading
   "The heading naming the results region in `ui`: what the `result`
@@ -543,7 +510,8 @@
   errors; then `body`, the view's own content. The switch between the
   views stands on the query line instead (see
   dk.cst.corpus-probe.views/search-page)."
-  [{:keys [ui result error pending?] :as state} heading controls body]
+  [{:keys [ui result error pending? all-hits-href] :as state}
+   heading controls body]
   ;; named by the heading alone: a screen reader landing here hears the
   ;; count, not the whole question, which the controls below restate
   [:section.result (cond-> {:id              url/results-id
@@ -570,6 +538,9 @@
     (when (counting? result)
       [:p (str (i18n/tr ui "Counting hits in") " "
                (corpora-phrase ui (:remaining result)) " …")]))
+   ;; after the live region, which must keep its place; the note appears
+   ;; and disappears
+   (subset-note ui all-hits-href (:subset result))
    ;; an error that left nothing to show is the answer, and the heading
    ;; already names it: what follows is the rest of that sentence, not a
    ;; section with a heading of its own. Where hits were found the same

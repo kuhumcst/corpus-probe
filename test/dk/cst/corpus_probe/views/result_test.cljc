@@ -69,7 +69,8 @@
 
 (deftest position-label-test
   (is (= "before the match" (result/position-label en "match[-1]")))
-  (is (= "over hele matchet" (result/position-label da "match..matchend")))
+  (is (= "hele matchet" (result/position-label da "match..matchend")))
+  (is (= "først i matchet" (result/position-label da "match")))
   (testing "a position nothing names is shown as CQP names it"
     (is (= "target" (result/position-label en "target")))))
 
@@ -80,6 +81,33 @@
          (result/subset-inputs {:anchor "match[-1]" :attr :lemma
                                 :value  "kat"})))
   (is (nil? (result/subset-inputs nil))))
+
+(deftest subset-note-test
+  (let [subset {:anchor "match" :attr :lemma :value "hund"}
+        href   "/search?q=%5Bpos+%3D+%22N.*%22%5D&sort=word#results"]
+    (testing "a slice of an answer is said as a sentence, in the words the
+              table that made it used"
+      (is (= (str "Showing only the hits where the lemma is \"hund\""
+                  " first in the match")
+             (result/subset-phrase en subset)))
+      (is (= "Viser kun de hits hvor ordet er \"kat\" før matchet"
+             (result/subset-phrase da {:anchor "match[-1]" :attr :word
+                                       :value  "kat"})))
+      (testing "an attribute the phrase has no word for is named as is"
+        (is (= "Showing only the hits where s_id is \"3\" after the match"
+               (result/subset-phrase en {:anchor "matchend[1]" :attr :s_id
+                                         :value  "3"}))))
+      (is (nil? (result/subset-phrase en nil))))
+    (testing "and over the hits, with the way out in parentheses: all the
+              hits, read as these were, from the first page"
+      (let [note (result/subset-note en href subset)]
+        (is (= :p.subset (first note)))
+        (is (some #{(str "Showing only the hits where the lemma is \"hund\""
+                         " first in the match")}
+                  (deep note)))
+        (is (some #(and (map? %) (= href (:href %))) (deep note)))
+        (is (some #{"show all"} (deep note))))
+      (is (nil? (result/subset-note en href nil))))))
 
 (deftest filter-phrase-test
   (is (= "" (result/filter-phrase {})))
@@ -118,27 +146,39 @@
     (is (nil? (result/found-in-phrase en nil)))))
 
 (deftest reach-test
-  (testing "every corpus answering, the reach is a line and no more"
-    (is (= [:p "in PROBE"]
-           (result/reach en {:counts [{:corpus "PROBE" :size 5}]}))))
-  (testing "a corpus left out folds away under a count of them"
-    (let [[tag summary [_ items]] (result/reach en example-result)]
+  (testing "every corpus answering, the reach folds away under a sign, the
+            corpora the hits are in inside, and nothing left out"
+    (let [[tag attrs summary found more]
+          (result/reach en {:counts [{:corpus "PROBE" :size 5}]})]
       (is (= :details.caveats tag))
-      (is (= "in 2 corpora" (text (drop 2 summary))))
-      (testing "labelled in words, the mark that says there is something
+      (is (nil? (:class attrs)))
+      (is (= [:summary {:title "in PROBE"} [:span.spoken "in PROBE"]] summary))
+      (is (= [:p "in PROBE"] found))
+      (is (nil? more))))
+  (testing "a corpus left out is counted in the sign's name and listed
+            under the corpora found, the sign classed for it"
+    (let [[tag attrs summary found [_ items]] (result/reach en example-result)]
+      (is (= :details.caveats tag))
+      (is (= "left-out" (:class attrs)))
+      (is (= [:p "in 2 corpora"] found))
+      (testing "labelled in words, the sign that says there is something
                 here being the stylesheet's, which reaches nobody
                 listening"
         (is (= "in 2 corpora, 2 corpora left out of the search"
-               (:aria-label (second summary)))))
+               (:title (second summary))))
+        (is (= [:span.spoken "in 2 corpora, 2 corpora left out of the search"]
+               (nth summary 2))))
       (testing "one item for each way of failing, naming what it took and
                 carrying CQP's own words where they are the reason"
         (is (= 1 (count items)))
         (is (= "TALER, GONE: CQP errorno lemma" (text (first items)))))))
   (testing "and it is said even where no corpus found anything to place"
-    (is (= :details.caveats
-           (first (result/reach en {:counts [{:corpus "PROBE" :size 0}
-                                             {:corpus "X"
-                                              :error {:type :timeout}}]})))))
+    (let [counts [{:corpus "PROBE" :size 0}
+                  {:corpus "X" :error {:type :timeout}}]
+          [tag _ summary found] (result/reach en {:counts counts})]
+      (is (= :details.caveats tag))
+      (is (= "1 corpus left out of the search" (:title (second summary))))
+      (is (nil? found))))
   (testing "a search that found nothing anywhere and failed nowhere has
             no reach to report"
     (is (nil? (result/reach en {:counts [{:corpus "PROBE" :size 0}]}))))
@@ -209,54 +249,26 @@
 (deftest view-controls-test
   (let [sort* (fn [lang] (concordance/sort-control lang [["word" :sort-word]] "word"))]
     (testing "no controls, nothing rendered"
-      (is (nil? (result/view-controls en false nil nil false))))
+      (is (nil? (result/view-controls en false nil))))
     (testing "a control that acts on a result submits the form that made it"
-      (let [html (result/view-controls en false (sort* "en") nil false)]
+      (let [html (result/view-controls en false (sort* "en"))]
+        (is (= :div.view-controls (first html)))
         (is (some #(and (map? %) (= url/form-id (:form %))) (deep html)))))
     (testing "without a client, a button is what applies it, one a browser
               with a script never shows"
-      (is (some #{"Apply"} (deep (result/view-controls en false (sort* "en")
-                                                       nil false))))
+      (is (some #{"Apply"} (deep (result/view-controls en false (sort* "en")))))
       (is (some #(and (vector? %) (= :noscript (first %)))
-                (deep (result/view-controls en false (sort* "en") nil false))))
+                (deep (result/view-controls en false (sort* "en")))))
       (is (some #{"Anvend"} (deep (result/view-controls da false
-                                                        (sort* "da")
-                                                        nil false)))))
+                                                        (sort* "da"))))))
     (testing "with one, choosing an order is asking for it: no button"
-      (let [html (result/view-controls en true (sort* "en") nil false)]
+      (let [html (result/view-controls en true (sort* "en"))]
         (is (not (some #{"Apply"} (deep html))))
         (is (not (some #(and (vector? %) (= :button (first %))) (deep html))))))
     (testing "and the control itself is what applies it"
       (is (some #(and (map? %) (= [:apply-view "sort" :event.target/value]
                                   (get-in % [:on :change])))
-                (deep (sort* "en")))))
-    (testing "what narrows a result sits behind a disclosure, closed until
-              a narrowing is in force, open while one is"
-      (let [narrowing (concordance/sample-control en nil)
-            closed    (result/view-controls en true (sort* "en") narrowing false)
-            open      (result/view-controls en true (sort* "en") narrowing true)
-            details   (fn [html] (some #(when (and (vector? %)
-                                                   (= :details (first %)))
-                                          %)
-                                       (deep html)))]
-        (is (= :div.view-controls (first closed)))
-        (is (false? (:open (second (details closed)))))
-        (is (true? (:open (second (details open)))))
-        (is (some #{"Narrow the result"} (deep closed)))
-        (is (some #{"Afgræns resultatet"}
-                  (deep (result/view-controls da true (sort* "da")
-                                              narrowing false))))
-        (testing "each row gets its own button without a client"
-          (is (= 2 (count (filter #{"Apply"}
-                                  (deep (result/view-controls en false
-                                                              (sort* "en")
-                                                              narrowing
-                                                              false)))))))
-        (testing "and a narrowing alone, with nothing to read differently,
-                  is the disclosure alone"
-          (let [html (result/view-controls en true nil narrowing true)]
-            (is (nil? (second html)))
-            (is (details html))))))))
+                (deep (sort* "en")))))))
 
 (deftest pager-test
   (testing "no links renders nothing"
@@ -399,63 +411,7 @@
     (is (= "word" (result/held {:sort "word"} :sort "corpus")))
     (is (= "corpus" (result/held {} :sort "corpus")))
     (is (nil? (result/held {:sort ""} :sort "corpus")))
-    (is (= 5 (result/held {} :context 5))))
-  (testing "a proximity is two fields in the form and a pair in the
-            result, so it is read as one thing"
-    (is (= {:word "kat" :distance 3}
-           (result/held-near {} {:near {:word "kat" :distance 3}})))
-    (is (= {:word "hund" :distance "5"}
-           (result/held-near {:near "hund" :distance "5"}
-                             {:near {:word "kat" :distance 3}})))
-    (is (nil? (result/held-near {:near ""} {:near {:word "kat"}})))
-    (is (nil? (result/held-near {} {})))))
-
-(deftest near-control-test
-  (testing "a distance the form holds is a string, and is the number it
-            names: one sorted among the distances as a string throws"
-    (let [html (result/near-control en {:word "kat" :distance "3"})]
-      (is (some #(and (map? %) (= 3 (:value %)) (:selected %)) (deep html)))
-      (is (= [1 2 3 5 10]
-             (keep #(when (number? (:value %)) (:value %)) (deep html))))))
-  (testing "no word in force: an empty field and the default distance"
-    (let [html (result/near-control en nil)]
-      (is (some #(and (map? %) (= "near" (:name %)) (= "" (:value %))
-                      (= url/form-id (:form %)))
-                (deep html)))
-      (is (some #(and (map? %) (= url/default-distance (:value %))
-                      (:selected %))
-                (deep html)))))
-  (testing "the word and distance in force, the distance applying itself"
-    (let [html (result/near-control en {:word "kat" :distance 3})]
-      (is (some #(and (map? %) (= "near" (:name %)) (= "kat" (:value %)))
-                (deep html)))
-      (is (some #(and (map? %) (= 3 (:value %)) (:selected %)) (deep html)))
-      (is (some #(and (map? %) (= "distance" (:name %))
-                      (= [:apply-view "distance" :event.target/value]
-                         (get-in % [:on :change])))
-                (deep html))))
-    (testing "and so does the word, once the reader is done typing it"
-      (is (some #(and (map? %) (= "near" (:name %))
-                      (= [:apply-view "near" :event.target/value]
-                         (get-in % [:on :change])))
-                (deep (result/near-control en {:word "kat" :distance 3}))))))
-  (testing "a distance the list lacks is offered beside them, in order"
-    (is (= [1 2 3 4 5 10]
-           (keep #(when (number? (:value %)) (:value %))
-                 (deep (result/near-control en {:word "kat" :distance 4}))))))
-  (testing "in Danish"
-    (is (some #{"Sammen med"} (deep (result/near-control da nil))))
-    (is (some #{"1 ord"} (deep (result/near-control da nil))))))
-
-(deftest empty-controls-test
-  (testing "a result emptied by a narrowing keeps that control, open, or
-            the reader could not take the word away again"
-    (let [html (result/empty-controls en false {:word "kat"})]
-      (is (= :div.view-controls (first html)))
-      (is (some #{"Near"} (deep html)))
-      (is (some #(and (map? %) (:open %)) (deep html)))))
-  (testing "one emptied by the query itself has nothing to decide"
-    (is (nil? (result/empty-controls en false nil)))))
+    (is (= 5 (result/held {} :context 5)))))
 
 (deftest bare-word-error-test
   (testing "a bare word in a CQP query is refused as a corpus, which the
@@ -532,7 +488,8 @@
         (is (= :header.result-head tag))
         (is (= :div.answer (first answer)))
         (is (= [:h1 {:id "results-heading"} "6 hits"] h1))
-        (is (= "in 2 corpora" (text (second reach))))
+        (is (= :details.caveats (first reach)))
+        (is (= "in 2 corpora" (text (nth reach 3))))
         (is (= [:div.view-controls] controls))))
     (testing "the switch between the views is not one of its parts: it
               stands on the query line (see views-test)"

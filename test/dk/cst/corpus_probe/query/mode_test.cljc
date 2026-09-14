@@ -63,10 +63,13 @@
     (is (not (mode/reads? "simple" :t1.v)))
     (testing "the marker standing for the tokens is no key"
       (is (not (mode/reads? "extended" ::mode/tokens)))
-      (is (not (mode/query-key? ::mode/tokens)))))
+      (is (not (mode/query-key? ::mode/tokens))))
+    (testing "the nearby word narrows any query, so every mode reads it"
+      (is (every? #(and (mode/reads? % :near) (mode/reads? % :distance))
+                  mode/modes))))
   (testing "a query key is one some mode reads; the rest say where and how"
     (is (every? mode/query-key? [:q :mode :in :ci :match :within
-                                 :t1.v :t2.3.join]))
+                                 :near :distance :t1.v :t2.3.join]))
     (is (not-any? mode/query-key? [:corpus :sort :f.text_year :page :from
                                    :cqp nil])))
   (testing "what the mode does not read is unread"
@@ -85,7 +88,11 @@
     (is (= #{:t1.v :within}
            (set (mode/read-keys "extended" {:q "x" :in "lemma" :within "text"
                                             :t1.v "y" :corpus "A"}))))
-    (is (= #{:q} (set (mode/read-keys "cqp" {:q "x" :in "lemma"}))))))
+    (is (= #{:q} (set (mode/read-keys "cqp" {:q "x" :in "lemma"})))))
+  (testing "not the nearby word, which no query spells and a change of
+            query leaves as it is"
+    (is (= #{:q} (set (mode/read-keys "simple" {:q "x" :near "y"
+                                                :distance "3"}))))))
 
 (deftest unread-query?-test
   (testing "a query the mode does not read is the form submitted with its

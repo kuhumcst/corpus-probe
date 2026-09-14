@@ -73,6 +73,18 @@
                               {:registry "nonesuch"}
                               {:query-params {:q "hund"}}))))))
 
+(deftest all-hits-href-test
+  (when-cwb
+   (testing "a result kept to a frequency row's hits links to all of them,
+             read the same way; one that is not links nowhere"
+     (let [href (fn [params]
+                  (:all-hits-href (search/search-view-data
+                                   ctx {:query-params params})))]
+       (is (= "/search?q=hund&sort=word#results"
+              (href {:q "hund" :subset "hund" :subset-attr "lemma"
+                     :sort "word"})))
+       (is (nil? (href {:q "hund"})))))))
+
 (deftest valueless-param-test
   (testing "a query param written without a value does not fail the page"
     (is (= 200 (:status (search/serve-search {:registry "test/resources"}

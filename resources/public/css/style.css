@@ -529,10 +529,19 @@ pre { font-size: 0.875rem; padding: 0.75rem 1rem;
   display: grid; grid-template-columns: max-content 1fr 1fr;
   gap: var(--row-gap) 0.5rem; align-items: center;
 }
-.matching p { display: contents; }
-.matching :is(.matching-find, .matching-within) > :first-child { text-align: end; }
-.matching p > select { inline-size: 100%; min-inline-size: 0; }
+.matching > p { display: contents; }
+.matching :is(.matching-find, .matching-within, .matching-near) > :first-child { text-align: end; }
+.matching > p > select { inline-size: 100%; min-inline-size: 0; }
 .matching-within > select { grid-column: 2 / -1; }
+/* the word field takes the width the distance leaves, so the row fills
+   the box in either language; the sign is muted along with the disabled
+   field */
+.matching-fields { grid-column: 2 / -1; display: flex; align-items: center;
+                   gap: 0.5rem; }
+.matching-fields > input { flex: 1; min-inline-size: 0; }
+.matching-distance { display: flex; align-items: center; gap: 0.25rem; }
+.matching-distance > input { inline-size: 3.5em; }
+.matching-distance:has(> input:disabled) { color: var(--tx-2); }
 .matching-case > label { grid-column: 1 / -1; }
 .modes > p { display: flex; flex-wrap: wrap; gap: 0.25rem 1rem; }
 
@@ -657,22 +666,37 @@ pre { font-size: 0.875rem; padding: 0.75rem 1rem;
 .result > * { margin-block: 0; }
 .result > * + * { margin-block-start: 1rem; }
 
-/* The answer, and beside it the controls over it, with a rule down the
-   gap between them: the heading takes the words it needs and the
-   controls the rest of the line.
-
-   No line under it. The table below it is a box of its own, and an
-   answer with no table needs no line either. */
-.result-head { display: flex; gap: 1.5rem; }
-.result-head > .answer { display: flex; flex-direction: column;
-                         align-items: start; gap: 0.25rem; }
-.result-head > .view-controls { flex: 1;
-                                padding-inline-start: 1.5rem;
+/* The count, the sign and the controls share a row, with a rule before
+   the controls; the disclosure's content gets a row of its own under
+   all three. That needs a grid, with the answer and the details set to
+   display: contents so that their children are grid items, which the
+   spec allows for details. A browser that ignores it opens the content
+   beside the count instead. The controls stretch to the row's height,
+   so the rule spans it. No line under the row: the table below is a
+   box of its own. */
+.result-head { display: grid; align-items: center;
+               grid-template-columns: max-content max-content 1fr;
+               grid-template-areas: "count sign controls"
+                                    "reach reach reach";
+               column-gap: 0.75rem; }
+.result-head > .answer, .caveats { display: contents; }
+.result-head h1 { grid-area: count; white-space: nowrap; }
+/* the sign at the count's own size and leading, so the row stays the
+   count's height */
+.caveats > summary { grid-area: sign; font-size: 2em; line-height: 1.25; }
+.caveats::details-content { grid-area: reach; }
+.result-head > .view-controls { grid-area: controls; align-self: stretch;
+                                display: flex; align-items: center;
+                                margin-inline-start: 0.5rem;
+                                padding-inline-start: 1.25rem;
                                 border-inline-start: 1px solid var(--rule); }
 /* the answer's own parts too, which the nesting puts out of reach of
    the rule above */
 .result-head > *, .result-head > .answer > * { margin-block: 0; }
 .result-head :is(p, summary) { color: var(--tx-2); }
+/* the note on which hits these are, muted like the reach line and
+   centred over the table */
+.result > .subset { color: var(--tx-2); text-align: center; }
 
 /* Only a phone takes the two apart, and the rule goes with the gap it
    stood in. No width above that earns a rule of its own: the head is at
@@ -681,33 +705,60 @@ pre { font-size: 0.875rem; padding: 0.75rem 1rem;
    head where it has the most room. The controls wrap in their own
    column instead. */
 @media (max-width: 40rem) {
-  .result-head { flex-direction: column; gap: 0.75rem; }
-  .result-head > .view-controls { padding-inline-start: 0;
+  .result-head { grid-template-columns: max-content 1fr;
+                 grid-template-areas: "count sign"
+                                      "reach reach"
+                                      "controls controls"; }
+  /* space under the count, or under the open disclosure, as a margin
+     rather than a row gap, which the closed disclosure's empty row
+     would get too */
+  .result-head > .view-controls { margin: 0.75rem 0 0;
+                                  padding-inline-start: 0;
                                   border-inline-start: 0; }
 }
 
-/* The corpora a search left out. They are not a failure of it, so they
-   fold away under a mark that follows the line rather than the arrow
-   that would lead it, and says there is something to read without
-   spending a heading on it. The summary is labelled in words for
-   whoever the mark cannot reach. The character is drawn by the reader's
-   own font, which is why it is one with no emoji form: a warning sign
-   or a heavy exclamation mark comes in colour and takes none of ours. */
-.caveats > summary { cursor: pointer; padding-block: 0.25rem;
-                     list-style: none; }
+/* Which corpora the hits are in, and which the search left out, fold
+   away under a sign beside the count, instead of a disclosure arrow
+   leading a line of text. A corpus left out is not a failure but a
+   shorter search, so it colours the sign rather than heading the page
+   as an error. */
+.caveats > summary { cursor: pointer; list-style: none; }
 .caveats > summary::-webkit-details-marker { display: none; }
-.caveats > summary::after { content: "ⓘ"; margin-inline-start: 0.4em;
-                            color: var(--error); }
+/* an i in a ring, drawn rather than typed so that it can be filled in
+   when open; as tall as the count's digits */
+.caveats > summary::after { content: "i" / ""; display: inline-flex;
+                            align-items: center; justify-content: center;
+                            vertical-align: middle; box-sizing: border-box;
+                            inline-size: 1.6rem; block-size: 1.6rem;
+                            border: 1.5px solid currentColor;
+                            border-radius: 50%;
+                            font: 600 1rem/1 var(--face);
+                            color: var(--tx-2); }
+.caveats[open] > summary::after { background: var(--tx-2);
+                                  color: var(--bg); }
+/* an exclamation in the colour of an error where a corpus was left out */
+.caveats.left-out > summary::after { content: "!" / ""; color: var(--error); }
+.caveats.left-out[open] > summary::after { background: var(--error);
+                                           color: var(--bg); }
+/* a closed sign under the pointer, or focused by keyboard, is
+   highlighted like a hit in the concordance */
+.caveats:not([open]) > summary:is(:hover, :focus-visible)::after {
+  background: var(--accent-pale); }
+.caveats > p { margin-block: 0.5rem 0; }
 .caveats ul { margin-block: 0.5rem 0.25rem; }
 .caveats pre { margin-block: 0.5rem 0; }
 
 /* TODO: should this row stick while the table scrolls? Narrow, the
    inspector sheet holds the foot of the viewport, so a stuck row would
    squeeze the reading strip from both ends. */
-.view-controls { display: flex; flex-direction: column; gap: 0.5rem; }
-.view-controls p { display: flex; flex-wrap: wrap; align-items: center;
-                   gap: 0.5rem; margin-block: 0; }
-.view-controls :is(select, input) + label { margin-inline-start: 0.75rem; }
+/* each control sits inside its label, so a label and its control never
+   wrap apart; the gap between pairs and within them is the Scope box's */
+.view-controls > p { display: flex; flex-wrap: wrap; align-items: center;
+                     gap: 0.5rem; margin-block: 0; }
+.view-controls label:has(select, input[type="number"]) {
+  display: inline-flex; align-items: center; gap: 0.5rem; }
+/* a size is a few digits, and its placeholder one word */
+.view-controls input[type="number"] { inline-size: 4.5em; }
 
 /* a column each, so the position stays centred when a direction is missing */
 .pager { display: grid; grid-template-columns: 1fr auto 1fr;

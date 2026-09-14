@@ -5,7 +5,8 @@
   sample, sort, count and load a result. Generated for CWB 3.5.0, the
   version the app ships with in its own container."
   (:require [clojure.string :as str]
-            [dk.cst.corpus-probe.cqp :as cqp]))
+            [dk.cst.corpus-probe.cqp :as cqp]
+            [dk.cst.corpus-probe.query :as query]))
 
 (defn valid-corpus-name
   "Return `corpus` when it is a valid corpus name (see
@@ -180,18 +181,20 @@
 
 (defn near-command
   "The commands keeping only the matches of Last that have a token
-  matching `word` (literally, regardless of case) within `distance`
-  tokens of them on either side, marking that token as their keyword
-  anchor; nil without a word.
+  matching `condition` (see dk.cst.corpus-probe.query/condition->cqp)
+  within `distance` tokens of them on either side, marking that token
+  as their keyword anchor; nil without a value to match.
 
-  (near-command {:word \"kat\" :distance 5})
+  (near-command {:condition {:attr :word :value \"kat\" :ci? true}
+                 :distance  5})
   ;; => set Last keyword nearest [word = \"kat\" %c] within 5 words from
   ;;    match; delete Last without keyword;"
-  [{:keys [word distance]}]
-  ;; outside the QueryLock, being no query, so the word is escaped
-  (when-not (str/blank? word)
-    (str "set Last keyword nearest [word = \"" (cqp/escape-value word)
-         "\" %c] within " (long distance) " words from match;"
+  [{:keys [condition distance]}]
+  ;; runs outside the QueryLock, so the value is escaped by the compiler
+  ;; and the attribute checked by the search (see search.opts/corpus-near!)
+  (when-not (str/blank? (:value condition))
+    (str "set Last keyword nearest [" (query/condition->cqp condition)
+         "] within " (long distance) " words from match;"
          " delete Last without keyword;")))
 
 (def positions

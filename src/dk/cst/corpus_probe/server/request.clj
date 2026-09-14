@@ -8,6 +8,7 @@
             [dk.cst.corpus-probe.cwb.command :as command]
             [dk.cst.corpus-probe.cwb.corpus :as corpus]
             [dk.cst.corpus-probe.i18n :as i18n]
+            [dk.cst.corpus-probe.query :as query]
             [dk.cst.corpus-probe.search.batch :as batch]
             [dk.cst.corpus-probe.storage :as storage]
             [dk.cst.corpus-probe.storage.settings :as settings]
@@ -184,16 +185,16 @@
       (min n reach-limit))))
 
 (defn near-param
-  "The word the `near` query param value `word` asks every hit to have
-  nearby, at most `distance` (the query param value) words away: {:word
-  ... :distance ...} as dk.cst.corpus-probe.cwb.command/near-command
-  takes it, or nil for a blank word. A distance that is not a positive
-  integer is the default."
-  [word distance]
-  (when-not (str/blank? word)
-    {:word     (str/trim word)
-     :distance (let [n (some-> distance parse-long)]
-                 (if (and n (pos? n)) n url/default-distance))}))
+  "The word the `near` query param of `params` asks every hit to have
+  nearby, read as a simple search reads its words, at most `distance`
+  words away: {:condition ... :distance ...} for
+  dk.cst.corpus-probe.cwb.command/near-command, or nil for a blank word.
+  A distance that is not a positive integer is the default."
+  [{:keys [near distance] :as params}]
+  (when-not (str/blank? near)
+    {:condition (query/condition params (str/trim near))
+     :distance  (let [n (some-> distance parse-long)]
+                  (if (and n (pos? n)) n url/default-distance))}))
 
 (defn view-param
   "The result view named by the `view` query param value `v`: the

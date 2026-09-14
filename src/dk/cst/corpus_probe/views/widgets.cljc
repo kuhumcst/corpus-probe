@@ -52,9 +52,9 @@
   [:option {:value value :selected (= (str value) (str selected))} label])
 
 (defn select
-  "A select named `id` over `options` (see `option`), its `label` before
-  it unless not `visible?`, bound by `form-id` to the form it submits
-  with and applying itself as it is changed."
+  "A select named `id` over `options` (see `option`), inside its `label`
+  unless not `visible?`, bound by `form-id` to the form it submits with
+  and applying itself as it is changed."
   ([form-id id label options]
    (select form-id id label options true))
   ([form-id id label options visible?]
@@ -67,7 +67,8 @@
                                          :event.target/value]}}
                   options]]
      (if visible?
-       (list [:label {:for id} label] " " control)
+       ;; the label wraps the control, so the two never wrap apart
+       [:label label control]
        (assoc-in control [1 :aria-label] label)))))
 
 (defn status

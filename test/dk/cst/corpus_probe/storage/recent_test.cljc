@@ -7,10 +7,12 @@
             [dk.cst.corpus-probe.storage.recent :as recent]))
 
 (deftest asked-test
-  (testing "the question: the query, the corpora it was asked of and the
-            metadata filter"
+  (testing "the question: the query, the word its hits must be near, the
+            corpora it was asked of and the metadata filter"
     (is (= {:q "hund" :corpus ["PROBE"] :f.text_year "1591"}
-           (recent/asked {:q "hund" :corpus ["PROBE"] :f.text_year "1591"}))))
+           (recent/asked {:q "hund" :corpus ["PROBE"] :f.text_year "1591"})))
+    (is (= {:q "hund" :near "kat" :distance "3"}
+           (recent/asked {:q "hund" :near "kat" :distance "3"}))))
   (testing "not how the answer is read, which is the reader's own and
             belongs to their settings"
     (is (= {:q "hund"}
@@ -19,19 +21,18 @@
   (testing "nor the narrowings worked from beside an answer, which refine
             a question the history holds already"
     (is (= {:q "hund"}
-           (recent/asked {:q      "hund" :sample "50" :near "kat"
-                          :distance "3" :subset "NOUN"
+           (recent/asked {:q      "hund" :sample "50" :subset "NOUN"
                           :subset-at "match" :subset-attr "pos"})))))
 
 (deftest refined?-test
   (testing "a narrowed answer counts a part of what the question found"
     (is (true? (recent/refined? {:q "hund" :sample "50"})))
-    (is (true? (recent/refined? {:q "hund" :near "kat"})))
     (is (true? (recent/refined? {:q "hund" :subset "NOUN"}))))
   (testing "and a qualifier narrows nothing on its own, as an empty
-            field narrows nothing"
-    (is (false? (recent/refined? {:q "hund" :distance "3"})))
-    (is (false? (recent/refined? {:q "hund" :sample "" :near nil})))
+            field narrows nothing; the nearby word is the question's own"
+    (is (false? (recent/refined? {:q "hund" :subset-at "match"})))
+    (is (false? (recent/refined? {:q "hund" :sample "" :subset nil})))
+    (is (false? (recent/refined? {:q "hund" :near "kat" :distance "3"})))
     (is (false? (recent/refined? {:q "hund"})))))
 
 (deftest entry-test

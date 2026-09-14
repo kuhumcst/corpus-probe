@@ -346,8 +346,8 @@
 (deftest sort-label-test
   (testing "every sort mode the command namespace offers is named here"
     ;; in Danish, where no label can coincide with the param value
-    (is (= ["korpusrækkefølge" "match" "match bagfra" "venstre kontekst"
-            "højre kontekst" "tilfældig"]
+    (is (= ["forekomst" "match" "match bagfra" "ordet før" "ordet efter"
+            "tilfældig"]
            (map (comp (partial concordance/sort-label da) first) command/sort-modes)))
     (doseq [[value] command/sort-modes]
       (is (not (str/blank? (concordance/sort-label en value)))
@@ -360,50 +360,39 @@
   (let [html (concordance/sort-control en ["corpus" "word"] "word")]
     (testing "a labelled select over the modes, the chosen one marked,
               submitting the query form and applying itself"
-      (is (some #{[:label {:for "sort"} "Sort"]} (deep html)))
+      (is (= :label (first html)))
+      (is (= "sort by" (second html)))
       (is (some #(and (map? %) (= "word" (:value %)) (:selected %)) (deep html)))
-      (is (some #{"corpus order"} (deep html)))
+      (is (some #{"occurrence"} (deep html)))
       (is (some #(and (map? %) (= "sort" (:name %)) (= url/form-id (:form %))
                       (= [:apply-view "sort" :event.target/value]
                          (get-in % [:on :change])))
                 (deep html))))))
 
 (deftest sample-control-test
-  (testing "no sample is the whole result, and it is what is chosen"
-    (let [html (concordance/sample-control en nil)]
-      (is (some #{"all hits"} (deep html)))
-      (is (some #(and (map? %) (= "" (:value %)) (:selected %)) (deep html)))))
-  (testing "the offered sizes are the ones the reader can choose between"
-    (is (= concordance/sample-sizes
-           (keep #(when (number? (:value %)) (:value %))
-                 (deep (concordance/sample-control en nil))))))
-  (testing "the reader's own choice marks an option without taking one out
-            of the list: an option that shifts keeps the mark the browser
-            gave it, since Replicant writes what changed in its own last
-            hiccup rather than what differs from the page"
-    (let [html (concordance/sample-control en 52 "100")]
-      (is (= [50 52 100 500 1000]
-             (keep #(when (number? (:value %)) (:value %)) (deep html))))
-      (is (some #(and (map? %) (= 100 (:value %)) (:selected %)) (deep html)))
-      (is (not (some #(and (map? %) (= 52 (:value %)) (:selected %))
-                     (deep html))))))
-  (testing "a size the form holds is a string, and is the number it names:
-            a size sorted among numbers as a string throws"
-    (let [html (concordance/sample-control en "48")]
-      (is (some #(and (map? %) (= 48 (:value %)) (:selected %)) (deep html)))
-      (is (= [48 50 100 500 1000]
-             (keep #(when (number? (:value %)) (:value %)) (deep html))))))
-  (testing "it submits the query form as the sort control does"
-    (is (some #(and (map? %) (= "sample" (:name %))
-                    (= url/form-id (:form %))
-                    (= [:apply-view "sample" :event.target/value]
-                       (get-in % [:on :change])))
-              (deep (concordance/sample-control en 100)))))
-  (testing "a size the list does not hold is offered beside them, in
-            order, so a hand-written URL shows as the sample it is"
-    (is (= [50 77 100 500 1000]
-           (keep #(when (number? (:value %)) (:value %))
-                 (deep (concordance/sample-control en 77)))))))
+  (let [field (fn [shown]
+                (some #(when (and (map? %) (= "sample" (:name %))) %)
+                      (deep (concordance/sample-control en shown))))]
+    (testing "a number field in its label, blank for the whole result,
+              which its placeholder says"
+      (is (= :label (first (concordance/sample-control en nil))))
+      (is (= ["Sample" "per corpus"]
+             (filter string? (concordance/sample-control en nil))))
+      (is (= ["Udtræk" "pr. korpus"]
+             (filter string? (concordance/sample-control da nil))))
+      (is (= "" (:value (field nil))))
+      (is (= "all" (:placeholder (field nil))))
+      (is (= "alle" (:placeholder
+                     (some #(when (and (map? %) (= "sample" (:name %))) %)
+                           (deep (concordance/sample-control da nil)))))))
+    (testing "holding the size the result has, or the one the form holds"
+      (is (= 100 (:value (field 100))))
+      (is (= "48" (:value (field "48")))))
+    (testing "it submits the query form as the sort control does, once
+              the reader is done with it"
+      (is (= url/form-id (:form (field 100))))
+      (is (= [:apply-view "sample" :event.target/value]
+             (get-in (field 100) [:on :change]))))))
 
 (deftest context-control-test
   (let [values (fn [html] (->> (deep html) (filter map?) (keep :value)
@@ -436,7 +425,7 @@
                          (get-in % [:on :change])))
                 (deep (concordance/context-control en 5)))))
     (testing "in Danish"
-      (is (some #{"sætning" "5 ord" "Kontekst"}
+      (is (some #{"sætning" "5 ord" "kontekst"}
                 (deep (concordance/context-control da 5)))))))
 
 (def example-result
@@ -482,16 +471,17 @@
         (is (= :header.result-head tag))
         (is (= [:h1 {:id "results-heading"}] (subvec h1 0 2)))
         (is (= "6 hits" (text (drop 2 h1))))
-        (is (= "in 2 corpora" (text (second reach))))
+        (is (= :details.caveats (first reach)))
+        (is (= "in 2 corpora" (text (nth reach 3))))
         (is (= :div.view-controls (first controls)))
-        (is (some #{"Sort"} (deep controls)))))
+        (is (some #{"sort by"} (deep controls)))))
     (testing "the corpora that failed fold into that reach rather than
               standing as errors over the concordance"
       (is (not (some #{[:h2 "CQP error"]} (deep html))))
       (is (some #{:details.caveats} (deep html)))
       (is (some #{:table.kwic} (deep html))))
     (testing "the sort travels with the result, not with the query form"
-      (is (some #{"corpus order"} (deep html)))
+      (is (some #{"occurrence"} (deep html)))
       (is (some #(and (map? %) (= "sort" (:id %)) (= url/form-id (:form %)))
                 (deep html))))
     (testing "and so does the sample, which is a question the reader has
@@ -545,19 +535,15 @@
       (is (not (some #{:table.kwic} (deep html))))
       (is (not (some #{"/e?format=tsv"} (deep html))))
       (is (not (some #{"/frequencies?q=x"} (deep html)))))
-    (testing "and no controls either, having nothing to decide about"
+    (testing "and no controls either, having nothing to decide about; the
+              word the hits had to be near stays in the form, where it
+              was asked"
       (is (nil? (concordance/concordance-controls
-                 {:ui en :result {:size 0 :counts [{:corpus "PROBE" :size 0}]}}))))
-    (testing "unless what emptied it is a narrowing, which keeps its own
-              control open, or the reader could not take it away again"
-      (let [html (concordance/concordance-controls
-                  {:ui     en
-                   :result {:size 0 :near {:word "kat"}
-                            :counts [{:corpus "PROBE" :size 0}]}})]
-        (is (= :div.view-controls (first html)))
-        (is (some #{"Near"} (deep html)))
-        (is (not (some #{"Sort"} (deep html))))
-        (is (some #(and (map? %) (:open %)) (deep html))))))
+                 {:ui en :result {:size 0 :counts [{:corpus "PROBE" :size 0}]}})))
+      (is (nil? (concordance/concordance-controls
+                 {:ui     en
+                  :result {:size 0 :near {:word "kat"}
+                           :counts [{:corpus "PROBE" :size 0}]}})))))
   (testing "a result still being counted says at least, what is still
             being counted, and where the reader is without a last page"
     (let [html (concordance/concordance-section

@@ -247,6 +247,7 @@
                    ;; a search that found nothing sampled nothing
                    (when (and hits (pos? (:size result 0)))
                      (result/sample-phrase ui (:sample result) corpus))
+                   (result/subset-phrase ui (:subset result))
                    (when (seq corpus) (result/corpora-phrase ui corpus))
                    (result/filter-phrase result)
                    (when (pos? page-n)
@@ -258,6 +259,7 @@
   and by what."
   [ui {:keys [corpus attr by] :as params} result]
   (page-title (result/query-phrase ui params)
+              (result/subset-phrase ui (:subset result))
               (when (seq corpus) (result/corpora-phrase ui corpus))
               (result/filter-phrase result)
               (str (i18n/tr ui "by") " " attr

@@ -129,6 +129,24 @@ msgstr "forbundet med"
 msgid "is"
 msgstr "er"
 
+msgid "Showing only the hits where {attr} is \"{value}\" {position}"
+msgstr "Viser kun de hits hvor {attr} er \"{value}\" {position}"
+
+msgid "show all"
+msgstr "vis alle"
+
+msgid "the word"
+msgstr "ordet"
+
+msgid "the lemma"
+msgstr "lemmaet"
+
+msgid "the POS"
+msgstr "ordklassen"
+
+msgid "the morphology"
+msgstr "morfologien"
+
 msgid "is not"
 msgstr "er ikke"
 
@@ -323,17 +341,17 @@ msgstr "størrelse"
 msgid "Skip to content"
 msgstr "Gå til indhold"
 
-msgid "Sort"
-msgstr "Sortering"
+msgid "sort by"
+msgstr "sortér efter"
 
 msgid "Sample"
-msgstr "Stikprøve"
+msgstr "Udtræk"
 
-msgid "all hits"
-msgstr "alle hits"
+msgid "all"
+msgstr "alle"
 
-msgid "corpus order"
-msgstr "korpusrækkefølge"
+msgid "occurrence"
+msgstr "forekomst"
 
 msgid "left context"
 msgstr "venstre kontekst"
@@ -343,6 +361,12 @@ msgstr "tilfældig"
 
 msgid "right context"
 msgstr "højre kontekst"
+
+msgid "previous word"
+msgstr "ordet før"
+
+msgid "next word"
+msgstr "ordet efter"
 
 msgid "List"
 msgstr "Liste"
@@ -362,7 +386,7 @@ msgstr "Uden en tekstattribut er der intet at læse som én tekst."
 msgid "matches regex"
 msgstr "matcher regex"
 
-msgid "match from the end"
+msgid "match reversed"
 msgstr "match bagfra"
 
 msgid "match"
@@ -455,6 +479,9 @@ msgstr "en tilfældig stikprøve på højst"
 msgid "per corpus"
 msgstr "pr. korpus"
 
+msgid "per {attr}"
+msgstr "pr. {attr}"
+
 msgid "hit"
 msgid_plural "hits"
 msgstr[0] "hit"
@@ -493,16 +520,24 @@ msgstr[1] "korpusser"
 msgid "active filter"
 msgstr "aktivt filter"
 
-msgid "Near"
-msgstr "Sammen med"
+msgid "near"
+msgstr "nær"
+
+msgid "words either side"
+msgstr "ord til hver side"
+
+msgid "word from"
+msgid_plural "words from"
+msgstr[0] "ord fra"
+msgstr[1] "ord fra"
 
 msgid "word"
 msgid_plural "words"
 msgstr[0] "ord"
 msgstr[1] "ord"
 
-msgid "Context"
-msgstr "Kontekst"
+msgid "context"
+msgstr "kontekst"
 
 msgid "sentence end"
 msgstr "sætningsslutning"
@@ -519,11 +554,11 @@ msgstr "afsnit"
 msgid "before the match"
 msgstr "før matchet"
 
-msgid "at the start of the match"
-msgstr "ved matchets start"
+msgid "first in the match"
+msgstr "først i matchet"
 
-msgid "at the end of the match"
-msgstr "ved matchets slutning"
+msgid "last in the match"
+msgstr "sidst i matchet"
 
 msgid "after the match"
 msgstr "efter matchet"
@@ -531,8 +566,8 @@ msgstr "efter matchet"
 msgid "Position"
 msgstr "Position"
 
-msgid "over the whole match"
-msgstr "over hele matchet"
+msgid "the whole match"
+msgstr "hele matchet"
 
 msgid "count texts"
 msgstr "tæl tekster"
@@ -548,9 +583,6 @@ msgstr "fra"
 
 msgid "to"
 msgstr "til"
-
-msgid "Narrow the result"
-msgstr "Afgræns resultatet"
 
 msgid "Glossary"
 msgstr "Ordliste"

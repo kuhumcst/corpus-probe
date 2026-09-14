@@ -11,15 +11,21 @@
 (deftest select-test
   (let [html (widgets/select "search-form" "sort" "Sort"
                              [(widgets/option "word" "word" "match")])]
-    (testing "a label for the control, then the control, named for the
-              form it submits with and applying itself on change, its
-              value going into the state the form is drawn from first"
-      (is (some #{[:label {:for "sort"} "Sort"]} (deep html)))
+    (testing "the control inside its label, so the two wrap as one, named
+              for the form it submits with and applying itself on change,
+              its value going into the state the form is drawn from first"
+      (is (= :label (first html)))
+      (is (= "Sort" (second html)))
+      (is (= :select (first (last html))))
       (is (some #(and (map? %) (= "sort" (:id %)) (= "sort" (:name %))
                       (= "search-form" (:form %))
                       (= [:apply-view "sort" :event.target/value]
                          (get-in % [:on :change])))
-                (deep html))))))
+                (deep html))))
+    (testing "named for a screen reader alone when it stands in a phrase"
+      (let [bare (widgets/select "search-form" "at" "Position" [] false)]
+        (is (= :select (first bare)))
+        (is (= "Position" (:aria-label (second bare))))))))
 
 (deftest status-test
   (testing "a live region, rendered whether or not it has anything to say"

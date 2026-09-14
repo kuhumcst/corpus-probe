@@ -80,11 +80,19 @@ msgid "Use the arrow keys to move between the words, Home and End for the ends o
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/concordance.cljc
-msgid "corpus order"
+msgid "occurrence"
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/concordance.cljc
-msgid "match from the end"
+msgid "match reversed"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/concordance.cljc
+msgid "previous word"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/concordance.cljc
+msgid "next word"
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/concordance.cljc
@@ -92,7 +100,7 @@ msgid "random"
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/concordance.cljc
-msgid "Sort"
+msgid "sort by"
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/concordance.cljc
@@ -100,11 +108,11 @@ msgid "Sample"
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/concordance.cljc
-msgid "all hits"
+msgid "all"
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/concordance.cljc
-msgid "Context"
+msgid "context"
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/concordance.cljc
@@ -234,6 +242,10 @@ msgid "Position"
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/frequency.cljc
+msgid "per {attr}"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/frequency.cljc
 msgid "columns"
 msgstr ""
 
@@ -291,7 +303,7 @@ msgstr[1] ""
 msgid "at least"
 msgstr ""
 
-#: src/dk/cst/corpus_probe/views/frequency.cljc src/dk/cst/corpus_probe/views/result.cljc
+#: src/dk/cst/corpus_probe/views/result.cljc
 msgid "corpora"
 msgstr ""
 
@@ -307,7 +319,7 @@ msgstr ""
 msgid "a random sample of at most"
 msgstr ""
 
-#: src/dk/cst/corpus_probe/views/result.cljc
+#: src/dk/cst/corpus_probe/views/concordance.cljc src/dk/cst/corpus_probe/views/frequency.cljc src/dk/cst/corpus_probe/views/result.cljc
 msgid "per corpus"
 msgstr ""
 
@@ -316,19 +328,43 @@ msgid "before the match"
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/result.cljc
-msgid "at the start of the match"
+msgid "first in the match"
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/result.cljc
-msgid "over the whole match"
+msgid "the whole match"
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/result.cljc
-msgid "at the end of the match"
+msgid "last in the match"
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/result.cljc
 msgid "after the match"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/result.cljc
+msgid "the word"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/result.cljc
+msgid "the lemma"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/result.cljc
+msgid "the POS"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/result.cljc
+msgid "the morphology"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/result.cljc
+msgid "Showing only the hits where {attr} is \"{value}\" {position}"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/result.cljc
+msgid "show all"
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views.cljc src/dk/cst/corpus_probe/views/frequency.cljc src/dk/cst/corpus_probe/views/result.cljc
@@ -341,14 +377,6 @@ msgstr ""
 
 #: src/dk/cst/corpus_probe/views/result.cljc
 msgid "Apply"
-msgstr ""
-
-#: src/dk/cst/corpus_probe/views/result.cljc
-msgid "Narrow the result"
-msgstr ""
-
-#: src/dk/cst/corpus_probe/views/result.cljc
-msgid "Near"
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/result.cljc
@@ -512,6 +540,12 @@ msgid "whole"
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/search.cljc
+msgid "word from"
+msgid_plural "words from"
+msgstr[0] ""
+msgstr[1] ""
+
+#: src/dk/cst/corpus_probe/views/search.cljc
 msgid "Help"
 msgstr ""
 
@@ -563,7 +597,7 @@ msgstr ""
 msgid "the query"
 msgstr ""
 
-#: src/dk/cst/corpus_probe/views/result.cljc src/dk/cst/corpus_probe/views/search.cljc
+#: src/dk/cst/corpus_probe/views/search.cljc
 msgid "within"
 msgstr ""
 
@@ -577,6 +611,14 @@ msgstr ""
 
 #: src/dk/cst/corpus_probe/views/search.cljc
 msgid "Change mode"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/search.cljc
+msgid "near"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/search.cljc
+msgid "words either side"
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/search.cljc

@@ -85,6 +85,7 @@
                    (assoc opts
                           :filter (opts/corpus-filter! ctx corpus opts)
                           :subset (opts/corpus-subset! ctx corpus subset)
+                          :near   (opts/corpus-near! ctx corpus (:near opts))
                           :sample nil))
         whole?    (command/whole-match? at)
         text      (when (and docs (not whole?) (not by))
