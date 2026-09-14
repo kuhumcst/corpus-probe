@@ -5,6 +5,7 @@
             [dk.cst.corpus-probe.client.lists-test :refer [filters folders]]
             [dk.cst.corpus-probe.query :as query]
             [dk.cst.corpus-probe.query.tokens :as tokens]
+            [dk.cst.corpus-probe.storage.recent :as recent]
             [dk.cst.corpus-probe.storage.settings :as settings]
             [dk.cst.corpus-probe.url :as url]
             [dk.cst.corpus-probe.views :as views]
@@ -84,7 +85,7 @@
         (is (map? (:state (actions/act state action))) (str kind))))
     (testing "the render hooks are effects, never actions"
       (is (nil? (actions/act state [:set-validity "x"])))
-      (is (nil? (actions/act state [:set-checkbox-state {}]))))))
+      (is (nil? (actions/act state [:set-indeterminate false]))))))
 
 (deftest data->state-test
   (testing "marked as the client's, the lists at rest, the filters
@@ -734,3 +735,25 @@
       (let [off (:state (actions/act state [:set-autosave false]))]
         (is (= [[:set-cookie :settings "scope=all"]]
                (:effects (actions/act off [:set-autosave true]))))))))
+
+(deftest toggle-rail-test
+  (let [asked  {:q "hund" :corpus ["PROBE"]}
+        opened (:state (actions/act (assoc state :asked asked)
+                                    [:toggle-rail true]))]
+    (testing "opening the search options records the question they stand
+              open over, and the concordance is recentred under the
+              width they take"
+      (is (= (recent/asked asked) (:rail-open opened)))
+      (is (= [[:recentre]]
+             (:effects (actions/act (assoc state :asked asked)
+                                    [:toggle-rail true])))))
+    (testing "shutting them records nothing"
+      (is (nil? (:rail-open (:state (actions/act opened [:toggle-rail false]))))))
+    (testing "the question is carried across a page arriving, which is
+              what keeps them open in the other view or language of the
+              same answer; the view decides whether it is still the one"
+      (is (= (recent/asked asked)
+             (:rail-open (:state (actions/page-arrived
+                                  opened data
+                                  "http://localhost/search?q=hund&corpus=PROBE"
+                                  true))))))))

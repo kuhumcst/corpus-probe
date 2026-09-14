@@ -260,7 +260,7 @@
                    (count corpora))
 
          :else
-         (i18n/tr ui "Choose corpora to filter by metadata."))]])
+         (i18n/tr ui "Choose corpora first."))]])
 
 (defn filter-chooser
   "The chooser over the tree of `filters` (see

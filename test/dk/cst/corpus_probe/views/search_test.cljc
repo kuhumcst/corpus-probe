@@ -5,6 +5,7 @@
             [dk.cst.corpus-probe.test.hiccup :refer [da en text]]
             [dk.cst.corpus-probe.i18n :as i18n]
             [dk.cst.corpus-probe.query.mode :as mode]
+            [dk.cst.corpus-probe.storage.recent :as recent]
             [dk.cst.corpus-probe.storage.settings :as settings]
             [dk.cst.corpus-probe.url :as url]
             [dk.cst.corpus-probe.views.corpus :as corpus-views]
@@ -220,7 +221,42 @@
           (is (= "Search" (label en "hund")))
           (is (= "Search" (label en "hund kat")))
           (is (= "Search" (label en "hund\nkat")))
-          (is (= "Søg" (label da "hund"))))))))
+          (is (= "Søg" (label da "hund"))))))
+    (testing "the button carries the constraint that a search needs a
+              corpus, so the browser refuses one where it was asked for,
+              and the chooser opens as it does"
+      (let [attrs (fn [ui params]
+                    (->> (deep (form {:ui ui :folders [] :params params}))
+                         (some #(when (and (vector? %) (= :button (first %)))
+                                  (second %)))))]
+        (is (= [:set-validity "Select at least one corpus"]
+               (:replicant/on-render (attrs en {:q "hund"}))))
+        (is (= [:set-validity "Vælg mindst ét korpus"]
+               (:replicant/on-render (attrs da {:q "hund"}))))
+        (is (= [:set-validity nil]
+               (:replicant/on-render (attrs en {:q "hund" :corpus ["PROBE"]}))))
+        (is (= {:invalid [:engage :corpora]} (:on (attrs en {:q "hund"}))))))))
+
+(deftest rail-fold-test
+  (let [hits  {:counts [{:corpus "PROBE" :size 3}]}
+        asked {:q "hund" :corpus ["PROBE"]}
+        fold  (fn [state]
+                (->> (deep (form (merge {:ui en :folders [] :params asked} state)))
+                     (some #(when (and (vector? %) (= :details.rail-fold (first %)))
+                              (second %)))))]
+    (testing "the boxes fold away once there are hits, and not before"
+      (is (nil? (fold {})))
+      (is (false? (:open (fold {:result hits :asked asked})))))
+    (testing "open while the page shows the search the reader opened them
+              over, in whichever view, and shut again by a new one"
+      (is (true? (:open (fold {:result    hits :asked asked
+                               :rail-open (recent/asked asked)}))))
+      (is (true? (:open (fold {:result    hits
+                               :asked     (assoc asked :view "frequencies")
+                               :rail-open (recent/asked asked)}))))
+      (is (false? (:open (fold {:result    hits
+                                :asked     {:q "kat" :corpus ["PROBE"]}
+                                :rail-open (recent/asked asked)})))))))
 
 (deftest change-mode-button-test
   (let [button (fn [state]

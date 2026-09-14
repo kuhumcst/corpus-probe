@@ -365,14 +365,12 @@
   [node msg]
   (.setCustomValidity node (or msg "")))
 
-(defn set-checkbox-state!
-  "Write to checkbox `node` the states of `m` that no attribute carries:
-  `:indeterminate`, for a folder holding only part of the selection, and
-  `:invalid`, the message the corpus chooser reports while nothing is
-  chosen; both are written to the element on every render."
-  [node {:keys [indeterminate invalid]}]
-  (set! (.-indeterminate node) indeterminate)
-  (.setCustomValidity node (or invalid "")))
+(defn set-indeterminate!
+  "Write to checkbox `node` whether it is `indeterminate`, for a folder
+  holding only part of the selection: no attribute carries the state, so
+  it is written to the element on every render."
+  [node indeterminate]
+  (set! (.-indeterminate node) indeterminate))
 
 (defn reading-strip
   "The strip that the reader reads in, as [start end] in viewport pixels.
@@ -595,8 +593,7 @@
       :resubmit           (apply resubmit! args)
       :apply-view         (apply apply-view! (:replicant/node data) args)
       :set-validity       (apply set-validity! (:replicant/node data) args)
-      :set-checkbox-state (apply set-checkbox-state! (:replicant/node data)
-                                 args)
+      :set-indeterminate  (apply set-indeterminate! (:replicant/node data) args)
       :centre-match       (apply centre-match! (:replicant/node data) args)
       :recentre           (recentre! state)
       :leave-concordance  (leave-concordance! dispatch!)

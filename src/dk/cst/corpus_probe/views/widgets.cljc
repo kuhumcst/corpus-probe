@@ -202,14 +202,12 @@
   they all are, indeterminate when only some are.
 
   In `opts`, `:clear-only?` disables it while there is nothing to clear,
-  for a list where taking everything means nothing; `:invalid` is the
-  message it reports while a group that must not be left empty is, HTML
-  being able to require one box but not one of a group; and `:mixed?`
-  marks it indeterminate whatever the boxes say, for a group narrowed by
+  for a list where taking everything means nothing; and `:mixed?` marks
+  it indeterminate whatever the boxes say, for a group narrowed by
   something other than them, which is then also something to clear."
   ([label items chosen? action]
    (select-all label items chosen? action nil))
-  ([label items chosen? action {:keys [clear-only? invalid mixed?]}]
+  ([label items chosen? action {:keys [clear-only? mixed?]}]
    (when (seq items)
      (let [n (count (filter chosen? items))]
        [:input {:type                "checkbox"
@@ -220,12 +218,10 @@
                 :disabled            (boolean (and clear-only? (zero? n)
                                                    (not mixed?)))
                 :aria-label          label
-                ;; neither the indeterminate state nor a custom validity
-                ;; is an attribute, so both are set as properties on render
-                :replicant/on-render [:set-checkbox-state
-                                      {:indeterminate (or (boolean mixed?)
-                                                          (< 0 n (count items)))
-                                       :invalid       invalid}]
+                ;; the indeterminate state is no attribute, so it is set
+                ;; as a property on render
+                :replicant/on-render [:set-indeterminate
+                                      (or (boolean mixed?) (< 0 n (count items)))]
                 :on                  {:change action}}]))))
 
 (defn error-section

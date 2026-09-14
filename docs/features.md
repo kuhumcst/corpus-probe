@@ -25,6 +25,18 @@ has shrunk reads back zero-filled without an error from CQP. A sampled
 result is never counted, and a damaged one is discarded and the query
 run.
 
+## The folded form
+
+Once a search has hits, the boxes under the query fold away under one
+line that says Search options. The query line stays, and the answer takes the
+whole width under it. Open, the boxes stand where they always stood,
+and a muted line at the foot of the rail folds them again. The fold is
+a disclosure, so it opens without a script, and the controls it hides
+still submit with the form. A new search folds it again. The other
+view of the same answer, another page of it, or the other language
+leaves it as the reader left it. Nothing folds while there are no
+hits, since the boxes are then what the reader needs.
+
 ## Narrow screens
 
 On a narrow screen, the concordance keeps its columns and lets the text
@@ -182,7 +194,11 @@ corpora are one comma-separated parameter. When each readable corpus is
 selected, the URL names no corpus, because that is the same search.
 The search page itself starts with no corpus selected. The reader
 selects the corpora first, and the browser refuses a search without
-one.
+one, on the search button: its bubble hangs under the control that is
+invalid, and on a box in the chooser it would cover the boxes under
+it. The chooser opens as the search is refused, so the corpora are
+there to tick. Without a script the server refuses it, as an error
+where the answer would be.
 Pages are numbered from one, as the page numbers itself.
 
 The **Search** link in the masthead is the address of the result being

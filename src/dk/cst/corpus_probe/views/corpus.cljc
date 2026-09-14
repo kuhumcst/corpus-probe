@@ -83,17 +83,9 @@
 ;; corpus already means every corpus (see url/with-corpora).
 (defn all-toggle
   "The `corpus-toggle` over every corpus on offer, the `ids`, named for the
-  registry in `ui`: the one control that selects or clears the lot.
-
-  It carries the chooser's one constraint, that a search needs a corpus:
-  invalid while nothing is `selected`, and says so in words, which the
-  summary's own figures do not, so the browser refuses the search on the
-  control that can put it right. Whatever the chooser shows: a selection
-  out of sight is still a selection."
+  registry in `ui`: the one control that selects or clears the lot."
   [ui selected ids]
-  (corpus-toggle (i18n/tr ui "All corpora") selected ids
-                 {:invalid (when (empty? selected)
-                             (i18n/tr ui "Select at least one corpus"))}))
+  (corpus-toggle (i18n/tr ui "All corpora") selected ids))
 
 (defn index-folder
   "One resolved `folder` of the corpus index in `ui`, headed at `level`

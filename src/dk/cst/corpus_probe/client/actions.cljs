@@ -367,6 +367,17 @@
                   (lists/tick :corpora ids unticking?))
      :effects [[:refresh-filters]]}))
 
+(defn toggle-rail
+  "The `state` with the search options `open?` over the question shown,
+  `:rail-open`, so that they stay open while the page keeps showing it,
+  in either view, on any page of it or in the other language, and fold
+  on a new search (see dk.cst.corpus-probe.views.search/rail-fold). The
+  concordance is recentred, since the fold changes its width as a
+  window edge does."
+  [state open?]
+  {:state   (assoc state :rail-open (when open? (recent/asked (:asked state))))
+   :effects [[:recentre]]})
+
 (defn clear-fields
   "Take the pattern and the range of `attr` out of `state`, which empties
   its fields, they being what the state holds."
@@ -669,9 +680,11 @@
                   (get-in state [:nav :search]))
         data    (cond-> data search (assoc-in [:nav :search] search))
         ;; the searches remembered are the client's own, and no page
-        ;; carries them, so they are carried across the page arriving
+        ;; carries them, so they are carried across the page arriving;
+        ;; so is the question the search options stand open over
         arrived (remember (assoc (data->state data cited)
-                                 :recent (:recent state)))]
+                                 :recent    (:recent state)
+                                 :rail-open (:rail-open state)))]
     {:state   (:state arrived)
      :effects (cond->> (into [[:set-title (:title data)]
                               [:set-lang (:lang data)]
@@ -722,6 +735,7 @@
       :clear-filter         (emptied state (clear-filter state))
       :engage               (refreshed x (lists/engage state x))
       :toggle-open          (refreshed x (lists/toggle-open state x y z))
+      :toggle-rail          (toggle-rail state x)
       :filter               {:state (lists/apply-filter state x y)}
       :leave                {:state (cond-> state y (lists/leave x))}
       :swallow-enter        (swallow-enter state x)

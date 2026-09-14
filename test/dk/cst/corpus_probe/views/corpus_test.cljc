@@ -173,19 +173,6 @@
       (is (= [:toggle-corpora ["VISER" "TALER"]]
              (get-in (second (corpus-views/all-toggle en #{} ["VISER" "TALER"]))
                      [:on :change]))))
-    (testing "and is invalid while nothing is selected, saying what the
-              summary says, so the browser refuses a search of no corpus
-              on the control that can put it right"
-      (let [invalid (fn [ui opts]
-                      (->> (deep (corpus-views/corpus-chooser
-                                  ui folders (assoc opts :client? true)))
-                           (filter #(and (map? %) (:replicant/on-render %)))
-                           (keep (comp :invalid second :replicant/on-render))))]
-        (is (= ["Select at least one corpus"] (invalid en {:selected #{}})))
-        (is (= ["Vælg mindst ét korpus"] (invalid da {:selected #{}})))
-        (is (empty? (invalid en {:selected #{"VISER"}})))
-        ;; a selection the filter hides is still a selection
-        (is (empty? (invalid en {:selected #{"VISER"} :filter "taler"})))))
     (testing "a filter answering nothing says so in the chooser's words,
               and every box is still in the document"
       (let [html (deep (corpus-views/corpus-chooser en folders

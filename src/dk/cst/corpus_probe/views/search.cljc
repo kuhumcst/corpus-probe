@@ -386,7 +386,7 @@
        [:p.matching-case
         [:label [:input {:type    "checkbox" :name "ci" :value "on"
                          :checked (some? ci)}]
-         (i18n/tr ui "ignore case")]])]))
+         " " (i18n/tr ui "ignore case")]])]))
 
 (defn settings-now
   "The settings the form of `state` shows, as they would be stored,
@@ -439,7 +439,7 @@
                      :checked (boolean autosave?)}
               client? (assoc :on {:change [:set-autosave
                                            :event.target/checked]}))]
-    (i18n/tr ui "save automatically")]])
+    " " (i18n/tr ui "save automatically")]])
 
 (defn settings-announcement
   "The live region of the preferences box in `ui`, spoken and never seen,
@@ -482,12 +482,63 @@
                         :action url/preferences}
    [:input {:type "hidden" :name "return" :value (url/search-href params)}]])
 
+;; TODO: reconsider where the bubble hangs. The constraint is the
+;; chooser's, and a screen reader hears the search button called invalid.
+;; Weighed on 2026-09-14: a box in the chooser and its filter box both put
+;; the bubble over the first corpora, and a message of the app's own in
+;; the chooser was turned down for the browser's bubble. A native anchor
+;; that covers nothing in the chooser and sits inside it would settle this
+(defn submit-button
+  "The button submitting the search form in `ui`, saying what pressing
+  it does: a text shaped like CQP runs as CQP, and the form says so
+  nowhere else, since the boxes it takes away are an absence.
+
+  It also carries the form's one constraint HTML cannot state, that a
+  search needs a corpus in `params`, so the browser refuses the search
+  where it was asked for: its bubble hangs under the control that is
+  invalid, and on a box in the chooser it would cover the boxes under
+  it. The chooser opens as the browser reports it, so the corpora to
+  tick are in view. Without a client the server refuses instead."
+  [ui params]
+  [:button {:type                "submit"
+            :replicant/on-render [:set-validity
+                                  (when (empty? (:corpus params))
+                                    (i18n/tr ui "Select at least one corpus"))]
+            :on                  {:invalid [:engage :corpora]}}
+   (if (= "cqp" (mode/mode params))
+     (i18n/trx ui "button" "Run as CQP")
+     (i18n/trx ui "button" "Search"))])
+
+(defn rail-fold
+  "The `rail` of the search form of `state`, under a disclosure once its
+  `:result` has hits to make room for, and bare until then. Shut, its
+  controls still submit with the form.
+
+  It stands open while the search `:asked` is the one the reader opened
+  it over, `:rail-open` (see dk.cst.corpus-probe.client.actions/toggle-rail):
+  the other view of the same answer, another page of it or the other
+  language leave it as it was, and a new search folds it, so the answer
+  has the whole width first."
+  [{:keys [ui rail-open asked result]} rail]
+  (if (result/found? result)
+    (let [open? (and rail-open (= rail-open (recent/asked asked)))]
+      [:details.rail-fold {:open (boolean open?)
+                           :on   {:toggle [:toggle-rail :event.target/open]}}
+       ;; open, the summary stands at the foot of the rail (see the
+       ;; sheet), so it says what pressing it does there
+       [:summary (if open?
+                   (i18n/tr ui "Hide")
+                   (i18n/tr ui "Search options"))]
+       rail])
+    rail))
+
 (defn search-form
   "The search form of `state`, submitted as GET to `action` with the
   page's own `extra` hidden inputs and the `chooser` of its corpora: the
   query row, then the boxes deciding how the query is read and the
   scope it is kept within, prefilled from the state's `:params`, and the
-  buttons storing them as the reader's defaults.
+  buttons storing them as the reader's defaults; the boxes fold away
+  once there are hits (see `rail-fold`).
 
   The query is required while the page has no `:result` and no `:error`
   to clear; with one, an empty field is how the reader starts over."
@@ -499,13 +550,7 @@
         {:keys [values]} lists
         extended? (= "extended" (mode/form params))
         required? (not (or result error))
-        ;; the button says what pressing it does. A text shaped like CQP
-        ;; runs as CQP, and the form says so nowhere else: the boxes it
-        ;; takes away are an absence, not a statement
-        button    [:button {:type "submit"}
-                   (if (= "cqp" (mode/mode params))
-                     (i18n/trx ui "button" "Run as CQP")
-                     (i18n/trx ui "button" "Search"))]
+        button    (submit-button ui params)
         held      (into (filter-views/filter-pairs (:selected filter-controls))
                         (:unticked values))]
     ;; HTML's own landmark for a search form, so a screen reader can jump
@@ -530,23 +575,25 @@
          ;; reading that earns its place, or leave it to the button
          [:p (query-field ui q required?) " " button])]
       ;; one wrapper, which the wide layout makes a rail beside the answer
-      [:div.rail
-       (modes-fieldset ui params client? switch)
-       (matching-fieldset ui search-attrs params)
-       ;; marks a selection the reader actually made: without it, unticking
-       ;; every corpus and submitting is indistinguishable from arriving
-       ;; with no corpus named, which searches them all
-       [:input {:type "hidden" :name "scope" :value "chosen"}]
-       chooser
-       ;; the list's state is named for the chooser's options, and what
-       ;; it holds beyond them the chooser ignores
-       (filter-views/filter-fieldset ui filter-controls
-                                     (assoc values
-                                            :held     held
-                                            :pending? filters-pending?
-                                            :corpora  (:corpus params)
-                                            :client?  client?))
-       (settings-fieldset state ui)]]
+      (rail-fold state
+                 [:div.rail
+                  (modes-fieldset ui params client? switch)
+                  (matching-fieldset ui search-attrs params)
+                  ;; marks a selection the reader actually made: without
+                  ;; it, unticking every corpus and submitting is
+                  ;; indistinguishable from arriving with no corpus
+                  ;; named, which searches them all
+                  [:input {:type "hidden" :name "scope" :value "chosen"}]
+                  chooser
+                  ;; the list's state is named for the chooser's options,
+                  ;; and what it holds beyond them the chooser ignores
+                  (filter-views/filter-fieldset ui filter-controls
+                                                (assoc values
+                                                       :held     held
+                                                       :pending? filters-pending?
+                                                       :corpora  (:corpus params)
+                                                       :client?  client?))
+                  (settings-fieldset state ui)])]
      (settings-form params)
      ;; only where the client runs: every other navigation is the
      ;; browser's own, and the browser reports those itself

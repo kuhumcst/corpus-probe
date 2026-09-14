@@ -167,7 +167,7 @@
           said (fn [opts] (filter string? (deep (box opts))))]
       (is (= :fieldset.filters.box (first (box {}))))
       (is (= "values" (:data-list (second (box {})))))
-      (is (some #{"Choose corpora to filter by metadata."} (said {})))
+      (is (some #{"Choose corpora first."} (said {})))
       (is (some #{"The corpus you chose carries no metadata."}
                 (said {:corpora ["PROBE"]})))
       (is (some #{"The corpora you chose carry no metadata."}
@@ -358,11 +358,11 @@
                                       (= "All values of text_year"
                                          (:aria-label %))))
                         first))]
-        (is (= [:set-checkbox-state {:indeterminate false :invalid nil}]
+        (is (= [:set-indeterminate false]
                (:replicant/on-render (node {}))))
-        (is (= [:set-checkbox-state {:indeterminate true :invalid nil}]
+        (is (= [:set-indeterminate true]
                (:replicant/on-render (node {:patterns {:text_year "15.."}}))))
-        (is (= [:set-checkbox-state {:indeterminate true :invalid nil}]
+        (is (= [:set-indeterminate true]
                (:replicant/on-render
                 (node {:ranges {:text_year ["1583" "1591"]}})))))
       (testing "and its summary adds a mark to the figures rather than a
@@ -481,11 +481,11 @@
                   must not act from"
           (is (true? (:disabled (root {}))))
           (is (false? (:checked (root {}))))
-          (is (= [:set-checkbox-state {:indeterminate false :invalid nil}]
+          (is (= [:set-indeterminate false]
                  (:replicant/on-render (root {})))))
         (testing "something chosen: live, partly checked, and it clears"
           (is (false? (:disabled (root {:a #{"1"}}))))
-          (is (= [:set-checkbox-state {:indeterminate true :invalid nil}]
+          (is (= [:set-indeterminate true]
                  (:replicant/on-render (root {:a #{"1"}}))))
           (is (= [:clear-filter] (get-in (root {:a #{"1"}}) [:on :change]))))
         (testing "everything chosen: checked, and it still only clears"
@@ -501,7 +501,7 @@
                       (filter #(and (map? %) (= "Clear filter" (:aria-label %))))
                       first)]
         (is (false? (:disabled root)))
-        (is (= [:set-checkbox-state {:indeterminate true :invalid nil}]
+        (is (= [:set-indeterminate true]
                (:replicant/on-render root)))))
     (testing "one disclosure over the filter, open only while it is active,
               and one per attribute, open while chosen in part"

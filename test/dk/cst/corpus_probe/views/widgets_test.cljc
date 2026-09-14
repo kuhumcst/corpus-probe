@@ -118,10 +118,10 @@
               states no attribute carries set on every render"
       (is (true? (:checked (attrs ["a" "b"] #{"a" "b"}))))
       (is (false? (:checked (attrs ["a" "b"] #{"a"}))))
-      (is (= [:set-checkbox-state {:indeterminate true :invalid nil}]
+      (is (= [:set-indeterminate true]
              (:replicant/on-render (attrs ["a" "b"] #{"a"}))))
-      (is (= [:set-checkbox-state {:indeterminate false :invalid "Pick one"}]
-             (:replicant/on-render (attrs ["a"] #{} {:invalid "Pick one"})))))
+      (is (= [:set-indeterminate false]
+             (:replicant/on-render (attrs ["a"] #{})))))
     (testing "named for a screen reader, dispatching the action given"
       (is (= "All" (:aria-label (attrs ["a"] #{}))))
       (is (= [:take] (get-in (attrs ["a"] #{}) [:on :change]))))

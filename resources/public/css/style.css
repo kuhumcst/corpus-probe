@@ -19,6 +19,10 @@
      where a tab shrinks; what stands beside a tab takes it too, so that
      every word in a row of them sits on one level */
   --tab-depth: calc(2.875em + 1px);
+  /* the step down from the top of the query line to the field. Set, not
+     measured: no rule can read a box's height. It holds while the first
+     box in the rail holds one row, which is its resting state */
+  --query-step: 1.375rem;
   accent-color: var(--accent);
 }
 
@@ -237,11 +241,9 @@ a abbr[title] { cursor: inherit; text-decoration: none; }
   /* the measure is the column's, above. The field stands where a box's
      own last control stands: its foot on their foot, and the box's
      padding under it, which brings the line the tabs stand on out level
-     with the foot of the first box in the rail. The step down to it is
-     set, not measured: no rule can read a box's height. It holds while
-     that box holds one row, which is its resting state */
+     with the foot of the first box in the rail */
   .search-page .query { grid-area: query;
-                        margin-block: 1.375rem var(--box-pad); }
+                        margin-block: var(--query-step) var(--box-pad); }
   /* token boxes carry the rail's border line already, and want the
      column, so the measure gives way where they stand */
   .search-page:has(.query-extended) {
@@ -271,7 +273,24 @@ a abbr[title] { cursor: inherit; text-decoration: none; }
   /* the rail grows down the page rather than scrolling inside itself,
      which rules out sticking it: that strands the foot of a rail taller
      than the viewport */
-  .search-page .rail { grid-area: rail; }
+  .search-page :is(.rail, .rail-fold) { grid-area: rail; }
+
+  /* an answer folds the rail under its summary on the query line, and
+     the rows under the line take its column too, so the hits have the
+     whole width. The panel keeps the column as it is, so the fold waits
+     while a token is inspected */
+  .search-page:not(.inspecting):has(.rail-fold:not([open])) {
+    grid-template-areas: "rail    query   views"
+                         "status  status  status"
+                         "results results results";
+  }
+  /* shut, the summary stands where the field stands, its words level
+     with the field's: a line as deep as the field, which is a tab less
+     the box padding under it */
+  .rail-fold:not([open]) > summary {
+    margin-block-start: var(--query-step);
+    line-height: calc(var(--tab-depth) - var(--box-pad));
+  }
 
   /* the panel is short and follows the reading, so it sticks; a scroll
      container clips at its padding edge, where a focus ring would be,
@@ -283,7 +302,7 @@ a abbr[title] { cursor: inherit; text-decoration: none; }
   }
 
   /* the panel takes the rail's column while open; the form still submits */
-  .inspecting .rail { display: none; }
+  .inspecting .rail-fold { display: none; }
 }
 
 /* Widgets, and the controls every view uses */
@@ -340,12 +359,13 @@ label:has(:is(input, select):disabled) { color: var(--rule); }
 
 /* The small-caps voice of the apparatus. A box shows its name on its
    border in the deep accent. A column shows its name over its data in
-   the same voice, and a tab names the section under it. A key beside
-   its value is muted.
+   the same voice, a tab names the section under it, and the fold names
+   the boxes it hides. A key beside its value is muted.
 
    The face is named rather than inherited: a column name stands over the
    corpus's own text and is apparatus, not part of it */
-legend, .inspector h3, .recent > h2, .facts dt, thead th, .tabs a {
+legend, .inspector h3, .recent > h2, .facts dt, thead th, .tabs a,
+.rail-fold > summary {
   font-family: var(--face); font-variant: all-small-caps;
   letter-spacing: 0.04em; font-weight: 600; color: var(--accent-deep);
 }
@@ -484,6 +504,23 @@ pre { font-size: 0.875rem; padding: 0.75rem 1rem;
 /* The search form */
 
 .search-form, .rail { display: flex; flex-direction: column; gap: 1rem; }
+/* open, the boxes stand where they always stood, and the fold's control
+   steps down to the foot of the rail, a muted line centred under them,
+   where a reader done with the boxes finds it. The room kept for it is
+   the form's gap and one line */
+.rail-fold[open] { position: relative; padding-block-end: 2.5rem; }
+.rail-fold[open] > summary { position: absolute; inset-block-end: 0;
+                             inset-inline: 0; text-align: center;
+                             color: var(--tx-2); list-style: none; }
+/* the marker points at the boxes, which stand above it: the agent's
+   open glyph mirrored, since it draws no upward one itself, at the
+   chooser's scale and with the room an agent's own marker keeps */
+.rail-fold[open] > summary::before {
+  content: counter(disclosure, disclosure-open);
+  display: inline-block; vertical-align: middle;
+  transform: scale(1.2, -1.2);
+  margin-inline-end: 0.5em;
+}
 /* the form's gaps are its rhythm, so nothing in it keeps a margin;
    `:where`, so the empty live region's rule still outweighs this */
 .search-form > *,
