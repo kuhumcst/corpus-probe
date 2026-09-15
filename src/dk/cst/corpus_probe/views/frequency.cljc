@@ -94,16 +94,17 @@
               " " (i18n/tr ui "most frequent shown")))))
 
 (defn table-caption
-  "The caption of the table of frequency `result`, in `ui`: its name, how
-  many values it holds and shows, the columns likewise when it is counted
+  "The caption of the table of frequency `result`, in `ui`: how many
+  values it holds and shows, the columns likewise when it is counted
   `:by` a second attribute, and what the parentheses hold when those
   columns are `:sized`.
 
   The counts are here rather than in the heading: they are the table's
-  size, which is what a caption says of a table."
+  size, which is what a caption says of a table. The view's name is not,
+  since the tab over the table says it."
   [ui {:keys [rows by columns column-count sized]}]
   (let [n (count rows)]
-    [:caption (i18n/tr ui "Frequencies") " · "
+    [:caption
      (shown-phrase ui (i18n/trn ui "value" "values" n) n (min row-limit n))
      (when by
        (str " · " (shown-phrase ui (i18n/trn ui "column" "columns"
@@ -148,6 +149,13 @@
    (let [cell (widgets/attribute-value attr value)]
      (if href [:a {:href href} cell] cell))])
 
+(def scroll-attrs
+  "The attributes of the region a frequency table scrolls in: the hooks
+  that fade its sides where the stylesheet cannot (see
+  dk.cst.corpus-probe.client.effects/fade-edges!)."
+  {:replicant/on-render  [:fade-edges]
+   :replicant/on-unmount [:unfade-edges]})
+
 (defn frequency-table
   "The merged frequency `result` as a table: a row per value (the
   `row-limit` most frequent, each linking to the hits it counted where
@@ -167,6 +175,7 @@
     ;; a column group per corpus, so a registry of any size is wider than
     ;; the page, which must not scroll sideways with it
     (widgets/table-box
+     scroll-attrs
      [:table.frequencies
       (table-caption ui result)
       [:colgroup]
@@ -222,8 +231,14 @@
     ;; a column per year is wider than the page, which must not scroll
     ;; sideways with it
     (widgets/table-box
+     scroll-attrs
      [:table.frequencies.crosstab
       (table-caption ui result)
+      ;; the row headers, the values and the total, so the stylesheet can
+      ;; rule between them as it rules between the corpora
+      [:colgroup]
+      [:colgroup {:span (count columns)}]
+      [:colgroup]
       [:thead
        [:tr
         [:th {:scope "col"} [:code (name attr)]]

@@ -986,6 +986,59 @@ body:has(.inspector) { padding-block-end: var(--sheet-block-size); }
 :is(.attributes, .frequencies) :is(th, td) { padding: var(--cell-pad) 0.5em;
                                              text-align: left; }
 :is(.attributes, .frequencies) .num { text-align: right; }
+/* room between few columns; many, or a narrow region, keep them close,
+   since a row that scrolls is worse than a tight one */
+@container (inline-size >= 60rem) {
+  .frequencies:not(:has(tr > :nth-child(13))) :is(th, td) {
+    padding-inline: 1.25em;
+  }
+}
+/* a corpus heads its group of columns, not the first of them */
+.frequencies colgroup + colgroup { border-inline-start: 1px solid var(--rule); }
+.frequencies th[scope="colgroup"] { text-align: center; }
+/* The size is a note under the table, not a title over it: the tab
+   names the table. Pinned and no wider than the region, or under a wide
+   table it is centred somewhere off the page */
+.frequencies caption { caption-side: bottom; text-align: center;
+                       padding-block: 0.75rem 0;
+                       border-block-start: 1px solid var(--rule);
+                       position: sticky; inset-inline-start: 0;
+                       inline-size: min(100%, 100cqi); }
+
+/* A table wider than its region fades at the side there is more of it,
+   as the concordance does. A region that does not scroll has no
+   timeline, so a table that fits does not fade.
+
+   The mask stands outside the guard because Firefox has no scroll-driven
+   animations and the client sets the widths there instead (see
+   dk.cst.corpus-probe.client.effects/fade-edges!), reading the fade
+   width in pixels, hence registered. Without the guard a browser that
+   drops the timeline runs the animations over no time and holds their
+   end for good */
+@property --fade { syntax: "<length>"; inherits: false;
+                   initial-value: 0px; }
+@property --fade-start { syntax: "<length>"; inherits: false;
+                         initial-value: 0px; }
+@property --fade-end { syntax: "<length>"; inherits: false;
+                       initial-value: 0px; }
+.scroll:has(> .frequencies) {
+  --fade: 3rem;
+  mask-image: linear-gradient(to right,
+                              transparent, #000 var(--fade-start),
+                              #000 calc(100% - var(--fade-end)),
+                              transparent);
+}
+@supports (animation-timeline: scroll(self inline)) {
+  .scroll:has(> .frequencies) {
+    animation: fade-start linear both, fade-end linear both;
+    animation-timeline: scroll(self inline);
+    animation-range: 0 var(--fade), calc(100% - var(--fade)) 100%;
+  }
+  @keyframes fade-start { from { --fade-start: 0px; }
+                          to { --fade-start: var(--fade); } }
+  @keyframes fade-end { from { --fade-end: var(--fade); }
+                        to { --fade-end: 0px; } }
+}
 
 /* a corpus .info file is prose and wraps */
 .about pre { white-space: pre-wrap; }

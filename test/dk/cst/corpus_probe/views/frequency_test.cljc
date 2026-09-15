@@ -60,7 +60,7 @@
         (is (some #{"Group by"} (deep controls)))))
     (testing "the table's size is its caption's to say"
       (is (some #(and (vector? %) (= :caption (first %))
-                      (= "Frequencies · 1 value" (text %)))
+                      (= "1 value" (text %)))
                 (deep html))))
     (testing "the switch between the views is the page's, on the query
               line, not the section's (see views-test)"
@@ -169,10 +169,10 @@
     (is (some #{"tæl tekster"} (deep (frequency/docs-control da false))))))
 
 (deftest table-caption-test
-  (testing "the table is named and sized"
-    (is (= "Frequencies · 2 values"
+  (testing "the table is sized, and not named: the tab names it"
+    (is (= "2 values"
            (text (frequency/table-caption en sample-result))))
-    (is (= "Frekvenser · 2 værdier"
+    (is (= "2 værdier"
            (text (frequency/table-caption da sample-result)))))
   (testing "a cut table says so"
     (let [cut (assoc sample-result :rows (repeat (inc frequency/row-limit) {}))]
@@ -186,8 +186,9 @@
            (frequency/frequency-heading en sample-result nil)))))
 
 (deftest frequency-table-test
-  ;; the box frames the region, and the region scrolls the table
-  (let [[_ [_ table]] (frequency/frequency-table en sample-result)
+  ;; the box frames the region, and the region, with its render hook,
+  ;; scrolls the table
+  (let [[_ [_ _ table]] (frequency/frequency-table en sample-result)
         [_ _ _ colgroups thead tbody] table
         row   (first (nth tbody 1))]
     (testing "a column group per readable corpus and one for the total"
@@ -281,7 +282,7 @@
         (is (not (some #{[:th {:scope "row"} "tokens"]} html)))))))
 
 (deftest crosstab-caption-test
-  (is (re-find #"^Frequencies · 1 value · 2 columns"
+  (is (re-find #"^1 value · 2 columns"
                (text (frequency/table-caption en crosstab))))
   (testing "cut columns say so"
     (is (re-find #"3 columns, the 2 most frequent shown"

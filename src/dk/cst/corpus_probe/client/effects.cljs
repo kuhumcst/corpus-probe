@@ -216,6 +216,45 @@
     ;; which style-src 'self' refuses to parse
     (.setProperty (.-style el) "padding-inline-start" (str (or cpos 0) "px"))))
 
+;; TODO: a hack for Firefox, which has no scroll-driven animations; remove
+;; it when CSS.supports there says true to the query below
+(defn fade-edges!
+  "Write the fade widths of scroll region `el` that the stylesheet
+  animates elsewhere (style.css, `.scroll:has(> .frequencies)`) on its
+  scroll, its resize and each render, when its table may be another width."
+  [^js el]
+  (when-not (.supports js/CSS "animation-timeline: scroll(self inline)")
+    (when-not (.-fadeEdges el)
+      (let [style    (.-style el)
+            ;; read once: a computed style on every scroll event is the
+            ;; cost this must not have
+            fade     (js/parseFloat (.getPropertyValue (js/getComputedStyle el)
+                                                       "--fade"))
+            update!  (fn []
+                       (let [left (.-scrollLeft el)
+                             most (- (.-scrollWidth el) (.-clientWidth el))]
+                         ;; past the first few pixels of scroll nothing
+                         ;; changes, and a scroll event then writes nothing
+                         (doseq [[k v] {"--fade-start" (min left fade)
+                                        "--fade-end"   (max 0 (min (- most left)
+                                                                   fade))}
+                                 :let [px (str v "px")]
+                                 :when (not= px (.getPropertyValue style k))]
+                           (.setProperty style k px))))
+            observer (js/ResizeObserver. update!)]
+        (set! (.-fadeEdges el) update!)
+        (set! (.-fadeEdgesObserver el) observer)
+        (.addEventListener el "scroll" update! #js {:passive true})
+        (.observe observer el)))
+    ((.-fadeEdges el))))
+
+(defn unfade-edges!
+  "Stop watching the size of scroll region `el` when it leaves the page
+  (see `fade-edges!`)."
+  [^js el]
+  ;; an observer keeps its target, table and all
+  (some-> (.-fadeEdgesObserver el) (.disconnect)))
+
 (defn go-to-page!
   "Go to page `n` of the result on screen once the select has held still
   (see `settle-ms`), as its pager's own links do: the URL in the bar with
@@ -585,6 +624,8 @@
       :navigate           (apply navigate! dispatch! args)
       :go-to-page         (apply go-to-page! dispatch! args)
       :align-pager        (align-pager! (:replicant/node data))
+      :fade-edges         (fade-edges! (:replicant/node data))
+      :unfade-edges       (unfade-edges! (:replicant/node data))
       :set-cookie         (apply set-cookie! args)
       :store-recent       (store-recent! state)
       :push-url           (apply push-url! args)
