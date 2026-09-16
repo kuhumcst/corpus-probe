@@ -128,11 +128,19 @@ msgid "Close"
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/concordance.cljc
-msgid "Read the whole text"
+msgid "Source"
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/concordance.cljc
-msgid "Corpus"
+msgid "see text"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/concordance.cljc
+msgid "More"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/concordance.cljc
+msgid "Less"
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/corpus.cljc

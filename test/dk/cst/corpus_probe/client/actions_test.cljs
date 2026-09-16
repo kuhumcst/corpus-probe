@@ -53,7 +53,8 @@
     :set-query :submit-on-enter :set-condition :set-token :apply-view
     :toggle-corpora :toggle-filter-values :clear-filter :engage
     :toggle-open :filter :leave :swallow-enter :inspect :close
-    :move-cursor :leave-concordance :forget-searches})
+    :move-cursor :key-in-card :toggle-text :leave-concordance
+    :forget-searches})
 
 (deftest act-covers-every-view-action-test
   (let [examples [[:set-mode "extended" {:q "hund" :mode "extended"}]
@@ -77,6 +78,8 @@
                   [:inspect {:token {:word "hund"}} [["PROBE" 9] 0]]
                   [:close]
                   [:move-cursor [["PROBE" 9] 0] "ArrowRight" false]
+                  [:key-in-card [["PROBE" 9] 0] "ArrowRight" false]
+                  [:toggle-text true]
                   [:leave-concordance]
                   [:forget-searches]]]
     (testing "one example per action the views emit, and each is answered"
@@ -735,6 +738,28 @@
       (let [off (:state (actions/act state [:set-autosave false]))]
         (is (= [[:set-cookie :settings "scope=all"]]
                (:effects (actions/act off [:set-autosave true]))))))))
+
+(deftest key-in-card-test
+  (let [k [["PROBE" 9] 0]]
+    (testing "a key in the card moves the cursor as it would on the token"
+      (is (= (actions/move-cursor state k "ArrowRight" false)
+             (actions/act state [:key-in-card k "ArrowRight" false]))))
+    (testing "Escape in the card closes it as its button does, and puts
+              focus back in the concordance rather than dropping it"
+      (let [{:keys [state effects]} (actions/act (assoc state :selected {})
+                                                 [:key-in-card k "Escape" false])]
+        (is (not (contains? state :selected)))
+        (is (= [[:focus concordance/region-id] [:prevent-default]] effects))))
+    (testing "the side the card landed on is measured, not kept"
+      (is (= {:state state :effects [[:mark-side]]}
+             (actions/act state [:mark-side]))))))
+
+(deftest toggle-text-test
+  (testing "the card's disclosure of the text's attributes is remembered
+            as the reader left it, so it stays open from token to token"
+    (let [opened (:state (actions/act state [:toggle-text true]))]
+      (is (true? (:text-open opened)))
+      (is (false? (:text-open (:state (actions/act opened [:toggle-text false]))))))))
 
 (deftest toggle-rail-test
   (let [asked  {:q "hund" :corpus ["PROBE"]}

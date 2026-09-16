@@ -82,9 +82,6 @@ msgstr "korpusser"
 msgid "Corpora"
 msgstr "Korpusser"
 
-msgid "Corpus"
-msgstr "Korpus"
-
 msgid "Counting hits in"
 msgstr "Tæller hits i"
 
@@ -378,8 +375,17 @@ msgstr "ordet efter"
 msgid "List"
 msgstr "Liste"
 
-msgid "Read the whole text"
-msgstr "Læs hele teksten"
+msgid "Source"
+msgstr "Kilde"
+
+msgid "see text"
+msgstr "se tekst"
+
+msgid "More"
+msgstr "Mere"
+
+msgid "Less"
+msgstr "Mindre"
 
 msgid "Use the arrow keys to move between the words, Home and End for the ends of a line."
 msgstr "Brug piletasterne til at bevæge dig mellem ordene, Home og End til linjens ender."

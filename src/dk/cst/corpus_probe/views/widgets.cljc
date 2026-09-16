@@ -127,11 +127,14 @@
 
 (defn facts
   "A definition list of `pairs`, a key and what it holds each: the key
-  named as it is, the value rendered by `attribute-value`."
-  [pairs]
-  [:dl.facts
-   (for [[k v] pairs]
-     (list [:dt (name k)] [:dd (attribute-value k v)]))])
+  as `label` names it, by its name when none is given, the value
+  rendered by `attribute-value`."
+  ([pairs]
+   (facts pairs name))
+  ([pairs label]
+   [:dl.facts
+    (for [[k v] pairs]
+      (list [:dt (label k)] [:dd (attribute-value k v)]))]))
 
 (defn note
   "A side note beside what it is about, `content` in small muted type:

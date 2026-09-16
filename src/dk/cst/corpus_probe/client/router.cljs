@@ -243,6 +243,13 @@
   ;; the concordance scrolls to hold the cursor in the middle of the
   ;; window; a window of a different size holds it somewhere else
   (.addEventListener js/window "resize" (fn [_] (dispatch! [:recentre])))
+  ;; the card anchored to the cursor flips over it as the page scrolls
+  ;; it toward the foot of the window, and its corners must follow. On
+  ;; the document, capturing, so that the concordance scrolling under
+  ;; the cursor counts too: a fixed card follows its anchor a frame
+  ;; behind, and a side read mid-scroll is wrong until the last event
+  (.addEventListener js/document "scroll" (fn [_] (dispatch! [:mark-side]))
+                     #js {:passive true :capture true})
   ;; a press rather than a click, so that a drag begun elsewhere counts,
   ;; and rather than focus, which a label, a summary and the page take
   ;; none of, nor on Safari a box

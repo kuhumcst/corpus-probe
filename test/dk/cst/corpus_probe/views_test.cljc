@@ -101,18 +101,13 @@
                                                       :message "boom"}))]
       (is (some #{"boom"} (deep html)))
       (is (some #{"results"} (deep html)))))
-  (testing "the inspector stands before the answer while a token is
-            selected, and only where the client runs, marking the page"
-    (let [selected {:token {:word "hund"} :corpus "PROBE"}
-          html     (views/search-page (assoc base :client? true
-                                             :selected selected))
-          flat     (deep html)]
-      (is (< (.indexOf flat :aside.inspector) (.indexOf flat :section.help)))
-      (is (= "inspecting" (:class (second html))))
-      (is (not (some #{:aside.inspector}
-                     (deep (views/search-page (assoc base :selected selected))))))
-      (is (not (contains? (second (views/search-page (assoc base :client? true)))
-                          :class))))))
+  (testing "the page marks nothing while a token is selected: the card
+            is the concordance's own (see
+            dk.cst.corpus-probe.views.concordance/inspector)"
+    (is (not (contains? (second (views/search-page
+                                 (assoc base :client? true
+                                        :selected {:token {:word "hund"}})))
+                        :class)))))
 
 (deftest result-announcement-test
   (let [result {:size 1 :page 0 :pages 1 :hits []

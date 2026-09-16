@@ -301,6 +301,40 @@ union of the searched corpora. A structural attribute is read with a
 concordance shows a sentence or a paragraph of context, the export
 shows 20 words on each side, because `tabulate` takes token offsets.
 
+## Token details
+
+A token in the concordance is a button. Focus on it, from a click or
+from the arrow keys, opens a card that names the token: the word as its
+heading, the other positional attributes under it, its source corpus
+with a link to the text itself, and the structural attributes of the
+text under a fold. The fold's line stands at the foot of the card,
+reading More shut and Less open, so the rows it opens stand above it
+rather than split from the rest. It stays as the reader left it while
+the cursor moves, since the text is the same for every token of the
+row, and a corpus may mark it with dozens of attributes.
+
+The card is filled with the accent and set in white, which is what says
+it floats over the page. Above a phone's width, the token is the card's
+title: it takes the same fill while the card is open, and the card
+hangs from it and out to its right, where a tooltip would stand,
+flipping to the token's left or above it where the window runs out. It
+is placed with CSS anchor positioning, so the concordance never moves
+to make room for it, and it follows the token as the page scrolls. A
+phone, and a browser without anchor positioning, shows the card as a
+sheet at the foot of the viewport, which the cursor is kept clear of.
+Focus leaving both the concordance and the card closes it, and so does
+its own button. The card follows the table in the document, so the tab
+order runs from the tokens to the card and on to the pager, and the
+cursor's keys still move the cursor from inside the card; Escape there
+closes it and puts focus back in the concordance.
+
+The card fades in with a small drop from the token, whose fill comes in
+with it, or slides up from the foot as a sheet, and goes the same way;
+a step of the cursor snaps, card and fill alike, as a cursor should;
+the rows its fold opens fade in, and a fold's marker turns rather than
+being redrawn. None of it moves for a reader who has asked their system
+for less motion.
+
 ## Reading a text
 
 The source column of the concordance and the token panel link to a

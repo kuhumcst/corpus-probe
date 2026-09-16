@@ -10,6 +10,7 @@
             [dk.cst.corpus-probe.i18n :as i18n]
             [dk.cst.corpus-probe.url :as url]
             [dk.cst.corpus-probe.views.result :as result]
+            [dk.cst.corpus-probe.views.search.tokens :as tokens-views]
             [dk.cst.corpus-probe.views.widgets :as widgets]))
 
 (def column-count
@@ -529,10 +530,13 @@
                                                   params :context
                                                   (:context result)))))))
 
+(declare inspector)
+
 (defn concordance-section
   "The concordance view of the search in `state`: its sort, context and
-  sample controls, the concordance itself, the pager under it and the
-  download links, worded in the state's `:ui` and wrapped in
+  sample controls, the concordance itself with the card of the token
+  `:selected` in it, the pager under it and the download links, worded
+  in the state's `:ui` and wrapped in
   dk.cst.corpus-probe.views.result/results-region.
 
   The result answers the params the search was `:asked` with, not the
@@ -563,6 +567,11 @@
                              :reach     (:reach result)
                              :client?   client?
                              :cursor    (:cursor state)})
+          ;; right after the table: a card anchored to a token must
+          ;; follow it in the document, and here the tab order runs from
+          ;; the tokens to the card and on to the pager
+          (when client?
+            (inspector ui (:selected state) (:cursor state) (:text-open state)))
           (result/pager ui prev-href next-href position)
           ;; what to do next with these hits, so it follows them: reading
           ;; the concordance is the task, taking it elsewhere is the one
@@ -579,39 +588,64 @@
   than by the class the stylesheet uses, as with `region-id`."
   "inspector")
 
-(defn detail-group
-  "A titled group of attributes `m` in the inspector, a box named `title`
-  on its border like the fieldsets, or nil when empty."
-  [title m]
-  (when (seq m)
-    [:section.box
-     [:h3 title]
-     (widgets/facts m)]))
-
 (defn inspector
-  "The token inspection panel: what the concordance's cursor is on, in
+  "The token inspection card: what the concordance's `cursor` is on, in
   `ui`, from `selected` (its :token, :structs, :corpus and the :cpos and
-  :matchend of its hit, which the link to the whole text takes); nil
-  while nothing is selected. The group titles are in `ui`, the attribute
-  names inside them the corpus's own."
-  [ui {:keys [token structs corpus cpos matchend] :as selected}]
+  :matchend of its hit, which the link to the source text takes); nil
+  while nothing is selected. The word heads the card and its other
+  attributes follow, its source last among them; the structural
+  attributes of the text, the same for every token of the row, stand
+  under a disclosure that is `text-open?` (see
+  dk.cst.corpus-probe.client.actions/toggle-text)."
+  [ui {:keys [token structs corpus cpos matchend] :as selected} cursor
+   text-open?]
   (when selected
-    ;; not a popover: that would want focus and the top layer, while the
-    ;; cursor must stay on the token for the arrow keys to keep moving.
-    ;; Focus leaving it is how the client knows to close it
-    [:aside.inspector {:id         inspector-id
-                       :aria-label (i18n/tr ui "Token details")
-                       :tabindex   "-1"
-                       :on         {:focusout [:leave-concordance]}}
-     [:h2 (i18n/tr ui "Token details")]
-     [:button.inspector-close {:type "button" :on {:click [:close]}}
-      (i18n/tr ui "Close")]
-     (detail-group (i18n/tr ui "Token") (dissoc token :open :close))
-     (detail-group (i18n/tr ui "Text") structs)
-     (when (and corpus cpos)
-       [:p [:a {:href (url/text corpus cpos matchend)}
-            (i18n/tr ui "Read the whole text")]])
-     (when corpus
-       [:section.box
-        [:h3 (i18n/tr ui "Corpus")]
-        [:p [:a {:href (url/corpus corpus)} [:code corpus]]]])]))
+    (let [attrs (dissoc token :word :open :close)]
+      ;; not a popover: that would want focus and the top layer, while
+      ;; the cursor must stay on the token for the arrow keys to keep
+      ;; moving. Focus leaving it is how the client knows to close it;
+      ;; while focus is in it, the cursor's keys still reach the cursor
+      [:aside.inspector
+       {:id                   inspector-id
+        :aria-label           (i18n/tr ui "Token details")
+        :tabindex             "-1"
+        :on                   {:focusout [:leave-concordance]
+                               :keydown  [:key-in-card cursor
+                                          :event/key :event/ctrl?]}
+        ;; which side of the token it landed on, for the corners (see
+        ;; dk.cst.corpus-probe.client.effects/mark-side!)
+        :replicant/on-render  [:mark-side]
+        ;; away for its first frame and again until its transition
+        ;; ends, which is how the stylesheet fades it in and out
+        :replicant/mounting   {:class "away"}
+        :replicant/unmounting {:class "away"}}
+       [:h2 (:word token)]
+       ;; a cross, as a card is closed everywhere, drawn by the
+       ;; stylesheet so that every browser draws the same one; its name
+       ;; is for the reader who hears it
+       [:button.inspector-close {:type       "button"
+                                 :aria-label (i18n/tr ui "Close")
+                                 :on         {:click [:close]}}]
+       ;; the source is the last of the word's facts, so the keys of
+       ;; both share a column, the attributes named as the form names
+       ;; them; a corpus that annotates nothing has no list
+       (when (or corpus (seq attrs))
+         (cond-> (widgets/facts attrs
+                                #(tokens-views/attribute-label ui (name %)))
+           corpus (conj (list [:dt (i18n/tr ui "Source")]
+                              [:dd.inspector-source
+                               [:a {:href (url/corpus corpus)} [:code corpus]]
+                               (when cpos
+                                 (list " (" [:a {:href (url/text corpus cpos
+                                                                 matchend)}
+                                             (i18n/tr ui "see text")] ")"))]))))
+       (when (seq structs)
+         [:details.inspector-text {:open (boolean text-open?)
+                                   :on   {:toggle [:toggle-text
+                                                   :event.target/open]}}
+          ;; the line stands at the foot of the card, after what it opens
+          ;; (see the stylesheet), so it says which way it will fold
+          [:summary (if text-open?
+                      (i18n/tr ui "Less")
+                      (i18n/tr ui "More"))]
+          (widgets/facts structs)])])))

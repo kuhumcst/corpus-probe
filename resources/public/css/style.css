@@ -4,7 +4,19 @@
    tokens.css's; a part's breakpoints stand with it. */
 
 :root {
-  --sheet-block-size: 45vh;   /* also the room kept under the sheet */
+  --sheet-block-size: 10rem;  /* also the room kept under the sheet */
+  /* the marker of a disclosure, cut from a square: a typed one comes
+     from whatever font has a triangle, at that font's size, which the
+     engines do not agree on. One size beside any type, and centred on
+     the line by flex. It points right shut, and open it turns to point
+     at the content, down or up as that stands below the line or above
+     it (see the motion rules at the foot) */
+  --marker-size: 0.5rem;
+  --marker:      polygon(0 0, 100% 50%, 0 100%);
+  /* how far the cursor's fill reaches past its box: what the row's
+     padding holds above and below, and a word's space holds at the
+     sides along with the padding in the box. The card lines up on it */
+  --cursor-reach: 4px;
   /* the line through the rail, where labels end and controls begin; a
      box narrows its column by its padding and edge to keep the line */
   --line: 5.5rem;
@@ -15,10 +27,11 @@
   --label-col: var(--line);
   /* every bordered box is rounded by the same hand */
   --radius: 0.25rem;
-  /* how deep a tab is. Set in em, so that it follows the type down
-     where a tab shrinks; what stands beside a tab takes it too, so that
-     every word in a row of them sits on one level */
-  --tab-depth: calc(2.875em + 1px);
+  /* how deep a tab is. In rem, since the tab's own type is set smaller
+     than the line it stands on; a phone, where a tab shrinks, sets it
+     down as well. What stands beside a tab takes it too, so that every
+     word in a row of them sits on one level */
+  --tab-depth: calc(2.875rem + 1px);
   /* the step down from the top of the query line to the field. Set, not
      measured: no rule can read a box's height. It holds while the first
      box in the rail holds one row, which is its resting state */
@@ -277,9 +290,8 @@ a abbr[title] { cursor: inherit; text-decoration: none; }
 
   /* an answer folds the rail under its summary on the query line, and
      the rows under the line take its column too, so the hits have the
-     whole width. The panel keeps the column as it is, so the fold waits
-     while a token is inspected */
-  .search-page:not(.inspecting):has(.rail-fold:not([open])) {
+     whole width */
+  .search-page:has(.rail-fold:not([open])) {
     grid-template-areas: "rail    query   views"
                          "status  status  status"
                          "results results results";
@@ -291,18 +303,6 @@ a abbr[title] { cursor: inherit; text-decoration: none; }
     margin-block-start: var(--query-step);
     line-height: calc(var(--tab-depth) - var(--box-pad));
   }
-
-  /* the panel is short and follows the reading, so it sticks; a scroll
-     container clips at its padding edge, where a focus ring would be,
-     so the padding gives it room and the margin takes it back */
-  .search-page > .inspector {
-    grid-area: rail; position: sticky; inset-block-start: 1rem;
-    max-block-size: calc(100vh - 2rem); overflow-y: auto;
-    padding: 0.25rem; margin: -0.25rem;
-  }
-
-  /* the panel takes the rail's column while open; the form still submits */
-  .inspecting .rail-fold { display: none; }
 }
 
 /* Widgets, and the controls every view uses */
@@ -312,15 +312,24 @@ a abbr[title] { cursor: inherit; text-decoration: none; }
 :where(input:not([type="checkbox"], [type="radio"]), select, textarea,
        button) {
   border: 1px solid var(--rule); border-radius: var(--radius);
-  padding: 0.25rem 0.5rem; background: var(--field); color: var(--tx);
+  padding: 0.25rem 0.5rem; background-color: var(--field); color: var(--tx);
 }
-:where(button, select) { background: var(--accent-tint);
+:where(button, select) { background-color: var(--accent-tint);
                          border-color: var(--accent);
                          color: var(--tx); }
 :where(button:enabled) { cursor: pointer; }
 :where(button:enabled, select:enabled):hover {
-  background: var(--accent-tint-2);
+  background-color: var(--accent-tint-2);
 }
+/* a select draws its own arrow, a chevron in the ink at the end of the
+   field, rather than wearing the platform's: WebKit's menu button takes
+   no padding, and the rest each draw a different arrow. The colour
+   above is set as a colour alone, so the arrow survives it */
+select { appearance: none; padding-inline-end: 1.6rem;
+         background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23100F0F' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E");
+         background-repeat: no-repeat;
+         background-position: right 0.55rem center;
+         background-size: 0.6em auto; }
 :where(input, select, textarea, button):disabled { opacity: 0.4; }
 /* Safari draws a search field its own way until told not to */
 input[type="search"] { appearance: none; }
@@ -363,11 +372,19 @@ label:has(:is(input, select):disabled) { color: var(--rule); }
    the boxes it hides. A key beside its value is muted.
 
    The face is named rather than inherited: a column name stands over the
-   corpus's own text and is apparatus, not part of it */
-legend, .inspector h3, .recent > h2, .facts dt, thead th, .tabs a,
-.rail-fold > summary {
-  font-family: var(--face); font-variant: all-small-caps;
-  letter-spacing: 0.04em; font-weight: 600; color: var(--accent-deep);
+   corpus's own text and is apparatus, not part of it.
+
+   The small capitals are set, not asked for: the face has none, and
+   the engines synthesise them at different sizes, Gecko at 0.8 of the
+   type and Blink and WebKit at 0.7. Capitals at 0.8 read the same
+   everywhere. The leading gives the line the height the full type had,
+   so nothing laid out on it moves; the depth of a tab is in rem for
+   the same reason */
+legend, .inspector-text > summary, .inspector-close, .recent > h2,
+.facts dt, thead th, .tabs a, .rail-fold > summary {
+  font-family: var(--face); text-transform: uppercase;
+  font-size: 0.8em; line-height: 1.875;
+  letter-spacing: 0.05em; font-weight: 600; color: var(--accent-deep);
 }
 .facts dt { color: var(--tx-2); }
 
@@ -381,13 +398,12 @@ legend, .inspector h3, .recent > h2, .facts dt, thead th, .tabs a,
    out of the flow instead, and the box holds the room it would have
    stood in: the padding below it, and the margin above, which is what
    puts the line where a fieldset beside it draws its own */
-.inspector .box, .recent { position: relative; }
-.inspector .box { padding-block-start: 0.75rem; margin-block-start: 0.4rem; }
-.inspector h3, .recent > h2 {
+.recent { position: relative; }
+.recent > h2 {
   position: absolute; inset-block-start: -0.55em;
   inset-inline-start: var(--box-pad);
   margin: 0; padding-inline: 0.3em; background: var(--bg);
-  font-size: 1rem; line-height: 1;
+  font-size: 0.8rem; line-height: 1;
 }
 
 /* a live region is rendered even when empty, so its changes are
@@ -423,7 +439,7 @@ legend, .inspector h3, .recent > h2, .facts dt, thead th, .tabs a,
    beside it */
 .tabs a { position: relative; inset-block-end: -1px;
           display: flex; align-items: center;
-          block-size: var(--tab-depth); padding-inline: 1em;
+          block-size: var(--tab-depth); padding-inline: 1.25em;
           border: 1px solid transparent;
           border-radius: var(--radius) var(--radius) 0 0; }
 /* each tab in its own hue, by the key it carries (see
@@ -441,10 +457,11 @@ legend, .inspector h3, .recent > h2, .facts dt, thead th, .tabs a,
                        border-block-end-color: var(--bg);
                        background: var(--bg); }
 /* narrower than this a masthead of four tabs runs off the edge. A tab
-   shrinks whole rather than closing up: its padding and its depth are
-   set in em, so both follow the type down */
+   shrinks whole rather than closing up: its padding follows the type
+   down, and its depth is set down with it */
 @media (max-width: 28rem) {
-  .tabs a { font-size: 0.8rem; }
+  :root { --tab-depth: calc(2.3rem + 1px); }
+  .tabs a { font-size: 0.64rem; }
 }
 
 hgroup { display: flex; flex-direction: column; gap: 0.25rem; }
@@ -459,7 +476,7 @@ hgroup p { color: var(--tx-2); }
 table { border-collapse: collapse; }
 /* Use the size of a legend, and not the size of the table. A column
    name is apparatus. The tables set their data smaller than the page */
-thead th { border-block-end: 1px solid var(--rule); font-size: 1rem; }
+thead th { border-block-end: 1px solid var(--rule); font-size: 0.8rem; }
 caption { caption-side: top; text-align: start; padding-block: 0.25rem;
           color: var(--tx-2); }
 
@@ -488,17 +505,17 @@ pre { font-size: 0.875rem; padding: 0.75rem 1rem;
 .chooser-group > details { flex: 1; min-inline-size: 0; }
 
 /* a flex summary is no list-item and gets no marker from the user agent,
-   so every summary draws the agent's own glyph, scaled in place */
+   so every summary draws its own (see --marker), centred on the line
+   while the rest of the row keeps to the baseline */
 .chooser-summary {
   display: flex; align-items: baseline; gap: 0.3rem; list-style: none;
 }
 .chooser-summary::before {
-  content: counter(disclosure, disclosure-closed);
-  display: inline-block; transform: scale(1.2);
+  content: ""; flex: none; align-self: center;
+  inline-size: var(--marker-size); block-size: var(--marker-size);
+  background: currentColor; clip-path: var(--marker);
 }
-.chooser details[open] > .chooser-summary::before {
-  content: counter(disclosure, disclosure-open);
-}
+.chooser details[open] > .chooser-summary::before { rotate: 90deg; }
 .chooser-find { flex: 1; min-inline-size: 0; }
 
 /* The search form */
@@ -510,17 +527,18 @@ pre { font-size: 0.875rem; padding: 0.75rem 1rem;
    the form's gap and one line */
 .rail-fold[open] { position: relative; padding-block-end: 2.5rem; }
 .rail-fold[open] > summary { position: absolute; inset-block-end: 0;
-                             inset-inline: 0; text-align: center;
-                             color: var(--tx-2); list-style: none; }
-/* the marker points at the boxes, which stand above it: the agent's
-   open glyph mirrored, since it draws no upward one itself, at the
-   chooser's scale and with the room an agent's own marker keeps */
-.rail-fold[open] > summary::before {
-  content: counter(disclosure, disclosure-open);
-  display: inline-block; vertical-align: middle;
-  transform: scale(1.2, -1.2);
-  margin-inline-end: 0.5em;
+                             inset-inline: 0; justify-content: center;
+                             color: var(--tx-2); }
+/* the fold draws its marker too (see --marker), and open it points at
+   the boxes, which stand above it */
+.rail-fold > summary { display: flex; align-items: center; gap: 0.5em;
+                       list-style: none; }
+.rail-fold > summary::before {
+  content: ""; flex: none;
+  inline-size: var(--marker-size); block-size: var(--marker-size);
+  background: currentColor; clip-path: var(--marker);
 }
+.rail-fold[open] > summary::before { rotate: -90deg; }
 /* the form's gaps are its rhythm, so nothing in it keeps a margin;
    `:where`, so the empty live region's rule still outweighs this */
 .search-form > *,
@@ -534,9 +552,10 @@ pre { font-size: 0.875rem; padding: 0.75rem 1rem;
 .settings-buttons > button { flex: 1; }
 
 /* spoken, never seen: clipped rather than moved off screen, which cannot
-   reach the scrollable area */
-.spoken { position: absolute; width: 1px; height: 1px;
-          clip-path: inset(50%); overflow: hidden; }
+   reach the scrollable area. The word heading the token card is one:
+   the eye has the token itself, filled to match */
+.spoken, .inspector > h2 { position: absolute; width: 1px; height: 1px;
+                           clip-path: inset(50%); overflow: hidden; }
 
 .query { display: flex; flex-direction: column; gap: 0.5rem; }
 
@@ -869,6 +888,9 @@ pre { font-size: 0.875rem; padding: 0.75rem 1rem;
 .kwic :is(.kwic-left, .kwic-right) { inline-size: 50%;
                                      min-inline-size: 900ch; }
 .kwic th, .kwic td { padding: var(--cell-pad) 0.25em; }
+/* a step more between the words than a space gives: the cursor's fill
+   reaches into the space on either side and must not touch the words */
+.kwic :is(.kwic-left, .kwic-match, .kwic-right) { word-spacing: 0.25em; }
 .kwic th { text-align: left; }
 /* scoped, or the heading rule above wins and the left heading flips */
 .kwic .kwic-left { text-align: right; }
@@ -891,7 +913,7 @@ pre { font-size: 0.875rem; padding: 0.75rem 1rem;
 /* an arrow at the size of the words beside it is a faint mark, and it
    rides high in the line: drawn larger, and let down to the heading it
    stands with. Its title names the column, as an abbreviation's does */
-.kwic thead .kwic-arrow { font-size: 1.375em; line-height: 1;
+.kwic thead .kwic-arrow { font-size: 1.72em; line-height: 1;
                           vertical-align: -0.1em; cursor: help; }
 /* no padding at the sides: it is the start of this cell's content box
    that its pinned name can be held at, so any padding there is a step
@@ -925,12 +947,22 @@ pre { font-size: 0.875rem; padding: 0.75rem 1rem;
                      padding-block: 0; }
 
 /* a token is a button that must still read as running text; the cursor
-   is a position, not a passing focus, so :focus, not :focus-visible */
+   is a position, not a passing focus, so :focus, not :focus-visible.
+   The cursor is filled as the card is while the card is open, whichever
+   of the two has focus: the word is the card's title, and the card hangs
+   from it. The fill takes no room in the line: it reaches past the word
+   on either side by a padding the margin takes back, and further on
+   every side by an outline, which the row's padding holds above and
+   below and a word's space holds at the sides. Forced colours drop the
+   fill and paint the outline, so the cursor is still shown there */
 .kwic button.token { font: inherit; color: inherit; background: none;
-                     border: 0; padding: 0; cursor: pointer;
+                     border: 0; padding: 0 0.2em; margin-inline: -0.2em;
+                     border-radius: 2px; cursor: pointer;
                      vertical-align: baseline; }
-.kwic button.token:focus { outline: 2px solid var(--accent);
-                           outline-offset: 1px; }
+.kwic button.token:focus,
+body:has(.inspector) .kwic .token[tabindex="0"] {
+  background: var(--layer); color: var(--layer-tx);
+  outline: var(--cursor-reach) solid var(--layer); outline-offset: 0; }
 
 /* the anchors as cqp shows them; both classes, or the button rule wins */
 .kwic .token.target { font-weight: bold; }
@@ -948,36 +980,211 @@ pre { font-size: 0.875rem; padding: 0.75rem 1rem;
    the window travels that far */
 .kwic .token.fade-3 { opacity: 0; pointer-events: none; }
 
-/* The inspector: a sheet at the foot of the viewport, a column when wide */
+/* The inspector: a card of a few lines filled with the accent and set
+   in white, which is what says it floats over the page without a
+   shadow. A sheet at the foot of the viewport, and where the browser
+   can anchor it, a card under the token the cursor is on, which takes
+   the same fill and is the card's title */
 
 /* above the concordance, whose pinned position column has a layer of its
    own; without one higher, the sheet is painted under the rows it
-   describes */
+   describes.
+
+   The card is one grid of keys and values, the pairs flowing into it
+   in order, one to a row. The lists and the disclosure are display:
+   contents, so that every key and value is an item of the card's grid
+   and the columns run the whole way down, which the spec allows for
+   details (see .result-head). The disclosure's content keeps a box of
+   its own, since that box is what the browser hides while the
+   disclosure is shut; it shares the columns as a subgrid. The rule
+   between a key and its value is drawn by the key, stretched to the
+   row's height, so the line is whole. The close control stands in the
+   corner, holding no column of its own.
+
+   TODO: the sheet is as wide as the screen, and the text's rows, which
+   may be many, could stand two to a row where it has the width. A
+   first try, the grid given four columns from 28rem up, read badly:
+   the rows are few by default, and two half-tables under one list
+   looked like a mistake. Worth another look with more rows in hand */
 .inspector { position: fixed; inset: auto 0 0 0; z-index: 2;
              max-block-size: var(--sheet-block-size); overflow: auto;
-             padding: 0.75rem 1rem; background: var(--bg);
-             border-block-start: 1px solid var(--rule);
-             display: grid; grid-template-columns: 1fr auto;
-             row-gap: 0.75rem; align-content: start; }
-/* the document ends above the sheet rather than under it */
+             padding: 0.75rem 1rem 0.5rem; font-size: 0.875rem;
+             background: var(--layer); color: var(--layer-tx);
+             color-scheme: dark;
+             display: grid; grid-template-columns: max-content 1fr; }
+/* the document ends above the sheet rather than under it. Open, the
+   text's attributes may be many, so the sheet may grow and scroll */
 body:has(.inspector) { padding-block-end: var(--sheet-block-size); }
+body:has(.inspector-text[open]) { --sheet-block-size: 45vh; }
 
-.inspector > * { grid-column: 1 / -1; margin-block: 0; }
-.inspector > h2 { grid-column: 1; font-size: 1.15rem; }
-.inspector-close { grid-column: 2; justify-self: end;
-                   align-self: center; }
+.inspector :is(.facts, .inspector-text) { display: contents; }
+/* a hairline parts the rows the fold opens from the word's own, and
+   goes with them: shut, the browser empties the box but keeps it, and
+   its line and its step would stand */
+.inspector-text:not([open])::details-content { display: none; }
+.inspector-text::details-content { grid-column: 1 / -1; display: grid;
+                                   grid-template-columns: subgrid;
+                                   margin-block-start: 0.35rem;
+                                   padding-block-start: 0.35rem;
+                                   border-block-start: 1px solid
+                                                       var(--layer-rule); }
+/* the card's two controls, the close button and the fold's line, are
+   one kind of thing: the tint the page's buttons wear, without their
+   border, which the fill would swallow, in the voice of a legend, and
+   stepping under the pointer as a button does, though toward the
+   light: on the page a button deepens, and on this fill deeper is
+   nearer the ground */
+.inspector :is(.inspector-close, summary) {
+  border: 0; border-radius: var(--radius);
+  background: var(--accent-tint); color: var(--accent-deep); }
+.inspector :is(.inspector-close, summary):hover {
+  background: var(--accent-pale); }
+/* in the corner the cross stands over the first row's end, which the
+   first value keeps clear of. The cross is drawn, as the fold's marker
+   is: typed, it came from whatever font had one, at that font's size,
+   and WebKit set it high in the button besides. A square the height of
+   the small caps, cut to two crossed bars, centred by grid in a box the
+   chip's height */
+.inspector-close { position: absolute; inset-block-start: 0.75rem;
+                   inset-inline-end: 1rem; padding: 0;
+                   display: inline-grid; place-items: center;
+                   inline-size: 1.75rem; block-size: 1.5rem; }
+.inspector > .facts > dd:first-of-type { padding-inline-end: 2.5rem; }
+.inspector-close::before {
+  content: ""; inline-size: 0.6rem; block-size: 0.6rem;
+  background: currentColor;
+  clip-path: polygon(0 15%, 15% 0, 50% 35%, 85% 0, 100% 15%, 65% 50%,
+                     100% 85%, 85% 100%, 50% 65%, 15% 100%, 0 85%,
+                     35% 50%); }
+/* forced colours drop backgrounds, and the drawn shapes with them, so
+   there they are painted in the colour of a button's own text */
+@media (forced-colors: active) {
+  .inspector :is(.inspector-close, summary)::before,
+  .chooser-summary::before, .rail-fold > summary::before {
+    forced-color-adjust: none; background: ButtonText; }
+}
+/* the keys and the disclosure keep the small-caps voice but not its
+   colours */
+.inspector :is(dt, dd) { padding-block: 0.15rem; }
+.inspector dt { padding-inline-end: 0.6rem; text-align: start;
+                border-inline-end: 1px solid var(--layer-rule);
+                color: inherit; }
+/* the fold's line stands at the foot of the card, after the rows it
+   opens rather than before them, so they are not split from the rest;
+   the order does it, the line being the last item placed. It is the
+   card's width, its words centred as the rail's are; the step above it
+   is the card's own padding, so the rows keep the same distance from
+   it as from the card's head. Its marker is drawn (see --marker),
+   centred on the words by flex, pointing up open, at the rows it
+   opened */
+.inspector summary { order: 1; grid-column: 1 / -1; justify-self: stretch;
+                     margin-block-start: 0.6rem; padding: 0.1rem 0.6rem;
+                     list-style: none; display: flex;
+                     justify-content: center; align-items: center;
+                     gap: 0.4em; }
+.inspector summary::before { content: ""; inline-size: var(--marker-size);
+                             block-size: var(--marker-size);
+                             background: currentColor;
+                             clip-path: var(--marker); }
+.inspector-text[open] > summary::before { rotate: -90deg; }
+.inspector dd { padding-inline-start: 0.6rem; margin: 0;
+                font-family: var(--mono); }
+.inspector-source { font-family: var(--face); }
+/* a link is the layer's own link colour, its underline whole rather
+   than faint */
+.inspector a { color: var(--layer-link); text-decoration-color: currentColor; }
 
-.inspector .box > p { margin-block: 0; }
+/* above a phone's width, where the browser anchors: the card hangs
+   from the cursor's token, its title, and out to its right, where a
+   tooltip would, and flips to the token's left or above it where the
+   window runs out. It stays fixed, as the sheet is: the window is then
+   its containing block, so it flips where the window ends rather than
+   where the page does, and it follows the token as the page scrolls,
+   an anchored element being moved with its anchor's scroll containers.
+   The one tabbable token is the cursor (see
+   dk.cst.corpus-probe.views.concordance/token), so it is the anchor
+   whether or not it has focus, and the card holds still while focus
+   moves into it. After the sheet rules, which the body rule matches
+   exactly. A phone keeps the sheet, its screen having no room beside
+   a token, and so does a browser without anchors; the client tells the
+   sheet from the card by the position area (see
+   dk.cst.corpus-probe.client.effects/sheet?) */
+@supports (anchor-name: --cursor) {
+  @media (min-width: 40rem) {
+    .kwic .token[tabindex="0"] { anchor-name: --cursor; }
+    /* flush under the token, over the foot of its outline, and out to
+       the outline's edge, so the two are one shape; one pair to a row,
+       the value taking the control's column too on every row but the
+       first, where the control stands in the flow rather than the
+       corner */
+    .inspector { inset: auto;
+                 position-anchor: --cursor;
+                 position-area: bottom span-right;
+                 position-try-fallbacks: flip-inline, flip-block,
+                                         flip-block flip-inline;
+                 margin: 0 calc(-1 * var(--cursor-reach));
+                 /* under a centred cursor it fits below, or above once
+                    flipped, so the card never straddles the foot */
+                 inline-size: 16rem; max-block-size: 40vh;
+                 padding: var(--box-pad) var(--box-pad) 0.5rem;
+                 grid-template-columns: max-content 1fr auto; }
+    .inspector dt { grid-column: 1; }
+    .inspector dd { grid-column: 2 / -1; }
+    .inspector > .facts > dd:first-of-type { grid-column: 2;
+                                             padding-inline-end: 0; }
+    .inspector-close { position: static; grid-row: 1; grid-column: 3;
+                       align-self: start; margin-inline-start: 0.6rem; }
+    body:has(.inspector) { padding-block-end: 0; }
 
-/* the panel's line is the rail's; a longer key widens the column */
-.inspector .facts { grid-template-columns: minmax(var(--label-col), max-content) 1fr;
-                    column-gap: 0.5rem; margin-block: 0; }
+    /* the corners are square where the two meet and rounded elsewhere,
+       the token's as a mark's are and the card's as a box's. Which
+       corners meet depends on the side the card landed on, which no
+       rule can read, so the client says (see
+       dk.cst.corpus-probe.client.effects/mark-side!) */
+    body:has(.inspector) .kwic .token[tabindex="0"] {
+      border-radius: 2px 2px 0 0; }
+    body:has(.inspector[data-above]) .kwic .token[tabindex="0"] {
+      border-radius: 0 0 2px 2px; }
+    .inspector { border-radius: 0 var(--radius) var(--radius) var(--radius); }
+    .inspector[data-left] {
+      border-radius: var(--radius) 0 var(--radius) var(--radius); }
+    .inspector[data-above] {
+      border-radius: var(--radius) var(--radius) var(--radius) 0; }
+    .inspector[data-above][data-left] {
+      border-radius: var(--radius) var(--radius) 0 var(--radius); }
+  }
+}
 
-/* wide: a column, not a sheet. After the sheet rules, which the body
-   rule matches exactly */
-@media (min-width: 64rem) {
-  .search-page > .inspector { border-block-start: 0; }
-  body:has(.inspector) { padding-block-end: 0; }
+/* Motion, all of it, and only for a reader who has not asked their
+   system for less. The card is away for its first frame and again from
+   the moment it is dismissed until the transition ends (see
+   dk.cst.corpus-probe.views.concordance/inspector), and the cursor's
+   fill comes and goes with it: every token wears the outline unseen, so
+   that its colour can turn, though not under forced colours, which
+   would paint it. A step of the cursor is no arrival: with the card up
+   and settled, the fill snaps to the next token as the card does */
+@media (prefers-reduced-motion: no-preference) {
+  .inspector { transition: opacity 120ms ease-out, translate 120ms ease-out; }
+  .kwic button.token { transition: background-color 120ms ease-out,
+                                   color 120ms ease-out,
+                                   outline-color 120ms ease-out; }
+  body:has(.inspector:not(.away)) .kwic button.token { transition: none; }
+  @media (forced-colors: none) {
+    .kwic button.token { outline: var(--cursor-reach) solid transparent;
+                         outline-offset: 0; }
+  }
+  .inspector.away { opacity: 0; translate: 0 100%; }
+  @supports (anchor-name: --cursor) {
+    @media (min-width: 40rem) {
+      .inspector.away { translate: 0 -0.25rem; }
+    }
+  }
+  .chooser-summary::before, .rail-fold > summary::before,
+  .inspector summary::before { transition: rotate 150ms ease-out; }
+  .inspector-text::details-content { transition: opacity 150ms ease-out; }
+  @starting-style {
+    .inspector-text[open]::details-content { opacity: 0; }
+  }
 }
 
 /* Frequency and corpus tables */

@@ -85,6 +85,13 @@
   --accent-tint:   color-mix(in srgb, var(--accent) 28%, white);
   --accent-tint-2: color-mix(in srgb, var(--accent) 45%, white);
   --accent-deep:   color-mix(in srgb, var(--accent) 80%, black);
+  /* a layer over the page: filled with the deep accent, its text white
+     and its links a yellow a step past the mark's, Flexoki's yellow-150,
+     which holds 4.5 there (WCAG 1.4.3) as no blue does */
+  --layer:      var(--accent-deep);
+  --layer-tx:   #FFFFFF;
+  --layer-rule: color-mix(in srgb, var(--layer-tx) 40%, transparent);
+  --layer-link: #F1D67E;
 
   /* Two faces: the page reads in one, apparatus and prose alike, and
      what a corpus holds, with the code that asks for it, in the other.

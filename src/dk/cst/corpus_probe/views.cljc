@@ -138,12 +138,11 @@
 
 (defn search-page
   "The search page's main content from application `state`: the query
-  form with the corpus chooser over its `:folders`, the inspector while
-  a token is `:selected`, and the results region by `:view` once the
-  `:params` described a search, else the `:help`; and the searches made
-  lately, `:recent`, wherever there are no hits to read."
-  [{:keys [ui view view-hrefs folders params lists result error selected
-           client?]
+  form with the corpus chooser over its `:folders`, and the results
+  region by `:view` once the `:params` described a search, else the
+  `:help`; and the searches made lately, `:recent`, wherever there are
+  no hits to read."
+  [{:keys [ui view view-hrefs folders params lists result error client?]
     :as state}]
   (let [{:keys [corpora]} lists
         corpus    (set (:corpus params))
@@ -158,8 +157,7 @@
                                      :client?  client?))]
     ;; no h1 of its own: the results region heads the page once there is
     ;; an answer, and the search landmark says what the page is until then
-    [:main.search-page (cond-> widgets/main-attrs
-                         selected (assoc :class "inspecting"))
+    [:main.search-page widgets/main-attrs
      ;; the form has to say which view it is being submitted from, or a
      ;; result regrouped from the frequency table comes back as a
      ;; concordance: one page serves both, and only this says which.
@@ -176,9 +174,6 @@
      ;; standing after an element that changes tag is made again
      (widgets/status "spoken" (result-announcement state))
      (search/recent-announcement ui (:announcement state))
-     ;; before the hits in the document, so reading order and visual
-     ;; order agree; the panel takes the form's column while it is open
-     (when client? (concordance/inspector ui selected))
      ;; on the query line, not in the result's own header: the grid
      ;; gives it a column beside the query, and the rows under it span
      ;; both, so the answer is as wide as it was. It waits for hits:

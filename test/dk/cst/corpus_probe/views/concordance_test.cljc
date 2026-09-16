@@ -565,37 +565,96 @@
                        {:ui en :view :kwic :asked {:q "hund"}
                         :params {:q "hund"} :result example-result})))))))
 
+(defn disclosure
+  "The text's disclosure in the card `html`; nil for none."
+  [html]
+  (first (filter #(and (vector? %) (= :details.inspector-text (first %)))
+                 (deep html))))
+
 (deftest inspector-test
   (testing "nothing selected, no panel: it describes the cursor or nothing"
-    (is (nil? (concordance/inspector en nil))))
-  (let [html (concordance/inspector en {:token   {:word "hund" :pos "NCSI"}
-                                        :structs {:text_title "Hverdag"}
-                                        :corpus  "PROBE"})]
+    (is (nil? (concordance/inspector en nil nil false))))
+  (let [cursor   [["PROBE" 9] 0]
+        selected {:token   {:word "hund" :pos "NCSI"}
+                  :structs {:text_title "Hverdag"}
+                  :corpus  "PROBE"}
+        html     (concordance/inspector en selected cursor false)
+        flat     (deep html)]
     (testing "it is a named complementary region, not a popover, found by
               the client by its id"
       (is (= :aside.inspector (first html)))
       (is (= concordance/inspector-id (:id (second html))))
       (is (= "Token details" (:aria-label (second html))))
       (is (not (contains? (second html) :popover))))
-    (testing "it never takes focus, so the cursor can keep moving"
-      (is (not (some #(and (map? %) (contains? % :autofocus)) (deep html)))))
-    (testing "the token, its text and its corpus are named groups, boxes
-              like the fieldsets, the facts of each a definition list"
-      (is (some #{[:h3 "Token"]} (deep html)))
-      (is (some #{[:h3 "Text"]} (deep html)))
-      (is (some #{[:h3 "Corpus"]} (deep html)))
-      (is (= 3 (count (filter #{:section.box} (deep html)))))
-      (is (some #{:dl.facts} (deep html)))
-      (is (some #{"NCSI"} (deep html)))
-      (is (some #{[:cite "Hverdag"]} (deep html))))
-    (testing "closing is a plain button, since Escape is handled by the grid"
-      (is (some #{[:button.inspector-close {:type "button" :on {:click [:close]}}
-                   "Close"]}
-                (deep html))))))
+    (testing "it never takes focus, so the cursor can keep moving, and the
+              cursor's keys reach the cursor from inside it"
+      (is (not (some #(and (map? %) (contains? % :autofocus)) flat)))
+      (is (= [:key-in-card cursor :event/key :event/ctrl?]
+             (get-in (second html) [:on :keydown]))))
+    (testing "the client says on render which side of the token it landed"
+      (is (= [:mark-side] (:replicant/on-render (second html)))))
+    (testing "it arrives and leaves under one class, for the stylesheet"
+      (is (= {:class "away"} (:replicant/mounting (second html))))
+      (is (= {:class "away"} (:replicant/unmounting (second html)))))
+    (testing "the word heads the card, and its other attributes follow as
+              a definition list of their own, named as the form names them"
+      (is (some #{[:h2 "hund"]} flat))
+      (is (some #{:dl.facts} flat))
+      (is (some #{[:dt "POS"]} flat))
+      (is (some #{[:dt "ordklasse"]}
+                (deep (concordance/inspector da selected cursor false))))
+      (is (some #{[:dd "NCSI"]} flat)))
+    (testing "the corpus is the last of them"
+      (is (some #{[:dt "Source"]} flat))
+      (is (some #{[:a {:href "/corpora/probe"} [:code "PROBE"]]} flat)))
+    (testing "the text's attributes are under a disclosure, shut or open as
+              the reader left it, which tells the client when it is worked"
+      (is (false? (:open (second (disclosure html)))))
+      (is (true? (:open (second (disclosure (concordance/inspector
+                                             en selected cursor true))))))
+      (is (= [:toggle-text :event.target/open]
+             (get-in (second (disclosure html)) [:on :toggle])))
+      (is (some #{[:summary "More"]} flat))
+      (is (some #{[:summary "Less"]}
+                (deep (concordance/inspector en selected cursor true))))
+      (is (some #{[:cite "Hverdag"]} flat))
+      (testing "and a corpus that marks no structure has no disclosure"
+        (is (nil? (disclosure (concordance/inspector
+                               en (dissoc selected :structs) cursor false))))))
+    (testing "closing is a plain button, since Escape is handled by the
+              grid: a cross the stylesheet draws, named for the reader
+              who hears it"
+      (is (some #{[:button.inspector-close {:type       "button"
+                                            :aria-label "Close"
+                                            :on         {:click [:close]}}]}
+                flat)))))
+
+(deftest inspector-placement-test
+  (testing "the card stands right after the table, so a card anchored to a
+            token follows it in the document and the tab order runs from
+            the tokens to the card and on to the pager; only where the
+            client runs"
+    (let [state {:ui en :view :kwic :asked {:q "hund"} :params {:q "hund"}
+                 :result example-result :export-hrefs {:csv "/csv"}
+                 :client? true
+                 :selected {:token {:word "hund"} :corpus "PROBE"}
+                 :cursor [["PROBE" 9] 0]}
+          flat  (deep (concordance/concordance-section state))]
+      (is (< (.indexOf flat :table.kwic)
+             (.indexOf flat :aside.inspector)
+             (.indexOf flat :p.downloads)))
+      (is (not (some #{:aside.inspector}
+                     (deep (concordance/concordance-section
+                            (dissoc state :client?)))))))))
 
 (deftest inspector-text-link-test
-  (let [selected {:token {:word "hund"} :corpus "PROBE" :cpos 9 :matchend 9}]
-    (testing "the panel links to the whole text of the hit it describes"
+  (let [selected {:token {:word "hund"} :corpus "PROBE" :cpos 9 :matchend 9}
+        cursor   [["PROBE" 9] 0]]
+    (testing "the panel names the hit's source corpus, and links to the
+              text itself"
       (is (some #(and (map? %) (= "/corpora/probe/text?cpos=9#hit" (:href %)))
-                (deep (concordance/inspector en selected))))
-      (is (some #{"Læs hele teksten"} (deep (concordance/inspector da selected)))))))
+                (deep (concordance/inspector en selected cursor false))))
+      (is (some #{"see text"}
+                (deep (concordance/inspector en selected cursor false))))
+      (is (some #{"se tekst"}
+                (deep (concordance/inspector da selected cursor false)))))))

@@ -307,6 +307,35 @@
   []
   (.-matches (js/matchMedia "(prefers-reduced-motion: reduce)")))
 
+(defn sheet?
+  "True when the inspection `panel` is the sheet across the foot of the
+  window rather than the card anchored under the token: the stylesheet
+  gives only the card a position area, and a browser that knows no such
+  property shows the sheet."
+  [panel]
+  (contains? #{"" "none"}
+             (.getPropertyValue (js/getComputedStyle panel) "position-area")))
+
+(defn mark-side!
+  "Say on the inspection panel which side of its token the browser put
+  it, as the attributes `data-above` and `data-left`, which the
+  stylesheet squares the joining corners by: a card anchored under the
+  token flips over it, or to its left, where the window runs out, and
+  no rule can read which fallback was taken. Nothing to say without the
+  card or the token."
+  []
+  (when-let [panel (.getElementById js/document concordance/inspector-id)]
+    (when-let [token (.querySelector js/document
+                                     ".kwic .token[tabindex=\"0\"]")]
+      (let [card  (.getBoundingClientRect panel)
+            token (.getBoundingClientRect token)]
+        ;; a pixel of slack: the card overlaps the token's outline, and
+        ;; the flipped card ends where the token begins
+        (.toggleAttribute panel "data-above"
+                          (<= (.-bottom card) (+ (.-top token) 1)))
+        (.toggleAttribute panel "data-left"
+                          (< (.-left card) (- (.-left token) 8)))))))
+
 (defn keep-in-view!
   "Scroll the page so that `el` is on screen: a step of the cursor down
   the rows can land past the foot of the window. The panel is the foot
@@ -315,8 +344,7 @@
   [el]
   (let [panel  (.getElementById js/document concordance/inspector-id)
         margin 16
-        foot   (- (if (and panel (= "fixed" (.-position
-                                             (js/getComputedStyle panel))))
+        foot   (- (if (and panel (sheet? panel))
                     (.-top (.getBoundingClientRect panel))
                     (.-innerHeight js/window))
                   margin)
@@ -637,6 +665,7 @@
       :set-indeterminate  (apply set-indeterminate! (:replicant/node data) args)
       :centre-match       (apply centre-match! (:replicant/node data) args)
       :recentre           (recentre! state)
+      :mark-side          (mark-side!)
       :leave-concordance  (leave-concordance! dispatch!)
       :land               (land!)
       :select-query       (select-query! state)

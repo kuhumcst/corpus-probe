@@ -207,6 +207,17 @@
    ;; scrolls, from where a tab reaches the cursor again
    :effects [[:focus concordance/region-id]]})
 
+(defn key-in-card
+  "Answer key `pressed` inside the panel as the token at cursor `k` would
+  (see `move-cursor`), `ctrl?` saying whether Ctrl was held, so that the
+  cursor keeps moving after a click in the panel; except that Escape
+  closes it as its button does, since focus is in it and would
+  otherwise be dropped."
+  [state k pressed ctrl?]
+  (if (= "Escape" pressed)
+    (update (close state) :effects conj [:prevent-default])
+    (move-cursor state k pressed ctrl?)))
+
 (defn place
   "Where the item with `id` stands among `items`, counted from one."
   [items id]
@@ -736,6 +747,9 @@
       :engage               (refreshed x (lists/engage state x))
       :toggle-open          (refreshed x (lists/toggle-open state x y z))
       :toggle-rail          (toggle-rail state x)
+      ;; whether the card shows the text's attributes, kept from token
+      ;; to token so that stepping the cursor does not shut it again
+      :toggle-text          {:state (assoc state :text-open x)}
       :filter               {:state (lists/apply-filter state x y)}
       :leave                {:state (cond-> state y (lists/leave x))}
       :swallow-enter        (swallow-enter state x)
@@ -743,6 +757,8 @@
       :inspect              {:state (inspect state x y)}
       :close                (close state)
       :move-cursor          (move-cursor state x y z)
+      :key-in-card          (key-in-card state x y z)
+      :mark-side            {:state state :effects [[:mark-side]]}
       :leave-concordance    {:state state :effects [[:leave-concordance]]}
       :recentre             {:state state :effects [[:recentre]]}
       :filters-due          (filters-due state)
