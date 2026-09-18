@@ -31,12 +31,10 @@
   hits of the query in the selected corpora, the first
   dk.cst.corpus-probe.search.export/hit-limit of them in the requested
   sort, as a TSV or CSV download; 400 without a query, known corpora or
-  a known format, or when no corpus could be searched.
-
-  The corpora are written as each answers. The first is waited for before
-  the download starts, because a download once started can no longer be a
-  400: if every corpus fails, their reasons are the answer."
+  a known format, or when no corpus could be searched."
   [ctx request format]
+  ;; the corpora are written as each answers, the first waited for before
+  ;; the download starts: a download once started can no longer be a 400
   (let [{:keys [params known cqp opts]} (search-server/search-request!
                                          ctx request)]
     (if-not (and cqp (seq known) (export/formats format))

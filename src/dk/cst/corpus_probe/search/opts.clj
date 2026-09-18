@@ -34,14 +34,19 @@
                                      (keys corpus/unit-attrs)))
         (command/within-query (attr unit)))))
 
+(defn attribute!
+  "The description of attribute `attr` of `corpus` via `ctx`, which the
+  guards below check before its name is spliced into a command outside
+  the QueryLock; nil when the corpus lacks it."
+  [ctx corpus attr]
+  (corpus/attribute (corpus/attributes! ctx corpus) attr))
+
 (defn corpus-subset!
   "The narrowing `subset` as `corpus` via `ctx` may run it: its attribute
-  checked against the corpus's countable attributes, since the name is
-  spliced into a command outside the QueryLock; nil for none."
+  checked against the corpus's countable attributes; nil for none."
   [ctx corpus {:keys [attr] :as subset}]
   (when subset
-    (when-not (some-> (corpus/attribute (corpus/attributes! ctx corpus) attr)
-                      (corpus/countable-attr?))
+    (when-not (corpus/countable-attr? (attribute! ctx corpus attr))
       (throw (ex-info "Not an attribute of this corpus"
                       {:corpus corpus :attr attr :reason :no-attr})))
     subset))
@@ -49,25 +54,21 @@
 (defn corpus-near!
   "The narrowing `near` as `corpus` via `ctx` may run it: the attribute
   its condition matches checked against the corpus's positional
-  attributes, since the name is spliced into a command outside the
-  QueryLock; nil for none."
+  attributes; nil for none."
   [ctx corpus near]
   (when near
     (let [attr (:attr (:condition near))]
-      (when-not (corpus/positional?
-                 (corpus/attribute (corpus/attributes! ctx corpus) attr))
+      (when-not (corpus/positional? (attribute! ctx corpus attr))
         (throw (ex-info "Not a positional attribute of this corpus"
                         {:corpus corpus :attr attr :reason :no-attr}))))
     near))
 
 (defn corpus-sort!
   "The sort mode `mode` as `corpus` via `ctx` may run it: the positional
-  attribute it names, if any, checked against the corpus's inventory,
-  since the name is spliced into a command outside the QueryLock."
+  attribute it names, if any, checked against the corpus's inventory."
   [ctx corpus mode]
   (when-let [attr (command/sort-attr mode)]
-    (when-not (corpus/positional?
-               (corpus/attribute (corpus/attributes! ctx corpus) attr))
+    (when-not (corpus/positional? (attribute! ctx corpus attr))
       (throw (ex-info "Not a positional attribute of this corpus"
                       {:corpus corpus :attr attr :reason :not-sortable}))))
   mode)
@@ -98,6 +99,12 @@
     (throw (ex-info "Too many values to search a range of them"
                     {:corpus corpus :attr attr :reason :too-many-values}))))
 
+(defn narrowed?
+  "True when `opts` narrow the search by metadata: a :filter, :patterns
+  or :ranges."
+  [{:keys [filter patterns ranges]}]
+  (boolean (or (seq filter) (seq patterns) (seq ranges))))
+
 (defn corpus-filter!
   "The metadata narrowing of `opts` as
   dk.cst.corpus-probe.cwb.command/filter-query takes it for `corpus` via
@@ -108,8 +115,8 @@
   which this corpus's own values answer (see `range-values!`). Every
   attribute must be an annotated s-attribute of the corpus, since the
   names are spliced into a command."
-  [ctx corpus {:keys [filter patterns ranges]}]
-  (when (or (seq filter) (seq patterns) (seq ranges))
+  [ctx corpus {:keys [filter patterns ranges] :as opts}]
+  (when (narrowed? opts)
     (let [regions (into {}
                         (keep (fn [{:keys [name regions values?]}]
                                 (when values? [name regions])))

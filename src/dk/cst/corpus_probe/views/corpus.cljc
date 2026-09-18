@@ -33,6 +33,61 @@
   [:li [:a {:href (url/corpus id)} (or title id)] " "
    (corpus-details ui m)])
 
+(defn labelled-folders
+  "Label the label-less tail folder among `folders` \"Other\", in `ui`,
+  when it has labelled siblings, or the ungrouped corpora could be
+  mistaken for part of the disclosure above them. A lone label-less
+  folder stays a bare list."
+  [ui folders]
+  (cond->> folders
+    (next folders) (map (fn [f]
+                          (update f :label #(or % (i18n/tr ui "Other")))))))
+
+(defn index-folder
+  "One resolved `folder` of the corpus index in `ui`, headed at `level`
+  (2 for a top-level folder, one more for each folder inside it): its
+  label as a heading, when it has one, its corpora as a list (see
+  `corpus-item`) and its subfolders after them, each a level down. A
+  label-less folder is its list alone, and takes no level."
+  [ui level {:keys [label corpora folders]}]
+  (list
+   (when label [(hiccup/heading level) label])
+   ;; classed for the stylesheet, which lines the entries' names, ids
+   ;; and sizes up in columns across the list
+   (when (seq corpora) [:ul.index (map (partial corpus-item ui) corpora)])
+   (map (partial index-folder ui (cond-> level label inc)) folders)))
+
+(defn index-page
+  "The corpus index page body in `ui`: the `folders` tree of corpus
+  overviews laid out as a document, a heading per folder and a list per
+  folder's corpora, the ungrouped tail labelled by `labelled-folders`."
+  [ui {:keys [folders]}]
+  ;; a document, not the chooser's disclosures: a reader is here to read,
+  ;; so nothing is folded away and the headings give the page an outline
+  [:main widgets/main-attrs
+   [:h1 (i18n/tr ui "Corpora")]
+   (map (partial index-folder ui 2) (labelled-folders ui folders))])
+
+(defn corpus-toggle
+  "dk.cst.corpus-probe.views.widgets/select-all over the corpus `ids`,
+  called `label`, with the set of `selected` IDs."
+  [label selected ids]
+  ;; before the disclosure rather than in its summary: a whole folder can
+  ;; be included without opening it, and a summary is a button, which
+  ;; need not expose the controls nested in it
+  (widgets/select-all label ids selected [:toggle-corpora (vec ids)]))
+
+;; TODO: if selecting every corpus proves too costly in production, the
+;; choices are a `:clear-only?` box here, as the metadata filter has, or
+;; a configured cap on how many corpora a search may name. Only the cap
+;; bites: ticking each folder still selects the lot, and a URL naming no
+;; corpus already means every corpus (see url/with-corpora).
+(defn all-toggle
+  "The `corpus-toggle` over every corpus on offer, the `ids`, named for the
+  registry in `ui`: the one control that selects or clears the lot."
+  [ui selected ids]
+  (corpus-toggle (i18n/tr ui "All corpora") selected ids))
+
 (defn chooser-item
   "One corpus overview map `m` as a chooser entry: a checkbox labelled by
   its title (falling back to its ID) and its details, checked when its ID
@@ -52,67 +107,6 @@
              ;; no count
              :on       {:change [:toggle-corpora [id]]}}]
     " " (or title id) " " (corpus-details ui m)]])
-
-(defn labelled-folders
-  "Label the label-less tail folder among `folders` \"Other\", in `ui`,
-  when it has labelled siblings, or the ungrouped corpora could be
-  mistaken for part of the disclosure above them. A lone label-less
-  folder stays a bare list."
-  [ui folders]
-  (cond->> folders
-    (next folders) (map (fn [f]
-                          (update f :label #(or % (i18n/tr ui "Other")))))))
-
-(defn corpus-toggle
-  "dk.cst.corpus-probe.views.widgets/select-all over the corpus `ids`,
-  called `label`, with the set of `selected` IDs and the select-all's own
-  `opts`.
-
-  It precedes the disclosure rather than sitting in the <summary>, so a
-  whole folder can be included without opening it, and because a summary
-  is a button, which need not expose the controls nested in it."
-  ([label selected ids]
-   (corpus-toggle label selected ids nil))
-  ([label selected ids opts]
-   (widgets/select-all label ids selected [:toggle-corpora (vec ids)] opts)))
-
-;; TODO: if selecting every corpus proves too costly in production, the
-;; choices are a `:clear-only?` box here, as the metadata filter has, or
-;; a configured cap on how many corpora a search may name. Only the cap
-;; bites: ticking each folder still selects the lot, and a URL naming no
-;; corpus already means every corpus (see url/with-corpora).
-(defn all-toggle
-  "The `corpus-toggle` over every corpus on offer, the `ids`, named for the
-  registry in `ui`: the one control that selects or clears the lot."
-  [ui selected ids]
-  (corpus-toggle (i18n/tr ui "All corpora") selected ids))
-
-(defn index-folder
-  "One resolved `folder` of the corpus index in `ui`, headed at `level`
-  (2 for a top-level folder, one more for each folder inside it): its
-  label as a heading, when it has one, its corpora as a list (see
-  `corpus-item`) and its subfolders after them, each a level down. A
-  label-less folder is its list alone, and takes no level."
-  [ui level {:keys [label corpora folders]}]
-  (list
-   (when label [(hiccup/heading level) label])
-   ;; classed for the stylesheet, which lines the entries' names, ids
-   ;; and sizes up in columns across the list
-   (when (seq corpora) [:ul.index (map (partial corpus-item ui) corpora)])
-   (map (partial index-folder ui (cond-> level label inc)) folders)))
-
-(defn index-page
-  "The corpus index page body in `ui`: the `folders` tree of corpus
-  overviews laid out as a document, a heading per folder and a list per
-  folder's corpora, the ungrouped tail labelled by `labelled-folders`.
-
-  A document rather than the chooser's tree of disclosures: a reader is
-  here to read, not to work a control, so nothing is folded away and the
-  headings give the page an outline."
-  [ui {:keys [folders]}]
-  [:main widgets/main-attrs
-   [:h1 (i18n/tr ui "Corpora")]
-   (map (partial index-folder ui 2) (labelled-folders ui folders))])
 
 (defn corpus-tree
   "The `folders` of the registry as the tree the chooser takes, in `ui`:
@@ -138,12 +132,10 @@
 (defn corpus-chooser
   "The corpus selection of the search form: the `folders` tree as the
   chooser over it (see dk.cst.corpus-probe.views.chooser/chooser, which
-  the `opts` are for), the IDs in the set `:selected` checked, in `ui`.
-
-  A corpus that cannot be read cannot be chosen, so it is disabled and
-  not counted: a folder holding one would otherwise be partly chosen for
-  ever, and stand open for ever with it."
+  the `opts` are for), the IDs in the set `:selected` checked, in `ui`."
   [ui folders {:keys [selected] :or {selected #{}} :as opts}]
+  ;; a corpus that cannot be read is disabled and not counted: a folder
+  ;; holding one would otherwise be partly chosen, and open, for ever
   (chooser/chooser
    ui :corpora (corpus-tree ui folders)
    (assoc opts
@@ -232,11 +224,9 @@
 (defn unreadable-section
   "The section shown in `ui` in place of the corpus facts when CWB cannot
   read the corpus's data, saying whether CWB has no data for the registry
-  entry at all (`phantom?`) or reading it failed this time.
-
-  Detail-free otherwise: the underlying tool output can name server
-  paths, which never reach a rendered page."
+  entry at all (`phantom?`) or reading it failed this time."
   [ui phantom?]
+  ;; no detail: the tool output can name server paths
   (widgets/error-section
    (i18n/tr ui "Unreadable corpus")
    [:p (if phantom?
@@ -318,10 +308,9 @@
   mark and the `:lang` of the corpus text), in `ui`: the text's name,
   the corpus it is from, its structural annotations and its `:blocks`
   as paragraphs, the hit marked in the block that holds it; or the
-  `:error` that came instead of the text.
-
-  A document like the frontpage, so the stylesheet gives it a measure."
+  `:error` that came instead of the text."
   [ui {:keys [corpus structs blocks from hit lang error] :as data}]
+  ;; a document like the frontpage, so the stylesheet gives it a measure
   [:main.document widgets/main-attrs
    [:h1 (text-name ui structs)]
    (if error

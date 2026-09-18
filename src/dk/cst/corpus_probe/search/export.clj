@@ -118,11 +118,6 @@
   [row]
   (str (str/join "\t" (map tsv-value row)) "\n"))
 
-(defn tsv
-  "Render `rows` of strings as TAB-separated text, one row per line."
-  [rows]
-  (apply str (map tsv-line rows)))
-
 (defn csv-value
   "Value `s` as a CSV field: quoted, with inner quotes doubled, when it
   holds a quote, a comma or a line break (RFC 4180)."
@@ -142,21 +137,20 @@
   letters."
   "\ufeff")
 
-(defn csv
-  "Render `rows` of strings as RFC 4180 CSV text with CRLF line ends,
-  opening with the `bom`."
-  [rows]
-  (str bom (apply str (map csv-line rows))))
-
 (def formats
   "The export formats by name (see dk.cst.corpus-probe.url/export-formats,
   which names each): what the text opens with, how to render one row as
-  a line and a whole table of rows, and the media type to serve."
+  a line, and the media type to serve."
   {"tsv" {:preamble     ""
           :line         tsv-line
-          :render       tsv
           :content-type "text/tab-separated-values; charset=utf-8"}
    "csv" {:preamble     bom
           :line         csv-line
-          :render       csv
           :content-type "text/csv; charset=utf-8"}})
+
+(defn render
+  "The `rows` of strings as the text of export `format` (see `formats`):
+  its preamble, then one line each."
+  [format rows]
+  (let [{:keys [preamble line]} (formats format)]
+    (str preamble (apply str (map line rows)))))

@@ -206,15 +206,17 @@
   (let [[header body] (split-with (complement str/blank?) lines)
         info          (str/join "\n" (drop-while str/blank? body))]
     (cond-> (reduce (fn [m line]
-                      (if-let [[_ k v] (re-matches #"([A-Za-z]+):\s*(.*)" line)]
-                        (case k
-                          "Name"    (assoc m :name v)
-                          "Size"    (assoc m :size (parse-long v))
-                          "Charset" (assoc m :charset v)
-                          m)
-                        (if-let [[_ k v] (re-matches #"\t(\S+) = '(.*)'" line)]
-                          (assoc-in m [:properties (keyword k)] v)
-                          m)))
+                      (condp re-matches line
+                        #"([A-Za-z]+):\s*(.*)" :>>
+                        (fn [[_ k v]]
+                          (case k
+                            "Name"    (assoc m :name v)
+                            "Size"    (assoc m :size (parse-long v))
+                            "Charset" (assoc m :charset v)
+                            m))
+                        #"\t(\S+) = '(.*)'" :>>
+                        (fn [[_ k v]] (assoc-in m [:properties (keyword k)] v))
+                        m))
                     {:properties {}}
                     header)
       (not-empty info) (assoc :info info))))

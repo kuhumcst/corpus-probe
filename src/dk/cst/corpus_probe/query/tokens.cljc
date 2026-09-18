@@ -37,17 +37,22 @@
   it must open or close a sentence."
   #{:min :max :start :end})
 
+(defn attr-name
+  "The positional attribute the param value `v` names, as a string: the
+  surface form, which every corpus has, when it names none."
+  [v]
+  (if (str/blank? (str v)) (:attr token-defaults) (str v)))
+
 (defn token-field
   "The [n c field] an extended-search token param key `k` names, `t2.v`
   being [2 1 :v] and `t2.3.v` [2 3 :v]: the token's number, the number
   of the condition among its conditions (the first when the key names
   none) and its field. nil for any other key."
   [k]
-  (when k
-    (when-let [[_ n c field]
-               (re-matches #"t(\d+)(?:\.(\d+))?\.(attr|op|v|ci|join|min|max|start|end)"
-                           (name k))]
-      [(parse-long n) (if c (parse-long c) 1) (keyword field)])))
+  (when-let [[_ n c field]
+             (some->> k name
+                      (re-matches #"t(\d+)(?:\.(\d+))?\.(attr|op|v|ci|join|min|max|start|end)"))]
+    [(parse-long n) (if c (parse-long c) 1) (keyword field)]))
 
 (defn token-key
   "The param key of `field` of condition `c` of token `n`, the inverse of

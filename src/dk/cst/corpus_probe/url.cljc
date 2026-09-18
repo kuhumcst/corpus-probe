@@ -5,6 +5,7 @@
   URL is a citation."
   (:require [clojure.string :as str]
             [dk.cst.corpus-probe.query.mode :as mode]
+            [dk.cst.corpus-probe.query.params :as params]
             [dk.cst.corpus-probe.query.tokens :as tokens])
   #?(:clj (:import [java.net URLDecoder URLEncoder])))
 
@@ -103,12 +104,6 @@
   the extension of its `export` path."
   ["tsv" "csv"])
 
-(def default-distance
-  "How many words away a nearby word may stand when no URL says: the
-  manual's own example (section 3.7) and the window a collocation is
-  usually counted in."
-  5)
-
 (def defaults
   "What each param means when a URL leaves it out, as the string a URL
   would carry: the default its reader applies, which `defaults-test`
@@ -116,7 +111,7 @@
   (merge mode/defaults
          {:sort        "corpus"
           :context     "5"
-          :distance    (str default-distance)
+          :distance    (str params/default-distance)
           :subset-at   "match"
           :subset-attr "word"
           :view        "kwic"
@@ -329,12 +324,18 @@
       (str/replace "%2C" ",")
       (str/replace "%3A" ":")))
 
+(defn with-query
+  "`path` followed by the query string of search `params`, when they say
+  anything."
+  [path params]
+  (let [qs (query-string params)]
+    (cond-> path (seq qs) (str "?" qs))))
+
 (defn search-href
   "The URL of the search page for `params`: the page itself when they
   say nothing."
   [params]
-  (let [qs (query-string params)]
-    (cond-> search (seq qs) (str "?" qs))))
+  (with-query search params))
 
 (defn results-href
   "The `search-href` of `params` ending in the `results-fragment`: the
@@ -346,8 +347,7 @@
   "The URL of the `view` of the search `params` describe as a file in
   `format` (see `export`)."
   [view format params]
-  (let [qs (query-string params)]
-    (cond-> (export view format) (seq qs) (str "?" qs))))
+  (with-query (export view format) params))
 
 (defn search-params
   "The `params` that identify a search, for linking the views of the same
@@ -417,14 +417,10 @@
   keyword url], in display order."
   [params]
   (for [[k value] result-views]
-    [k (results-href (assoc (search-params params)
-                            :view    value
-                            :attr    (:attr params)
-                            :at      (:at params)
-                            :by      (:by params)
-                            :docs    (:docs params)
-                            :sort    (:sort params)
-                            :context (:context params)))]))
+    [k (results-href (merge (search-params params)
+                            (select-keys params [:attr :at :by :docs
+                                                 :sort :context])
+                            {:view value}))]))
 
 (defn nav-hrefs
   "The URL of each top-level page for `params`: the search page as it

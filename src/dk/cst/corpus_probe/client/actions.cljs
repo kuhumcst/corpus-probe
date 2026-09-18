@@ -185,13 +185,10 @@
 (defn inspect
   "Put `selected`, the token the inspection panel describes, in `state`,
   or take it out for nil. The cursor follows it to `k`, so that the one
-  tabbable token is the one the reader is on however they got there, and
-  the concordance can keep it in the middle.
-
-  Taking it out takes the cursor with it: the reader has left the
-  concordance, and it goes back to resting on its matches rather than
-  holding the line where they stopped reading."
+  tabbable token is the one the reader is on however they got there."
   [state selected k]
+  ;; taking it out takes the cursor too: the reader has left, and the
+  ;; concordance goes back to resting on its matches
   (if selected
     (cond-> (assoc state :selected selected)
       k (assoc :cursor k))
@@ -363,12 +360,10 @@
   are already selected, the change noted for the chooser (see
   dk.cst.corpus-probe.client.lists/tick) and the metadata filters asked
   to refresh: one rule for a corpus and a folder, so a folder only partly
-  selected fills rather than clearing the part the reader already had.
-
-  The filters are pending from the tick rather than from the fetch it
-  leads to: what this selection carries is unknown the moment it
-  changes, and the attributes of the one before it are no stand-in."
+  selected fills rather than clearing the part the reader already had."
   [state ids]
+  ;; pending from the tick, not from the fetch it leads to: what the
+  ;; selection carries is unknown the moment it changes
   (let [corpus     (get-in state [:params :corpus])
         unticking? (every? (set corpus) ids)]
     {:state   (-> state
@@ -486,11 +481,8 @@
 
 (defn filters-due
   "Fetch the metadata filters the selection of `state` now offers, when
-  they are stale (see dk.cst.corpus-probe.client.lists/filters-stale?).
-
-  No corpus carries no metadata, which is answered here rather than
-  asked over the wire. A selection ticked away and back again is the one
-  the filters already describe, and nothing is pending on it."
+  they are stale (see dk.cst.corpus-probe.client.lists/filters-stale?);
+  no corpus carries no metadata, answered here rather than over the wire."
   [state]
   (let [corpora (lists/chosen-corpora state)]
     (cond
@@ -507,14 +499,11 @@
 (defn remember
   "The `state` with the search it shows at the head of the searches it
   remembers, and the effect storing them; nothing to remember on another
-  page, before an answer, or where no corpus could be searched.
-
-  Called again when the count finishes: the same question moves to the
-  head it already holds and takes the count with it. A narrowed answer
-  counts a part of what the question found, so it reports no count and
-  the count the question has stands (see
-  dk.cst.corpus-probe.storage.recent/remember)."
+  page, before an answer, or where no corpus could be searched. Called
+  again when the count finishes, so the entry takes the count with it."
   [{:keys [route asked result] :as state}]
+  ;; a narrowed answer counts part of what the question found, so it
+  ;; reports no count and the question's stands (see recent/remember)
   (let [hits  (when-not (or (recent/refined? asked)
                             (result-views/counting? result))
                 (:size result))
@@ -539,15 +528,13 @@
 
 (defn set-query
   "The state with `text` in the query field, and the answer taken out of
-  it where the text asks nothing at all.
-
-  Emptying the field is how a reader starts over (see
-  dk.cst.corpus-probe.client.router/cleared?, the same rule at a
-  submit), so the page goes back to the guide and the searches made
-  lately without being asked a second time. The address goes back with
-  it, onto the history rather than over it: it cited a result that is no
-  longer on screen, and a field emptied by accident has a way back."
+  it where the text asks nothing at all: emptying the field is how a
+  reader starts over (see dk.cst.corpus-probe.client.router/cleared?, the
+  same rule at a submit)."
   [{:keys [result error] :as state} text]
+  ;; the address goes back too, onto the history rather than over it: it
+  ;; cited a result no longer on screen, and a field emptied by accident
+  ;; has a way back
   ;; every keystroke into the state, so the answer can tell when the
   ;; form has moved on from what ran; the field keeps what was typed,
   ;; since Replicant leaves an unchanged value alone
@@ -565,14 +552,11 @@
 (defn forget-searches
   "The `state` with the searches it remembers forgotten, and the empty
   history stored: forgetting is storing nothing, as it is for the
-  settings.
-
-  The box takes focus where the button that had it goes quiet: a browser
-  drops focus from a control it disables, and the box they are still in
-  is a better place for it than the head of the page (see
-  dk.cst.corpus-probe.views.search/recent-announcement for what is said
-  of the clearing)."
+  settings (see dk.cst.corpus-probe.views.search/recent-announcement for
+  what is said of it)."
   [state]
+  ;; the box takes focus where the button that had it goes quiet: a
+  ;; browser drops focus from a control it disables
   {:state   (assoc state :recent [] :announcement :cleared)
    :effects [[:store-recent] [:focus search-views/recent-box-id]]})
 
@@ -641,14 +625,11 @@
 
 (defn form-changed
   "The state with the settings the form now shows in `params` taken into
-  it, stored where the reader has automatic storing on.
-
-  This client answers only the controls it has handlers for and reads
-  the rest when a search is sent, so the matching options would
-  otherwise never reach what the preferences box measures, and a change
-  nobody searched on would be lost on going anywhere else. A corpus
-  comes back as one name or several, so it is read as a URL names it."
+  it, stored where the reader has automatic storing on."
   [state params]
+  ;; the client answers only the controls it has handlers for, so the
+  ;; matching options would otherwise never reach the preferences box,
+  ;; and a change nobody searched on would be lost on going elsewhere
   (let [shown (cond-> (select-keys params settings/param-keys)
                 (contains? params :corpus)
                 (update :corpus url/corpora-param))
@@ -662,12 +643,10 @@
 (defn set-autosave
   "Turn storing the settings as the reader changes them `on?` or off, and
   store that choice at once (see
-  dk.cst.corpus-probe.views.search/autosave-control).
-
-  Turning it on stores the form in front of them, which is what asking
-  for it from now on means. Turning it off stores the choice alone: a
-  reader turning storing off is not asking for one last store."
+  dk.cst.corpus-probe.views.search/autosave-control)."
   [{:keys [stored selectable] :as state} on?]
+  ;; on stores the form in front of them; off stores the choice alone,
+  ;; since turning storing off is not asking for one last store
   (let [state (assoc state :autosave? on?)
         now   (if on?
                 (search-views/settings-now state)

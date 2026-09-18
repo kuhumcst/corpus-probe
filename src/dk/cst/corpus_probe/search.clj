@@ -70,10 +70,8 @@
   [ctx corpora query deadline opts]
   (vec (cwb/pmap-n (cwb/parallelism ctx)
                    (fn [corpus]
-                     (if (cwb/overdue? deadline)
-                       {:corpus corpus :error {:type :timeout}}
-                       (corpus-size! (cwb/within-deadline ctx deadline)
-                                     corpus query opts)))
+                     (cwb/attempt-within ctx deadline corpus
+                                         #(corpus-size! % corpus query opts)))
                    corpora)))
 
 (defn known-sizes
@@ -109,16 +107,43 @@
       (cache/share! (batch/stored-kwic-batch corpus nqr opts) fetch)
       (fetch))))
 
-(defn kwic!
-  "Run CQP `query` against `corpus` (an uppercase CQP corpus name) via
-  `ctx` and return the hits in one row range: {:corpus ... :query ...
-  :size <total hits> :rows [from to] :hits [hit ...]}, each hit a parsed
-  KWIC line (:cpos :left :match :right) with its :anchors and :structs.
+(defn- kwic-page
+  "The page the `sections` of a KWIC batch hold for `query` in `corpus`
+  under `opts` (see dk.cst.corpus-probe.search.opts/kwic-opts!): each
+  hit clipped to its text, with its :anchors and :structs."
+  [corpus query {:keys [p-attrs struct-attrs rows text-attr]} sections]
+  (let [{[cat-lines]  :cat
+         [dump-lines] :dump
+         tab-sections :tabulate} sections
+        hits    (mapv #(parse/clip-context text-attr %)
+                      (parse/kwic->hits p-attrs cat-lines))
+        anchors (parse/dump->anchors dump-lines)
+        structs (when (seq struct-attrs)
+                  (mapv #(zipmap struct-attrs %)
+                        (parse/tabulate->rows tab-sections)))]
+    (when (not= (count hits) (count anchors))
+      ;; cat and dump disagree only when CQP printed something other
+      ;; than the requested rows, so the page cannot be trusted
+      (throw (ex-info "KWIC output misaligned"
+                      {:corpus corpus
+                       :error  {:type     :misaligned
+                                :expected (count hits)
+                                :received (count anchors)}})))
+    {:corpus corpus
+     :query  query
+     :size   (result/match-count sections)
+     :rows   rows
+     :hits   (mapv (fn [hit anchor struct]
+                     (cond-> (assoc hit :anchors anchor)
+                       struct (assoc :structs struct)))
+                   hits anchors (or structs (repeat nil)))}))
 
-  A page holds more context than it was asked for (see
-  dk.cst.corpus-probe.search.batch/fetch-context), cut back to the text
-  each hit is in, so the concordance has words to fade out and to travel
-  into.
+(defn kwic!
+  "The hits of CQP `query` in `corpus` (an uppercase CQP corpus name) via
+  `ctx` in one row range: {:corpus ... :query ... :size <total hits>
+  :rows [from to] :hits [hit ...]}, each hit a parsed KWIC line (:cpos
+  :left :match :right) with its :anchors and :structs. Throws ex-info
+  when CQP reports an error, times out or dies.
 
   `opts`: :rows (the [from to] row range, default the first page),
   :context (a number of tokens, or a unit of text), :sort (a mode, or a
@@ -126,8 +151,7 @@
   filter), :sample (how many matches to keep, at random), :near (a word
   the matches must have nearby), :within (a unit of text they are kept
   within), :struct-attrs (default every annotated s-attribute) and
-  :cache? (false keeps the result out of the cache). Throws ex-info when
-  CQP reports an error, times out or dies."
+  :cache? (false keeps the result out of the cache)."
   ([ctx corpus query]
    (kwic! ctx corpus query {}))
   ([ctx corpus query opts]
@@ -140,35 +164,12 @@
         :size   0
         :rows   (:rows opts (:rows batch/kwic-defaults))
         :hits   []}
-       (let [opts     (as-> (opts/kwic-opts! ctx corpus query opts) $
-                        (update $ :context batch/fetch-context (:reach $)))
-             {:keys [p-attrs struct-attrs rows text-attr]} opts
-             sections (kwic-sections! ctx corpus query opts)
-             {[cat-lines]  :cat
-              [dump-lines] :dump
-              tab-sections :tabulate} sections
-             hits     (mapv #(parse/clip-context text-attr %)
-                            (parse/kwic->hits p-attrs cat-lines))
-             anchors  (parse/dump->anchors dump-lines)
-             structs  (when (seq struct-attrs)
-                        (mapv #(zipmap struct-attrs %)
-                              (parse/tabulate->rows tab-sections)))]
-         (when (not= (count hits) (count anchors))
-           ;; cat and dump disagree only when CQP printed something other
-           ;; than the requested rows, so the page cannot be trusted
-           (throw (ex-info "KWIC output misaligned"
-                           {:corpus corpus
-                            :error  {:type     :misaligned
-                                     :expected (count hits)
-                                     :received (count anchors)}})))
-         {:corpus corpus
-          :query  query
-          :size   (result/match-count sections)
-          :rows   rows
-          :hits   (mapv (fn [hit anchor struct]
-                          (cond-> (assoc hit :anchors anchor)
-                            struct (assoc :structs struct)))
-                        hits anchors (or structs (repeat nil)))})))))
+       ;; more context than asked for, cut back to the text each hit is
+       ;; in, so the concordance has words to fade out and travel into
+       (let [opts (as-> (opts/kwic-opts! ctx corpus query opts) $
+                    (update $ :context batch/fetch-context (:reach $)))]
+         (kwic-page corpus query opts
+                    (kwic-sections! ctx corpus query opts)))))))
 
 (defn blocks
   "The `tokens` of a text in the blocks it is read in: a new block
@@ -271,12 +272,9 @@
   [ctx corpora query deadline limit opts]
   (lazy-seq
    (when-let [[corpus & more] (and (pos? limit) (seq corpora))]
-     (let [res (if (cwb/overdue? deadline)
-                 {:corpus corpus :error {:type :timeout}}
-                 (cwb/attempt corpus
-                              #(export! (cwb/within-deadline ctx deadline)
-                                        corpus query
-                                        (assoc opts :limit limit))))]
+     (let [res (cwb/attempt-within ctx deadline corpus
+                                   #(export! % corpus query
+                                             (assoc opts :limit limit)))]
        (cons res (export-corpora! ctx more query deadline
                                   (- limit (count (:rows res))) opts))))))
 

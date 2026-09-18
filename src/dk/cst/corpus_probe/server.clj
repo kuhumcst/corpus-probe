@@ -75,16 +75,13 @@
       (not-empty (System/getenv "CORPUS_PROBE_CONFIG"))))
 
 (defn read-config
-  "Read config.edn from the classpath, merge the `config-file` over it
-  when there is one, and resolve the :registry and :cache-dir paths to
-  absolute ones so cqp finds them regardless of working directory.
-
-  The merge is shallow, so an installation's own file need only carry
-  what it changes; what it leaves out stays as the built-in file has it,
-  the :folders tree above all. A file that is named but cannot be read
-  stops the server rather than being passed over: a configuration
-  silently ignored is the failure this exists to prevent."
+  "Read config.edn from the classpath, merge the `config-file` shallowly
+  over it when there is one, and resolve the :registry and :cache-dir
+  paths to absolute ones so cqp finds them regardless of working
+  directory."
   []
+  ;; a named file that cannot be read stops the server: a configuration
+  ;; silently ignored is the failure this exists to prevent
   (let [built-in (edn/read-string (slurp (io/resource "config.edn")))
         path     (config-file)
         override (when path
@@ -111,18 +108,12 @@
     (response/page-response request (views/title data) data)))
 
 (defn serve-preferences
-  "Store the settings a reader chose with `request` and send them back
-  where they were.
-
-  A preference is state, so it is set with a POST and answered with a
-  redirect: a refresh does not re-submit the form they came from. Cookies
-  are the whole persistence: no URL names a preference, so a link can be
-  shared without imposing the sharer's settings.
-
-  A reset goes to the bare form rather than back (see
-  dk.cst.corpus-probe.storage.settings/return), where a form at the
-  app's own defaults is what the reset did."
+  "Store the settings a reader chose with `request` in cookies and send
+  them back where they were, or to the bare form after a reset (see
+  dk.cst.corpus-probe.storage.settings/return)."
   [_ctx request]
+  ;; a POST answered with a redirect, so a refresh does not resubmit;
+  ;; cookies alone, so a shared link imposes no settings
   (let [params  (settings/with-autosave (:form-params request))
         cookies (request/preference-cookies params)]
     {:status  303

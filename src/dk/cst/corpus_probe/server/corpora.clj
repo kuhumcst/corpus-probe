@@ -23,6 +23,12 @@
                                                     (registry/entries ctx))}}]
     (response/page-response request (views/title data) data)))
 
+(defn corpus-param
+  "The corpus name the :id path parameter of `request` names, uppercased
+  as CQP has it."
+  [request]
+  (str/upper-case (str (get-in request [:path-params :id]))))
+
 (defn serve-corpus
   "Handle a corpus info page `request` against `ctx`, rendering the corpus
   named by the :id path parameter (case-insensitively, see
@@ -30,7 +36,7 @@
   registry corpus."
   [ctx request]
   (let [lang   (request/request-language request)
-        corpus (str/upper-case (str (get-in request [:path-params :id])))
+        corpus (corpus-param request)
         entry  (registry/entry-of ctx corpus)]
     (if-not entry
       response/not-found
@@ -78,7 +84,7 @@
   page, there being no text to pick without one. A corpus that marks no
   texts, or a CQP failure, is a page saying so."
   [ctx request]
-  (let [corpus (str/upper-case (str (get-in request [:path-params :id])))
+  (let [corpus (corpus-param request)
         entry  (registry/entry-of ctx corpus)
         {:keys [cpos matchend]} (:query-params request)
         cpos*  (parse-long (str cpos))]

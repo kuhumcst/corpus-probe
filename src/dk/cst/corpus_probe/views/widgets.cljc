@@ -25,30 +25,26 @@
   (cond-> {} lang (assoc :lang lang)))
 
 (defn hidden-attrs
-  "The attribute map hiding an element while `hidden?`.
-
-  Hidden rather than left out: a hidden control is still submitted,
-  where one left out drops a choice from the search without a word."
+  "The attribute map hiding an element while `hidden?`."
   [hidden?]
+  ;; hidden rather than left out: a hidden control is still submitted,
+  ;; where one left out drops a choice from the search without a word
   (cond-> {} hidden? (assoc :hidden true)))
 
 (def list-attrs
   "The attributes a list carries where the stylesheet takes its markers
-  off.
-
-  Safari reads a list with no markers as no list at all, and a reader
-  who hears the page is then told neither that it is a list nor how many
-  items it holds. The role says what the element already is."
+  off."
+  ;; Safari reads a list with no markers as no list at all, and a reader
+  ;; who hears the page is then told neither that it is a list nor how
+  ;; many items it holds
   {:role "list"})
 
 (defn option
   "The option `value` of a select, called `label`, chosen when it is what
-  is `selected`.
-
-  Compared as written, not as typed: an option's value is a string in the
-  DOM, so a control that a reader has changed says \"5\" where the result
-  it was rendered from says 5."
+  is `selected`."
   [selected value label]
+  ;; compared as strings: a changed control says "5" where the result
+  ;; it was rendered from says 5
   [:option {:value value :selected (= (str value) (str selected))} label])
 
 (defn select
@@ -102,12 +98,11 @@
 (defn tabs
   "A `link-row` of `links` read as a tab strip named `label` in a
   navigation landmark, `current` keying the one being shown, which is
-  drawn as a tab standing on the line the row sits on.
-
-  The line itself belongs to whatever draws the boundary there: the
-  masthead's own border, the answer's top edge. The tab covers a pixel
-  of it, so the two read as one shape."
+  drawn as a tab standing on the line the row sits on."
   [label links current]
+  ;; the line belongs to whatever draws the boundary there, the
+  ;; masthead's border or the answer's top edge; the tab covers a pixel
+  ;; of it, so the two read as one shape
   [:nav.tabs {:aria-label label} (link-row links current)])
 
 (defn attribute-value
@@ -235,6 +230,17 @@
   [:section.error
    [:h2 heading]
    body])
+
+(defn attribute-label
+  "What the positional attribute named `attr` is called in `ui`: the
+  usual ones in the reader's words, any other as its corpus names it."
+  [ui attr]
+  (case attr
+    "word"  (i18n/trx ui "attribute" "word")
+    "lemma" (i18n/trx ui "attribute" "lemma")
+    "pos"   (i18n/trx ui "attribute" "POS")
+    "msd"   (i18n/trx ui "attribute" "morphology")
+    attr))
 
 (defn term
   "The jargon `k` as the interface shows it, in `ui`: an <abbr> with its

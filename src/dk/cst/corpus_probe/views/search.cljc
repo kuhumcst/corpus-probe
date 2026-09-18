@@ -9,6 +9,7 @@
             [dk.cst.corpus-probe.i18n :as i18n]
             [dk.cst.corpus-probe.query :as query]
             [dk.cst.corpus-probe.query.mode :as mode]
+            [dk.cst.corpus-probe.query.params :as params]
             [dk.cst.corpus-probe.query.tokens :as tokens]
             [dk.cst.corpus-probe.storage.recent :as recent]
             [dk.cst.corpus-probe.storage.settings :as settings]
@@ -110,136 +111,25 @@
    (for [value tokens/match-ops]
      (widgets/option (or match "") value (match-option-label ui value)))])
 
-(defn near-distance
-  "The distance `params` give the nearby word, in words, or the default
-  when they give none."
-  [params]
-  (or (some-> (:distance params) parse-long) url/default-distance))
-
 (defn near-phrase
   "The nearby word of `params` and its distance as a phrase in `ui`: 5
   words from kat; nil without a word."
-  [ui {:keys [near] :as params}]
+  [ui {:keys [near distance]}]
   (when-not (str/blank? near)
-    (let [distance (near-distance params)]
+    (let [distance (params/distance-param distance)]
       (str distance " " (i18n/trn ui "word from" "words from" distance)
            " " near))))
 
-(defn help
-  "The search help, the hiccup `blocks` of its document, as a region
-  named in `ui`; nil without a help document."
-  [ui blocks]
-  ;; TODO: the page has no h1 until an answer heads it. Does the empty
-  ;; page want one, and of what?
-  (when (seq blocks)
-    [:section.help {:aria-label (i18n/tr ui "Help")} blocks]))
-
-(def recent-id
-  "The id of the heading naming the history, which the landmark around it
-  is named by."
-  "recent-searches")
-
-(def recent-box-id
-  "The id of the history's box, which clearing leaves the reader on: the
-  button they pressed goes quiet as they press it, and a quiet button
-  holds no focus."
-  "recent")
-
-(defn recent-facts
-  "What the remembered search `entry`, whose question is `asked`, says of
-  itself under its query in `ui`: the corpora it was asked of, the word
-  its hits had to be near, the metadata filter it was narrowed by and
-  the hits it found, where each is known."
-  [ui asked {:keys [hits] narrowing :filter}]
-  (->> [(when-let [corpora (seq (url/corpora-param (:corpus asked)))]
-          (result/corpora-phrase ui corpora))
-        (near-phrase ui asked)
-        (not-empty narrowing)
-        (when hits (result/hits-phrase ui hits))]
-       (remove nil?)
-       (str/join " · ")))
-
-(defn recent-query
-  "The question `asked` as the history names it in `ui` (see
-  dk.cst.corpus-probe.views.result/query-phrase): a query written in CQP
-  as the code it is, and what a reader typed as they typed it."
-  [ui asked]
-  (let [phrase (result/query-phrase ui asked)]
-    (if (#{"cqp" "extended"} (mode/mode asked))
-      [:code phrase]
-      phrase)))
-
-(defn recent-search
-  "One remembered `entry` as a link in `ui`: the question it asked, and
-  under it what the answer was (see `recent-facts`)."
-  [ui entry]
-  ;; the params are read for the words alone; the link is the string as
-  ;; it was written (see dk.cst.corpus-probe.storage.recent/href)
-  (let [asked (url/form-decode (:params entry))]
-    [:li [:a {:href (recent/href entry)}
-          [:span.recent-query (recent-query ui asked)]
-          (when-let [facts (not-empty (recent-facts ui asked entry))]
-            [:small.recent-facts facts])]]))
-
-(defn recent-searches
-  "The searches a reader has made lately, `entries`, newest first, as a
-  navigation landmark in `ui`; what will stand there for a reader who
-  has made none.
-
-  It stands in the column the result's own tabs take, and gives that
-  column up as soon as there are hits to read in them. Its place is kept
-  while it is empty, so that a reader is told the searches are being
-  kept before there are any, and the column does not fill as they
-  search."
-  [ui entries]
-  ;; TODO: two questions this leaves. A reader with an answer on screen
-  ;; reaches the history by emptying the field, which is the way back to
-  ;; the bare page and is said nowhere. And the list is forgotten whole
-  ;; or not at all: is one entry worth a control of its own?
-  [:nav.recent.box {:id              recent-box-id
-                    :tabindex        "-1"
-                    :aria-labelledby recent-id}
-   [:h2 {:id recent-id} (i18n/tr ui "Recent searches")]
-   (if (seq entries)
-     [:ol widgets/list-attrs (for [entry entries] (recent-search ui entry))]
-     [:p.recent-empty (i18n/tr ui "Your searches appear here.")])
-   [:p.recent-clear
-    ;; nothing to forget is a button that says so by going quiet, as the
-    ;; preferences box's do
-    [:button {:type     "button"
-              :disabled (empty? entries)
-              :on       {:click [:forget-searches]}}
-     (i18n/trx ui "button" "Clear")]]])
-
-(defn recent-announcement
-  "The live region saying the history was cleared, in `ui`, when that is
-  what `announcement` names; spoken and never seen.
-
-  Clearing leaves a list turned into a sentence and a button gone quiet,
-  neither of which is announced, so a reader not watching the screen is
-  otherwise told nothing. Off screen because one who is watching has the
-  box to look at. Outside the box, which is rebuilt as it empties."
-  [ui announcement]
-  (widgets/status "spoken"
-                  (when (= :cleared announcement)
-                    (i18n/tr ui "Recent searches cleared"))))
-
-(defn navigation-status
-  "The live region reporting a routed navigation in flight in `ui`,
-  which says so while `pending?` and holds nothing otherwise."
-  [ui pending?]
-  (widgets/status
-   "navigation-status"
-   ;; TODO: design this. Three questions are open: where a reader is
-   ;; looking while they wait (the button is at the foot of the rail, the
-   ;; answer is not); whether it wants a minimum time on screen, since a
-   ;; fast answer flashes it past
-   ;; (dk.cst.corpus-probe.client.effects/pending-delay-ms); and whether
-   ;; it should say more than that it is waiting. The metadata filter's
-   ;; busy state and the count still being made (see
-   ;; dk.cst.corpus-probe.views.result/results-region) have the same
-   ;; decision pending, and the three want answering together
-   (when pending? [:p (i18n/tr ui "Loading …")])))
+(defn form-query
+  "The query the search form holds: that of its `params`, or in the
+  extended mode of its `tokens` as the client keeps them, within the
+  unit the params name."
+  [params tokens]
+  (let [mode (mode/mode params)]
+    (query/of (if (= "extended" mode)
+                (assoc (tokens/rows->params tokens)
+                       :mode mode :within (:within params))
+                params))))
 
 (defn cqp-line
   "The CQP the extended form's `tokens` compile to, with the `params`,
@@ -248,7 +138,7 @@
   ;; TODO: is the line worth its place? The field's radio hands the same
   ;; text to the field, and switching back restores the tokens. Drop it
   ;; if nobody reads it
-  (when-let [cqp (query/->cqp (result/form-query params tokens))]
+  (when-let [cqp (query/->cqp (form-query params tokens))]
     ;; a paragraph, not an output: its implicit status role would have a
     ;; screen reader read the string after every keystroke
     [:p.cqp (i18n/tr ui "As CQP") ": " [:code cqp]]))
@@ -343,22 +233,21 @@
   "The nearby-word control in `ui`, holding what `params` say: the word
   and its distance. The distance is disabled while the word is blank,
   since a blank word asks for nothing."
-  [ui {:keys [near in] :as params}]
+  [ui {:keys [near in distance]}]
   [:p.matching-near
    [:label {:for "near"} (i18n/tr ui "near")]
    ;; one grid item: the word field takes the width the distance leaves
    [:span.matching-fields
     [:input {:type         "search" :name "near" :id "near"
              :value        (or near "")
-             :placeholder  (tokens-views/attribute-label
-                            ui (if (str/blank? in) "word" in))
+             :placeholder  (widgets/attribute-label ui (tokens/attr-name in))
              :autocomplete "off"
              ;; stored as typed, so the distance field can enable itself
              :on           {:input [:set-param "near" :event.target/value]}}]
     ;; the sign is decoration; the field's name says either side
     [:span.matching-distance [:span {:aria-hidden "true"} "±"]
      [:input {:type       "number" :name "distance" :min 1
-              :value      (near-distance params)
+              :value      (params/distance-param distance)
               :disabled   (str/blank? near)
               :aria-label (i18n/tr ui "words either side")}]]]])
 
@@ -390,10 +279,8 @@
 
 (defn settings-now
   "The settings the form of `state` shows, as they would be stored,
-  measured against its `:selectable` corpora.
-
-  The client calls it when it stores, so the value a button offers and
-  the value a change writes cannot drift apart."
+  measured against its `:selectable` corpora. The client stores through
+  it too, so what a button offers and what a change writes agree."
   [{:keys [params selectable autosave?]}]
   (settings/string (cond-> params
                      (false? autosave?)
@@ -402,13 +289,11 @@
 
 (defn settings-buttons
   "The buttons in `ui` storing `now` (see `settings-now`) as the reader's
-  own defaults, or forgetting what they have `stored`.
-
-  Without a `client?` neither is disabled: their state is read as the
-  page renders and goes stale as soon as a box is ticked, and a button
-  that does nothing is kinder than one that refuses a change the reader
-  really has made."
+  own defaults, or forgetting what they have `stored`."
   [ui now stored client?]
+  ;; without a client neither is disabled: what is read at render goes
+  ;; stale at the first tick, and a button that does nothing is kinder
+  ;; than one refusing a change the reader really has made
   (let [departs? (seq now)
         unsaved? (not= now stored)
         button   (fn [value on? label]
@@ -423,13 +308,11 @@
 
 (defn autosave-control
   "The checkbox in `ui` saying whether a change to the form stores the
-  settings it leaves, ticked when `autosave?`.
-
-  It stores itself the moment it changes, which cannot wait for the
-  button beside it: a reader who turns storing off could never keep that
-  choice if keeping it were the first thing the choice forbade. Without
-  a `client?` it is posted with the buttons instead."
+  settings it leaves, ticked when `autosave?`; posted with the buttons
+  where no `client?` runs."
   [ui autosave? client?]
+  ;; stored the moment it changes: a reader turning storing off could
+  ;; never keep that choice if keeping it were the first thing it forbade
   [:p.settings-autosave
    [:label
     [:input (cond-> {:type    "checkbox"
@@ -443,15 +326,11 @@
 
 (defn settings-announcement
   "The live region of the preferences box in `ui`, spoken and never seen,
-  saying what `announcement` names and nothing for nil.
-
-  Storing moves nothing and the button pressed goes quiet, so a reader
-  not watching the screen is otherwise told nothing; off screen because
-  one who is watching has the buttons. The announcement belongs to the
-  act and not to the state it left, so the next action takes it away
-  (see dk.cst.corpus-probe.client.actions/act) and a second save is
-  spoken as the first was."
+  saying what `announcement` names and nothing for nil."
   [ui announcement]
+  ;; storing moves nothing and the button goes quiet, so a reader not
+  ;; watching is otherwise told nothing; the next action takes the
+  ;; announcement away (see actions/act), so a second save is spoken too
   (widgets/status "spoken"
                   (when (= :saved announcement)
                     (i18n/tr ui "Settings saved"))))
@@ -459,7 +338,7 @@
 (defn settings-fieldset
   "The preferences box of the search form of `state` in `ui`: what the
   form is stored as, forgotten with, and whether it is stored at all."
-  [{:keys [client? autosave? stored announcement] :as state} ui]
+  [ui {:keys [client? autosave? stored announcement] :as state}]
   ;; the group takes focus where the button that had it goes quiet: the
   ;; box they are still in, rather than the button that would undo it
   [:fieldset.settings.box {:id settings/box-id :tabindex "-1"}
@@ -470,35 +349,28 @@
 
 (defn settings-form
   "The form the `settings-fieldset`'s controls post to, returning to the
-  search `params` describe.
-
-  A preference is state, so it is posted rather than asked for in a URL
-  (see dk.cst.corpus-probe.server/serve-preferences). The buttons carry
-  what is stored and stand elsewhere, so this holds nothing but the
-  return and the id they name."
+  search `params` describe: a preference is state, so it is posted (see
+  dk.cst.corpus-probe.server/serve-preferences)."
   [params]
+  ;; the buttons carry what is stored and stand elsewhere, so this holds
+  ;; nothing but the return and the id they name
   [:form.settings-form {:id     settings/form-id
                         :method "post"
                         :action url/preferences}
    [:input {:type "hidden" :name "return" :value (url/search-href params)}]])
 
-;; TODO: reconsider where the bubble hangs. The constraint is the
-;; chooser's, and a screen reader hears the search button called invalid.
-;; Weighed on 2026-09-14: a box in the chooser and its filter box both put
-;; the bubble over the first corpora, and a message of the app's own in
-;; the chooser was turned down for the browser's bubble. A native anchor
-;; that covers nothing in the chooser and sits inside it would settle this
 (defn submit-button
   "The button submitting the search form in `ui`, saying what pressing
-  it does: a text shaped like CQP runs as CQP, and the form says so
-  nowhere else, since the boxes it takes away are an absence.
-
-  It also carries the form's one constraint HTML cannot state, that a
-  search needs a corpus in `params`, so the browser refuses the search
-  where it was asked for: its bubble hangs under the control that is
-  invalid, and on a box in the chooser it would cover the boxes under
-  it. The chooser opens as the browser reports it, so the corpora to
-  tick are in view. Without a client the server refuses instead."
+  it does, since a text shaped like CQP runs as CQP and the form says so
+  nowhere else. It also carries the form's one constraint HTML cannot
+  state, that a search needs a corpus in `params`; without a client the
+  server refuses instead."
+  ;; the bubble hangs under the invalid control, and on a box in the
+  ;; chooser it would cover the boxes under it; the chooser opens as the
+  ;; browser reports it, so the corpora to tick are in view.
+  ;; TODO: a screen reader hears the search button called invalid for the
+  ;; chooser's constraint. Weighed 2026-09-14: a native anchor inside the
+  ;; chooser that covers nothing would settle this
   [ui params]
   [:button {:type                "submit"
             :replicant/on-render [:set-validity
@@ -512,14 +384,12 @@
 (defn rail-fold
   "The `rail` of the search form of `state`, under a disclosure once its
   `:result` has hits to make room for, and bare until then. Shut, its
-  controls still submit with the form.
-
-  It stands open while the search `:asked` is the one the reader opened
-  it over, `:rail-open` (see dk.cst.corpus-probe.client.actions/toggle-rail):
-  the other view of the same answer, another page of it or the other
-  language leave it as it was, and a new search folds it, so the answer
-  has the whole width first."
+  controls still submit with the form. It stands open while the search
+  `:asked` is the one the reader opened it over, `:rail-open` (see
+  dk.cst.corpus-probe.client.actions/toggle-rail)."
   [{:keys [ui rail-open asked result]} rail]
+  ;; the other view, another page or the other language leave it as it
+  ;; was; a new search folds it, so the answer has the whole width first
   (if (result/found? result)
     (let [open? (and rail-open (= rail-open (recent/asked asked)))]
       [:details.rail-fold {:open (boolean open?)
@@ -531,6 +401,18 @@
                    (i18n/tr ui "Search options"))]
        rail])
     rail))
+
+(defn navigation-status
+  "The live region reporting a routed navigation in flight in `ui`,
+  which says so while `pending?` and holds nothing otherwise."
+  [ui pending?]
+  (widgets/status
+   "navigation-status"
+   ;; TODO: design this: where a reader looks while they wait, whether it
+   ;; wants a minimum time on screen (see effects/pending-delay-ms) and
+   ;; whether it should say more. The filter's busy state and the count
+   ;; still being made want the same answer
+   (when pending? [:p (i18n/tr ui "Loading …")])))
 
 (defn search-form
   "The search form of `state`, submitted as GET to `action` with the
@@ -593,8 +475,100 @@
                                                        :pending? filters-pending?
                                                        :corpora  (:corpus params)
                                                        :client?  client?))
-                  (settings-fieldset state ui)])]
+                  (settings-fieldset ui state)])]
      (settings-form params)
      ;; only where the client runs: every other navigation is the
      ;; browser's own, and the browser reports those itself
      (when client? (navigation-status ui pending?))]))
+
+(defn help
+  "The search help, the hiccup `blocks` of its document, as a region
+  named in `ui`; nil without a help document."
+  [ui blocks]
+  ;; TODO: the page has no h1 until an answer heads it. Does the empty
+  ;; page want one, and of what?
+  (when (seq blocks)
+    [:section.help {:aria-label (i18n/tr ui "Help")} blocks]))
+
+(def recent-id
+  "The id of the heading naming the history, which the landmark around it
+  is named by."
+  "recent-searches")
+
+(def recent-box-id
+  "The id of the history's box, which clearing leaves the reader on: the
+  button they pressed goes quiet as they press it, and a quiet button
+  holds no focus."
+  "recent")
+
+(defn recent-facts
+  "What the remembered search `entry`, whose question is `asked`, says of
+  itself under its query in `ui`: the corpora it was asked of, the word
+  its hits had to be near, the metadata filter it was narrowed by and
+  the hits it found, where each is known."
+  [ui asked {:keys [hits] narrowing :filter}]
+  (->> [(when-let [corpora (seq (url/corpora-param (:corpus asked)))]
+          (result/corpora-phrase ui corpora))
+        (near-phrase ui asked)
+        (not-empty narrowing)
+        (when hits (result/hits-phrase ui hits))]
+       (remove nil?)
+       (str/join " · ")))
+
+(defn recent-query
+  "The question `asked` as the history names it in `ui` (see
+  dk.cst.corpus-probe.views.result/query-phrase): a query written in CQP
+  as the code it is, and what a reader typed as they typed it."
+  [ui asked]
+  (let [phrase (result/query-phrase ui asked)]
+    (if (#{"cqp" "extended"} (mode/mode asked))
+      [:code phrase]
+      phrase)))
+
+(defn recent-search
+  "One remembered `entry` as a link in `ui`: the question it asked, and
+  under it what the answer was (see `recent-facts`)."
+  [ui entry]
+  ;; the params are read for the words alone; the link is the string as
+  ;; it was written (see dk.cst.corpus-probe.storage.recent/href)
+  (let [asked (url/form-decode (:params entry))]
+    [:li [:a {:href (recent/href entry)}
+          [:span.recent-query (recent-query ui asked)]
+          (when-let [facts (not-empty (recent-facts ui asked entry))]
+            [:small.recent-facts facts])]]))
+
+(defn recent-searches
+  "The searches a reader has made lately, `entries`, newest first, as a
+  navigation landmark in `ui`; what will stand there for a reader who
+  has made none."
+  [ui entries]
+  ;; in the column the result's tabs take, given up as soon as there are
+  ;; hits; kept while empty, so a reader is told the searches are being
+  ;; kept before there are any.
+  ;; TODO: emptying the field is the way back to the history, and is said
+  ;; nowhere; and is one entry worth a control of its own?
+  [:nav.recent.box {:id              recent-box-id
+                    :tabindex        "-1"
+                    :aria-labelledby recent-id}
+   [:h2 {:id recent-id} (i18n/tr ui "Recent searches")]
+   (if (seq entries)
+     [:ol widgets/list-attrs (for [entry entries] (recent-search ui entry))]
+     [:p.recent-empty (i18n/tr ui "Your searches appear here.")])
+   [:p.recent-clear
+    ;; nothing to forget is a button that says so by going quiet, as the
+    ;; preferences box's do
+    [:button {:type     "button"
+              :disabled (empty? entries)
+              :on       {:click [:forget-searches]}}
+     (i18n/trx ui "button" "Clear")]]])
+
+(defn recent-announcement
+  "The live region saying the history was cleared, in `ui`, when that is
+  what `announcement` names; spoken and never seen."
+  [ui announcement]
+  ;; clearing leaves a sentence and a quiet button, neither announced, so
+  ;; a reader not watching is otherwise told nothing; outside the box,
+  ;; which is rebuilt as it empties
+  (widgets/status "spoken"
+                  (when (= :cleared announcement)
+                    (i18n/tr ui "Recent searches cleared"))))

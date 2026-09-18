@@ -103,11 +103,11 @@
 
 (defn share!
   "Call no-arg `f` for key `k`, sharing the one call with every caller
-  asking for the same `k` while it runs: a cache miss on a large corpus
-  costs minutes, so a reader who reloads would otherwise start a second
-  one. A failure is shared like a value, every waiter getting the
-  exception the first caller got."
+  asking for the same `k` while it runs. A failure is shared like a
+  value, every waiter getting the exception the first caller got."
   [k f]
+  ;; a miss on a large corpus costs minutes, and a reader who reloads
+  ;; would otherwise start a second one.
   ;; a promise rather than a delay: a virtual thread blocked on a monitor
   ;; holds its carrier before JDK 24, and requests run on virtual threads
   (let [mine  (promise)
@@ -228,6 +228,12 @@
   [ctx corpus nqr]
   (some-> ^File (result-file ctx corpus nqr) (.delete)))
 
+(defn least-bytes
+  "The fewest bytes a saved query result of `matches` matches takes: two
+  32-bit positions a match."
+  [matches]
+  (* 8 (or matches 0)))
+
 (defn commit!
   "Give the saved query result `pending` of `corpus` under `ctx` its final
   name `nqr`, replacing whatever was stored under it, atomically, so that
@@ -239,9 +245,9 @@
   (let [^File from (result-file ctx corpus pending)
         ^File to   (result-file ctx corpus nqr)]
     (when (and from (.isFile from))
-      ;; two 32-bit positions a match; CQP does not report a save it could
-      ;; write only part of, and the short file reads back zero-filled
-      (if (< (.length from) (* 8 (or matches 0)))
+      ;; CQP does not report a save it could write only part of, and the
+      ;; short file reads back zero-filled
+      (if (< (.length from) (least-bytes matches))
         (do (t/event! ::truncated-save
                       {:level :error
                        :data  {:corpus corpus :matches matches
@@ -260,7 +266,7 @@
   [ctx corpus nqr matches]
   (boolean (some-> ^File (result-file ctx corpus nqr)
                    (.length)
-                   (>= (* 8 (or matches 0))))))
+                   (>= (least-bytes matches)))))
 
 (defn stale?
   "True when `f` was last read more than `ttl-ms` before `now`."
@@ -298,12 +304,11 @@
   "Delete the saved query results under `ctx` that no longer belong there,
   and return how many were deleted: first those nobody has read for its
   `ttl-ms`, then as many of the rest as it takes to fit within its
-  `max-bytes`.
-
-  Age alone does not bound the disk, a busy `ttl-ms` being when nothing
-  is old enough to delete and the disk is filling; and nothing is locked,
-  since a result deleted under a reader costs a re-run, not a failure."
+  `max-bytes`."
   [ctx]
+  ;; age alone does not bound the disk: a busy ttl is when nothing is old
+  ;; enough to delete and the disk is filling. Nothing is locked, since a
+  ;; result deleted under a reader costs a re-run, not a failure
   (let [stale? (partial stale? (ttl-ms ctx) (System/currentTimeMillis))
         by-age (group-by stale? (result-files ctx))
         gone   (into (vec (by-age true))

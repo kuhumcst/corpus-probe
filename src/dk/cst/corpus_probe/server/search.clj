@@ -12,6 +12,7 @@
             [dk.cst.corpus-probe.docs :as docs]
             [dk.cst.corpus-probe.query :as query]
             [dk.cst.corpus-probe.query.mode :as mode]
+            [dk.cst.corpus-probe.query.tokens :as tokens]
             [dk.cst.corpus-probe.search :as search]
             [dk.cst.corpus-probe.search.batch :as batch]
             [dk.cst.corpus-probe.search.export :as export]
@@ -26,12 +27,10 @@
 (defn selected-corpora
   "The corpus names `params` asks for out of the `selectable` ones: those
   it names, or all of them when it names none and the selection is not
-  one the reader made.
-
-  The form submits a `scope` param alongside its checkboxes, so an empty
-  selection a reader ticked their way to is answered with the no-corpus
-  error rather than silently widened to the whole registry."
+  one the reader made."
   [selectable params]
+  ;; the form submits a scope param beside its boxes, so a selection a
+  ;; reader emptied gets the no-corpus error rather than every corpus
   (let [named (url/corpora-param (:corpus params))]
     (if (or (seq named) (contains? params :scope))
       named
@@ -98,7 +97,7 @@
         {:keys [params] :as req} (search-request! ctx request)]
     (assoc req
            :view      (request/view-param (:view params))
-           :attr      (request/attr-param (:attr params))
+           :attr      (tokens/attr-name (:attr params))
            :at        (request/position-param (:at params))
            :docs      (some? (:docs params))
            :page      (request/page-param (:page params))
@@ -128,7 +127,7 @@
   A `:seeded?` form shows its settings as they are: how a query is
   matched rides on the query, and there is none, so re-spelling would
   drop what was stored."
-  [{:keys [params arrived selected named seeded?] :as req}]
+  [{:keys [params arrived selected named seeded? attr at] :as req}]
   (let [{:keys [form held]} arrived]
     (-> (if seeded?
           params
@@ -136,8 +135,8 @@
                  (query/->params form held)))
         (assoc :mode   (mode/form-of form)
                :corpus (if (runs? req) selected named)
-               :attr   (request/attr-param (:attr params))
-               :at     (request/position-param (:at params))))))
+               :attr   attr
+               :at     at))))
 
 (defn citation
   "The URL params the search page for `req` (see `read-request!`) cites
@@ -180,12 +179,10 @@
   "The attribute descriptions ({:type :name}) offered for grouping the
   `corpora` via `ctx`: their union, positional attributes first, each
   kind keeping the registry order of the first corpus reporting it.
-  Falls back to word, the one attribute every corpus has.
-
-  Every attribute is offered whatever the query: a structural one cannot
-  table a whole corpus, and that request is rejected with its reason, so
-  the form still shows what was asked."
+  Falls back to word, the one attribute every corpus has."
   [ctx corpora]
+  ;; every attribute whatever the query: a structural one cannot table a
+  ;; whole corpus, but the rejection says so and the form shows the ask
   (let [attrs (->> (corpora-attrs! ctx frequency/groupable-attrs! corpora)
                    (map #(select-keys % [:type :name]))
                    (distinct)
@@ -417,10 +414,8 @@
   the outcome of the search when the params describe one, the links out
   of it, and the settings it holds as `:stored`, which the preferences
   box reads against the `:selectable` corpora both sides measure a
-  selection by.
-
-  The same map is embedded as transit for the client, so it holds corpus
-  overviews only: the registry maps carry absolute server paths."
+  selection by. Embedded as transit too, so it holds corpus overviews
+  only: the registry maps carry absolute server paths."
   ([ctx request]
    (let [req (read-request! ctx request)]
      (search-view-data ctx req (citation req))))
@@ -447,18 +442,15 @@
 (defn serve-search
   "Handle a search-page `request` against `ctx`: render the form, and
   when the query params describe a search, its concordance or the reason
-  there is none, else the search help where the results will be.
-
-  A request whose query string is not the search's citation (see
-  `uncited?`) is answered with a redirect to it, so a submit without the
-  client ends on the one URL the search has. Not one whose mode changed,
-  whose citation is what the form holds rather than what it was given.
-
-  The same request stores what it asked as the reader's own defaults,
-  unless they turned that off. It is the reader without a script who is
-  served here: a search they asked for says how they work, one they
-  arrived at by a link says how the sharer does."
+  there is none, else the search help where the results will be. A
+  request whose query string is not the search's citation (see
+  `uncited?`) is redirected to it, and stores what it asked as the
+  reader's own defaults unless they turned that off."
   [ctx request]
+  ;; not redirected after a change of mode, whose citation is what the
+  ;; form holds rather than what it was given. Stored for the reader
+  ;; without a script: a search they asked for says how they work, one
+  ;; they arrived at by a link says how the sharer does
   (let [req     (read-request! ctx request)
         cited   (citation req)
         asked?  (uncited? request req cited)
@@ -494,13 +486,11 @@
 (defn serve-filters
   "Answer the metadata filters the corpora named in `request` offer via
   `ctx`, as transit, so the client can refresh the filter fieldset when
-  the corpus selection changes without submitting a search.
-
-  The values a reader has chosen are not answered: those are the reader's
-  and the client is already holding them. An attribute list that no
-  longer offers a chosen value leaves that value where it is, so
-  narrowing the corpora never quietly drops part of a filter."
+  the corpus selection changes without submitting a search."
   [ctx request]
+  ;; the chosen values are not answered: the client holds them, and a
+  ;; list that no longer offers one leaves it where it is, so narrowing
+  ;; the corpora never quietly drops part of a filter
   (let [entries   (registry/entries ctx)
         named     (url/corpora-param (:corpus (:query-params request)))
         [known _] (corpus/split-known entries named)]

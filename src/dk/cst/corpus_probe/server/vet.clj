@@ -32,12 +32,10 @@
 
 (defn missing-tools!
   "The `commands` that cannot be launched on this machine at all, whatever
-  the others then exit with.
-
-  The cwb-* tools exit non-zero for `-h` and for no arguments alike, so
-  their exit code says nothing about whether they are installed; being
-  launchable at all does."
+  the others then exit with."
   [commands]
+  ;; the cwb-* tools exit non-zero for -h and for no arguments alike, so
+  ;; only being launchable says whether they are installed
   (vec (remove (fn [command]
                  (try
                    (not (cwb/timeout? (cwb/run! [command "-h"] timeout-ms {})))
@@ -46,13 +44,11 @@
 
 (defn tool-problems!
   "Log the CWB programs `ctx` drives that this machine cannot launch, and
-  return them: its :cqp (default cqp) and the cwb-* tools.
-
-  A PATH reaching cqp need not reach the rest, and the failure is quiet:
-  search keeps working while corpus pages, frequency lists and metadata
-  filters all fail. Logs the CQP version too, since the app generates the
-  subset that is safe on the oldest supported one."
+  return them: its :cqp (default cqp) and the cwb-* tools; logs the CQP
+  version too."
   [ctx]
+  ;; a PATH reaching cqp need not reach the rest, and the failure is
+  ;; quiet: search keeps working while the corpus pages and filters fail
   (let [missing (log-problems! ::tool-missing
                                (fn [command]
                                  {:level :warn :data {:command command}})
@@ -99,14 +95,11 @@
 
 (defn pipeline-order!
   "The line numbers the sort pipeline CQP runs puts `collation-probe` in
-  under LC_ALL `sort-locale`; nil when the pipeline cannot be run at all.
-
-  Running CQP's own pipeline (docs/research/gap-nqr-persistence.md §3) is
-  the only way to learn what its sort will really do here, because sort,
-  gawk and the locale all have to work together and CQP reports none of
-  it: it falls back to corpus order and says nothing. The pipeline exits
-  with gawk's status, not sort's, so what came back is judged instead."
+  under LC_ALL `sort-locale`; nil when the pipeline cannot be run at all."
   [sort-locale]
+  ;; CQP's own pipeline (docs/research/gap-nqr-persistence.md §3), since
+  ;; sort, gawk and the locale must work together and CQP reports none of
+  ;; it. It exits with gawk's status, not sort's, so the output is judged
   (try
     (let [res   (cwb/run!
                  ["sh" "-c" "sort -k 2 -k 1n | gawk '{print $1}'"]
@@ -132,12 +125,10 @@
   :sort-locale of `ctx`, and return it: :sort-locale-unset when there is
   none to follow, :pipeline-broken when CQP's sort pipeline does not run
   here, and :collation-mismatch when it runs but disagrees with the app's
-  collator.
-
-  The app orders values with a java.text.Collator while CQP orders a
-  concordance with a shell pipeline: the setting is worth nothing unless
-  the two agree."
+  collator."
   [{:keys [sort-locale] :as ctx}]
+  ;; the app orders values with a Collator and CQP a concordance with a
+  ;; shell pipeline: the setting is worth nothing unless the two agree
   (let [order    (when-not (str/blank? (str sort-locale))
                    (pipeline-order! sort-locale))
         expected (when order (collator-order sort-locale))]
@@ -156,13 +147,11 @@
   and return it: :cache-unusable when the directory is neither there nor
   creatable, or cannot be written, and :cache-over-disk when its byte
   budget is larger than the filesystem has left; nothing when `ctx` keeps
-  no cache.
-
-  An unusable directory fails every save, so it is an error rather than a
-  warning; a budget larger than the disk only fails the saves that fill
-  it, and goes on failing them, since nothing evicts until a budget is
-  reached that never can be."
+  no cache."
   [ctx]
+  ;; an unusable directory fails every save, so it is an error; a budget
+  ;; past the disk fails only the saves that fill it, but for ever, since
+  ;; nothing evicts until a budget is reached that never can be
   (let [^File dir (cache/directory ctx)
         _         (when dir (.mkdirs dir))
         ;; whether it can be written is learnt by writing: File.canWrite
@@ -204,13 +193,11 @@
 (defn registry-problems!
   "Read every corpus of the `ctx` registry once, in parallel, log the ones
   CWB cannot open and return them as the [id reason] pairs of
-  `corpus-problem!`.
-
-  A registry that holds no corpus at all is logged as a problem rather
-  than a clean run, since a mistyped :registry path reads exactly like an
-  empty one. Reading them all also caches the corpus index's token counts
-  before the first request."
+  `corpus-problem!`; reading them all also caches the index's token
+  counts before the first request."
   [ctx]
+  ;; an empty registry is logged as a problem: a mistyped :registry path
+  ;; reads exactly like one
   (let [started (System/nanoTime)
         entries (registry/entries ctx)
         broken  (log-problems! ::corpus-unreadable

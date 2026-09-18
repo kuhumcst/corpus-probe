@@ -5,6 +5,7 @@
             [dk.cst.corpus-probe.test.hiccup :refer [da en text]]
             [dk.cst.corpus-probe.i18n :as i18n]
             [dk.cst.corpus-probe.query.mode :as mode]
+            [dk.cst.corpus-probe.query.params :as params]
             [dk.cst.corpus-probe.storage.recent :as recent]
             [dk.cst.corpus-probe.storage.settings :as settings]
             [dk.cst.corpus-probe.url :as url]
@@ -158,7 +159,7 @@
         (is (some #{[:label {:for "near"} "near"]} (deep (row state))))
         (is (some #{"nær"} (deep (row (assoc state :ui da)))))
         (is (= "" (:value (field state "near"))))
-        (is (= url/default-distance (:value (field state "distance"))))
+        (is (= params/default-distance (:value (field state "distance"))))
         (testing "the word typed goes into the state, so the distance can
                   follow: disabled while the word is blank, which asks
                   nothing, so that nothing is submitted with it"

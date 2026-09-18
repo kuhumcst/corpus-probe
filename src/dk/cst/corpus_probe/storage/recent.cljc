@@ -29,12 +29,9 @@
   "The params a reader narrows an answer by, working from beside it: a
   random sample of the hits, and the subset behind a frequency row. The
   nearby word is not among them: it is set in the search form, and so
-  belongs to the question.
-
-  They name which hits a URL holds, so
-  dk.cst.corpus-probe.url/search-params keeps them; they narrow an
-  answer to a question the history holds already, so this drops them,
-  and working a control beside a result writes no entry of its own."
+  belongs to the question."
+  ;; a URL keeps them, naming which hits it holds (see url/search-params);
+  ;; the history drops them, so a control beside a result writes no entry
   [:sample :subset])
 
 (def qualifiers
@@ -88,13 +85,11 @@
 
 (defn remember
   "The history `entries` with `entry` at its head: the same question
-  asked again moves rather than repeats, and the oldest go once there
-  are more than `max-entries`.
-
-  A question asked again keeps what it said of itself where it says
-  nothing now: a narrowed answer counts a part of what the question
-  found and reports no count of its own (see `refined?`)."
+  asked again moves rather than repeats, keeping what it said of itself
+  where it says nothing now, and the oldest go once there are more than
+  `max-entries`."
   [entries entry]
+  ;; merged: a narrowed answer reports no count of its own (see refined?)
   (let [same? #(= (:params entry) (:params %))]
     (into [(merge (first (filter same? entries)) entry)]
           (comp (remove same?) (take (dec max-entries)))

@@ -160,11 +160,8 @@
 (defn filters-stale?
   "True when the metadata filters `state` holds are not the ones the
   corpora now selected offer, `:filters-for` naming the selection they
-  were read for.
-
-  Asked of the selection rather than of the reader opening the filter:
-  what a selection carries is fetched, and a reader who has to wait for
-  the answer at the moment they look reads the last selection's
-  attributes until it lands."
+  were read for."
   [{:keys [filters-for] :as state}]
+  ;; asked of the selection, not of the reader opening the filter: one
+  ;; who waits at the moment they look reads stale attributes till then
   (not= (chosen-corpora state) filters-for))

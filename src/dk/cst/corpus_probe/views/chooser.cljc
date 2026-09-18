@@ -42,11 +42,10 @@
 
 (defn counted
   "Stamp `node` and the nodes under it with `:offered`, the ids each of
-  them offers (see `offered`).
-
-  Stamped before the resting view hides what is not chosen, so every
-  count is of what the filter left rather than of the selection alone."
+  them offers (see `offered`)."
   [node]
+  ;; before the resting view hides what is not chosen, so every count is
+  ;; of what the filter left rather than of the selection alone
   (let [node (update node :nodes #(mapv counted %))]
     (assoc node :offered (vec (offered node)))))
 
@@ -81,12 +80,11 @@
 (defn open-at-rest
   "Which disclosures stand open while nobody is choosing from `nodes`,
   `selected` being the leaves they have chosen: every node chosen in
-  part, by id, and `:root` whenever the resting view shows anything.
-
-  A node chosen whole, or not at all, is shut: its own row says which,
-  having both a label and a count. The root has only the count, so
-  shutting it would leave a ticked box that names nothing."
+  part, by id, and `:root` whenever the resting view shows anything."
   [nodes selected]
+  ;; a node chosen whole or not at all is shut, its own row saying which
+  ;; with a label and a count; the root has only the count, so shutting
+  ;; it would leave a ticked box that names nothing
   (let [nodes (map counted nodes)
         part? (fn [offered]
                 (< 0 (count (filter selected offered)) (count offered)))

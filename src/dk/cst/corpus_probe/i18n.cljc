@@ -128,11 +128,8 @@
                                                          source-language))
            [whole fraction] (str/split (if decimals (fixed n decimals) (str n))
                                        #"\.")]
-       (cond-> (->> (reverse whole)
-                    (partition-all 3)
-                    (map (comp str/join reverse))
-                    (reverse)
-                    (str/join group))
+       ;; a separator before every run of three digits that ends the number
+       (cond-> (str/replace whole #"\B(?=(\d{3})+(?!\d))" group)
          fraction (str decimal fraction))))))
 
 (comment

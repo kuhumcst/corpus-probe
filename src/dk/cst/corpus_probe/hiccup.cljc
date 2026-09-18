@@ -38,7 +38,7 @@
   nested, its attributes left out."
   [[_ attrs & children :as h]]
   (let [content (if (map? attrs) children (rest h))]
-    (apply str (filter string? (tree-seq coll? seq content)))))
+    (apply str (filter string? (deep content)))))
 
 (defn heading
   "The heading tag `level` deep, h6 at the deepest: HTML has no h7."

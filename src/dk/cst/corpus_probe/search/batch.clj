@@ -51,12 +51,10 @@
   "How many words either side a concordance page fetches however few it
   shows, so that the line fills a wide screen and there is text past the
   width asked for to fade out and travel into."
-  ;; the dial between what a page weighs and how far a reader gets before
-  ;; one is fetched for them: every hit on the page carries this many
-  ;; words twice over, whether or not they are ever looked at.
-  ;; TODO: chosen against the toy corpora, where a text is shorter than
-  ;; this and the clip decides instead. Weigh it again on the KU data,
-  ;; where a text runs to hundreds of words and this is what a page costs
+  ;; every hit on the page carries this many words twice over, looked at
+  ;; or not.
+  ;; TODO: chosen against the toy corpora, whose texts are shorter than
+  ;; this; weigh it again on the KU data, where it is what a page costs
   30)
 
 (defn fetch-context
@@ -96,6 +94,15 @@
               (command/valid-data-directory cache-dir) "\"; "))
        hardened-profile " set Context " (context-spec context) ";"))
 
+(defn tabulate-attrs
+  "One :tabulate section per entry of `struct-attrs` over the rows
+  `span`: a whole line is one value, since an annotation value may hold
+  a TAB."
+  [span struct-attrs]
+  (map (fn [attr]
+         [:tabulate (str "tabulate " span " match " (name attr) ";")])
+       struct-attrs))
+
 (defn page-commands
   "The [section command] pairs displaying the rows `[from to]` of the
   query result named `nqr`: a :cat section showing the positional
@@ -109,11 +116,7 @@
                     "; "))]
     (into [[:cat (str show "cat " span ";")]
            [:dump (str "dump " span ";")]]
-          ;; one tabulate per attribute, so that a whole line is one
-          ;; value: an annotation value may hold a TAB
-          (map (fn [attr]
-                 [:tabulate (str "tabulate " span " match " (name attr) ";")]))
-          struct-attrs)))
+          (tabulate-attrs span struct-attrs))))
 
 (defn size-batch
   "The batch counting the matches of `query` (raw CQP) in `corpus`:
@@ -176,9 +179,7 @@
                  (str/join (map #(str ", match..matchend " (name %))
                                 (remove #{:word} p-attrs)))
                  ";")]]
-          (map (fn [attr]
-                 [:tabulate (str "tabulate " span " match " (name attr) ";")]))
-          struct-attrs)))
+          (tabulate-attrs span struct-attrs))))
 
 (defn export-batch
   "The batch running `query` (raw CQP) against `corpus` and printing the
@@ -202,29 +203,35 @@
          [:query  (command/locked-query query)]]
         (page-commands "Last" [0 0] p-attrs struct-attrs shown)))
 
+(defn stored-batch
+  "The batch every read of the saved query result named `nqr` of `corpus`
+  opens with: the setup with the `context` and `cache-dir` of `opts` (see
+  `setup-command`), the activation and the result's size. No query runs
+  and nothing is sorted: the matches and their order both come from the
+  save file."
+  [corpus nqr {:keys [context cache-dir]
+               :or   {context (:context kwic-defaults)}}]
+  [[:setup  (setup-command context cache-dir)]
+   [:corpus (str corpus ";")]
+   [:size   (str "size " (command/valid-result-name nqr) ";")]])
+
 (defn stored-kwic-batch
   "The batch returning the rows `:rows` of the saved query result named
-  `nqr` of `corpus`: [section command] pairs as `kwic-batch` returns, no
-  query run and nothing sorted, the matches and their order both coming
-  from the save file."
-  [corpus nqr {:keys [p-attrs struct-attrs context rows cache-dir text-attr]
-               :or   {context (:context kwic-defaults)
-                      rows    (:rows kwic-defaults)}}]
-  (into [[:setup  (setup-command context cache-dir)]
-         [:corpus (str corpus ";")]
-         [:size   (str "size " (command/valid-result-name nqr) ";")]]
+  `nqr` of `corpus`: the `stored-batch` of `opts`, then the
+  `page-commands` of the rows as `kwic-batch` has them."
+  [corpus nqr {:keys [p-attrs struct-attrs rows text-attr]
+               :or   {rows (:rows kwic-defaults)}
+               :as   opts}]
+  (into (stored-batch corpus nqr opts)
         (page-commands nqr rows p-attrs struct-attrs
                        (when text-attr [text-attr]))))
 
 (defn stored-export-batch
   "The batch printing the first `limit` rows of the saved query result
-  named `nqr` of `corpus` for an export, as `export-batch` prints a
-  fresh one's; no query runs and nothing is sorted, as with
-  `stored-kwic-batch`."
-  [corpus nqr {:keys [context p-attrs struct-attrs cache-dir limit]}]
-  (into [[:setup  (setup-command context cache-dir)]
-         [:corpus (str corpus ";")]
-         [:size   (str "size " (command/valid-result-name nqr) ";")]]
+  named `nqr` of `corpus` for an export: the `stored-batch` of `opts`,
+  then the `tabulate-commands` as `export-batch` has them."
+  [corpus nqr {:keys [context p-attrs struct-attrs limit] :as opts}]
+  (into (stored-batch corpus nqr opts)
         (tabulate-commands nqr [0 (dec limit)] context p-attrs struct-attrs)))
 
 (defn count-batch

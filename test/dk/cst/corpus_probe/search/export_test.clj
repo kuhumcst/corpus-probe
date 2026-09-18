@@ -65,16 +65,16 @@
                       :rows []})))))))
 
 (deftest tsv-test
-  (is (= "a\tb\nc\td\n" (export/tsv [["a" "b"] ["c" "d"]])))
+  (is (= "a\tb\nc\td\n" (export/render "tsv" [["a" "b"] ["c" "d"]])))
   (testing "TAB and line breaks inside a value become spaces"
-    (is (= "a b c\n" (export/tsv [["a\tb\nc"]])))))
+    (is (= "a b c\n" (export/render "tsv" [["a\tb\nc"]])))))
 
 (deftest csv-test
   (testing "plain values are bare, others quoted with doubled quotes"
     (is (= "a,\"b,c\",\"12\"\"\"\r\n"
-           (subs (export/csv [["a" "b,c" "12\""]]) 1))))
+           (subs (export/render "csv" [["a" "b,c" "12\""]]) 1))))
   (testing "the text starts with a byte order mark"
-    (is (str/starts-with? (export/csv [["a"]]) "\ufeff"))))
+    (is (str/starts-with? (export/render "csv" [["a"]]) "\ufeff"))))
 
 (deftest sized-frequency-lines-test
   (let [rows (export/frequency-lines
@@ -119,10 +119,4 @@
 
 (deftest lines-test
   (is (= "a\tb\n" (export/tsv-line ["a" "b"])))
-  (is (= "a,\"b,c\"\r\n" (export/csv-line ["a" "b,c"])))
-  (testing "the formats render a table as they render its lines"
-    (is (= (export/tsv [["a"] ["b"]])
-           (apply str (map (:line (export/formats "tsv")) [["a"] ["b"]]))))
-    (is (= (export/csv [["a"]])
-           (str (:preamble (export/formats "csv"))
-                ((:line (export/formats "csv")) ["a"]))))))
+  (is (= "a,\"b,c\"\r\n" (export/csv-line ["a" "b,c"]))))

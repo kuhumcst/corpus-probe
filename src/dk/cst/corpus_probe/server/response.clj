@@ -26,17 +26,14 @@
     (.toString out "UTF-8")))
 
 (defn correct-quote-escaping
-  "Work around a bug in Replicant's string renderer: it escapes `\"` as
-  `&#39;` (an apostrophe) instead of `&#34;`, in both attributes and text.
-  Real apostrophes are emitted as `&apos;`, so `&#39;` unambiguously marks a
-  corrupted double quote and can be restored globally."
-  ;; Still present in 2026.07.1, and fixed on Replicant's main branch but
-  ;; in no release. Two conditions before dropping this, not one: the
-  ;; escape has to emit `&#34;` for a double quote **and** still emit
-  ;; `&apos;` for an apostrophe. If a release ever fixed the quote by
-  ;; moving apostrophes to `&#39;`, this replacement would turn every
-  ;; apostrophe in Danish corpus text into a double quote.
-  ;; TODO: report upstream.
+  "Restore the double quotes Replicant's string renderer escapes as
+  `&#39;`, an apostrophe, in `html`; real apostrophes come out as
+  `&apos;`, so the mark is unambiguous."
+  ;; still in 2026.07.1, fixed upstream but unreleased. Drop this only
+  ;; once a release emits &#34; for a quote AND still &apos; for an
+  ;; apostrophe: one moving apostrophes to &#39; would make this corrupt
+  ;; every apostrophe in the corpus text.
+  ;; TODO: report upstream
   [html]
   (str/replace html "&#39;" "&#34;"))
 
@@ -45,6 +42,12 @@
   enclosing <script> element; JSON readers decode the escape back to `<`."
   [s]
   (str/replace s "<" "\\u003c"))
+
+(defn render
+  "The hiccup `x` as HTML, its double quotes restored (see
+  `correct-quote-escaping`)."
+  [x]
+  (correct-quote-escaping (replicant/render x)))
 
 (defn document
   "The complete HTML document from `opts`: its `:lang` (the UI language;
@@ -59,12 +62,10 @@
          "<html lang=\"" lang "\"><head>"
          "<meta charset=\"utf-8\">"
          "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
-         (correct-quote-escaping
-          (replicant/render
-           [:meta {:name    "description"
-                   :content (i18n/tr ui (str "Search CWB corpora and read "
-                                             "KWIC concordances."))}]))
-         (correct-quote-escaping (replicant/render [:title title]))
+         (render [:meta {:name    "description"
+                         :content (i18n/tr ui (str "Search CWB corpora and "
+                                                   "read KWIC concordances."))}])
+         (render [:title title])
          "<link rel=\"stylesheet\" href=\"/css/reset.css\">"
          "<link rel=\"stylesheet\" href=\"/css/tokens.css\">"
          "<link rel=\"stylesheet\" href=\"/css/style.css\">"
@@ -72,21 +73,14 @@
          ;; outright where no client can (see public/css/noscript.css)
          "<noscript><link rel=\"stylesheet\" href=\"/css/noscript.css\"></noscript>"
          "</head><body>"
-         (correct-quote-escaping (replicant/render (views/skip-link ui)))
+         (render (views/skip-link ui))
          ;; the masthead, #app and the footer each get a mount point of
          ;; their own: a routed navigation must re-render all three or
          ;; they go stale. The plain <div> scopes no landmark, so the
          ;; <header> and <footer> inside are still banner and contentinfo
-         "<div id=\"masthead\">"
-         (correct-quote-escaping
-          (replicant/render (views/site-header ui path nav)))
-         "</div>"
-         "<div id=\"app\">"
-         (correct-quote-escaping (replicant/render body))
-         "</div>"
-         "<div id=\"footer\">"
-         (correct-quote-escaping (replicant/render (views/site-footer ui)))
-         "</div>"
+         "<div id=\"masthead\">" (render (views/site-header ui path nav)) "</div>"
+         "<div id=\"app\">" (render body) "</div>"
+         "<div id=\"footer\">" (render (views/site-footer ui)) "</div>"
          ;; a string rather than hiccup: Replicant's renderer would mangle
          ;; the payload's double quotes (see `correct-quote-escaping`)
          (when payload
@@ -97,12 +91,11 @@
          "</body></html>")))
 
 (defn transit-response
-  "The view data `x` as transit, for the client router.
-
-  It varies by the same things the document does, and is not stored: the
-  same URL answers with a document or with data depending on the request,
-  and a search is as fresh as the corpora behind it."
+  "The view data `x` as transit, for the client router."
   [x]
+  ;; varies as the document does, and is not stored: one URL answers with
+  ;; a document or data by the request, and a search is only as fresh as
+  ;; the corpora behind it
   {:status  200
    :headers {"Content-Type"  (str url/transit-type "; charset=utf-8")
              "Vary"          "Accept, Accept-Language, Cookie"
@@ -110,12 +103,10 @@
    :body    (->transit x)})
 
 (defn html-response
-  "A complete HTML page response with `html` as its body.
-
-  The page is served in the language its request asks for, so it varies by
-  `Accept-Language` and says so; a shared cache would otherwise hand one
-  reader's language to the next."
+  "A complete HTML page response with `html` as its body."
   [html]
+  ;; served in the language the request asks for, so it says it varies by
+  ;; it, or a shared cache would hand one reader's language to the next
   {:status  200
    :headers {"Content-Type" "text/html; charset=utf-8"
              "Vary"         "Accept, Accept-Language, Cookie"}
@@ -132,19 +123,15 @@
 (defn resource-response
   "A 200 response serving classpath `resource` as `content-type`, kept by
   the reader's browser for `seconds` or, with none, not at all, so that a
-  dev asset always refetches.
-
-  The body is the bytes of the file rather than its text: a font is not
-  text, and reading it as such corrupts it."
-  ([content-type resource]
-   (resource-response content-type resource nil))
-  ([content-type resource seconds]
-   {:status  200
-    :headers {"Content-Type"  content-type
-              "Cache-Control" (if seconds
-                                (str "public, max-age=" seconds)
-                                "no-store")}
-    :body    (io/input-stream resource)}))
+  dev asset always refetches."
+  [content-type resource seconds]
+  ;; the bytes rather than the text: a font read as text is corrupted
+  {:status  200
+   :headers {"Content-Type"  content-type
+             "Cache-Control" (if seconds
+                               (str "public, max-age=" seconds)
+                               "no-store")}
+   :body    (io/input-stream resource)})
 
 (defn download-response
   "A 200 response serving `body` (text, or a function writing it to the
@@ -179,29 +166,24 @@
   an empty file."
   [format filename readable? {:keys [counts]} rows]
   (if (some readable? counts)
-    (download-response format filename ((:render (export/formats format)) rows))
+    (download-response format filename (export/render format rows))
     (export-failure counts)))
 
 (defn shell-data
   "The parts of a page the masthead is built from, for `request` with
   search `params`: the `:path` being served, which its navigation marks
-  as current and its language switch returns to, and the `:nav` itself.
-
-  They travel in the view data because the client re-renders the
-  masthead, and the navigation depends on the search being looked at."
+  as current and its language switch returns to, and the `:nav` itself."
   [request params]
+  ;; in the view data because the client re-renders the masthead, and
+  ;; the navigation depends on the search being looked at
   {:path (:uri request)
    :nav  (url/nav-hrefs params)})
 
 (defn page-response
-  "Answer `request` with the page `data` describes under `title`: as
-  transit when the client router asked for it, else as the document its
-  route renders from the same data.
-
-  The masthead's own parts are merged in here, built for `nav-params`,
-  the search its navigation carries. Both representations come from one
-  place, so the page the server paints and the page the client renders
-  can never describe different things."
+  "Answer `request` with the page `data` describes under `title`, the
+  masthead built for `nav-params`: as transit when the client router
+  asked for it, else as the document its route renders from the same
+  data, so the two can never describe different things."
   ([request title data]
    (page-response request title data {}))
   ([request title data nav-params]

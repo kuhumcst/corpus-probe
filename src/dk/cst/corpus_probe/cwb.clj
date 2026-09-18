@@ -197,14 +197,11 @@
 
 (defn error-map
   "The error map for exception `e` thrown by a search: the CQP error it
-  carries, a :rejected error with the message and the `rejection-keys` of
-  one of this project's own guards (an ex-info without one), or :internal
-  for anything else, logged rather than shown since its message may name
-  a server path.
-
-  The corpus is left out: the view groups the corpora that failed the
-  same way, which two error maps differing only by corpus would split."
+  carries, a :rejected error with the message and `rejection-keys` of one
+  of this project's own guards, or :internal for anything else, logged
+  rather than shown since its message may name a server path."
   [e]
+  ;; no corpus in it: the view groups the corpora that failed the same way
   (or (:error (ex-data e))
       (if (instance? clojure.lang.ExceptionInfo e)
         (merge {:type :rejected :message (ex-message e)}
@@ -274,6 +271,14 @@
     (cond-> ctx
       (:timeout-ms ctx)       (update :timeout-ms min left)
       (:query-timeout-ms ctx) (update :query-timeout-ms min left))))
+
+(defn attempt-within
+  "As `attempt` for `corpus`, with `ctx` cut to `deadline` (see
+  `within-deadline`); a timeout error once the deadline has passed."
+  [ctx deadline corpus f]
+  (if (overdue? deadline)
+    {:corpus corpus :error {:type :timeout}}
+    (attempt corpus #(f (within-deadline ctx deadline)))))
 
 (defn running-ctx
   "Give `ctx` the longer timeout a batch that runs the query needs (its

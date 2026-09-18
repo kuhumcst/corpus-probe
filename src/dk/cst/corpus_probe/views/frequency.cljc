@@ -7,7 +7,6 @@
             [dk.cst.corpus-probe.stats :as stats]
             [dk.cst.corpus-probe.url :as url]
             [dk.cst.corpus-probe.views.result :as result]
-            [dk.cst.corpus-probe.views.search.tokens :as tokens-views]
             [dk.cst.corpus-probe.views.widgets :as widgets]))
 
 (def row-limit
@@ -22,7 +21,18 @@
   string)."
   [ui selected {attr :name :as m}]
   (widgets/option selected (name attr)
-                  (tokens-views/attribute-label ui (name attr))))
+                  (widgets/attribute-label ui (name attr))))
+
+(defn attr-groups
+  "The attribute descriptions `attrs` as option groups in `ui`, the
+  positional attributes then the structural ones, each description an
+  option by `option`; a kind the corpora lack has no group."
+  [ui option attrs]
+  (let [by-type (group-by :type attrs)]
+    (for [[type label] [[:positional (i18n/tr ui "positional attributes")]
+                        [:structural (i18n/tr ui "structural attributes")]]
+          :when (seq (by-type type))]
+      [:optgroup {:label label} (map option (by-type type))])))
 
 (defn attr-control
   "The grouping control in `ui`: a select over the attribute
@@ -32,15 +42,8 @@
   It names the form it submits with, so it can sit beside the table it
   regroups rather than inside the query form."
   [ui attrs selected]
-  (let [{p :positional s :structural} (group-by :type attrs)]
-    (widgets/select url/form-id "attr" (i18n/tr ui "Group by")
-                    (list
-                     (when (seq p)
-                       [:optgroup {:label (i18n/tr ui "positional attributes")}
-                        (map (partial attr-option ui selected) p)])
-                     (when (seq s)
-                       [:optgroup {:label (i18n/tr ui "structural attributes")}
-                        (map (partial attr-option ui selected) s)])))))
+  (widgets/select url/form-id "attr" (i18n/tr ui "Group by")
+                  (attr-groups ui (partial attr-option ui selected) attrs)))
 
 (defn position-control
   "The control choosing where in the match the table counts, in `ui`: a
@@ -59,26 +62,20 @@
   "The control choosing what the columns of the table are, in `ui`: the
   corpora counted, one group of columns each, or the values of one of
   the attribute descriptions `attrs`, the corpora then summed, `by` (a
-  keyword; nil for the corpora) chosen. The structural attributes come
-  first, a breakdown over the years or the authors being what this is
-  mostly for."
+  keyword; nil for the corpora) chosen."
   [ui attrs by]
-  (let [{p :positional s :structural} (group-by :type attrs)
-        selected (or (some-> by name) "")
+  (let [selected (or (some-> by name) "")
         per      (fn [{attr :name}]
                    (widgets/option selected (name attr)
                                    (i18n/tr ui "per {attr}"
-                                            {:attr (tokens-views/attribute-label
+                                            {:attr (widgets/attribute-label
                                                     ui (name attr))})))]
     (widgets/select url/form-id "by" (i18n/tr ui "columns")
                     (list
                      (widgets/option selected "" (i18n/tr ui "per corpus"))
-                     (when (seq s)
-                       [:optgroup {:label (i18n/tr ui "structural attributes")}
-                        (map per s)])
-                     (when (seq p)
-                       [:optgroup {:label (i18n/tr ui "positional attributes")}
-                        (map per p)]))
+                     ;; the structural attributes first, a breakdown over
+                     ;; the years or the authors being what this is for
+                     (reverse (attr-groups ui per attrs)))
                     ;; the options carry the meaning, so the label is for
                     ;; screen readers only
                     false)))
@@ -97,12 +94,10 @@
   "The caption of the table of frequency `result`, in `ui`: how many
   values it holds and shows, the columns likewise when it is counted
   `:by` a second attribute, and what the parentheses hold when those
-  columns are `:sized`.
-
-  The counts are here rather than in the heading: they are the table's
-  size, which is what a caption says of a table. The view's name is not,
-  since the tab over the table says it."
+  columns are `:sized`."
   [ui {:keys [rows by columns column-count sized]}]
+  ;; the counts are the table's size, which is what a caption says; not
+  ;; the view's name, which the tab over the table says
   (let [n (count rows)]
     [:caption
      (shown-phrase ui (i18n/trn ui "value" "values" n) n (min row-limit n))
@@ -271,7 +266,7 @@
   the name of the `error` that came instead."
   [ui {:keys [counts] :as result} error]
   (if (tabled? result)
-    (result/hits-heading ui (reduce + (keep :size (filter :tokens counts))))
+    (result/hits-heading ui (reduce + (keep :size (stats/readable-counts counts))))
     (result/error-heading ui (or error (some :error counts)))))
 
 (defn frequency-controls

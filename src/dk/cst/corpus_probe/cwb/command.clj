@@ -10,8 +10,8 @@
 
 (defn valid-corpus-name
   "Return `corpus` when it is a valid corpus name (see
-  dk.cst.corpus-probe.cqp/corpus-name?), else throw; the guard every
-  command builder applies before splicing a corpus name into a command."
+  dk.cst.corpus-probe.cqp/corpus-name?), else throw: the guard applied
+  before a corpus name is spliced into a command."
   [corpus]
   (when-not (cqp/corpus-name? corpus)
     (throw (ex-info "Invalid corpus name" {:corpus corpus})))
@@ -19,8 +19,8 @@
 
 (defn valid-result-name
   "Return `nqr` when it is a name CQP accepts for a query result (see
-  dk.cst.corpus-probe.cqp/name?), else throw; the guard every command
-  builder applies before splicing a result name into a command."
+  dk.cst.corpus-probe.cqp/name?), else throw: the guard applied before a
+  result name is spliced into a command."
   [nqr]
   (when-not (cqp/name? nqr)
     (throw (ex-info "Invalid query result name" {:nqr nqr})))
@@ -139,11 +139,9 @@
   the filter query (see `filter-query`) under its own lock, its result
   activated as the subcorpus Filter, and the query within it. One string,
   so it fills one section of a batch as `locked-query` alone does."
-  ;; TODO: this same shape would restrict a query to the texts another
-  ;; query matched, which is the one thing here CQP cannot say in a
-  ;; single query. Verified to work: `expand to` runs under QueryLock,
-  ;; and a second activation nests inside this filter's. Deferred rather
-  ;; than dropped, for the reasons in PLAN.md section 3.
+  ;; TODO: the same shape would restrict a query to the texts another
+  ;; query matched, which one CQP query cannot say; verified to work,
+  ;; deferred for the reasons in PLAN.md section 3
   [query filter]
   (if (empty? filter)
     (locked-query query)

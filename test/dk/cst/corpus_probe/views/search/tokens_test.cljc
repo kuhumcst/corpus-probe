@@ -7,11 +7,6 @@
             [dk.cst.corpus-probe.views.search.tokens :as tokens]))
 
 (deftest labels-test
-  (testing "the usual attributes are named in the reader's words, any
-            other as the corpus names it"
-    (is (= "word" (tokens/attribute-label en "word")))
-    (is (= "ord" (tokens/attribute-label da "word")))
-    (is (= "msd2" (tokens/attribute-label da "msd2"))))
   (testing "every operator is named, equality for one nothing knows"
     (is (= "starts with" (tokens/operator-label en "prefix")))
     (is (= "any word" (tokens/operator-label en "any")))

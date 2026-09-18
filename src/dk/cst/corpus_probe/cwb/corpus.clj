@@ -32,6 +32,8 @@
   miss. Concurrent misses share one computation, and one that throws is
   forgotten so the next caller retries."
   [{:keys [registry] :as ctx} corpus label f]
+  ;; the name becomes a path in the build stamp, so it is checked first
+  (command/valid-corpus-name corpus)
   (let [k [registry corpus label (registry/build-stamp ctx corpus)]
         d (get (swap! facts-cache
                       (fn [cache]
@@ -59,7 +61,6 @@
   name) via `ctx` and parse its output lines with `parse-fn`, cached per
   registry, corpus and command until the corpus is re-encoded."
   [ctx corpus command parse-fn]
-  (command/valid-corpus-name corpus)
   (facts! ctx corpus [::cqp command]
           (fn []
             (-> (cwb/batch! (corpus-ctx ctx corpus) corpus command
@@ -177,6 +178,15 @@
   (let [known? (set (map (comp str/upper-case :id) entries))]
     [(filterv known? selected) (vec (remove known? selected))]))
 
+(defn overviews!
+  "The `overview!` of each of the registry `entries` via `ctx`, in
+  parallel; an entry whose corpus cannot be read is the error map
+  `attempt` gives it."
+  [ctx entries]
+  (cwb/pmap-n (cwb/parallelism ctx)
+              #(cwb/attempt (:id %) (fn [] (overview! ctx %)))
+              entries))
+
 (defn readable-corpora!
   "The names of the registry `entries` CWB can read right now, via `ctx`,
   in registry order: what a request that names no corpus searches, and
@@ -184,9 +194,7 @@
   [ctx entries]
   (into []
         (comp (filter :size) (map (comp str/upper-case :id)))
-        (cwb/pmap-n (cwb/parallelism ctx)
-                    #(cwb/attempt (:id %) (fn [] (overview! ctx %)))
-                    entries)))
+        (overviews! ctx entries)))
 
 (defn corpus-tree!
   "The registry `entries` summarized via `ctx`, in parallel, and grouped
@@ -196,9 +204,7 @@
   [ctx entries]
   (registry/grouped-corpora
    (:folders ctx)
-   (vec (cwb/pmap-n (cwb/parallelism ctx)
-                    (fn [entry]
-                      (let [summary (cwb/attempt (:id entry)
-                                                 #(overview! ctx entry))]
-                        (if (:error summary) (overview entry) summary)))
-                    entries))))
+   (mapv (fn [entry summary]
+           (if (:error summary) (overview entry) summary))
+         entries
+         (overviews! ctx entries))))

@@ -9,7 +9,6 @@
             [dk.cst.corpus-probe.i18n :as i18n]
             [dk.cst.corpus-probe.query :as query]
             [dk.cst.corpus-probe.query.mode :as mode]
-            [dk.cst.corpus-probe.query.tokens :as tokens]
             [dk.cst.corpus-probe.url :as url]
             [dk.cst.corpus-probe.views.widgets :as widgets]))
 
@@ -23,17 +22,6 @@
                  (str n " " (i18n/trn ui "word" "words" n)))
     "extended" (query/->cqp (query/of params))
     q))
-
-(defn form-query
-  "The query the search form holds: that of its `params`, or in the
-  extended mode of its `tokens` as the client keeps them, within the
-  unit the params name."
-  [params tokens]
-  (let [mode (mode/mode params)]
-    (query/of (if (= "extended" mode)
-                (assoc (tokens/rows->params tokens)
-                       :mode mode :within (:within params))
-                params))))
 
 (defn asked?
   "True when the search `params` ask for anything; a search asking
@@ -192,11 +180,10 @@
                                             [(str from "–" to)])))))))
 
 (defn view-label
-  "What the result view `k` is called, in `ui`: the concordance is KWIC,
-  the word bare rather than in an <abbr>. A title inside a link leaves
-  the link no name of its own, and a tooltip is a thing no keyboard
-  reaches; the glossary is where the jargon is spelled out."
+  "What the result view `k` is called, in `ui`."
   [ui k]
+  ;; KWIC bare rather than in an <abbr>: a title inside a link leaves the
+  ;; link no name of its own, and the glossary spells the jargon out
   (case k
     :kwic        "KWIC"
     :frequencies (i18n/tr ui "Frequencies")
@@ -237,13 +224,10 @@
 (defn held
   "What a view control shows: what `params` hold under `k`, since the
   reader may have changed it since the result came back, else `fallback`,
-  which is what the result answers. A blank is how a control says none.
-
-  A form holds every value as a string and a result holds what it means,
-  so each control makes what it is handed into its own (see
-  `sample-control` and `context-control` in
-  dk.cst.corpus-probe.views.concordance)."
+  which is what the result answers. A blank is how a control says none."
   [params k fallback]
+  ;; a form holds strings and a result what they mean, so each control
+  ;; makes what it is handed into its own (see concordance/context-control)
   (let [v (get params k)]
     (cond
       (nil? v) fallback

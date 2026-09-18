@@ -9,6 +9,8 @@
             [dk.cst.corpus-probe.cwb.corpus :as corpus]
             [dk.cst.corpus-probe.i18n :as i18n]
             [dk.cst.corpus-probe.query :as query]
+            [dk.cst.corpus-probe.query.params :as params]
+            [dk.cst.corpus-probe.query.tokens :as tokens]
             [dk.cst.corpus-probe.search.batch :as batch]
             [dk.cst.corpus-probe.storage :as storage]
             [dk.cst.corpus-probe.storage.settings :as settings]
@@ -112,12 +114,6 @@
   (when-let [n (some-> v parse-long)]
     (when (pos? n) n)))
 
-(defn attr-param
-  "The attribute the query param value `v` names, word when it names
-  none: the one attribute every corpus has."
-  [v]
-  (if (str/blank? v) "word" v))
-
 (defn position-param
   "The position of the match the `at` query param value `v` names, among
   dk.cst.corpus-probe.cwb.command/positions; the start of the match for
@@ -142,7 +138,7 @@
   [{:keys [subset subset-at subset-attr]}]
   (when-not (str/blank? subset)
     {:anchor (position-param subset-at)
-     :attr   (keyword (attr-param subset-attr))
+     :attr   (keyword (tokens/attr-name subset-attr))
      :value  subset}))
 
 (defn context-param
@@ -162,16 +158,11 @@
   "The furthest a page may be asked to reach either side of a match, in
   words. Past this the whole text is the bound and the reading page is
   the way on."
-  ;; two reasons for a cap, and this number answers the second: a reader
-  ;; travelling on must not be able to ask for a page of any size, and
-  ;; the concordance's context columns are given a width that holds this
-  ;; many words (style.css, `.kwic-left`), since a column that grew with
-  ;; the page would shift the table sideways each time one arrived. The
-  ;; two must move together.
-  ;; TODO: it is also the furthest a reader can travel, which is a
-  ;; question about reading rather than about layout. If travelling to
-  ;; the end of a long text turns out to be wanted, the answer is not a
-  ;; bigger number here but handing over to the reading page at the edge
+  ;; a cap, so a reader travelling on cannot ask for a page of any size;
+  ;; and the width the context columns are given holds this many words
+  ;; (style.css, `.kwic-left`), so the two must move together.
+  ;; TODO: also the furthest a reader can travel; if the end of a long
+  ;; text is wanted, hand over to the reading page at the edge
   120)
 
 (defn reach-param
@@ -190,11 +181,10 @@
   words away: {:condition ... :distance ...} for
   dk.cst.corpus-probe.cwb.command/near-command, or nil for a blank word.
   A distance that is not a positive integer is the default."
-  [{:keys [near distance] :as params}]
+  [{:keys [near distance] :as m}]
   (when-not (str/blank? near)
-    {:condition (query/condition params (str/trim near))
-     :distance  (let [n (some-> distance parse-long)]
-                  (if (and n (pos? n)) n url/default-distance))}))
+    {:condition (query/condition m (str/trim near))
+     :distance  (params/distance-param distance)}))
 
 (defn view-param
   "The result view named by the `view` query param value `v`: the
@@ -224,14 +214,11 @@
 
 (def preference-keys
   "The settings a reader may store, by the name each is stored under, with
-  the predicate saying which values that setting accepts.
-
-  An allowlist rather than a free cookie jar: a caller who chooses both
-  the name and the value of a cookie can fill a reader's jar until their
-  requests no longer fit in a header, or shadow a cookie this app relies
-  on. Whatever comes back out is a value the app has already agreed to."
-  ;; the search settings are one setting holding many, so forgetting them
-  ;; clears one cookie and leaves the reader's language alone
+  the predicate saying which values that setting accepts."
+  ;; an allowlist: a caller choosing both name and value could fill a
+  ;; reader's jar past what a header holds, or shadow a cookie the app
+  ;; relies on. The search settings are one setting holding many, so
+  ;; forgetting them leaves the language alone
   {:lang               i18n/supported?
    settings/cookie-key settings/storable?})
 
@@ -289,12 +276,10 @@
 
 (defn safe-return
   "The path `s` to send a reader back to after a preference change, or the
-  search page when it names anywhere but this app.
-
-  A redirect target that arrives in a form field is an open redirect
-  unless it is checked: only a path of our own is followed, never an
-  absolute URL and never a protocol-relative one."
+  search page when it names anywhere but this app."
   [s]
+  ;; a target arriving in a form field is an open redirect unless checked:
+  ;; never an absolute URL, never a protocol-relative one
   (let [s (str s)]
     (if (and (str/starts-with? s "/") (not (str/starts-with? s "//")))
       s

@@ -10,7 +10,6 @@
             [dk.cst.corpus-probe.i18n :as i18n]
             [dk.cst.corpus-probe.url :as url]
             [dk.cst.corpus-probe.views.result :as result]
-            [dk.cst.corpus-probe.views.search.tokens :as tokens-views]
             [dk.cst.corpus-probe.views.widgets :as widgets]))
 
 (def column-count
@@ -95,12 +94,10 @@
 (defn token->offset
   "How far token `i` of `hit` is from the start of its match: negative in
   the left context, zero at the first token of the match, positive after
-  it.
-
-  This is what lines a hit up with its wider context, the same match with
-  more text around it, so moving between them lands on the same word
-  rather than on the same column."
+  it."
   [hit i]
+  ;; what lines a hit up with a wider fetch of itself, so moving between
+  ;; them lands on the same word rather than the same column
   (- i (count (:left hit))))
 
 (defn offset->token
@@ -329,12 +326,10 @@
 
 (defn caption
   "What the concordance is called, in `ui`: the term, and which page of
-  `result` it holds where there is more than one (`paged?`).
-
-  The pager stands under the table, so a reader who hears the page rather
-  than seeing it would otherwise meet the rows before the page they are
-  on (see dk.cst.corpus-probe.views.result/page-phrase)."
+  `result` it holds where there is more than one (`paged?`)."
   [ui result paged?]
+  ;; the pager stands under the table, so a reader who hears the page
+  ;; would otherwise meet the rows before the page they are on
   (cond-> (widgets/term ui :kwic false)
     paged? (list " · " (result/page-phrase ui result))))
 
@@ -351,13 +346,11 @@
 
 (defn key-help
   "How the concordance is read by keyboard, in `ui`: spoken, never seen,
-  since a reader who can see the cursor move needs no telling.
-
-  The table keeps its own semantics rather than taking the grid roles of
-  the APG pattern, which would cost a screen reader the rows and columns
-  a concordance is read by. Nothing then says the arrow keys move a
-  cursor through the words, so the region says it in words."
+  since a reader who can see the cursor move needs no telling."
   [ui]
+  ;; the table keeps its own semantics rather than the APG grid roles,
+  ;; which would cost a screen reader the rows and columns; nothing then
+  ;; says the arrow keys move a cursor, so the region says it in words
   [:p.spoken {:id keys-id}
    (i18n/tr ui (str "Use the arrow keys to move between the words, "
                     "Home and End for the ends of a line."))])
@@ -479,16 +472,14 @@
   `context-widths` with `shown` (a number of words or a unit keyword)
   chosen, named by `context-label`. A number of words the list does not
   hold is offered among the numbers, in order. It names the form it
-  submits with, as `sort-control` does.
-
-  The list is the `context` the result holds and `shown` only the mark on
-  it, so that a reader's choice, which is `shown` until the search they
-  asked for arrives, cannot take an option out of the list under them:
-  Replicant writes what changed in its own last hiccup, and options that
-  shift leave the mark where the browser put it."
+  submits with, as `sort-control` does."
   ([ui context]
    (context-control ui context context))
   ([ui context shown]
+   ;; the list is the result's context and `shown` only the mark on it, so
+   ;; a reader's choice cannot take an option out of the list under them:
+   ;; Replicant writes what changed in its own last hiccup, and options
+   ;; that shift leave the mark where the browser put it
    ;; the form holds both a width and a unit as a string, the result holds
    ;; a number and a keyword
    (let [context (cond-> context
@@ -530,7 +521,71 @@
                                                   params :context
                                                   (:context result)))))))
 
-(declare inspector)
+(def inspector-id
+  "The id of the inspection panel, by which the client finds it rather
+  than by the class the stylesheet uses, as with `region-id`."
+  "inspector")
+
+(defn inspector
+  "The token inspection card: what the concordance's `cursor` is on, in
+  `ui`, from `selected` (its :token, :structs, :corpus and the :cpos and
+  :matchend of its hit, which the link to the source text takes); nil
+  while nothing is selected. The word heads the card and its other
+  attributes follow, its source last among them; the structural
+  attributes of the text, the same for every token of the row, stand
+  under a disclosure that is `text-open?` (see
+  dk.cst.corpus-probe.client.actions/toggle-text)."
+  [ui {:keys [token structs corpus cpos matchend] :as selected} cursor
+   text-open?]
+  (when selected
+    (let [attrs (dissoc token :word :open :close)]
+      ;; not a popover: that would want focus and the top layer, while
+      ;; the cursor must stay on the token for the arrow keys to keep
+      ;; moving. Focus leaving it is how the client knows to close it;
+      ;; while focus is in it, the cursor's keys still reach the cursor
+      [:aside.inspector
+       {:id                   inspector-id
+        :aria-label           (i18n/tr ui "Token details")
+        :tabindex             "-1"
+        :on                   {:focusout [:leave-concordance]
+                               :keydown  [:key-in-card cursor
+                                          :event/key :event/ctrl?]}
+        ;; which side of the token it landed on, for the corners (see
+        ;; dk.cst.corpus-probe.client.effects/mark-side!)
+        :replicant/on-render  [:mark-side]
+        ;; away for its first frame and again until its transition
+        ;; ends, which is how the stylesheet fades it in and out
+        :replicant/mounting   {:class "away"}
+        :replicant/unmounting {:class "away"}}
+       [:h2 (:word token)]
+       ;; a cross, as a card is closed everywhere, drawn by the
+       ;; stylesheet so that every browser draws the same one; its name
+       ;; is for the reader who hears it
+       [:button.inspector-close {:type       "button"
+                                 :aria-label (i18n/tr ui "Close")
+                                 :on         {:click [:close]}}]
+       ;; the source is the last of the word's facts, so the keys of
+       ;; both share a column, the attributes named as the form names
+       ;; them; a corpus that annotates nothing has no list
+       (when (or corpus (seq attrs))
+         (cond-> (widgets/facts attrs #(widgets/attribute-label ui (name %)))
+           corpus (conj (list [:dt (i18n/tr ui "Source")]
+                              [:dd.inspector-source
+                               [:a {:href (url/corpus corpus)} [:code corpus]]
+                               (when cpos
+                                 (list " (" [:a {:href (url/text corpus cpos
+                                                                 matchend)}
+                                             (i18n/tr ui "see text")] ")"))]))))
+       (when (seq structs)
+         [:details.inspector-text {:open (boolean text-open?)
+                                   :on   {:toggle [:toggle-text
+                                                   :event.target/open]}}
+          ;; the line stands at the foot of the card, after what it opens
+          ;; (see the stylesheet), so it says which way it will fold
+          [:summary (if text-open?
+                      (i18n/tr ui "Less")
+                      (i18n/tr ui "More"))]
+          (widgets/facts structs)])])))
 
 (defn concordance-section
   "The concordance view of the search in `state`: its sort, context and
@@ -582,70 +637,3 @@
                                         (i18n/group-digits ui export-limit) " "
                                         (i18n/trn ui "hit" "hits"
                                                   export-limit))))))))))
-
-(def inspector-id
-  "The id of the inspection panel, by which the client finds it rather
-  than by the class the stylesheet uses, as with `region-id`."
-  "inspector")
-
-(defn inspector
-  "The token inspection card: what the concordance's `cursor` is on, in
-  `ui`, from `selected` (its :token, :structs, :corpus and the :cpos and
-  :matchend of its hit, which the link to the source text takes); nil
-  while nothing is selected. The word heads the card and its other
-  attributes follow, its source last among them; the structural
-  attributes of the text, the same for every token of the row, stand
-  under a disclosure that is `text-open?` (see
-  dk.cst.corpus-probe.client.actions/toggle-text)."
-  [ui {:keys [token structs corpus cpos matchend] :as selected} cursor
-   text-open?]
-  (when selected
-    (let [attrs (dissoc token :word :open :close)]
-      ;; not a popover: that would want focus and the top layer, while
-      ;; the cursor must stay on the token for the arrow keys to keep
-      ;; moving. Focus leaving it is how the client knows to close it;
-      ;; while focus is in it, the cursor's keys still reach the cursor
-      [:aside.inspector
-       {:id                   inspector-id
-        :aria-label           (i18n/tr ui "Token details")
-        :tabindex             "-1"
-        :on                   {:focusout [:leave-concordance]
-                               :keydown  [:key-in-card cursor
-                                          :event/key :event/ctrl?]}
-        ;; which side of the token it landed on, for the corners (see
-        ;; dk.cst.corpus-probe.client.effects/mark-side!)
-        :replicant/on-render  [:mark-side]
-        ;; away for its first frame and again until its transition
-        ;; ends, which is how the stylesheet fades it in and out
-        :replicant/mounting   {:class "away"}
-        :replicant/unmounting {:class "away"}}
-       [:h2 (:word token)]
-       ;; a cross, as a card is closed everywhere, drawn by the
-       ;; stylesheet so that every browser draws the same one; its name
-       ;; is for the reader who hears it
-       [:button.inspector-close {:type       "button"
-                                 :aria-label (i18n/tr ui "Close")
-                                 :on         {:click [:close]}}]
-       ;; the source is the last of the word's facts, so the keys of
-       ;; both share a column, the attributes named as the form names
-       ;; them; a corpus that annotates nothing has no list
-       (when (or corpus (seq attrs))
-         (cond-> (widgets/facts attrs
-                                #(tokens-views/attribute-label ui (name %)))
-           corpus (conj (list [:dt (i18n/tr ui "Source")]
-                              [:dd.inspector-source
-                               [:a {:href (url/corpus corpus)} [:code corpus]]
-                               (when cpos
-                                 (list " (" [:a {:href (url/text corpus cpos
-                                                                 matchend)}
-                                             (i18n/tr ui "see text")] ")"))]))))
-       (when (seq structs)
-         [:details.inspector-text {:open (boolean text-open?)
-                                   :on   {:toggle [:toggle-text
-                                                   :event.target/open]}}
-          ;; the line stands at the foot of the card, after what it opens
-          ;; (see the stylesheet), so it says which way it will fold
-          [:summary (if text-open?
-                      (i18n/tr ui "Less")
-                      (i18n/tr ui "More"))]
-          (widgets/facts structs)])])))

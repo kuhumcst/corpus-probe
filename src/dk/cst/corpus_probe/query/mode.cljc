@@ -59,7 +59,7 @@
   "What a query key means when a URL leaves it out, as the string it
   would carry. `match` and `ci` have no value to leave out: the whole
   form, as written, is what their absence says."
-  {:in     "word"
+  {:in     (:attr tokens/token-defaults)
    :within "sentence"})
 
 (defn typed
@@ -96,17 +96,6 @@
     "extended"
     (shape (:q params))))
 
-(defn query-key?
-  "True when param key `k` says what was asked: the mode, a key some mode
-  reads (see `fields`), one every mode reads (see `shared`) or the field
-  of a token."
-  [k]
-  (boolean (and k (not= ::tokens k)
-                (or (= :mode k)
-                    (contains? shared k)
-                    (some #(contains? % k) (vals fields))
-                    (tokens/token-key? k)))))
-
 (defn reads?
   "True when mode `m` reads param key `k` (see `fields`): the mode itself,
   one of the mode's keys, one of the `shared` keys or, where it reads
@@ -120,14 +109,19 @@
                       (contains? own k)
                       (and (contains? own ::tokens) (tokens/token-key? k)))))))
 
+(defn query-key?
+  "True when param key `k` says what was asked: some mode reads it (see
+  `reads?`)."
+  [k]
+  (boolean (some #(reads? % k) modes)))
+
 (defn read-keys
   "The query params among `params` that the form of mode `m` reads (see
   `reads?`), as keys, the mode itself and the `shared` keys aside: what
   a form holds of a query, and so what its query replaces when it
   changes."
   [m params]
-  (filter #(and (query-key? %) (not= :mode %) (not (shared %))
-                (reads? m %))
+  (filter #(and (reads? m %) (not= :mode %) (not (shared %)))
           (keys params)))
 
 (defn unread

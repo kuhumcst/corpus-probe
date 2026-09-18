@@ -47,6 +47,11 @@
     (is (= ["a" "b"] (tokens/present ["a" "" "b"])))
     (is (nil? (tokens/present ["" " "])))))
 
+(deftest attr-name-test
+  (is (= "word" (tokens/attr-name nil)))
+  (is (= "word" (tokens/attr-name "")))
+  (is (= "lemma" (tokens/attr-name "lemma"))))
+
 (deftest rows->params-test
   (testing "the rows print as the params the form submits, and read back
             as themselves"

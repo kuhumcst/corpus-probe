@@ -3,35 +3,23 @@
   (see dk.cst.corpus-probe.query.tokens/form-tokens), each condition an
   attribute, an operator and a value, each token its conditions with
   its repeat and its edges, and the row under them that adds a token."
-  (:require [clojure.string :as str]
-            [dk.cst.corpus-probe.i18n :as i18n]
+  (:require [dk.cst.corpus-probe.i18n :as i18n]
             [dk.cst.corpus-probe.query.tokens :as tokens]
             [dk.cst.corpus-probe.views.widgets :as widgets]))
-
-(defn attribute-label
-  "What the positional attribute named `attr` is called in `ui`: the
-  usual ones in the reader's words, any other as its corpus names it."
-  [ui attr]
-  (case attr
-    "word"  (i18n/trx ui "attribute" "word")
-    "lemma" (i18n/trx ui "attribute" "lemma")
-    "pos"   (i18n/trx ui "attribute" "POS")
-    "msd"   (i18n/trx ui "attribute" "morphology")
-    attr))
 
 (defn attribute-options
   "The options of a select over the positional `attrs` (attribute
   keywords, word first) with `selected` (a string, word when blank)
   chosen, each called as `ui` calls it."
   [ui attrs selected]
-  (let [selected (if (str/blank? selected) "word" selected)
+  (let [selected (tokens/attr-name selected)
         names    (map name attrs)
         ;; an attribute the list lacks is offered too, so a hand-written
         ;; URL shows what it searches rather than something else
         offered  (cond-> names
                    (not (some #{selected} names)) (concat [selected]))]
     (for [n offered]
-      (widgets/option selected n (attribute-label ui n)))))
+      (widgets/option selected n (widgets/attribute-label ui n)))))
 
 (defn operator-label
   "What the operator `op` of an extended-search token is called, in `ui`;
@@ -101,7 +89,7 @@
   suggesting the values the token's `:value-lists` hold for its :attr;
   dead under `:any?`."
   [ui {:keys [i value-lists any?]} required? c {:keys [id attr v]}]
-  (let [attr* (keyword (if (str/blank? attr) "word" attr))]
+  (let [attr* (keyword (tokens/attr-name attr))]
     [:input.condition-value
      (cond-> {:type         "text"
               :name         (tokens/token-key i c :v)
@@ -161,38 +149,34 @@
   "The repeat of token `i` of the extended search in `ui`: at least `lo`
   and at most `hi` times, once each when nil."
   [ui i lo hi]
-  ;; a named group: the second field's own label is only "to"
-  [:span.token-repeat {:role "group" :aria-label (i18n/tr ui "repeat")}
-   [:label (i18n/tr ui "repeat") " "
-    [:input {:type "number" :name (tokens/token-key i 1 :min) :value (or lo "1")
-             :min  0 :max 99
-             :on   {:input [:set-token [i :min] :event.target/value]}}]]
-   " "
-   [:label (i18n/tr ui "to") " "
-    [:input {:type "number" :name (tokens/token-key i 1 :max) :value (or hi "1")
-             :min  0 :max 99
-             :on   {:input [:set-token [i :max] :event.target/value]}}]]])
+  (let [field (fn [end v label]
+                [:label label " "
+                 [:input {:type  "number" :name (tokens/token-key i 1 end)
+                          :value (or v "1")
+                          :min   0 :max 99
+                          :on    {:input [:set-token [i end]
+                                          :event.target/value]}}]])]
+    ;; a named group: the second field's own label is only "to"
+    [:span.token-repeat {:role "group" :aria-label (i18n/tr ui "repeat")}
+     (field :min lo (i18n/tr ui "repeat"))
+     " "
+     (field :max hi (i18n/tr ui "to"))]))
 
 (defn edge-boxes
   "The boxes asking token `i` of the extended search to open a sentence,
   ticked under `start`, and to close one, ticked under `end`, in `ui`."
   [ui i start end]
-  (list
-   [:label.token-edges
-    [:input {:type    "checkbox" :name (tokens/token-key i 1 :start)
-             :value   "on"
-             :checked (some? start)
-             :on      {:change [:set-token [i :start]
-                                :event.target/checked]}}]
-    (i18n/tr ui "sentence start")]
-   " "
-   [:label.token-edges
-    [:input {:type    "checkbox" :name (tokens/token-key i 1 :end)
-             :value   "on"
-             :checked (some? end)
-             :on      {:change [:set-token [i :end]
-                                :event.target/checked]}}]
-    (i18n/tr ui "sentence end")]))
+  (let [box (fn [edge on label]
+              [:label.token-edges
+               [:input {:type    "checkbox" :name (tokens/token-key i 1 edge)
+                        :value   "on"
+                        :checked (some? on)
+                        :on      {:change [:set-token [i edge]
+                                           :event.target/checked]}}]
+               label])]
+    (list (box :start start (i18n/tr ui "sentence start"))
+          " "
+          (box :end end (i18n/tr ui "sentence end")))))
 
 (defn token-actions
   "The buttons of token `i` of the extended search, with `id`, in `ui`:

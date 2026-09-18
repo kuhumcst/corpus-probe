@@ -16,29 +16,11 @@
             [dk.cst.corpus-probe.views.search :as search]
             [dk.cst.corpus-probe.views.widgets :as widgets]))
 
-(defonce ^{:doc "The wait before a routed navigation is worth reporting,
-  so that an answer arriving at once is not announced and then
-  unannounced."}
-  pending-timer
-  (atom nil))
-
-(defonce ^{:doc "The pending debounce of a metadata filter refresh, so
-  that a reader ticking their way through a folder asks for one set of
-  filters at the end rather than one per box."}
-  filters-timer
-  (atom nil))
-
-(defonce ^{:doc "The pending debounce of a page turn, so that a reader
-  arrowing down the page select turns to the page they stop on rather
-  than to every page they pass."}
-  page-timer
-  (atom nil))
-
-(defonce ^{:doc "The pending debounce of a view being applied, so that a
-  reader working the sort, the context or the sample runs the search they
-  stop on rather than one per step."}
-  view-timer
-  (atom nil))
+(defonce ^{:doc "The debounces waiting to fire, by name (see `debounce!`):
+  the report of a routed navigation, a metadata filter refresh, a page
+  turn and a view being applied."}
+  timers
+  (atom {}))
 
 (defonce ^{:doc "The AbortController of the routed navigation being
   fetched, if there is one, so that starting another can call off the one
@@ -62,18 +44,11 @@
 
 (def settle-ms
   "How long a control must hold still before what it asks for is asked
-  (see `debounce!`): long enough that a reader still working it is not
-  taken at every step, short enough that one who has stopped is not left
-  waiting.
-
-  Every control here is worked in steps. A closed select reports every
-  option a key passes over, so arrowing from the first page to the fourth
-  would otherwise ask for three pages, and doing the same to the sort
-  would run three searches.
-
-  A held key repeats far faster than this, so the value is set by the
-  reader who taps instead: long enough to cover the gap between two
-  presses, short enough not to read as lag once they have stopped."
+  (see `debounce!`)."
+  ;; a closed select reports every option a key passes over, so arrowing
+  ;; from page one to four would otherwise ask for three pages. Set by
+  ;; the reader who taps: longer than the gap between two presses,
+  ;; shorter than reads as lag once they have stopped
   200)
 
 (defn read-transit
@@ -82,18 +57,18 @@
   (transit/read (transit/reader :json) s))
 
 (defn cancel!
-  "Call off whatever `timer` was waiting to do."
-  [timer]
-  (some-> @timer js/clearTimeout)
-  (reset! timer nil))
+  "Call off whatever the debounce named `k` was waiting to do."
+  [k]
+  (some-> (get @timers k) js/clearTimeout)
+  (swap! timers dissoc k))
 
 (defn debounce!
-  "Call `f` after `ms`, cancelling whatever `timer` was already waiting to
-  do: for a control that fires while a reader is still working it, only
-  the state they stop on is worth acting on."
-  [timer ms f]
-  (cancel! timer)
-  (reset! timer (js/setTimeout f ms)))
+  "Call `f` after `ms`, cancelling whatever the debounce named `k` was
+  already waiting to do: for a control that fires while a reader is
+  still working it, only the state they stop on is worth acting on."
+  [k ms f]
+  (cancel! k)
+  (swap! timers assoc k (js/setTimeout f ms)))
 
 (defn fetch-transit!
   "Fetch `href` as transit, called off by `signal` where there is one: a
@@ -109,6 +84,14 @@
                   (.then (.text response)
                          (fn [body] [(read-transit body) (.-url response)]))
                   (throw (js/Error. (str "request failed: " href)))))))))
+
+(defn on-this-page
+  "`f`, called only while the page it was made on is still the one on
+  screen (see dk.cst.corpus-probe.client.router/shown): a late answer to
+  a page the reader has left is dropped."
+  [f]
+  (let [key (router/page-key)]
+    (fn [x] (when (= key @router/shown) (f x)))))
 
 (defn fetch-filters!
   "Fetch the metadata filters `corpora` offer and dispatch their arrival
@@ -128,18 +111,16 @@
   `[:counts-arrived counted]`."
   [dispatch! state]
   (when (seq (get-in state [:result :remaining]))
-    (let [key (router/page-key)]
-      ;; the page's own query string, so the server counts the question
-      ;; the page answered; dropped once the reader has moved on
-      (-> (fetch-transit! (str url/counts-api js/location.search))
-          (.then (fn [[counted]]
-                   (when (= key @router/shown)
-                     (dispatch! [:counts-arrived counted]))))
-          ;; a real navigation, as a page that fails: the server renders
-          ;; the page with its count in full
-          (.catch (fn [_]
-                    (when (= key @router/shown)
-                      (set! (.-href js/location) js/location.href))))))))
+    ;; the page's own query string, so the server counts the question
+    ;; the page answered
+    (-> (fetch-transit! (str url/counts-api js/location.search))
+        (.then (on-this-page (fn [[counted]]
+                               (dispatch! [:counts-arrived counted]))))
+        ;; a real navigation, as a page that fails: the server renders
+        ;; the page with its count in full
+        (.catch (on-this-page (fn [_]
+                                (set! (.-href js/location)
+                                      js/location.href)))))))
 
 (defn fetch-wider!
   "Fetch the page on screen holding `reach` words either side of each
@@ -149,23 +130,19 @@
   left as it is, a reach being a way of reading a result rather than part
   of naming one. Dropped once the reader has moved on."
   [dispatch! reach]
-  (let [key (router/page-key)
-        url (router/current-url)]
+  (let [url (router/current-url)]
     (.set (.-searchParams url) "reach" (str reach))
     (-> (fetch-transit! (str (.-pathname url) (.-search url)))
-        (.then (fn [[data]]
-                 (when (= key @router/shown)
-                   (dispatch! [:wider-arrived reach data]))))
-        (.catch (fn [_]
-                  (when (= key @router/shown)
-                    (dispatch! [:wider-failed])))))))
+        (.then (on-this-page (fn [[data]]
+                               (dispatch! [:wider-arrived reach data]))))
+        (.catch (on-this-page (fn [_] (dispatch! [:wider-failed])))))))
 
 (defn refresh-filters!
   "Ask, once the corpus selection has held still (see `settle-ms`),
   whether the metadata filters want fetching: `[:filters-due]` through
   `dispatch!`."
   [dispatch!]
-  (debounce! filters-timer settle-ms #(dispatch! [:filters-due])))
+  (debounce! :filters settle-ms #(dispatch! [:filters-due])))
 
 (defn navigate!
   "Fetch the route at `href` as data and dispatch its arrival through
@@ -173,24 +150,22 @@
   the answer came from and `push?` whether it gets a history entry;
   `[:pending]` once an answer is `pending-delay-ms` late. Falls back to a
   real navigation on any failure, so a route the client cannot render is
-  still a working page.
-
-  A path is resolved first: everything past here reads an href with
-  `js/URL`, which takes no relative one, and the fallback would answer
-  the throw by reloading the page it was avoiding."
+  still a working page."
   [dispatch! href push?]
+  ;; resolved first: js/URL takes no relative href, and the fallback
+  ;; would answer the throw by reloading the page it was avoiding
   (let [href       (.-href (js/URL. href js/location.href))
         controller (js/AbortController.)]
     ;; called off rather than raced, so the reader gets the answer to
     ;; their latest question
     (some-> @in-flight (.abort))
     (reset! in-flight controller)
-    (debounce! pending-timer pending-delay-ms #(dispatch! [:pending]))
+    (debounce! :pending pending-delay-ms #(dispatch! [:pending]))
     (-> (fetch-transit! href (.-signal controller))
         (.then (fn [[data landed]]
                  ;; before the state is replaced, or a report scheduled
                  ;; for a wait that is over lands on the answer to it
-                 (cancel! pending-timer)
+                 (cancel! :pending)
                  (dispatch! [:page-arrived data (router/landed-href href landed)
                              push?])))
         (.catch (fn [_]
@@ -198,16 +173,14 @@
                   ;; timer belongs to the navigation that did the
                   ;; aborting, still in flight and maybe worth reporting
                   (when-not (.-aborted (.-signal controller))
-                    (cancel! pending-timer)
+                    (cancel! :pending)
                     (set! (.-href js/location) href)))))))
 
 (defn align-pager!
   "Start pager `el` where the strip the concordance is read in starts
   (see `reading-strip`), so that its middle stands under the match at
-  rest rather than in the middle of the region.
-
-  A width, not an attribute, so it is written on render as the other
-  measured things are. Nothing to line up with starts it at the edge."
+  rest rather than in the middle of the region; at the edge when there
+  is nothing to line up with."
   [el]
   (let [cpos (some-> (.querySelector js/document ".kwic .kwic-cpos")
                      (.getBoundingClientRect)
@@ -258,18 +231,16 @@
 (defn go-to-page!
   "Go to page `n` of the result on screen once the select has held still
   (see `settle-ms`), as its pager's own links do: the URL in the bar with
-  the page named in it, landing on the answer.
-
-  The bar holds the citation the server wrote, which is the one thing
-  here that knows every param the search was asked with. The first page
-  is the default and no canonical URL says it."
+  the page named in it, landing on the answer."
   [dispatch! n]
+  ;; the bar holds the citation the server wrote, the one thing here that
+  ;; knows every param the search was asked with
   (let [url    (js/URL. js/location.href)
         params (.-searchParams url)]
     (if (= "1" n)
       (.delete params "page")
       (.set params "page" n))
-    (debounce! page-timer settle-ms
+    (debounce! :page settle-ms
                #(navigate! dispatch!
                            (str (.-pathname url) (.-search url)
                                 url/results-fragment)
@@ -292,11 +263,9 @@
                     (catch :default _ nil))))
 
 (defn store-recent!
-  "Store the history `state` holds, so a later visit finds it.
-
-  A store that refuses what it is given, being full or being kept by
-  nobody, leaves the history to this visit: it is the reader's note of
-  where they have been, and no answer depends on it."
+  "Store the history `state` holds, so a later visit finds it; a store
+  that refuses leaves the history to this visit, since no answer depends
+  on it."
   [state]
   (try
     (.setItem js/localStorage recent/store-key (recent/string (:recent state)))
@@ -411,14 +380,12 @@
 (defn apply-view!
   "Submit the form with `form-id` for a change to view control `node`:
   once it has held still where it is a select (see `settle-ms`), at once
-  where it is anything else.
-
-  Only a select reports what a reader is still working: a closed one
-  reports every option a key passes over. A box and a field report a
-  decision that has been made, and waiting on those is lag for nothing."
+  where it is anything else."
   [node form-id]
+  ;; only a select reports what is still being worked; a box or a field
+  ;; reports a decision made, and waiting on those is lag for nothing
   (if (= "SELECT" (.-tagName node))
-    (debounce! view-timer settle-ms #(resubmit! form-id))
+    (debounce! :view settle-ms #(resubmit! form-id))
     (resubmit! form-id)))
 
 (defn prevent-default!
@@ -476,20 +443,13 @@
 
 (defn centre-match!
   "Keep the token with id `token`, which the cursor is on, in the middle
-  of concordance region `el`.
-
-  Centre it again when one of these changes:
-  - the token;
-  - the page's `reach`;
-  - the width of the strip that is read.
-  Centre it again also when the cursor has left that strip. A render that
-  changed none of these leaves the reader where they scrolled to.
-
-  The region glides only between two tokens of one page at one width. A
-  step along the line then reads as a step. In the other cases the region
-  moves immediately. A new page, a page the reader came back to, and a
-  page that changed width are all too far for a step."
+  of concordance region `el`: centred again when the token, the page's
+  `reach` or the width of the strip read changes, or the cursor has
+  left the strip; a render that changed none of these leaves the reader
+  where they scrolled to."
   [el token reach]
+  ;; it glides only between two tokens of one page at one width, so a
+  ;; step reads as a step; a new page or a new width is too far for one
   (when-let [cell (some->> token (.getElementById js/document))]
     (let [[start end :as strip] (reading-strip el)
           was    @centred
@@ -505,16 +465,12 @@
         (centre-on! el strip cell glide?)))))
 
 (defn recentre!
-  "Put the cursor of `state` back in the middle of the concordance. The
-  window has changed size under it.
-
-  Move immediately, and do not glide. A resize is not a step, and it
-  happens many times while the reader drags a window edge.
-
-  Take the cursor as the view resolves it, and not as the state holds it.
-  The state has no cursor until the reader moves one. The view shows the
-  default cursor until then."
+  "Put the cursor of `state` back in the middle of the concordance after
+  the window changed size under it, without gliding: a resize is no
+  step, and it fires many times as a window edge is dragged."
   [state]
+  ;; the cursor as the view resolves it: the state has none until the
+  ;; reader moves one, and the view shows the default until then
   (when-let [el (.getElementById js/document concordance/region-id)]
     (let [hits   (get-in state [:result :hits] [])
           cursor (concordance/resolved-cursor hits (:cursor state))]
@@ -553,13 +509,10 @@
   "Put the reader where a routed navigation should leave them: at the
   place in the page the URL's fragment names, when it names one; else
   focused on the results, when the page has any, and moved to them only
-  if they are not already at hand; else at the start of the main content.
-
-  Focus, not only a scroll: a routed navigation replaces the page with
-  none of the announcement and reset of focus a real one gives, leaving
-  a reader who is not watching the screen told nothing and one on the
-  keyboard in a page that has gone."
+  if they are not already at hand; else at the start of the main content."
   []
+  ;; focus, not only a scroll: a routed navigation gives none of the
+  ;; announcement and reset of focus a real one does
   ;; nothing has gone where a control of the search form still holds
   ;; focus: the form outlives a search, and taking the caret out of the
   ;; field the reader typed in is no rescue
@@ -592,14 +545,12 @@
 
 (defn select-query!
   "Select what the query field holds, where the search in `state` found
-  nothing and the reader asked for it themselves: what they try instead
-  replaces what did not work, in one keystroke.
-
-  Only from the field or the button that runs it. A control beside the
-  result is where the reader is working, and a page they arrived at by a
-  link is not a search of theirs, so neither takes the caret away from
-  where it is. A result still being counted has not answered yet."
+  nothing and the reader asked for it themselves from the field or its
+  button: what they try instead replaces what did not work, in one
+  keystroke."
   [state]
+  ;; not from a control beside the result, where the reader is working,
+  ;; nor for a page arrived at by a link, which is no search of theirs
   (let [active (.-activeElement js/document)
         asked? (and active
                     (= url/form-id (some-> active (.-form) (.-id)))

@@ -96,11 +96,9 @@
 
 (defn site-footer
   "The site's contentinfo in `ui`: what this is a front end for, whose it
-  is, and where its manual and its source are.
-
-  Belongs directly under <body>: inside <main> it would be a section
-  footer rather than the document's contentinfo."
+  is, and where its manual and its source are."
   [ui]
+  ;; directly under <body>: inside <main> it would be a section footer
   [:footer.footer
    [:p (i18n/tr ui "Powered by") " "
     [:a {:href "https://cwb.sourceforge.io/"} "IMS Open Corpus Workbench"]

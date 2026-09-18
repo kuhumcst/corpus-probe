@@ -3,6 +3,7 @@
             [clojure.test :refer [deftest is testing]]
             [dk.cst.corpus-probe.cwb.command :as command]
             [dk.cst.corpus-probe.query.params :as params]
+            [dk.cst.corpus-probe.query.tokens :as tokens]
             [dk.cst.corpus-probe.search.batch :as batch]
             [dk.cst.corpus-probe.server.request :as request]
             [dk.cst.corpus-probe.url :as url]))
@@ -119,10 +120,10 @@
     (is (= (:view url/defaults) (second (first url/result-views))))
     (is (= (request/view-param nil)
            (request/view-param (:view url/defaults))))
-    (is (= (:attr url/defaults) (request/attr-param nil)))
-    (is (= (:in url/defaults) (request/attr-param nil)))
+    (is (= (:attr url/defaults) (tokens/attr-name nil)))
+    (is (= (:in url/defaults) (tokens/attr-name nil)))
     (is (= (:within url/defaults) (name (params/within-param nil))))
-    (is (= (:subset-attr url/defaults) (request/attr-param nil)))
+    (is (= (:subset-attr url/defaults) (tokens/attr-name nil)))
     (is (= (:at url/defaults) (request/position-param nil)))
     (is (= (:subset-at url/defaults) (request/position-param nil)))
     (is (= 0 (request/page-param (:page url/defaults))))))

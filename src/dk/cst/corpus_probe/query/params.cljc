@@ -29,6 +29,19 @@
   [v]
   (if (some #{v} (map (comp name first) cqp/units)) (keyword v) :sentence))
 
+(def default-distance
+  "How many words away a nearby word may stand when no URL says: the
+  manual's own example (section 3.7) and the window a collocation is
+  usually counted in."
+  5)
+
+(defn distance-param
+  "The `distance` query param value `v` in words: a positive integer,
+  else `default-distance`."
+  [v]
+  (let [n (some-> v parse-long)]
+    (if (and n (pos? n)) n default-distance)))
+
 (defn condition-params
   "The condition `row` of an extended-search token as the compiler takes
   it: its :attr, its :op, its :value as typed, :ci? for its box and its

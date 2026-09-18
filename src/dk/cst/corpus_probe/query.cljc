@@ -27,6 +27,12 @@
     "infix"  (str ".*" literal ".*")
     literal))
 
+(defn clause
+  "The CQP condition relating `attr` to the regex `body` by `op`, `=` or
+  `!=`, with the %c flag under `ci?`."
+  [attr op body ci?]
+  (str (name attr) " " op " \"" body "\"" (when ci? " %c")))
+
 (defn condition->cqp
   "The CQP condition of extended-search `condition`: its :attr related by
   :op to its :value, escaped and affixed as a literal or kept as written
@@ -35,13 +41,12 @@
   (condition->cqp {:attr :lemma :op \"is\" :value \"hund\" :ci? true})
   ;; => lemma = \"hund\" %c"
   [{:keys [attr op value ci?] :or {attr :word op "is"}}]
-  (str (name attr)
-       (if (#{"not" "not-regex"} op) " != \"" " = \"")
-       (if (#{"regex" "not-regex"} op)
-         (cqp/regex-value value)
-         (affixed op (cqp/escape-value (str value))))
-       "\""
-       (when ci? " %c")))
+  (clause attr
+          (if (#{"not" "not-regex"} op) "!=" "=")
+          (if (#{"regex" "not-regex"} op)
+            (cqp/regex-value value)
+            (affixed op (cqp/escape-value (str value))))
+          ci?))
 
 (defn literal-shape
   "What `condition` matches its value with: its attribute, its operator
@@ -71,10 +76,7 @@
   [conditions]
   (let [[attr op ci?] (literal-shape (first conditions))
         values        (map #(cqp/escape-value (str (:value %))) conditions)]
-    (str (name attr) " = \""
-         (affixed op (str "(" (str/join "|" values) ")"))
-         "\""
-         (when ci? " %c"))))
+    (clause attr "=" (affixed op (str "(" (str/join "|" values) ")")) ci?)))
 
 (defn condition-groups
   "The `conditions` of a token in the groups their :join makes: the first
@@ -143,7 +145,7 @@
   "The condition matching `word` as the options of a simple search or a
   list say: the `in` attribute, the `match` operator and the `ci` flag."
   [{:keys [in ci match]} word]
-  {:attr  (keyword (or (tokens/present in) (:in mode/defaults)))
+  {:attr  (keyword (tokens/attr-name in))
    :op    (params/match-op match)
    :value word
    :ci?   (some? ci)})
@@ -174,17 +176,17 @@
   search one token each, or the words of a list as one token of
   alternatives. Nil when nothing is asked, which counts every token."
   [{:keys [q within] :as params}]
-  (let [mode   (mode/mode params)
-        unit   (params/within-param (when (mode/reads? mode :within) within))
-        tokens (fn [tokens]
-                 (when (seq tokens) {:tokens (vec tokens) :within unit}))
-        words  (words q)]
+  (let [mode    (mode/mode params)
+        unit    (params/within-param (when (mode/reads? mode :within) within))
+        ->query (fn [tokens]
+                  (when (seq tokens) {:tokens (vec tokens) :within unit}))
+        ws      (words q)]
     (case mode
       "cqp"      (when-not (str/blank? q) {:cqp q})
-      "extended" (tokens (params/token-params params))
-      "list"     (tokens (when (seq words)
-                           [(list-token (map #(condition params %) words))]))
-      (tokens (map #(token [(condition params %)]) words)))))
+      "extended" (->query (params/token-params params))
+      "list"     (->query (when (seq ws)
+                            [(list-token (map #(condition params %) ws))]))
+      (->query (map #(token [(condition params %)]) ws)))))
 
 (defn ->cqp
   "The CQP of `query` (see `of`): the text as typed, or the tokens
@@ -211,12 +213,11 @@
   (cond
     (nil? query)         {}
     (= "cqp" mode)       {:q (->cqp query)}
-    (= "extended" mode)  (let [{:keys [tokens within]} query
-                               fields (map-indexed (fn [i t]
-                                                     (params/token->params
-                                                      (inc i) t))
-                                                   tokens)]
-                           (cond-> (into {} fields)
+    (= "extended" mode)  (let [{:keys [tokens within]} query]
+                           (cond-> (into {}
+                                         (map-indexed
+                                          #(params/token->params (inc %1) %2))
+                                         tokens)
                              (not= :sentence within)
                              (assoc :within (name within))))
     :else                (params/word-params mode query)))

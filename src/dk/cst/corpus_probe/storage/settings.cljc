@@ -64,15 +64,13 @@
 (defn string
   "The `param-keys` of `params` that depart from `defaults`, as the one
   value they are stored under, against the set `all` of every corpus the
-  reader may choose; blank for a form at the app's own defaults.
-
-  Every corpus chosen is kept as `url/all-scope` rather than by name,
-  since a registry of many would not fit in a cookie. `url/form-encode`d
-  rather than `url/query-string`, whose cosmetic commas a cookie value
-  may not hold."
+  reader may choose; blank for a form at the app's own defaults."
   ([params]
    (string params nil))
   ([params all]
+   ;; every corpus as all-scope, since a registry of many would not fit
+   ;; a cookie; form-encoded, since a cookie value may not hold the
+   ;; cosmetic commas of query-string
    (let [chosen (url/corpora-param (:corpus params))
          all?   (and (seq all) (= (set chosen) (set all)))
          params (cond-> (url/with-corpora params all)
@@ -104,12 +102,11 @@
 (defn with-autosave
   "The preferences `params` with their settings recording whether a
   change stores them: an unticked checkbox submits nothing, so nothing
-  submitted is what turns it off.
-
-  For the reader without a script, whose checkbox travels beside the
-  button rather than inside its value. Settings stored as nothing are
-  left alone: that is a reset, which puts automatic storing back too."
+  submitted is what turns it off. Settings stored as nothing are left
+  alone: that is a reset, which puts automatic storing back too."
   [params]
+  ;; for the reader without a script, whose checkbox travels beside the
+  ;; button rather than inside its value
   (let [stored (get params cookie-key)]
     (if (str/blank? (str stored))
       params

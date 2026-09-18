@@ -47,29 +47,33 @@
   ^java.io.File [{:keys [registry] :as ctx} corpus]
   (io/file registry (str/lower-case (str corpus))))
 
+(defn read-entry
+  "The entry map of registry `file` (see `entry`) with its :id, the
+  filename, which is the name CQP resolves a corpus by whatever the ID
+  field inside says; nil when the file is no entry (see `entry-file?`)."
+  [^java.io.File file]
+  (when (entry-file? file)
+    (assoc (entry file) :id (.getName file))))
+
 (defn entries
   "Read every registry entry in `ctx`'s :registry directory into entry
-  maps sorted by :id, the entry's filename, which is the name CQP resolves
-  a corpus by whatever the ID field inside says."
+  maps (see `read-entry`) sorted by :id."
   [{:keys [registry] :as ctx}]
   (->> (.listFiles (io/file registry))
-       (filter entry-file?)
-       (map (fn [^java.io.File file] (assoc (entry file) :id (.getName file))))
+       (keep read-entry)
        (filter :home)
        (sort-by :id)
        (vec)))
 
 (defn entry-of
   "The registry entry map of the corpus `id` names under `ctx` (matched
-  case-insensitively, read as `entries` reads it), or nil when `id` is no
-  corpus name or names no entry."
+  case-insensitively, see `read-entry`), or nil when `id` is no corpus
+  name or names no entry."
   [ctx id]
   (let [corpus (str/upper-case (str id))]
     ;; the name is checked before it becomes a filename
     (when (cqp/corpus-name? corpus)
-      (let [file (entry-file ctx corpus)]
-        (when (entry-file? file)
-          (assoc (entry file) :id (.getName file)))))))
+      (read-entry (entry-file ctx corpus)))))
 
 (defn language
   "The language of the corpus with registry entry map `m`, when its language
@@ -104,10 +108,8 @@
   nothing, so commands sent to a corpus and output read from it must use
   its own encoding."
   [ctx corpus]
-  (let [file (entry-file ctx corpus)]
-    (or (when (entry-file? file)
-          (cwb->charset (:charset (entry file))))
-        "UTF-8")))
+  (or (cwb->charset (:charset (read-entry (entry-file ctx corpus))))
+      "UTF-8"))
 
 (defn data-file
   "The file holding the token stream of `corpus` under `ctx`: the data of
@@ -115,11 +117,9 @@
   corpus is encoded. nil when the registry entry does not say where the
   data are."
   ^java.io.File [ctx corpus]
-  (let [file (entry-file ctx corpus)]
-    (when (entry-file? file)
-      (let [{:keys [home p-attrs]} (entry file)]
-        (when home
-          (io/file home (str (name (or (first p-attrs) :word)) ".corpus")))))))
+  (when-let [{:keys [home p-attrs]} (read-entry (entry-file ctx corpus))]
+    (when home
+      (io/file home (str (name (or (first p-attrs) :word)) ".corpus")))))
 
 (defn build-stamp
   "What `corpus` reads as under `ctx`: the modification time and length of

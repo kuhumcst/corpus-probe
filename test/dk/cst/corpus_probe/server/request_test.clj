@@ -242,11 +242,6 @@
     (is (= 0 (request/page-param "x")))
     (is (= 0 (request/page-param "99999999999999999999")))))
 
-(deftest attr-param-test
-  (is (= "word" (request/attr-param nil)))
-  (is (= "word" (request/attr-param "")))
-  (is (= "lemma" (request/attr-param "lemma"))))
-
 (deftest by-param-test
   (is (= :text_year (request/by-param "text_year")))
   (testing "no attribute, no second attribute"

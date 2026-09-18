@@ -121,9 +121,10 @@
   modifier, so the browser's own meaning of the click is kept."
   [el event]
   (and el
-       (= (.-origin (js/URL. (.-href el))) js/location.origin)
-       (routable? (js/URL. (.-href el)))
-       (not (in-page? (js/URL. (.-href el))))
+       (let [url (js/URL. (.-href el))]
+         (and (= (.-origin url) js/location.origin)
+              (routable? url)
+              (not (in-page? url))))
        (str/blank? (.-target el))
        (not (or (.-metaKey event) (.-ctrlKey event)
                 (.-shiftKey event) (.-altKey event)))

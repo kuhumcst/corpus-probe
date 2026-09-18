@@ -217,14 +217,12 @@
 (defn filterable?
   "True when `filters` offer anything to filter by, or hold a narrowing
   of the reader's own to show, which decides whether the chooser is
-  rendered at all.
-
-  A pattern or a range counts whether or not a box is ticked under it: a
-  field out of the document is a constraint dropped from the search while
-  the state still holds it, and the reader is left with nowhere to see it
-  or take it back. Asked with `in-force?`, since every keystroke lands in
-  the state and a field typed into and emptied again narrows nothing."
+  rendered at all."
   [{:keys [attrs unlisted selected patterns ranges]}]
+  ;; a pattern or a range counts with no box ticked: a field out of the
+  ;; document drops a constraint the state still holds, with nowhere to
+  ;; see or take it back. Asked with in-force?, since a field typed into
+  ;; and emptied again narrows nothing
   (boolean (or (seq attrs) (seq unlisted) (seq selected)
                (some #(in-force? (get patterns %) (get ranges %))
                      (concat (keys patterns) (keys ranges))))))
@@ -239,12 +237,11 @@
   "The metadata fieldset with no chooser in it, in `ui`: the box the
   chooser would have stood in, saying why it is empty over the `corpora`
   chosen for it to read metadata from, or that the first answer is on
-  its way while `pending?`.
-
-  The box stands in every state, so the rail neither grows nor shrinks
-  as corpora are ticked, and a reader who has chosen none is still told
-  where filtering by metadata lives."
+  its way while `pending?`."
   [ui corpora pending?]
+  ;; a box in every state, so the rail neither grows nor shrinks as
+  ;; corpora are ticked, and a reader who has chosen none is still told
+  ;; where filtering by metadata lives
   [:fieldset.filters.box {:id        box-id
                           :tabindex  "-1"
                           :data-list "values"}

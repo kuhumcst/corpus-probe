@@ -151,6 +151,13 @@
            (widgets/term en :cqp false)))
     (is (= "Metadata" (widgets/term en :metadata false)))))
 
+(deftest attribute-label-test
+  (testing "the usual attributes are named in the reader's words, any
+            other as the corpus names it"
+    (is (= "word" (widgets/attribute-label en "word")))
+    (is (= "ord" (widgets/attribute-label da "word")))
+    (is (= "msd2" (widgets/attribute-label da "msd2")))))
+
 (deftest attrs-test
   (testing "the landmark every page shares"
     (is (= {:id "main" :tabindex "-1"} widgets/main-attrs))

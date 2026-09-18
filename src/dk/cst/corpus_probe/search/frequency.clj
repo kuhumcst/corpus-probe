@@ -52,13 +52,12 @@
 (defn count-sections!
   "The output sections of the `counting` commands over the matches of
   `query` in `corpus` via `ctx` under `opts`: read from the saved query
-  result when one is stored, and run afresh otherwise.
-
-  What the concordance saved is what the breakdown counts, so switching a
-  result to its frequency view runs no query. The stored result's size is
-  checked against the file, because a whole result is read here and a
-  file that has shrunk reads back short without CQP saying so."
+  result when one is stored, and run afresh otherwise."
   [ctx corpus query {:keys [nqr] :as opts} counting]
+  ;; what the concordance saved is what the breakdown counts, so the
+  ;; frequency view of a result runs no query. The stored size is checked
+  ;; against the file: a whole result is read here, and a file that has
+  ;; shrunk reads back short without CQP saying so
   (:count (or (result/read-stored! ctx corpus query opts
                                    #(batch/stored-count-batch %1 %2 %3 counting)
                                    #(cache/holds? ctx corpus nqr
@@ -134,14 +133,13 @@
   "How many tokens of `corpus` via `ctx` carry each value of `attr`,
   within the :filter, :patterns and :ranges of `opts`: {<value> <tokens>},
   or nil when `attr` marks no regions of its own (see `sized-attr?`) or
-  has too many to decode.
-
-  What the rate per million of a value is measured against: the text
-  carrying it rather than the whole corpus, so a year with more text does
-  not look busier."
-  [ctx corpus attr {:keys [filter patterns ranges] :as opts}]
+  has too many to decode."
+  [ctx corpus attr opts]
+  ;; what a rate per million is measured against: the text carrying the
+  ;; value rather than the whole corpus, so a year with more text does
+  ;; not look busier
   (when (sized-attr? (corpus/attributes! ctx corpus) attr)
-    (if (or (seq filter) (seq patterns) (seq ranges))
+    (if (opts/narrowed? opts)
       (into {}
             (map (fn [{:keys [values freq]}] [(first values) freq]))
             ;; nothing saves a result of every token, so none is looked for
@@ -173,12 +171,12 @@
   the sizes of its regions rather than by matching every token. Under a
   :filter it breaks down every token of the filtered regions, and the
   :tokens are theirs, so the rates stay relative to what was counted."
-  [ctx corpus query attr {:keys [filter patterns ranges at by] :as opts}]
+  [ctx corpus query attr {:keys [at by] :as opts}]
   (cwb/attempt
    corpus
    (fn []
      (let [blank?  (str/blank? query)
-           whole?  (and (empty? filter) (empty? patterns) (empty? ranges))
+           whole?  (not (opts/narrowed? opts))
            sizes   (when-not (command/whole-match? at)
                      (value-sizes! ctx corpus (or by attr) opts))
            freqs   (cond
