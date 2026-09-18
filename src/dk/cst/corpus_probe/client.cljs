@@ -4,10 +4,12 @@
   so moving between views swaps the page's data rather than reloading
   it. Every action a view dispatches is data, answered by the pure step
   (dk.cst.corpus-probe.client.actions) whose effects run at the edge
-  (dk.cst.corpus-probe.client.effects); `dispatch!` joins the two."
+  (dk.cst.corpus-probe.client.effects); `dispatch!` joins the two and
+  keeps the reader's focus (dk.cst.corpus-probe.client.focus)."
   (:require [clojure.walk :as walk]
             [dk.cst.corpus-probe.client.actions :as actions]
             [dk.cst.corpus-probe.client.effects :as effects]
+            [dk.cst.corpus-probe.client.focus :as focus]
             [dk.cst.corpus-probe.client.lists :as lists]
             [dk.cst.corpus-probe.client.router :as router]
             [dk.cst.corpus-probe.i18n :as i18n]
@@ -18,17 +20,6 @@
   `dispatch!` writes."}
   state
   (atom nil))
-
-(defn focus-left?
-  "True when focusout `event` says focus left the element listening: it
-  went to something in the tab order outside it."
-  [event]
-  (let [to (.-relatedTarget event)]
-    (boolean (and to
-                  ;; a press on a label sends focus to <main>, tabindex -1,
-                  ;; for a moment before the box it is for takes it
-                  (<= 0 (.-tabIndex to))
-                  (not (.contains (.-currentTarget event) to))))))
 
 (def placeholders
   "What a view puts in an action where it needs something only the event
@@ -52,7 +43,7 @@
    :event.target.form/params (fn [{:replicant/keys [node]}]
                                (router/form-params (.-form node)))
    :event/focus-left?        (fn [{:replicant/keys [dom-event]}]
-                               (focus-left? dom-event))})
+                               (focus/focus-left? dom-event))})
 
 (defn interpolate
   "Replace every placeholder in `action` (see `placeholders`) with what
@@ -91,7 +82,8 @@
 (defn dispatch!
   "Answer `action` for the Replicant dispatch `data` of the event or
   life-cycle hook that raised it, or for none, as the listeners and the
-  fetches raise theirs."
+  fetches raise theirs. A control the action takes from under the reader
+  hands focus to its box (see dk.cst.corpus-probe.client.focus/rescue!)."
   ([action]
    (dispatch! {} action))
   ([{:replicant/keys [trigger] :as data} action]
@@ -99,7 +91,9 @@
    ;; nothing renders from inside a render
    (if (= :replicant.trigger/life-cycle trigger)
      (effects/perform! dispatch! data [action])
-     (let [before @state]
+     (let [before @state
+           ;; where the reader is, read before the render moves anything
+           refuge (focus/refuge)]
        (when-let [{after :state :keys [effects]}
                   (actions/act before (interpolate data action))]
          (when-not (identical? before after)
@@ -107,7 +101,9 @@
          ;; in the same call, once the watch has rendered: a
          ;; prevent-default reaches the event before the handler returns
          ;; and a focus finds the node the render has just made
-         (effects/perform! dispatch! (assoc data :state after) effects))))))
+         (effects/perform! dispatch! (assoc data :state after) effects)
+         ;; last, so that an effect that put the reader somewhere stands
+         (focus/rescue! refuge))))))
 
 (defn ^:dev/after-load reload!
   "Render again once shadow-cljs has swapped in recompiled code: the

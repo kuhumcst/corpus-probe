@@ -13,10 +13,18 @@
   "The id of every page's <main>, which the bypass link targets."
   "main")
 
+(defn landing-attrs
+  "The attributes of the landing named `id`: a place the client may put
+  the reader that is no tab stop (see dk.cst.corpus-probe.client.focus)."
+  [id]
+  ;; focusable, so that focus can be put here by name; out of the tab
+  ;; order, since there is nothing here to work
+  {:id id :tabindex "-1"})
+
 (def main-attrs
-  "The attributes every page's <main> carries: `main-id`, and a tabindex
-  letting the bypass link move focus into it rather than only scroll."
-  {:id main-id :tabindex "-1"})
+  "The attributes every page's <main> carries: the landing `main-id`, so
+  that the bypass link moves focus into it rather than only scrolling."
+  (landing-attrs main-id))
 
 (defn lang-attrs
   "The attribute map marking an element's text as being in `lang`, when

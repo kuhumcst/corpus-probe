@@ -125,7 +125,7 @@
   until there is an answer."
   [{:keys [ui view asked result error]}]
   ;; the field keeps focus through a search (see
-  ;; dk.cst.corpus-probe.client.effects/land!), so nothing else says the
+  ;; dk.cst.corpus-probe.client.focus/land!), so nothing else says the
   ;; answer arrived; the query is in it because a live region announces
   ;; changes alone, and two searches to the same count would not change
   (when (or result error)

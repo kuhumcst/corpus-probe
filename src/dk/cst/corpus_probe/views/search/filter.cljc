@@ -228,9 +228,9 @@
                      (concat (keys patterns) (keys ranges))))))
 
 (def box-id
-  "The id of the metadata box, which emptying the filter leaves the
-  reader on: the chooser goes as the last thing in it is taken back, and
-  the control they worked to take it back goes with the chooser."
+  "The id of the metadata box, a landing in both its states: the last
+  control of a filter goes with the chooser (see
+  dk.cst.corpus-probe.client.focus/rescue!)."
   "metadata")
 
 (defn empty-fieldset
@@ -242,9 +242,8 @@
   ;; a box in every state, so the rail neither grows nor shrinks as
   ;; corpora are ticked, and a reader who has chosen none is still told
   ;; where filtering by metadata lives
-  [:fieldset.filters.box {:id        box-id
-                          :tabindex  "-1"
-                          :data-list "values"}
+  [:fieldset.filters.box (assoc (widgets/landing-attrs box-id)
+                                :data-list "values")
    [:legend (widgets/term ui :metadata false)]
    [:p (cond
          pending?
@@ -275,6 +274,7 @@
     (chooser/chooser
      ui :values nodes
      (assoc opts
+            :id        box-id
             :class     "filters"
             :selected  selected
             :busy?     pending?

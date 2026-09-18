@@ -132,7 +132,7 @@
                       (assoc :cursor cursor)
                       (update :result #(rested (assoc % :hits hits
                                                         :reach reach))))
-         :effects [[:focus (concordance/cursor-id cursor) true]]})
+         :effects [[:follow-cursor (concordance/cursor-id cursor)]]})
       {:state (update state :result #(rested (assoc % :widest? true)))})))
 
 (defn move-cursor
@@ -149,7 +149,7 @@
                 ;; the concordance travels to the token itself, so focus
                 ;; must not jump the view there first
                 :effects [[:prevent-default]
-                          [:focus (concordance/cursor-id cursor) true]]})]
+                          [:follow-cursor (concordance/cursor-id cursor)]]})]
     (cond
       (= "Escape" pressed)
       {:state (dissoc state :selected) :effects [[:prevent-default]]}
@@ -172,7 +172,7 @@
           {:state state* :effects (into [[:prevent-default]] (:effects asking))}
           {:state   (assoc state* :cursor cursor)
            :effects (into [[:prevent-default]
-                           [:focus (concordance/cursor-id cursor) true]]
+                           [:follow-cursor (concordance/cursor-id cursor)]]
                           (:effects asking))}))
 
       end
@@ -451,18 +451,6 @@
   (cond-> {:state state}
     (= :values k) (assoc :effects [[:refresh-filters]])))
 
-(defn emptied
-  "Answer the step that took `state` to `state'`, leaving the reader on
-  the metadata box where the step emptied the filter: with no corpus
-  chosen the filter is the only thing holding the chooser, so taking the
-  last of it back takes away the control that took it back, and focus
-  would fall to the document."
-  [state state']
-  (cond-> {:state state'}
-    (and (filter-views/filterable? (:filter-controls state))
-         (not (filter-views/filterable? (:filter-controls state'))))
-    (assoc :effects [[:focus filter-views/box-id]])))
-
 (defn filters-arrived
   "Apply `options`, the metadata filters fetched for `corpora`, to
   `state` while they still describe the selection, so that a slow answer
@@ -555,10 +543,8 @@
   settings (see dk.cst.corpus-probe.views.search/recent-announcement for
   what is said of it)."
   [state]
-  ;; the box takes focus where the button that had it goes quiet: a
-  ;; browser drops focus from a control it disables
   {:state   (assoc state :recent [] :announcement :cleared)
-   :effects [[:store-recent] [:focus search-views/recent-box-id]]})
+   :effects [[:store-recent]]})
 
 (defn counts-arrived
   "Put `counted`, the count of the search on screen, in `state`, with the
@@ -618,7 +604,7 @@
   (let [k (keyword k)]
     (if (and (= settings/cookie-key k) (not (settings/reset? {k v})))
       {:state   (assoc state :stored v :announcement :saved)
-       :effects [[:set-cookie k v] [:focus settings/box-id]]}
+       :effects [[:set-cookie k v]]}
       (let [to (settings/return {k v :return return})]
         {:state   state
          :effects [[:set-cookie k v] [:navigate to (not= to return)]]}))))
@@ -716,13 +702,12 @@
       :apply-view           {:state   (assoc-in state [:params (keyword x)] y)
                              :effects [[:apply-view url/form-id]]}
       :toggle-corpora       (toggle-corpora state x)
-      ;; every way the filter is worked can be the way it is emptied
       :toggle-filter-values (let [[attr values] x]
-                              (emptied state (toggle-filter-values
-                                              state attr values)))
-      :set-filter-pattern   (emptied state (set-filter-pattern state x y))
-      :set-filter-bound     (emptied state (set-filter-bound state x y z))
-      :clear-filter         (emptied state (clear-filter state))
+                              {:state (toggle-filter-values state attr
+                                                            values)})
+      :set-filter-pattern   {:state (set-filter-pattern state x y)}
+      :set-filter-bound     {:state (set-filter-bound state x y z)}
+      :clear-filter         {:state (clear-filter state)}
       :engage               (refreshed x (lists/engage state x))
       :toggle-open          (refreshed x (lists/toggle-open state x y z))
       :toggle-rail          (toggle-rail state x)
@@ -738,7 +723,12 @@
       :move-cursor          (move-cursor state x y z)
       :key-in-card          (key-in-card state x y z)
       :mark-side            {:state state :effects [[:mark-side]]}
-      :leave-concordance    {:state state :effects [[:leave-concordance]]}
+      ;; the concordance and its card are one pool: the card closes once
+      ;; focus has settled outside both
+      :leave-concordance    {:state   state
+                             :effects [[:once-left [concordance/region-id
+                                                    concordance/inspector-id]
+                                        [:inspect nil]]]}
       :recentre             {:state state :effects [[:recentre]]}
       :filters-due          (filters-due state)
       :filters-arrived      {:state (filters-arrived state x y)}

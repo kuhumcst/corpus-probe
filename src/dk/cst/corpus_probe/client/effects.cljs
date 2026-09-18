@@ -1,20 +1,19 @@
 (ns dk.cst.corpus-probe.client.effects
   "The edge of the client: everything that touches the world, the timers,
-  the fetches, focus, the history, the document's title and language,
-  the cookie, the store the searches made lately are kept in, and
-  `perform!`, which runs the effects an action answered with. Nothing
-  here reads or writes the state: a fetch comes back as an action, so
-  what to keep of a late answer is the pure step's decision."
+  the fetches, the history, the document's title and language, the
+  cookie, the store the searches made lately are kept in, the moves of
+  focus (see dk.cst.corpus-probe.client.focus) and `perform!`, which
+  runs the effects an action answered with. Nothing here reads or writes
+  the state: a fetch comes back as an action, so what to keep of a late
+  answer is the pure step's decision."
   (:require [cognitect.transit :as transit]
+            [dk.cst.corpus-probe.client.focus :as focus]
             [dk.cst.corpus-probe.client.router :as router]
             [dk.cst.corpus-probe.query.mode :as mode]
             [dk.cst.corpus-probe.storage :as storage]
             [dk.cst.corpus-probe.storage.recent :as recent]
             [dk.cst.corpus-probe.url :as url]
-            [dk.cst.corpus-probe.views.concordance :as concordance]
-            [dk.cst.corpus-probe.views.result :as result-views]
-            [dk.cst.corpus-probe.views.search :as search]
-            [dk.cst.corpus-probe.views.widgets :as widgets]))
+            [dk.cst.corpus-probe.views.concordance :as concordance]))
 
 (defonce ^{:doc "The debounces waiting to fire, by name (see `debounce!`):
   the report of a routed navigation, a metadata filter refresh, a page
@@ -325,25 +324,13 @@
                                             "auto"
                                             "smooth")}))))
 
-(defn focus!
-  "Move focus to the element with `id`, once the render that put it there
-  has run. `follow?` brings it onto the screen here rather than letting
-  focus jump there itself (see `keep-in-view!`), which is what keeps the
-  panel from covering the token it describes."
-  ([id]
-   (focus! id false))
-  ([id follow?]
-   (when-let [el (.getElementById js/document id)]
-     (.focus el #js {:preventScroll follow?})
-     (when follow? (keep-in-view! el)))))
-
-(defn focus-field!
-  "Move focus to the form control named `name`, once the render that put
-  it there has run: where a reader who added or took away a token or a
-  condition is left, rather than on the body."
-  [name]
-  (some-> (.querySelector js/document (str "[name=\"" name "\"]"))
-          (.focus)))
+(defn follow-cursor!
+  "Move focus to the cursor's token with `id` and bring it onto the
+  screen here (see `keep-in-view!`) rather than letting focus jump there
+  itself, which is what keeps the panel from covering the token it
+  describes."
+  [id]
+  (some-> (focus/focus! id true) (keep-in-view!)))
 
 (defn push-url!
   "Add `href` to the history as the address of the page on screen."
@@ -478,91 +465,6 @@
                                (.getElementById js/document))]
         (centre-on! el (reading-strip el) cell false)))))
 
-(defn leave-concordance!
-  "Close the inspection panel, `[:inspect nil]` through `dispatch!`, once
-  focus has settled outside both the concordance and the panel, which
-  are one pool: focus moving between them keeps the panel."
-  [dispatch!]
-  ;; a tick later, since focusout fires before the next element has
-  ;; focus; and activeElement rather than relatedTarget, so that a click
-  ;; on the page background closes the panel while switching windows,
-  ;; which keeps the active element, does not
-  (js/setTimeout
-   (fn []
-     (let [el     (.-activeElement js/document)
-           region (.getElementById js/document concordance/region-id)
-           panel  (.getElementById js/document concordance/inspector-id)]
-       (when-not (or (and region (.contains region el))
-                     (and panel (.contains panel el)))
-         (dispatch! [:inspect nil]))))
-   0))
-
-(defn at-hand?
-  "True when `el` begins in the upper half of the viewport, which is what
-  it means to be looking at the start of something already: a region
-  beginning near the foot shows one row of itself."
-  [el]
-  (let [top (.-top (.getBoundingClientRect el))]
-    (and (>= top 0) (< top (/ (.-innerHeight js/window) 2)))))
-
-(defn land!
-  "Put the reader where a routed navigation should leave them: at the
-  place in the page the URL's fragment names, when it names one; else
-  focused on the results, when the page has any, and moved to them only
-  if they are not already at hand; else at the start of the main content."
-  []
-  ;; focus, not only a scroll: a routed navigation gives none of the
-  ;; announcement and reset of focus a real one does
-  ;; nothing has gone where a control of the search form still holds
-  ;; focus: the form outlives a search, and taking the caret out of the
-  ;; field the reader typed in is no rescue
-  (let [hash   (.-hash js/location)
-        target (.getElementById js/document url/results-id)
-        held?  (= url/form-id (some-> js/document (.-activeElement)
-                                      (.-form) (.-id)))]
-    (cond
-      ;; replacing the location with itself is a fragment navigation,
-      ;; which scrolls, marks the :target and sets where Tab starts, none
-      ;; of which scrollIntoView does; its popstate names the page on
-      ;; screen, so the router ignores it
-      (and (seq hash) (not= hash url/results-fragment))
-      (.replace js/location js/location.href)
-
-      ;; focus is what tells a reader the outcome arrived; the browser
-      ;; scrolls on a real navigation, from the fragment on the form
-      ;; action, but pushState does not
-      target
-      (do (when-not (at-hand? target)
-            (.scrollIntoView target))
-          (when-not held?
-            (.focus target #js {:preventScroll true})))
-
-      :else
-      (do (.scrollTo js/window 0 0)
-          (when-not held?
-            (some-> (.getElementById js/document widgets/main-id)
-                    (.focus #js {:preventScroll true})))))))
-
-(defn select-query!
-  "Select what the query field holds, where the search in `state` found
-  nothing and the reader asked for it themselves from the field or its
-  button: what they try instead replaces what did not work, in one
-  keystroke."
-  [state]
-  ;; not from a control beside the result, where the reader is working,
-  ;; nor for a page arrived at by a link, which is no search of theirs
-  (let [active (.-activeElement js/document)
-        asked? (and active
-                    (= url/form-id (some-> active (.-form) (.-id)))
-                    (or (= search/query-id (.-id active))
-                        (= "submit" (.-type active))))
-        result (:result state)]
-    (when (and asked? (not (result-views/counting? result))
-               (not (result-views/found? result)))
-      (some-> (.getElementById js/document search/query-id)
-              (doto (.focus))
-              (.select)))))
-
 (defn sync-url!
   "Write the canonical query string of the page on screen into the bar,
   replacing history so the URL stays shareable without new entries, and
@@ -594,8 +496,10 @@
   (doseq [[effect & args] effects]
     (case effect
       :prevent-default    (prevent-default! (:replicant/dom-event data))
-      :focus              (apply focus! args)
-      :focus-field        (apply focus-field! args)
+      :focus              (apply focus/focus! args)
+      :focus-field        (apply focus/focus-field! args)
+      :follow-cursor      (apply follow-cursor! args)
+      :once-left          (apply focus/once-left! dispatch! args)
       :fetch-filters      (apply fetch-filters! dispatch! args)
       :fetch-counts       (fetch-counts! dispatch! state)
       :fetch-wider        (apply fetch-wider! dispatch! args)
@@ -617,7 +521,6 @@
       :centre-match       (apply centre-match! (:replicant/node data) args)
       :recentre           (recentre! state)
       :mark-side          (mark-side!)
-      :leave-concordance  (leave-concordance! dispatch!)
-      :land               (land!)
-      :select-query       (select-query! state)
+      :land               (focus/land!)
+      :select-query       (focus/select-query! state)
       :sync-url           (sync-url! state))))

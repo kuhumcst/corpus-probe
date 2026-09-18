@@ -488,7 +488,7 @@
 
 (defn results-region
   "The outcome of a search in `state` under `heading`, as a region named
-  by that heading and focusable, so a GET search can land on it: a
+  by that heading and a landing, so a search can land on it: a
   header of the heading, where the hits are and the `controls` over
   them; a status line while the result is still being counted; the
   errors; then `body`, the view's own content. The switch between the
@@ -498,9 +498,8 @@
    heading controls body]
   ;; named by the heading alone: a screen reader landing here hears the
   ;; count, not the whole question, which the controls below restate
-  [:section.result (cond-> {:id              url/results-id
-                            :tabindex        "-1"
-                            :aria-labelledby "results-heading"}
+  [:section.result (cond-> (assoc (widgets/landing-attrs url/results-id)
+                                  :aria-labelledby "results-heading")
                      ;; while the next question is in flight these hits
                      ;; are still the previous one's answer, and nothing
                      ;; about them says so

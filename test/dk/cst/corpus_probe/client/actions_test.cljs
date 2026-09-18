@@ -6,11 +6,9 @@
             [dk.cst.corpus-probe.query :as query]
             [dk.cst.corpus-probe.query.tokens :as tokens]
             [dk.cst.corpus-probe.storage.recent :as recent]
-            [dk.cst.corpus-probe.storage.settings :as settings]
             [dk.cst.corpus-probe.url :as url]
             [dk.cst.corpus-probe.views :as views]
-            [dk.cst.corpus-probe.views.concordance :as concordance]
-            [dk.cst.corpus-probe.views.search.filter :as filter-views]))
+            [dk.cst.corpus-probe.views.concordance :as concordance]))
 
 (def hit
   {:corpus  "PROBE" :cpos 9
@@ -160,7 +158,7 @@
           (actions/move-cursor state [["PROBE" 9] 0] "ArrowRight" false)]
       (is (= [["PROBE" 9] 1] (:cursor state')))
       ;; the view of the concordance is the concordance's own to move
-      (is (= [[:prevent-default] [:focus "t-PROBE-9-1" true]] effects)))
+      (is (= [[:prevent-default] [:follow-cursor "t-PROBE-9-1"]] effects)))
     (is (= [["PROBE" 9] 3]
            (:cursor (:state (actions/move-cursor state [["PROBE" 9] 0]
                                                  "End" false)))))
@@ -256,7 +254,7 @@
         (is (= [wider other] (get-in state' [:result :hits])))
         (is (= 60 (get-in state' [:result :reach])))
         (is (= [["PROBE" 9] 6] (:cursor state')))
-        (is (= [[:focus "t-PROBE-9-6" true]] effects))
+        (is (= [[:follow-cursor "t-PROBE-9-6"]] effects))
         (is (not (contains? (:result state') :widening)))))
     (testing "and one that came back no wider is all the line there is"
       (let [{state' :state} (actions/wider-arrived reached 60 data)]
@@ -432,34 +430,6 @@
     (is (identical? state
                     (:state (actions/act state [:leave :corpora false]))))))
 
-(deftest emptied-filter-test
-  (let [alone (-> state
-                  (assoc-in [:params :corpus] [])
-                  (assoc :filter-controls {:attrs    [] :unlisted []
-                                           :selected {:text_year #{"1591"}}
-                                           :patterns {} :ranges {}}))]
-    (testing "the last of a filter taken back leaves the reader on the
-              metadata box: with no corpus chosen the filter is the only
-              thing holding the chooser, so the control they worked to
-              take it back goes with it and focus would fall to the page"
-      (is (= [[:focus filter-views/box-id]]
-             (:effects (actions/act alone [:clear-filter]))))
-      (is (= [[:focus filter-views/box-id]]
-             (:effects (actions/act alone [:toggle-filter-values
-                                           [:text_year ["1591"]]]))))
-      (is (= [[:focus filter-views/box-id]]
-             (:effects (actions/act (assoc-in alone [:filter-controls]
-                                              {:attrs [] :unlisted []
-                                               :selected {}
-                                               :patterns {:text_year "15.."}
-                                               :ranges {}})
-                                    [:set-filter-pattern :text_year ""])))))
-    (testing "and nowhere else: a filter still standing keeps its controls,
-              and so does one the corpora still offer attributes for"
-      (is (nil? (:effects (actions/act alone [:toggle-filter-values
-                                              [:text_year ["1583"]]]))))
-      (is (nil? (:effects (actions/act state [:clear-filter])))))))
-
 (deftest filters-test
   (let [looking (update-in state [:lists :values :open] conj :root)
         moved   (assoc-in looking [:params :corpus] ["ANDEN"])]
@@ -561,13 +531,12 @@
       (let [{state' :state :keys [effects]} (actions/remember state)]
         (is (nil? (:recent state')) what)
         (is (nil? effects) what))))
-  (testing "forgetting is storing nothing, and the box takes the focus
-            the button it quietens cannot hold, with what happened said"
+  (testing "forgetting is storing nothing, with what happened said"
     (let [{state' :state :keys [effects]}
           (actions/forget-searches {:recent [{:params "q=hund"}]})]
       (is (= [] (:recent state')))
       (is (= :cleared (:announcement state')))
-      (is (= [[:store-recent] [:focus "recent"]] effects))))
+      (is (= [[:store-recent]] effects))))
   (testing "and the saying of it belongs to the act, so the next one
             takes it away"
     (is (nil? (:announcement (:state (actions/act {:announcement :cleared}
@@ -649,10 +618,7 @@
               stays as it is and only what the box measures against moves"
       (let [{state' :state :keys [effects]}
             (actions/act state [:set-preference "settings" "sort=word" "/search"])]
-        (is (= [[:set-cookie :settings "sort=word"]
-                ;; the button that had focus goes quiet as it is pressed
-                [:focus settings/box-id]]
-               effects))
+        (is (= [[:set-cookie :settings "sort=word"]] effects))
         (is (= "sort=word" (:stored state')))
         (testing "and says so where it is heard and not seen"
           (is (= :saved (:announcement state'))))))
@@ -670,7 +636,9 @@
       (is (= [[:apply-view url/form-id]] (:effects applied))))
     (is (= false (get-in (actions/act state [:apply-view "docs" false])
                          [:state :params :docs])))
-    (is (= [[:leave-concordance]]
+    ;; the concordance and its card are one pool to leave
+    (is (= [[:once-left [concordance/region-id concordance/inspector-id]
+             [:inspect nil]]]
            (:effects (actions/act state [:leave-concordance]))))
     ;; a resize moves the strip the concordance is read in, not the state
     (is (= {:state state :effects [[:recentre]]}

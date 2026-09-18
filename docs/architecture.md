@@ -89,7 +89,7 @@ corpus-probe/
 │   │                               ;   frequency, corpus (index, chooser,
 │   │                               ;   info, reading page)
 │   ├── client.cljs                 ; Replicant client: state, dispatch
-│   ├── client/                     ; router, effects, lists, actions
+│   ├── client/                     ; router, focus, effects, lists, actions
 │   ├── server.clj                  ; config, CSP, routes, start/stop
 │   └── server/                     ; request readers, responses and the
 │                                   ;   document shell, the search page

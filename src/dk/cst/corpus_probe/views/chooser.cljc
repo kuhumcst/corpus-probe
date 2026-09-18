@@ -197,15 +197,16 @@
 (defn fieldset
   "The box a long list stands in, named for the client by list `k` in a
   data attribute and worded in `ui`: its `:legend` and `:class`, the
-  `:control` taking every entry at once, the `:box` narrowing the
-  disclosure the `entries` are behind, how many of the `:total` entries
-  are `:chosen` and what that `:said` in words, the `:details`
-  attributes of the disclosure, the `:status` the box reports and what
-  focus leaving it dispatches, `:leave`."
-  [ui k {:keys [class legend control box chosen total said details status
-                leave]}
+  `:id` that makes it a landing, the `:control` taking every entry at
+  once, the `:box` narrowing the disclosure the `entries` are behind,
+  how many of the `:total` entries are `:chosen` and what that `:said`
+  in words, the `:details` attributes of the disclosure, the `:status`
+  the box reports and what focus leaving it dispatches, `:leave`."
+  [ui k {:keys [id class legend control box chosen total said details
+                status leave]}
    & entries]
   [:fieldset.chooser.box (cond-> {:data-list (name k)}
+                           id    (merge (widgets/landing-attrs id))
                            class (assoc :class class)
                            leave (assoc :on {:focusout leave}))
    [:legend legend]
@@ -237,9 +238,10 @@
   disclosures, `:root` for the fieldset's own. The instance supplies the
   rest: `:item`, `:summary`, `:extra`, `:control`, `:toggle` and
   `:after` draw its parts, `:noun` names what it counts (see
-  `count-title`), `:invalid` is what the box reports of them, and the
-  controls and the box are rendered only where `:client?` runs."
-  [ui k nodes {:keys [selected held open choosing? client? busy? class
+  `count-title`), `:invalid` is what the box reports of them, `:id`
+  makes the fieldset a landing (see `fieldset`), and the controls and
+  the box are rendered only where `:client?` runs."
+  [ui k nodes {:keys [selected held open choosing? client? busy? id class
                       legend not-found control toggle item summary extra
                       after invalid noun]
                q     :filter
@@ -259,7 +261,8 @@
         total          (count offered)]
     (fieldset
      ui k
-     {:class   class
+     {:id      id
+      :class   class
       :legend  legend
       :control (when (and client? control) (control offered))
       :box     (when client?

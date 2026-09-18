@@ -116,6 +116,15 @@ main:not(.search-page), .help { max-inline-size: 40rem; }
 .skip { position: absolute; inset-inline-start: -100vw; }
 .skip:focus { position: static; }
 
+/* The client focuses <main>, the results and the boxes only to keep the
+   reader's place (see dk.cst.corpus-probe.views.widgets/landing-attrs).
+   They are not controls, so they show no focus ring: a ring around a
+   whole region tells the reader nothing, and Safari draws the browser's
+   default one each time the tab comes back to the front. The tokens off
+   the cursor carry the same two attributes; their own rule sets their
+   outline and wins on specificity */
+[id][tabindex="-1"]:focus { outline: none; }
+
 /* a GET search lands on #results: keep it clear of the viewport edge */
 :target { scroll-margin-block-start: 1rem; }
 

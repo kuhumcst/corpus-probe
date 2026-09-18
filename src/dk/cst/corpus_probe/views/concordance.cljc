@@ -370,17 +370,17 @@
         opts   (assoc opts :cursor cursor :travel (travel-offset hits cursor))]
     ;; a KWIC line must not wrap, or its columns stop lining up, so the
     ;; table stands in a region that clips it and is scrolled by the
-    ;; cursor alone; not a tab stop, since there is nothing to scroll by
-    ;; hand, but focusable because the panel sends focus back here on
+    ;; cursor alone; a landing rather than a tab stop, since there is
+    ;; nothing to scroll by hand and the panel sends focus back here on
     ;; closing, and named because a focusable region needs a name
     (widgets/table-box
-     (cond-> {:id              region-id
-              :role            "region"
-              :tabindex        "-1"
-              :aria-labelledby caption-id
-              ;; the panel describes what the cursor is on, so it has
-              ;; nothing to describe once the cursor is left behind
-              :on              {:focusout [:leave-concordance]}}
+     (cond-> (assoc (widgets/landing-attrs region-id)
+                    :role            "region"
+                    :aria-labelledby caption-id
+                    ;; the panel describes what the cursor is on, so it
+                    ;; has nothing to describe once the cursor is left
+                    ;; behind
+                    :on              {:focusout [:leave-concordance]})
        ;; the width of line that the reader asked for. The page needs
        ;; this to set its own width (style.css, `.search-page:has(...)`)
        context
@@ -542,21 +542,21 @@
       ;; not a popover: that would want focus and the top layer, while
       ;; the cursor must stay on the token for the arrow keys to keep
       ;; moving. Focus leaving it is how the client knows to close it;
-      ;; while focus is in it, the cursor's keys still reach the cursor
+      ;; while focus is in it, the cursor's keys still reach the cursor.
+      ;; A landing, so that a click on its own text keeps focus in it
       [:aside.inspector
-       {:id                   inspector-id
-        :aria-label           (i18n/tr ui "Token details")
-        :tabindex             "-1"
-        :on                   {:focusout [:leave-concordance]
-                               :keydown  [:key-in-card cursor
-                                          :event/key :event/ctrl?]}
-        ;; which side of the token it landed on, for the corners (see
-        ;; dk.cst.corpus-probe.client.effects/mark-side!)
-        :replicant/on-render  [:mark-side]
-        ;; away for its first frame and again until its transition
-        ;; ends, which is how the stylesheet fades it in and out
-        :replicant/mounting   {:class "away"}
-        :replicant/unmounting {:class "away"}}
+       (assoc (widgets/landing-attrs inspector-id)
+              :aria-label           (i18n/tr ui "Token details")
+              :on                   {:focusout [:leave-concordance]
+                                     :keydown  [:key-in-card cursor
+                                                :event/key :event/ctrl?]}
+              ;; which side of the token it landed on, for the corners
+              ;; (see dk.cst.corpus-probe.client.effects/mark-side!)
+              :replicant/on-render  [:mark-side]
+              ;; away for its first frame and again until its transition
+              ;; ends, which is how the stylesheet fades it in and out
+              :replicant/mounting   {:class "away"}
+              :replicant/unmounting {:class "away"})
        [:h2 (:word token)]
        ;; a cross, as a card is closed everywhere, drawn by the
        ;; stylesheet so that every browser draws the same one; its name

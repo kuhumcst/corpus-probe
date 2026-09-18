@@ -94,9 +94,8 @@
   "settings-form")
 
 (def box-id
-  "The id of the preferences box, which storing leaves the reader on: the
-  button they pressed goes quiet as they press it, and a quiet button
-  holds no focus."
+  "The id of the preferences box, a landing: Save goes quiet as it is
+  pressed (see dk.cst.corpus-probe.client.focus/rescue!)."
   "preferences")
 
 (defn with-autosave

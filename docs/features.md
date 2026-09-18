@@ -45,6 +45,52 @@ to scan, survives on a phone. Without wrapping, the table is 807px wide
 on a 375px screen, and the match is off the screen. The source column
 is hidden, so that the contexts have room.
 
+## Focus
+
+The client decides where focus goes whenever it changes what is on the
+page. The rules are few, and `dk.cst.corpus-probe.client.focus` holds
+them all.
+
+A landing is a place the client may put the reader that is not a tab
+stop: the main content, the results, the concordance and its card, the
+metadata box, the preferences box and the history. Each is focusable
+by its id, Tab skips it, and it shows no focus ring, since a ring
+around a whole region tells the reader nothing.
+
+One rule needs no asking. A control that goes away, or goes quiet,
+under the reader's focus hands it to the nearest landing that survives.
+A browser drops focus from a control it disables or takes out of the
+document, and a reader dropped on the document has lost their place.
+Thus the Save button, the Clear filter box, the Clear button of the
+history and the last control of a filter all leave the reader on their
+box, and no action says so. A control that stays keeps focus, and a
+reader who moved focus themselves is left where they went. A control
+that can go from under the reader stands in a landing; that is the
+whole of what a new one has to do.
+
+An action that knows a better place says so. A token or a condition
+added to the extended form takes focus, and one removed hands it to the
+row in its place. A step of the concordance's cursor takes focus with
+it, and the page scrolls to keep the token in view, clear of the card.
+The card's close button, and Escape in the card, put focus back in the
+concordance, from where Tab reaches the cursor again.
+
+A routed navigation lands the reader as a real one would: at the place
+the URL's fragment names, else on the results when the page has any,
+else at the start of the main content. A real page load announces
+itself and resets focus; one the client makes must do the same by hand,
+or a reader who is not watching the screen is told nothing. It leaves
+focus alone where a control of the search form holds it: the form
+outlives a search, so the reader is still standing where they submitted
+from. The page still scrolls to the results. A search that found
+nothing leaves the query selected when the reader asked from the field
+or its button (see Preferences).
+
+Focus is read as well as moved. Focus settling outside the concordance
+and its card closes the card. Focus leaving a chooser for a tab stop
+outside it, or a press elsewhere on the page, puts the list at rest,
+and focus entering its find box engages it.
+
 ## Simple search
 
 The search field reads its text by its shape (`query.mode/shape`): text that
@@ -368,7 +414,8 @@ field out of the document is a constraint that the form no longer
 submits, while the state still holds it. It would come back on the next
 corpus that the reader ticks, and they would not know why. When the
 reader takes back the last of the filter, the chooser goes, and the
-control they used goes with it. Focus moves to the box.
+control they used goes with it. Focus lands on the box, as it does
+whenever a control goes from under it (see Focus).
 
 The client reads the filter over `/api/filters` when the corpus
 selection has settled. It does not wait for the reader to open the box.
@@ -454,24 +501,16 @@ page renders, and it goes stale as soon as a box is ticked.
 
 Saving asks the server for nothing, because the server words no part of
 the page from the stored settings. The page stays as it is; the Save
-button goes quiet and Reset wakes up. Focus moves to the box, because a
-quiet button holds no focus and the reader would otherwise be dropped on
-the document and lose their place in the form. A live region in the box
-says that it was saved. The region is clipped and never seen: a reader
-who is watching the screen has the buttons to tell them, and one who is
-not has nothing else. It says so for the act and not for the state it
-left, so the next thing the reader does empties it, and a second save is
-spoken as the first was.
+button goes quiet and Reset wakes up, and focus lands on the box (see
+Focus). A live region in the box says that it was saved. The region is
+clipped and never seen: a reader who is watching the screen has the
+buttons to tell them, and one who is not has nothing else. It says so
+for the act and not for the state it left, so the next thing the reader
+does empties it, and a second save is spoken as the first was.
 
 A reset does ask again: the bare form it leaves behind is the server's
-to describe. Every routed navigation lands the reader at the top of what
-arrived, on the results where a search found any and on the main content
-otherwise. A real page load announces itself and resets focus; one the
-client makes must do the same by hand, or a reader who is not watching
-the screen is told nothing. It leaves focus alone, though, where a
-control of the search form holds it: the form outlives a search, so the
-reader is still standing where they submitted from, and there is nothing
-to rescue them from. The page still scrolls to the results.
+to describe. The reader lands on it as on every page the client fetches
+(see Focus).
 
 A search that keeps focus says what it found in a live region instead,
 clipped and never seen. It holds the query and the heading, "hund. 3
@@ -548,7 +587,7 @@ The history is stored in the browser, not in a cookie. No request needs
 it, and a search of a pasted list of words is longer than a cookie may
 be. Thus it needs a script: a reader without one has no rail, as they
 have no inspector. **Clear** forgets the whole list, and forgetting is
-storing nothing, as it is for the settings. The box goes as it is
-cleared, and the button that was pressed goes with it, so focus is put
-on the page rather than dropped, and a live region says what happened,
-clipped and never seen, as the Preferences box does when it stores.
+storing nothing, as it is for the settings. The button goes quiet as it
+is pressed, and focus lands on the box (see Focus); a live region says
+what happened, clipped and never seen, as the Preferences box does when
+it stores.

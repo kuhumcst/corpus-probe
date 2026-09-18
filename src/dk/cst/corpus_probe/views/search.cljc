@@ -339,9 +339,7 @@
   "The preferences box of the search form of `state` in `ui`: what the
   form is stored as, forgotten with, and whether it is stored at all."
   [ui {:keys [client? autosave? stored announcement] :as state}]
-  ;; the group takes focus where the button that had it goes quiet: the
-  ;; box they are still in, rather than the button that would undo it
-  [:fieldset.settings.box {:id settings/box-id :tabindex "-1"}
+  [:fieldset.settings.box (widgets/landing-attrs settings/box-id)
    [:legend (i18n/trx ui "legend" "Preferences")]
    (settings-buttons ui (settings-now state) stored client?)
    (autosave-control ui autosave? client?)
@@ -496,9 +494,8 @@
   "recent-searches")
 
 (def recent-box-id
-  "The id of the history's box, which clearing leaves the reader on: the
-  button they pressed goes quiet as they press it, and a quiet button
-  holds no focus."
+  "The id of the history's box, a landing: Clear goes quiet as it is
+  pressed (see dk.cst.corpus-probe.client.focus/rescue!)."
   "recent")
 
 (defn recent-facts
@@ -547,9 +544,8 @@
   ;; kept before there are any.
   ;; TODO: emptying the field is the way back to the history, and is said
   ;; nowhere; and is one entry worth a control of its own?
-  [:nav.recent.box {:id              recent-box-id
-                    :tabindex        "-1"
-                    :aria-labelledby recent-id}
+  [:nav.recent.box (assoc (widgets/landing-attrs recent-box-id)
+                          :aria-labelledby recent-id)
    [:h2 {:id recent-id} (i18n/tr ui "Recent searches")]
    (if (seq entries)
      [:ol widgets/list-attrs (for [entry entries] (recent-search ui entry))]
