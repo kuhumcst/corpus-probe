@@ -48,7 +48,7 @@
                             (:required)))]
         (is (true? (required state)))
         (testing "and is not once there is a result, or an error, since an
-                  empty field is how the reader starts over"
+                  empty field is how the reader clears the answer"
           (is (false? (required (assoc state :result {:size 3}))))
           (is (false? (required (assoc state :error {:type :timeout})))))))
     (testing "grouped controls have legends"
@@ -217,6 +217,36 @@
           (is (= "Search" (label en "hund kat")))
           (is (= "Search" (label en "hund\nkat")))
           (is (= "Søg" (label da "hund"))))))
+    ;; the way back to the guide was said nowhere while it was a
+    ;; keystroke: the button is where the form says what a press does
+    (testing "the button is a Clear once a form with an answer under it
+              asks nothing, whichever form holds the query"
+      (let [button   (fn [ui state]
+                       (->> (deep (form (merge {:ui ui :folders []} state)))
+                            (some #(when (and (vector? %) (= :button (first %))
+                                              (:replicant/on-render (second %)))
+                                     %))))
+            label    (comp last button)
+            answered {:result {:size 3} :params {:q "" :corpus ["PROBE"]}}]
+        (is (= "Clear" (label en answered)))
+        (is (= "Ryd" (label da answered)))
+        (is (= "Clear" (label en (assoc answered :params
+                                        {:mode "extended"
+                                         :corpus ["PROBE"]}))))
+        (testing "and for an error standing where the answer would"
+          (is (= "Clear" (label en (-> (dissoc answered :result)
+                                       (assoc :error {:type :timeout}))))))
+        (testing "while a query the form does ask searches"
+          (is (= "Search" (label en (assoc-in answered [:params :q] "hund")))))
+        (testing "and the bare page keeps the Search its required field
+                  asks for"
+          (is (= "Search" (label en (dissoc answered :result)))))
+        (testing "clearing searches nothing, so the corpus constraint is
+                  not held against it"
+          (is (= [:set-validity nil]
+                 (:replicant/on-render
+                  (second (button en (assoc-in answered [:params :corpus]
+                                               [])))))))))
     (testing "the button carries the constraint that a search needs a
               corpus, so the browser refuses one where it was asked for,
               and the chooser opens as it does"
@@ -448,6 +478,11 @@
                                 (first)))]
       (is (= :nav.recent.box (first html)))
       (is (some #{"Your searches appear here."} (deep html)))
+      ;; not the search button's bare Clear: a search that found nothing
+      ;; puts the two on screen together, and one word twice is one word
+      ;; in a reader's list of the buttons
+      (is (some #{"Clear list"} (deep html)))
+      (is (some #{"Ryd listen"} (deep (search/recent-searches da nil))))
       (is (some #{"Dine søgninger vises her."}
                 (deep (search/recent-searches da nil))))
       (is (not (some #{:ol} (deep html))))

@@ -528,27 +528,56 @@
    :prev-href :next-href])
 
 (defn set-query
-  "The state with `text` in the query field, and the answer taken out of
-  it where the text asks nothing at all: emptying the field is how a
-  reader starts over (see dk.cst.corpus-probe.client.router/cleared?, the
-  same rule at a submit)."
-  [{:keys [result error] :as state} text]
+  "The state with `text` in the query field."
+  [state text]
+  ;; every keystroke comes this way (see
+  ;; dk.cst.corpus-probe.views.search/query-field), and the field keeps
+  ;; what was typed, since Replicant leaves an unchanged value alone
+  {:state (assoc-in state [:params :q] text)})
+
+(defn clear-answer
+  "The `state` with the answer taken out of it: a submit of a form that
+  asks nothing, which is the Clear the search button becomes once the
+  field is empty (see dk.cst.corpus-probe.client.router/cleared?). A
+  page with no answer stays as it is."
+  [{:keys [result error] :as state}]
   ;; the address goes back too, onto the history rather than over it: it
-  ;; cited a result no longer on screen, and a field emptied by accident
+  ;; cited a result no longer on screen, and a form cleared by accident
   ;; has a way back
-  ;; every keystroke into the state, so the answer can tell when the
-  ;; form has moved on from what ran; the field keeps what was typed,
-  ;; since Replicant leaves an unchanged value alone
-  (let [state (assoc-in state [:params :q] text)]
-    (if (and (or result error) (nil? (query/of (:params state))))
-      (let [state (apply dissoc state answer-keys)]
-        {:state   state
-         ;; the title named the answer too, and this is the one page the
-         ;; client arrives at without the server having titled it
-         :effects [[:set-title (views/title state)]
-                   [:push-url url/search]
-                   [:sync-url]]})
-      {:state state})))
+  (if (or result error)
+    (let [state (apply dissoc state answer-keys)]
+      {:state   state
+       ;; the title named the answer too, and this is the one page the
+       ;; client arrives at without the server having titled it
+       :effects [[:set-title (views/title state)]
+                 [:push-url url/search]
+                 [:sync-url]
+                 ;; the field, not the button they pressed, which only
+                 ;; changes its word: a whole answer goes, and a focus is
+                 ;; heard where a live region that empties is not. The
+                 ;; extended form has no field and the effect finds none.
+                 ;; TODO: unconfirmed on a phone. Does this raise the
+                 ;; on-screen keyboard over the guide that just arrived?
+                 ;; The step runs inside the fold's view transition, so
+                 ;; the press may no longer count as the gesture that
+                 ;; asked for it
+                 [:focus search-views/query-id true]]})
+    {:state state}))
+
+(defn apply-view
+  "The `state` with view control `k` set to `v`, and the form submitted
+  with it where it asks something: a control beside an answer must not
+  submit a form that asks nothing and be taken for a Clear (see
+  `clear-answer`). The choice is kept either way, and travels with the
+  next search."
+  [state k v]
+  ;; the control's own value first: the form is submitted once it has
+  ;; held still, and a render landing in between draws every control
+  ;; from the state, so a choice the state does not hold is drawn away
+  (let [state (assoc-in state [:params (keyword k)] v)]
+    (cond-> {:state state}
+      (search-views/form-query (:params state) (:tokens state))
+      (assoc :effects [[:apply-view url/form-id]]))))
 
 (defn forget-searches
   "The `state` with the searches it remembers forgotten, and the empty
@@ -724,16 +753,13 @@
       :add-condition        (add-condition state x)
       :remove-condition     (let [[i id] x] (remove-condition state i id))
       :set-query            (set-query state x)
+      :clear-answer         (clear-answer state)
       :submit-on-enter      (submit-on-enter state x y z)
       :set-condition        {:state (set-condition state x y)}
       :set-token            {:state (set-token state x y)}
       ;; stores what a control holds, without submitting the form
       :set-param            {:state (assoc-in state [:params (keyword x)] y)}
-      ;; the control's own value first: the form is submitted once it has
-      ;; held still, and a render landing in between draws every control
-      ;; from the state, so a choice the state does not hold is drawn away
-      :apply-view           {:state   (assoc-in state [:params (keyword x)] y)
-                             :effects [[:apply-view url/form-id]]}
+      :apply-view           (apply-view state x y)
       :toggle-corpora       (toggle-corpora state x)
       :toggle-filter-values (let [[attr values] x]
                               {:state (toggle-filter-values state attr

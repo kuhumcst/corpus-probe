@@ -360,24 +360,30 @@
 (defn submit-button
   "The button submitting the search form in `ui`, saying what pressing
   it does, since a text shaped like CQP runs as CQP and the form says so
-  nowhere else. It also carries the form's one constraint HTML cannot
-  state, that a search needs a corpus in `params`; without a client the
-  server refuses instead."
+  nowhere else. A `clear?` button asks nothing and takes the answer away
+  instead (see `search-form`). Otherwise it carries the form's one
+  constraint HTML cannot state, that a search needs a corpus in
+  `params`; without a client the server refuses instead."
   ;; the bubble hangs under the invalid control, and on a box in the
   ;; chooser it would cover the boxes under it; the chooser opens as the
   ;; browser reports it, so the corpora to tick are in view.
   ;; TODO: a screen reader hears the search button called invalid for the
   ;; chooser's constraint. Weighed 2026-09-14: a native anchor inside the
   ;; chooser that covers nothing would settle this
-  [ui params]
+  ;; TODO: a Clear wears the search button's look in the search button's
+  ;; place. Is the press that takes the answer away worth a quieter one?
+  [ui params clear?]
   [:button {:type                "submit"
+            ;; clearing searches nothing, so no corpus can hold it back
             :replicant/on-render [:set-validity
-                                  (when (empty? (:corpus params))
+                                  (when (and (not clear?)
+                                             (empty? (:corpus params)))
                                     (i18n/tr ui "Select at least one corpus"))]
             :on                  {:invalid [:engage :corpora]}}
-   (if (= "cqp" (mode/mode params))
-     (i18n/trx ui "button" "Run as CQP")
-     (i18n/trx ui "button" "Search"))])
+   (cond
+     clear?                       (i18n/trx ui "button" "Clear")
+     (= "cqp" (mode/mode params)) (i18n/trx ui "button" "Run as CQP")
+     :else                        (i18n/trx ui "button" "Search"))])
 
 (defn fold-state
   "How the search options of `state` stand: `:open` or `:shut` under
@@ -422,7 +428,9 @@
   once there are hits (see `rail-fold`).
 
   The query is required while the page has no `:result` and no `:error`
-  to clear; with one, an empty field is how the reader starts over."
+  to clear; with one, a form that asks nothing makes the button a Clear
+  that starts the reader over (see
+  dk.cst.corpus-probe.client.actions/clear-answer)."
   [{:keys [ui filter-controls search-attrs params tokens value-lists
            switch client? lists filters-pending? result error]
     :as state}
@@ -431,7 +439,8 @@
         {:keys [values]} lists
         extended? (= "extended" (mode/form params))
         required? (not (or result error))
-        button    (submit-button ui params)
+        clear?    (and (not required?) (nil? (form-query params tokens)))
+        button    (submit-button ui params clear?)
         held      (into (filter-views/filter-pairs (:selected filter-controls))
                         (:unticked values))]
     ;; HTML's own landmark for a search form, so a screen reader can jump
@@ -498,7 +507,7 @@
   "recent-searches")
 
 (def recent-box-id
-  "The id of the history's box, a landing: Clear goes quiet as it is
+  "The id of the history's box, a landing: Clear list goes quiet as it is
   pressed (see dk.cst.corpus-probe.client.focus/rescue!)."
   "recent")
 
@@ -549,8 +558,7 @@
    ;; in the column the result's tabs take, given up as soon as there are
    ;; hits; kept while empty, so a reader is told the searches are being
    ;; kept before there are any.
-   ;; TODO: emptying the field is the way back to the history, and is said
-   ;; nowhere; and is one entry worth a control of its own?
+   ;; TODO: is one entry worth a control of its own?
    [:nav.recent.box (merge (widgets/landing-attrs recent-box-id)
                            widgets/arrival-attrs
                            (widgets/busy-attrs pending?)
@@ -561,11 +569,15 @@
       [:p.recent-empty (i18n/tr ui "Your searches appear here.")])
     [:p.recent-clear
      ;; nothing to forget is a button that says so by going quiet, as the
-     ;; preferences box's do
+     ;; preferences box's do.
+     ;; It names the list: a search that found nothing leaves this beside
+     ;; the search button, which is a Clear while the field is empty (see
+     ;; `submit-button`), and two buttons of one word are one word in a
+     ;; reader's list of them
      [:button {:type     "button"
                :disabled (empty? entries)
                :on       {:click [:forget-searches]}}
-      (i18n/trx ui "button" "Clear")]]]))
+      (i18n/trx ui "button" "Clear list")]]]))
 
 (defn recent-announcement
   "The live region saying the history was cleared, in `ui`, when that is

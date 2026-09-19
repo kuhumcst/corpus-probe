@@ -82,7 +82,8 @@
 (defn select
   "A select named `id` over `options` (see `option`), inside its `label`
   unless not `visible?`, bound by `form-id` to the form it submits with
-  and applying itself as it is changed."
+  and applying itself as it is changed (see
+  dk.cst.corpus-probe.client.actions/apply-view)."
   ([form-id id label options]
    (select form-id id label options true))
   ([form-id id label options visible?]

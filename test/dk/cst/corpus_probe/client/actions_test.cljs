@@ -544,42 +544,48 @@
 
 (deftest set-query-test
   (let [answered (actions/data->state answered "http://localhost/search?q=hund")]
-    (testing "every keystroke goes into the state, the answer standing
-              while the field still asks something"
-      (let [{state' :state :keys [effects]} (actions/set-query answered "hun")]
-        (is (= "hun" (get-in state' [:params :q])))
-        (is (some? (:result state')))
-        (is (nil? effects))))
-    (testing "emptying the field is starting over: the answer goes, and
-              the address that cited it goes with it, onto the history"
-      (doseq [blank ["" "  " "\n"]]
-        (let [{state' :state :keys [effects]} (actions/set-query answered blank)]
-          (is (= blank (get-in state' [:params :q])) blank)
-          (is (not-any? state' actions/answer-keys) blank)
-          ;; the title named the answer too, and no server titled this
-          (is (= [[:set-title "Search · corpus-probe"]
-                  [:push-url "/search"]
-                  [:sync-url]]
-                 effects)
-              blank))))
+    (testing "every keystroke goes into the state, and the answer stands
+              until the reader submits the empty field"
+      (doseq [text ["hun" "" "  " "\n"]]
+        (let [{state' :state :keys [effects]} (actions/set-query answered text)]
+          (is (= text (get-in state' [:params :q])) text)
+          (is (some? (:result state')) text)
+          (is (nil? effects) text))))))
+
+(deftest clear-answer-test
+  (let [answered (-> (actions/data->state answered
+                                          "http://localhost/search?q=hund")
+                     (assoc-in [:params :q] ""))]
+    (testing "a submit that asks nothing starts the reader over: the
+              answer goes, and the address that cited it goes with it,
+              onto the history"
+      (let [{state' :state :keys [effects]} (actions/clear-answer answered)]
+        (is (not-any? state' actions/answer-keys))
+        ;; the title named the answer too, and no server titled this;
+        ;; and the reader is put in the field they are about to type in,
+        ;; since a whole answer goes and nothing else would be heard
+        (is (= [[:set-title "Search · corpus-probe"]
+                [:push-url "/search"]
+                [:sync-url]
+                [:focus "q" true]]
+               effects))))
     (testing "and the form is left as it stands, so the corpora a reader
               chose are still chosen"
-      (is (= ["PROBE"] (get-in (:state (actions/set-query answered ""))
+      (is (= ["PROBE"] (get-in (:state (actions/clear-answer answered))
                                [:params :corpus]))))
-    (testing "a field emptied where nothing was answered does nothing but
-              hold what was typed"
+    (testing "a page with no answer has nothing to clear"
       (let [{state' :state :keys [effects]}
-            (actions/set-query (dissoc answered :result :error) "")]
+            (actions/clear-answer (dissoc answered :result :error))]
         (is (nil? effects))
         (is (= "" (get-in state' [:params :q])))))))
 
 (deftest cleared-page-test
-  (testing "what a cleared field leaves on the page: the guide and the
+  (testing "what a cleared form leaves on the page: the guide and the
             searches made lately, where the answer stood"
     (let [state (-> (assoc answered :help [[:p "Type a word."]])
                     (actions/data->state "http://localhost/search?q=hund")
                     (assoc :recent [{:params "q=kat"}])
-                    (actions/set-query "")
+                    (actions/clear-answer)
                     (:state))
           html  (deep (views/search-page state))]
       (is (not (some #{:section.result} html)))
@@ -636,6 +642,13 @@
       (is (= [[:apply-view url/form-id]] (:effects applied))))
     (is (= false (get-in (actions/act state [:apply-view "docs" false])
                          [:state :params :docs])))
+    ;; a form that asks nothing is a clear wherever it is submitted from,
+    ;; so a control beside the answer keeps the choice and waits
+    (let [emptied (assoc-in state [:params :q] "")
+          applied (actions/act emptied [:apply-view "sort" "word"])]
+      (is (= "word" (get-in applied [:state :params :sort])))
+      (is (nil? (:effects applied)))
+      (is (some? (get-in applied [:state :result]))))
     ;; the concordance and its card are one pool to leave
     (is (= [[:once-left [concordance/region-id concordance/inspector-id]
              [:inspect nil]]]
@@ -779,9 +792,9 @@
               the bare page, which has no fold yet"
       (is (= :fold (actions/move opened (assoc opened :asked {:q "kat"}))))
       (is (= :fold (actions/move bare shut))))
-    (testing "and the field emptied, which takes the answer the fold
+    (testing "and the form cleared, which takes the answer the fold
               stands over"
-      (is (= :fold (moved shut [:set-query ""]))))
+      (is (= :fold (moved shut [:clear-answer]))))
     (testing "another page or view of the same answer moves nothing, and
               nor does a page of the site with no options at all"
       (is (nil? (actions/move opened (assoc-in opened [:result :page] 2))))

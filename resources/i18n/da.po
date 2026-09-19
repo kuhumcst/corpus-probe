@@ -414,6 +414,9 @@ msgstr "Nulstil"
 msgid "button|Clear"
 msgstr "Ryd"
 
+msgid "button|Clear list"
+msgstr "Ryd listen"
+
 msgid "Recent searches"
 msgstr "Seneste søgninger"
 

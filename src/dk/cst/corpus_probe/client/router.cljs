@@ -170,21 +170,24 @@
        (= (.-origin (js/URL. (.-action form))) js/location.origin)))
 
 (defn cleared?
-  "True when a submit of `form` asks nothing: the reader emptying the
-  field to start over."
+  "True when a submit of `form` asks nothing: the Clear the search
+  button becomes once the field is empty (see
+  dk.cst.corpus-probe.views.search/submit-button)."
   [form]
-  ;; no search runs without a query, so no control beside a result can
-  ;; submit a blank form and be taken for the reader clearing it
+  ;; a control beside a result holds its own submit while the form asks
+  ;; nothing (see dk.cst.corpus-probe.client.actions/apply-view), so the
+  ;; only submit that arrives empty is the reader's own
   (nil? (query/of (form-params form))))
 
 (defn listen!
   "Install the document's listeners, which only dispatch through
   `dispatch!`: a routed link click or submit `[:navigate href true]`, a
-  preference's submit `[:set-preference k v return]`, a change to any
-  control of the search form `[:form-changed params]`, a popstate to
-  another page `[:navigate href false]`, a hashchange `[:set-fragment
-  fragment]`, a resize `[:recentre]` and a press outside the fieldset of
-  any of the lists `ks` `[:leave k true]`."
+  submit that asks nothing `[:clear-answer]`, a preference's submit
+  `[:set-preference k v return]`, a change to any control of the search
+  form `[:form-changed params]`, a popstate to another page `[:navigate
+  href false]`, a hashchange `[:set-fragment fragment]`, a resize
+  `[:recentre]` and a press outside the fieldset of any of the lists
+  `ks` `[:leave k true]`."
   [dispatch! ks]
   (.addEventListener
    js/document "click"
@@ -216,10 +219,12 @@
 
          (routed-submit? form)
          (do (.preventDefault e)
-             (dispatch! [:navigate (if (cleared? form)
-                                     url/search
-                                     (submit-href form))
-                         true]))))))
+             ;; a clear has no page to fetch: the guide it goes back to
+             ;; travelled with the answer (see
+             ;; dk.cst.corpus-probe.client.actions/clear-answer)
+             (dispatch! (if (cleared? form)
+                          [:clear-answer]
+                          [:navigate (submit-href form) true])))))))
   ;; every control of the search form, not only the ones with a handler:
   ;; the matching options have none, so what the form says would reach
   ;; the preferences box only when a search sent it

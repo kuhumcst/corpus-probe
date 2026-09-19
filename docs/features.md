@@ -38,8 +38,8 @@ leaves it as the reader left it. Nothing folds while there are no
 hits, since the boxes are then what the reader needs. With a script,
 the fold is animated: the answer and the rail slide to their new
 places (see Motion). A new search folds it as its answer lands, an
-answer onto the bare page folds it around itself, and emptying the
-field unfolds it as the answer goes.
+answer onto the bare page folds it around itself, and a clear unfolds
+it as the answer goes.
 
 ## Narrow screens
 
@@ -90,6 +90,13 @@ from. The page still scrolls to the results. A search that found
 nothing leaves the query selected when the reader asked from the field
 or its button (see Preferences).
 
+Clear is the one press that puts the reader somewhere else in the form:
+it leaves them in the empty query field, which is where they are going
+next. It has to say something, since a whole answer goes and the
+button they pressed only changes its word, and a focus is heard where a
+live region that empties is not. The extended form has no field, so
+there the reader is left where they were.
+
 Focus is read as well as moved. Focus settling outside the concordance
 and its card closes the card. Focus leaving a chooser for a tab stop
 outside it, or a press elsewhere on the page, puts the list at rest,
@@ -123,7 +130,7 @@ a sort or a view of the same question changes in place. So does every
 page: its main content is keyed by its path, so a corpus page or a
 document comes into focus whole under the masthead's tabs, while the
 search page, one path for every search, changes in place; and so do the
-help and the history when the field is emptied. The card also drops
+help and the history when the form is cleared. The card also drops
 from its token, or slides up from the foot as a sheet, which its own
 arriving and leaving states add.
 
@@ -163,7 +170,7 @@ page itself included.
 
 One move is defined: the search options folding, unfolding, or coming
 and going. Whatever brings it about, a press on their line, an answer
-that folds them as it lands, or the field emptied that takes the answer
+that folds them as it lands, or the clear that takes the answer
 away, the rail and the answer's contents slide to their new places over
 the arrival's length. One cause is not the reader's: where a search
 runs out of time before it finds hits the page says none, and a count
@@ -203,10 +210,15 @@ it and can learn CQP from it.
 
 The field is required while the page holds no result, so the bare form
 reports an empty query rather than searching for nothing. Once there is
-a result, submitting an empty field is how the reader starts over: it
-goes to `/search`, the bare page, which forgets the view, the order and
-the page the result was read in. A search runs only when it asks
-something, in either view.
+a result, an empty field asks nothing, and the button says so: it reads
+**Clear**, and pressing it starts the reader over rather than
+searching. It goes to `/search`, the bare page, which forgets the view,
+the order and the page the result was read in. The same holds of the
+extended form with nothing filled in. Clearing searches nothing, so the
+corpus the search button otherwise asks for is not held against it.
+Once the page is back to its start, the field is required again and the
+button reads **Search**. A search runs only when it asks something, in
+either view.
 
 A simple search matches the surface form. The reader can select another
 positional attribute of the searched corpora, for example lemma. A
@@ -368,6 +380,11 @@ bold, as `cqp` itself shows both anchors. The sample travels with the
 search into the frequency view and the exports. Without a script, the
 controls apply through a button. A browser with a script never shows
 this button.
+
+A control applies by asking the search again, so it waits while the
+form asks nothing: a reader who has emptied the field keeps the choice
+they made, and it travels with their next search rather than clearing
+the answer they are reading.
 
 A search that found nothing, and one that failed everywhere, show no
 table, no downloads, no controls and no switch between the views.
@@ -661,15 +678,14 @@ frequency row both narrow an answer to a question that the history
 holds already. Thus working a control beside a result never writes an
 entry.
 
-Emptying the field puts the page back to that start without a submit:
-the answer goes, the guide and the rail take its place, the address in
-the bar stops citing a result that is no longer on screen and the title
+Clear puts the page back to that start without fetching a page: the
+answer goes, the guide and the rail take its place, the address in the
+bar stops citing a result that is no longer on screen and the title
 stops naming it. The form itself is left as it stands, so the corpora
 the reader chose are still chosen. The address goes onto the history
-rather than over it, so a field emptied by accident has a way back. The
-guide travels with every search page for this, a kilobyte of it: fetching
-it at the moment the field empties would land on whatever the reader
-typed next.
+rather than over it, so a form cleared by accident has a way back.
+The guide travels with every search page for this, a kilobyte of it,
+since there is no page to fetch it with.
 
 The canonical query string of the question is both the entry's link and
 its name. The same question asked again moves to the head of the list
@@ -681,8 +697,11 @@ oldest go when it is longer than that, or when it no longer fits.
 The history is stored in the browser, not in a cookie. No request needs
 it, and a search of a pasted list of words is longer than a cookie may
 be. Thus it needs a script: a reader without one has no rail, as they
-have no inspector. **Clear** forgets the whole list, and forgetting is
-storing nothing, as it is for the settings. The button goes quiet as it
+have no inspector. **Clear list** forgets the whole list, and forgetting
+is storing nothing, as it is for the settings. It names the list because
+a search that found nothing leaves it beside the search button, which
+reads **Clear** while the field is empty, and two buttons of one word
+read as one word in a list of them. The button goes quiet as it
 is pressed, and focus lands on the box (see Focus); a live region says
 what happened, clipped and never seen, as the Preferences box does when
 it stores.

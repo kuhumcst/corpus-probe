@@ -28,6 +28,10 @@ msgid "Glossary"
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views.cljc
+msgid "Loading …"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views.cljc
 msgid "Site"
 msgstr ""
 
@@ -630,6 +634,10 @@ msgid "Select at least one corpus"
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/search.cljc
+msgid "button|Clear"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/search.cljc
 msgid "button|Run as CQP"
 msgstr ""
 
@@ -658,7 +666,7 @@ msgid "Your searches appear here."
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/search.cljc
-msgid "button|Clear"
+msgid "button|Clear list"
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/search.cljc
@@ -711,10 +719,6 @@ msgstr ""
 
 #: src/dk/cst/corpus_probe/views/search/filter.cljc
 msgid "Clear filter"
-msgstr ""
-
-#: src/dk/cst/corpus_probe/views.cljc src/dk/cst/corpus_probe/views/search/filter.cljc
-msgid "Loading …"
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/search/filter.cljc

@@ -291,8 +291,8 @@
                               :headers      {"accept" url/transit-type}}))))]
      (testing "the guide travels with a search that found something, so
                that the client can put the page back to it when the
-               reader empties the field (see
-               dk.cst.corpus-probe.client.actions/set-query)"
+               reader clears the form (see
+               dk.cst.corpus-probe.client.actions/clear-answer)"
        (let [answered (data "q=hund&corpus=PROBE")]
          (is (seq (:result answered)))
          (is (seq (:help answered)))

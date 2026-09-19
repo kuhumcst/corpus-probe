@@ -146,8 +146,8 @@
   (url/canonical (shown-params req) (set selectable)))
 
 (defn cleared?
-  "True when the submitted search `req` asks nothing: the reader
-  emptying the field to start over (see
+  "True when the submitted search `req` asks nothing: the Clear the
+  search button becomes once the field is empty (see
   dk.cst.corpus-probe.client.router/cleared?, the same rule with a
   script)."
   [{:keys [params]}]
@@ -473,9 +473,9 @@
             ;; the masthead's navigation takes the citation; the client
             ;; does not read it. The help travels whatever the search
             ;; found, a kilobyte of it: the client puts the page back to
-            ;; the guide the moment the reader empties the field, and
-            ;; fetching it then would land on what they type next (see
-            ;; dk.cst.corpus-probe.client.actions/set-query)
+            ;; the guide when the reader clears the form, without a
+            ;; page to fetch for it (see
+            ;; dk.cst.corpus-probe.client.actions/clear-answer)
             data (assoc (dissoc data :cited)
                         :route :search
                         :help (docs/document

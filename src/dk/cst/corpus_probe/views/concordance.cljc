@@ -505,7 +505,8 @@
   [{:keys [ui sort-modes asked params result client?]}]
   ;; what the form holds over what the result answers: a control the
   ;; reader has changed holds their choice until the search they asked
-  ;; for arrives with it (see dk.cst.corpus-probe.client.actions/act)
+  ;; for arrives with it (see
+  ;; dk.cst.corpus-probe.client.actions/apply-view)
   (when (and (result/searched? result) (result/found? result))
     ;; the row reads as one sentence, in the order the work is done:
     ;; sample all per corpus · sort by occurrence · context 5 words
