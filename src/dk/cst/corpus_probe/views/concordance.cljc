@@ -291,14 +291,18 @@
      (map (partial hit-row opts) hits)]))
 
 (defn context-heading
-  "A context column's heading: `arrow`, which points away from the match
-  and into the context, with `s` naming the column to a reader who hears
-  the table and to a pointer resting on the arrow."
+  "A context column's heading: a run of `arrow`s pointing away from the
+  match and into the context, with `s` naming the column to a reader who
+  hears the table and to a pointer resting on them."
   [arrow s]
-  ;; the title is hidden with the arrow that carries it, so the name is
-  ;; spoken the once, as the heading, and never again as a description
+  ;; the title is hidden with the arrows, so the name is spoken once, as
+  ;; the heading. A run of them rather than one, or the heading reads as
+  ;; a link to the next page; the sheet fades and orders them
   (list [:span.spoken s]
-        [:span.kwic-arrow {:aria-hidden "true" :title s} arrow]))
+        [:span.kwic-arrow {:aria-hidden "true" :title s}
+         [:span arrow]
+         [:span.fade-1 arrow]
+         [:span.fade-2 arrow]]))
 
 (defn column-headers
   "The concordance's column headings in `ui`."

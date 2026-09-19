@@ -262,17 +262,20 @@
               [:tr
                [:th.kwic-cpos {:scope "col"}
                 [:abbr {:title "corpus position"} "cpos"]]
-               ;; an arrow heads each context, its name spoken: the words
-               ;; take more room than a heading here has
+               ;; arrows head each context, their name spoken: the words
+               ;; take more room than a heading here has. The first
+               ;; stands against the match, the rest fall away from it
                [:th.kwic-left {:scope "col"}
                 (list [:span.spoken "left context"]
                       [:span.kwic-arrow {:aria-hidden "true"
-                                         :title     "left context"} "←"])]
+                                         :title     "left context"}
+                       [:span "←"] [:span.fade-1 "←"] [:span.fade-2 "←"]])]
                [:th.kwic-match {:scope "col"} "match"]
                [:th.kwic-right {:scope "col"}
                 (list [:span.spoken "right context"]
                       [:span.kwic-arrow {:aria-hidden "true"
-                                         :title     "right context"} "→"])]]]
+                                         :title     "right context"}
+                       [:span "→"] [:span.fade-1 "→"] [:span.fade-2 "→"]])]]]
              (nth table 2))))
     (testing "a heading carries its column's class, so a rule about the
               column reaches the heading too"
