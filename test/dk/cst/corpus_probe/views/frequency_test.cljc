@@ -54,7 +54,7 @@
              (second html))))
     (testing "its heading is the answer, and under it where the hits are;
               how the table counted is its own controls' to say"
-      (let [[tag [_ h1 reach] controls] (nth html 2)]
+      (let [[tag [_ h1 reach] controls] (nth (nth html 2) 1)]
         (is (= :header.result-head tag))
         (is (= "5 hits" (text (drop 2 h1))))
         (is (= :details.caveats (first reach)))

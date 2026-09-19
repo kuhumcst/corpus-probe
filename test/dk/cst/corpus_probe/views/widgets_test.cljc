@@ -31,9 +31,13 @@
   (testing "a live region, rendered whether or not it has anything to say"
     (is (= [:div.status {:role "status"} nil] (widgets/status nil)))
     (is (= [:div.status {:role "status"} [:p "x"]] (widgets/status [:p "x"]))))
-  (testing "placed by a class of its own where a layout wants it"
+  (testing "placed by a class of its own where a layout wants it, or by
+            several, which are a collection and never one string"
     (is (= [:div.status {:class "navigation-status" :role "status"} nil]
-           (widgets/status "navigation-status" nil)))))
+           (widgets/status "navigation-status" nil)))
+    (is (= [:div.status {:class ["spoken" "navigation-status"] :role "status"}
+            nil]
+           (widgets/status ["spoken" "navigation-status"] nil)))))
 
 (deftest link-row-test
   (let [html (widgets/link-row [[:a "/a" "A"] [:b "/b" "B"]] :b)]

@@ -80,7 +80,9 @@
   style.css, Loading)."
   [ui pending?]
   (widgets/status
-   "spoken navigation-status"
+   ;; two classes, as a collection: Replicant reads a space in a class
+   ;; string as one class named with a space in it, and says so
+   ["spoken" "navigation-status"]
    (when pending? [:p (i18n/tr ui "Loading …")])))
 
 (defn site-header

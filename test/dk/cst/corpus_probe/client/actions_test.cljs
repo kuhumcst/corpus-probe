@@ -744,6 +744,17 @@
                                     [:toggle-rail true])))))
     (testing "shutting them records nothing"
       (is (nil? (:rail-open (:state (actions/act opened [:toggle-rail false]))))))
+    (testing "a toggle the state already says is nothing: the client's own
+              render makes the disclosure report one"
+      (is (= {:state opened} (actions/act opened [:toggle-rail true]))))
+    (testing "a press folds as a toggle does, and is kept from the
+              browser, which would fold the page before its picture"
+      (is (= [[:prevent-default] [:recentre]]
+             (:effects (actions/act (assoc state :asked asked)
+                                    [:fold-rail true]))))
+      (is (= (recent/asked asked)
+             (:rail-open (:state (actions/act (assoc state :asked asked)
+                                              [:fold-rail true]))))))
     (testing "the question is carried across a page arriving, which is
               what keeps them open in the other view or language of the
               same answer; the view decides whether it is still the one"
@@ -752,3 +763,28 @@
                                   opened data
                                   "http://localhost/search?q=hund&corpus=PROBE"
                                   true))))))))
+
+(deftest move-test
+  (let [asked  {:q "hund" :corpus ["PROBE"]}
+        shut   (assoc state :route :search :asked asked
+                      :result {:counts [{:corpus "PROBE" :size 3}]})
+        opened (assoc shut :rail-open (recent/asked asked))
+        bare   (apply dissoc shut actions/answer-keys)
+        moved  (fn [state action]
+                 (actions/move state (:state (actions/act state action))))]
+    (testing "a press on the options' line folds them, either way"
+      (is (= :fold (moved shut [:fold-rail true])))
+      (is (= :fold (moved opened [:fold-rail false]))))
+    (testing "so does an answer to another question, and one landing on
+              the bare page, which has no fold yet"
+      (is (= :fold (actions/move opened (assoc opened :asked {:q "kat"}))))
+      (is (= :fold (actions/move bare shut))))
+    (testing "and the field emptied, which takes the answer the fold
+              stands over"
+      (is (= :fold (moved shut [:set-query ""]))))
+    (testing "another page or view of the same answer moves nothing, and
+              nor does a page of the site with no options at all"
+      (is (nil? (actions/move opened (assoc-in opened [:result :page] 2))))
+      (is (nil? (actions/move opened (assoc-in opened [:asked :view]
+                                               "frequencies"))))
+      (is (nil? (actions/move bare (assoc bare :route :corpora)))))))

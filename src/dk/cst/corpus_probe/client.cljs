@@ -83,7 +83,9 @@
   "Answer `action` for the Replicant dispatch `data` of the event or
   life-cycle hook that raised it, or for none, as the listeners and the
   fetches raise theirs. A control the action takes from under the reader
-  hands focus to its box (see dk.cst.corpus-probe.client.focus/rescue!)."
+  hands focus to its box (see dk.cst.corpus-probe.client.focus/rescue!),
+  and a step that moves part of the page whole renders inside a view
+  transition (see dk.cst.corpus-probe.client.actions/moves)."
   ([action]
    (dispatch! {} action))
   ([{:replicant/keys [trigger] :as data} action]
@@ -96,14 +98,29 @@
            refuge (focus/refuge)]
        (when-let [{after :state :keys [effects]}
                   (actions/act before (interpolate data action))]
-         (when-not (identical? before after)
-           (reset! state after))
-         ;; in the same call, once the watch has rendered: a
-         ;; prevent-default reaches the event before the handler returns
-         ;; and a focus finds the node the render has just made
-         (effects/perform! dispatch! (assoc data :state after) effects)
-         ;; last, so that an effect that put the reader somewhere stands
-         (focus/rescue! refuge))))))
+         (let [move  (actions/move before after)
+               stop? (comp #{:prevent-default} first)
+               ;; the views fade nothing while the browser pictures the
+               ;; render: mid-fade is the wrong picture
+               after (cond-> after move (assoc :move move))
+               step! (fn []
+                       (when-not (identical? before after)
+                         (reset! state after))
+                       ;; once the watch has rendered, so that a focus
+                       ;; finds the node the render has made
+                       (effects/perform! dispatch! (assoc data :state after)
+                                         (remove stop? effects))
+                       ;; last, so that an effect that put the reader
+                       ;; somewhere stands
+                       (focus/rescue! refuge))]
+           ;; first and in this call: the browser answers the event until
+           ;; the handler returns, while a step that moves waits for the
+           ;; frame of its picture. A change landing in that frame is
+           ;; lost when the step lands, which is what a picture costs
+           (effects/perform! dispatch! data (filter stop? effects))
+           (if move
+             (effects/view-transition! move step!)
+             (step!))))))))
 
 (defn ^:dev/after-load reload!
   "Render again once shadow-cljs has swapped in recompiled code: the

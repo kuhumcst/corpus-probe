@@ -338,7 +338,7 @@ select { appearance: none; padding-inline-end: 1.6rem;
    TODO: the blur is the costliest effect the sheet has, on a whole page
    or a wide table above all; look at it again with the KU data, and dim
    those two alone if it stutters */
-[aria-busy="true"]:not(.result), .result[aria-busy="true"] > * {
+[aria-busy="true"]:not(.result), .result[aria-busy="true"] > .result-body {
   opacity: var(--dim); filter: blur(var(--blur)); }
 /* Loading: a navigation in flight fills the masthead's live region (see
    dk.cst.corpus-probe.views/navigation-status); the pointer says so */
@@ -720,11 +720,7 @@ pre { font-size: 0.875rem; padding: 0.75rem 1rem;
 /* The result */
 
 /* the line the view tabs stand on is this section's own top edge */
-/* the step down to the heading is a rail box's legend deep, so that the
-   heading's own words start where the border of the box beside them is
-   drawn: a legend sits inside its fieldset's border box and pushes that
-   border down by its own height, which no bounding box reports */
-.result { border-block-start: 1px solid var(--rule); padding-block-start: 2rem; }
+.result { border-block-start: 1px solid var(--rule); }
 
 /* nothing found: prose, and as wide as prose. No tab stands on the line
    here, so it is hidden rather than removed: its width is part of the
@@ -732,8 +728,18 @@ pre { font-size: 0.875rem; padding: 0.75rem 1rem;
 .result:not(:has(table)) { max-inline-size: 40rem;
                            border-block-start-color: transparent; }
 
-.result > * { margin-block: 0; }
-.result > * + * { margin-block-start: 1rem; }
+/* the contents stand in one element under the line, which is what the
+   fold's view transition pictures (see Motion); the line stays with the
+   box. The step down to the heading is this element's own, not the
+   section's, so that the picture starts at the line, where the help it
+   replaces starts, and travels sideways rather than at an angle. The
+   step is a rail box's legend deep, so that the heading's own words
+   start where the border of the box beside them is drawn: a legend sits
+   inside its fieldset's border box and pushes that border down by its
+   own height, which no bounding box reports */
+.result-body { padding-block-start: 2rem; }
+.result-body > * { margin-block: 0; }
+.result-body > * + * { margin-block-start: 1rem; }
 
 /* The count, the sign and the controls share a row, with a rule before
    the controls; the disclosure's content gets a row of its own under
@@ -765,8 +771,8 @@ pre { font-size: 0.875rem; padding: 0.75rem 1rem;
 .result-head :is(p, summary) { color: var(--tx-2); }
 /* the note on which hits these are, muted like the reach line and
    centred over the table */
-.result > .subset { color: var(--tx-2); text-align: center; }
-.result > .downloads { text-align: center; }
+.result-body > .subset { color: var(--tx-2); text-align: center; }
+.result-body > .downloads { text-align: center; }
 
 /* Only a phone takes the two apart, and the rule goes with the gap it
    stood in. No width above that earns a rule of its own: the head is at
@@ -1182,6 +1188,10 @@ body:has(.inspector-text[open]) { --sheet-block-size: 45vh; }
    What a disclosure opens arrives too; what it shuts goes at once.
    A state eases over the quick length, and busy contents fade out to
    the look and back. A cursor step snaps.
+   What moves whole, the browser pictures and slides, in a view
+   transition the client runs for a render that makes such a move. Each
+   move has its own rules at the foot, under its own name; there is one
+   so far, the search options folding, unfolding, or coming and going.
    Scrolls are the client's (see
    dk.cst.corpus-probe.client.effects/centre-match!).
 
@@ -1192,11 +1202,12 @@ body:has(.inspector-text[open]) { --sheet-block-size: 45vh; }
   :root { --length: var(--arrive); --curve: var(--easing); }
   /* going is quick and speeds away: leaving, and going busy. The return
      from busy is an arrival */
-  .leaving, [aria-busy="true"]:not(.result), .result[aria-busy="true"] > * {
+  .leaving, [aria-busy="true"]:not(.result),
+  .result[aria-busy="true"] > .result-body {
     --length: var(--quick); --curve: var(--easing-away); }
   /* what arrives, busy contents and what a disclosure opens. With no
      specificity, so that an element's own rule wins, as the card's does */
-  :where([data-arrival], .result > *, .chooser-group > details) {
+  :where([data-arrival], .result-body, .chooser-group > details) {
     transition: opacity var(--length) var(--curve),
                 filter var(--length) var(--curve); }
   ::details-content { transition: opacity var(--length) var(--curve),
@@ -1239,6 +1250,47 @@ body:has(.inspector-text[open]) { --sheet-block-size: 45vh; }
     .kwic button.token { outline: var(--cursor-reach) solid transparent;
                          outline-offset: 0; }
   }
+  /* What moves whole, the browser pictures and slides. The client marks
+     the document with the move's name before the first picture is taken
+     (see dk.cst.corpus-probe.client.actions/moves), so each move's rules
+     stand under its own mark. A rule there must not change how the page
+     looks, being read while that picture is taken. What no move names
+     stays live, the page included */
+  :root { view-transition-name: none; }
+  /* or the page would be dead for the length of it */
+  ::view-transition { pointer-events: none; }
+  /* the browser moving, never the sheet: an arrival's length always */
+  ::view-transition-group(*) { animation-duration: var(--arrive);
+                               animation-timing-function: var(--easing); }
+  /* the moving box clips its pictures rather than stretching them: a
+     table reflowing between two shapes looks wrong */
+  ::view-transition-old(*), ::view-transition-new(*) {
+    block-size: 100%; object-fit: none; object-position: top left; }
+  /* or an arrival is pictured mid-fade. Departures stand down in the
+     client (see dk.cst.corpus-probe.views.concordance/concordance-section):
+     no rule here takes back the renderer's hold on a leaving element */
+  [data-view-transition] .arriving { opacity: 1; filter: none; }
+
+  /* fold: the search options folding, unfolding, or coming and going.
+     The bare rail carries the rail's name and the help the answer's,
+     neither pair on the page at once. The answer's box is left out, so
+     the line the tabs stand on stays live */
+  [data-view-transition="fold"] .rail-fold,
+  [data-view-transition="fold"] .rail:not(.rail-fold .rail) {
+    view-transition-name: rail; }
+  [data-view-transition="fold"] .result-body,
+  [data-view-transition="fold"] .search-page > .help {
+    view-transition-name: answer; }
+  /* a name makes a stacking context: raised as the card is, so the card
+     keeps standing above the tabs */
+  [data-view-transition="fold"] .result-body { position: relative;
+                                               z-index: 2; }
+  [data-view-transition="fold"] .search-page > .recent {
+    view-transition-name: history; }
+  /* the browser is moving these: the sheet holds still */
+  [data-view-transition="fold"] .rail-fold::details-content,
+  [data-view-transition="fold"] .rail-fold > summary::before {
+    transition: none; }
 }
 
 /* Frequency and corpus tables */

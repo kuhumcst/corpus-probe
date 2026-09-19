@@ -379,10 +379,23 @@
   in either view, on any page of it or in the other language, and fold
   on a new search (see dk.cst.corpus-probe.views.search/rail-fold). The
   concordance is recentred, since the fold changes its width as a
-  window edge does."
+  window edge does; nothing, where the state says so already."
   [state open?]
-  {:state   (assoc state :rail-open (when open? (recent/asked (:asked state))))
-   :effects [[:recentre]]})
+  ;; the disclosure reports a toggle the client's own render made too
+  (let [rail-open (when open? (recent/asked (:asked state)))]
+    (if (= rail-open (:rail-open state))
+      {:state state}
+      {:state   (assoc state :rail-open rail-open)
+       :effects [[:recentre]]})))
+
+(defn fold-rail
+  "The `state` with the search options `open?`, as `toggle-rail`, for a
+  press on their line: the press is the client's own, since a
+  disclosure flips before its toggle event reaches anything, and a page
+  the browser has already changed is one whose picture is taken too late
+  (see dk.cst.corpus-probe.client/dispatch!)."
+  [state open?]
+  (update (toggle-rail state open?) :effects #(into [[:prevent-default]] %)))
 
 (defn clear-fields
   "Take the pattern and the range of `attr` out of `state`, which empties
@@ -673,6 +686,25 @@
                              (:effects arrived))
                 push? (into [[:push-url cited]]))}))
 
+(def moves
+  "What a step can move whole, by the name the stylesheet knows it by:
+  each asks whether the step from one state to the next made that move
+  (see style.css, Motion). To add one, add its question here and its
+  rules to the block."
+  {;; the search options folding, unfolding, or coming and going
+   ;; TODO: a count landing after a search that ran out of time can find
+   ;; hits where the page found none, and moves the page under a reader
+   ;; who did nothing. Leave it, or picture only a step they began?
+   :fold (fn [state state']
+           (not= (search-views/fold-state state)
+                 (search-views/fold-state state')))})
+
+(defn move
+  "What the step from `state` to `state'` moves whole, by name; nil for
+  a step that moves nothing (see `moves`)."
+  [state state']
+  (some (fn [[name moved?]] (when (moved? state state') name)) moves))
+
 (defn act
   "The state to keep and the effects to run, `{:state state' :effects
   [...]}`, for `action` on `state`: `[kind & args]`, a view's action with
@@ -682,8 +714,9 @@
   [state [kind x y z]]
   ;; an announcement belongs to the act, not to the state it left: taking
   ;; it away here empties the live region on the reader's next move, so
-  ;; the same thing said twice is heard twice
-  (let [state (dissoc state :announcement)]
+  ;; the same thing said twice is heard twice. A move belongs to the one
+  ;; render the browser pictures, and goes the same way
+  (let [state (dissoc state :announcement :move)]
     (case kind
       :set-mode             {:state (switch-mode state x y)}
       :add-token            (add-token state)
@@ -711,6 +744,7 @@
       :engage               (refreshed x (lists/engage state x))
       :toggle-open          (refreshed x (lists/toggle-open state x y z))
       :toggle-rail          (toggle-rail state x)
+      :fold-rail            (fold-rail state x)
       ;; whether the card shows the text's attributes, kept from token
       ;; to token so that stepping the cursor does not shut it again
       :toggle-text          {:state (assoc state :text-open x)}

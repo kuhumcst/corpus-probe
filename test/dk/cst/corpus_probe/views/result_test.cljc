@@ -488,9 +488,13 @@
       (is (= "true" (:aria-busy (second (result/results-region
                                          (assoc state :pending? true)
                                          "6 hits" nil nil))))))
+    (testing "its contents stand in one element under the line the tabs
+              stand on, which is what the fold's transition pictures"
+      (is (= 3 (count html)))
+      (is (= :div.result-body (first (nth html 2)))))
     (testing "its head holds the answer, the heading and how far the
               search reached, and beside it the controls over that answer"
-      (let [[tag answer controls] (nth html 2)
+      (let [[tag answer controls] (nth (nth html 2) 1)
             [_ h1 reach] answer]
         (is (= :header.result-head tag))
         (is (= :div.answer (first answer)))
@@ -505,7 +509,7 @@
               headed as errors of their own"
       (is (not (some #{[:h2 "CQP error"]} (deep html))))
       (is (some #{:details.caveats} (deep html)))
-      (is (= [:p "body"] (last html))))
+      (is (= [:p "body"] (last (nth html 2)))))
     (testing "a result still being counted is headed by the hits so far,
               and no live region stands in the region to say so"
       (let [counting (assoc example-result :pages nil :remaining ["X" "Y"])]

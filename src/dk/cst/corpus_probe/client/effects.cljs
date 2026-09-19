@@ -384,6 +384,26 @@
                                     "data-settled" "")
                      (watch-motion! dispatch!))))
 
+(defn view-transition!
+  "Run `render!` inside a view transition, the document wearing `move`'s
+  name as `data-view-transition` from before the first picture is taken,
+  so the move's rules stand in both (see style.css, Motion). At once
+  where the browser pictures nothing, or motion is off."
+  [move render!]
+  (let [root (.-documentElement js/document)]
+    (if (and (.-startViewTransition js/document) (motion?))
+      (do
+        (.setAttribute root "data-view-transition" (name move))
+        (let [transition (.startViewTransition js/document render!)]
+          ;; skipped, in a hidden tab say, it is never ready: no failure,
+          ;; and the browser reports one unless it is listened for
+          (.catch (.-ready transition) (fn [_]))
+          (-> (.-finished transition)
+              (.finally #(.removeAttribute root "data-view-transition"))
+              ;; what is left is the render's own failure
+              (.catch #(js/console.error %)))))
+      (render!))))
+
 (defn resubmit!
   "Submit the form with `form-id` again, as it now stands, at once: what
   a reader asks for themselves, by pressing Enter, is not waited on.

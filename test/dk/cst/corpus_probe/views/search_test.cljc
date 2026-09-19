@@ -251,7 +251,23 @@
                                :rail-open (recent/asked asked)}))))
       (is (false? (:open (fold {:result    hits
                                 :asked     {:q "kat" :corpus ["PROBE"]}
-                                :rail-open (recent/asked asked)})))))))
+                                :rail-open (recent/asked asked)})))))
+    (testing "the press is the client's, asking for the other state, so
+              that the browser can animate the fold; the toggle still
+              listens for a fold the browser makes on its own"
+      (let [summary (fn [state]
+                      (->> (deep (form (merge {:ui en :folders [] :params asked}
+                                              state)))
+                           (some #(when (and (vector? %)
+                                             (= :details.rail-fold (first %)))
+                                    (nth % 2)))))]
+        (is (= [:summary {:on {:click [:fold-rail true]}} "Search options"]
+               (summary {:result hits :asked asked})))
+        (is (= [:summary {:on {:click [:fold-rail false]}} "Hide"]
+               (summary {:result    hits :asked asked
+                         :rail-open (recent/asked asked)})))
+        (is (= [:toggle-rail :event.target/open]
+               (get-in (fold {:result hits :asked asked}) [:on :toggle])))))))
 
 (deftest change-mode-button-test
   (let [button (fn [state]

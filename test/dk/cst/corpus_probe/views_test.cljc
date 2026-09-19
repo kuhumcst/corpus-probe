@@ -327,7 +327,8 @@
       (is (some #{:nav.tabs} (deep (views/site-header en "/" nav)))))
     (testing "and holds the region saying a page is on its way, spoken and
               never seen, empty until one is"
-      (is (= [:div.status {:class "spoken navigation-status" :role "status"}
+      (is (= [:div.status {:class ["spoken" "navigation-status"]
+                           :role  "status"}
               nil]
              (last (views/site-header en "/" nav))))
       (is (some #{"Loading …"} (deep (views/site-header en "/" nav true))))

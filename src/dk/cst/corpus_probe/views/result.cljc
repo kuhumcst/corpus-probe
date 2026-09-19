@@ -483,10 +483,11 @@
 (defn results-region
   "The outcome of a search in `state` under `heading`, as a region named
   by that heading, a landing, so a search can land on it, and keyed by
-  the question `:asked`: a header of the heading, where the hits are and
-  the `controls` over them; the errors; then `body`, the view's own
-  content. The switch between the views stands on the query line
-  instead (see dk.cst.corpus-probe.views/search-page)."
+  the question `:asked`: in one element under its line, a header of the
+  heading, where the hits are and the `controls` over them; the errors;
+  then `body`, the view's own content. The switch between the views
+  stands on the query line instead (see
+  dk.cst.corpus-probe.views/search-page)."
   [{:keys [ui result error pending? all-hits-href asked] :as state}
    heading controls body]
   ;; named by the heading alone: a screen reader landing here hears the
@@ -501,24 +502,28 @@
                            ;; arrives; a page or sort of the same one
                            ;; changes in place
                            :replicant/key   (recent/asked asked)})
-   [:header.result-head
-    ;; the answer, and beside it what can be done to it: two parts for
-    ;; the stylesheet to set a rule between
-    [:div.answer
-     ;; the page's h1: the search page has no other, so what a search
-     ;; found is what the page is about, and nothing else goes here:
-     ;; every other word of the question is in a control the reader can
-     ;; see from where they are
-     [:h1 {:id "results-heading"} heading]
-     (reach ui result)]
-    controls]
-   (subset-note ui all-hits-href (:subset result))
-   ;; an error that left nothing to show is the answer, and the heading
-   ;; already names it: what follows is the rest of that sentence, not a
-   ;; section with a heading of its own. Where hits were found the same
-   ;; errors are notes on how far the search reached (see `reach`)
-   (when-not (searched? result)
-     (list (when error (error-body ui error nil))
-           (for [[e corpora] (error-groups (:counts result))]
-             (error-body ui e corpora))))
-   body])
+   ;; the contents in one element under the line the tabs stand on: it
+   ;; is what the fold's view transition pictures, and the line stays
+   ;; with the box (see style.css, Motion)
+   [:div.result-body
+    [:header.result-head
+     ;; the answer, and beside it what can be done to it: two parts for
+     ;; the stylesheet to set a rule between
+     [:div.answer
+      ;; the page's h1: the search page has no other, so what a search
+      ;; found is what the page is about, and nothing else goes here:
+      ;; every other word of the question is in a control the reader can
+      ;; see from where they are
+      [:h1 {:id "results-heading"} heading]
+      (reach ui result)]
+     controls]
+    (subset-note ui all-hits-href (:subset result))
+    ;; an error that left nothing to show is the answer, and the heading
+    ;; already names it: what follows is the rest of that sentence, not a
+    ;; section with a heading of its own. Where hits were found the same
+    ;; errors are notes on how far the search reached (see `reach`)
+    (when-not (searched? result)
+      (list (when error (error-body ui error nil))
+            (for [[e corpora] (error-groups (:counts result))]
+              (error-body ui e corpora))))
+    body]])

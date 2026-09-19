@@ -35,7 +35,11 @@ a disclosure, so it opens without a script, and the controls it hides
 still submit with the form. A new search folds it again. The other
 view of the same answer, another page of it, or the other language
 leaves it as the reader left it. Nothing folds while there are no
-hits, since the boxes are then what the reader needs.
+hits, since the boxes are then what the reader needs. With a script,
+the fold is animated: the answer and the rail slide to their new
+places (see Motion). A new search folds it as its answer lands, an
+answer onto the bare page folds it around itself, and emptying the
+field unfolds it as the answer goes.
 
 ## Narrow screens
 
@@ -109,7 +113,7 @@ whether motion is on and tells the views, which mark a departure only
 then: a leaving element is kept until its transition ends, and with
 none to wait for it would be kept for nothing.
 
-There are four kinds. What the client puts on the page comes into
+There are five kinds. What the client puts on the page comes into
 focus from the look: a view marks it with `widgets/arrival-attrs`,
 which has it arriving for its first frame, and asks nothing else. A row
 added to the extended form arrives this way, and so does an answer: the
@@ -150,10 +154,39 @@ client's, which alone knows a step from an arrival, and glide only
 while motion is on: the concordance glides between two tokens of one
 page and jumps to a new page or a new width.
 
+What moves whole, the browser pictures and slides. A step that makes
+such a move renders inside a view transition, and the client marks the
+page with that move's name while it runs, so the block keeps a set of
+rules for each move: what the move pictures, and how those pictures
+behave. What a move does not name is not pictured and stays live, the
+page itself included.
+
+One move is defined: the search options folding, unfolding, or coming
+and going. Whatever brings it about, a press on their line, an answer
+that folds them as it lands, or the field emptied that takes the answer
+away, the rail and the answer's contents slide to their new places over
+the arrival's length. One cause is not the reader's: where a search
+runs out of time before it finds hits the page says none, and a count
+landing later may find some, so the options appear and the page moves
+under a reader who did nothing. It is the only such case, and rare
+enough to live with. The answer's box is not pictured, so the line the
+tabs stand on stays live under the pictures, and what is pictured of
+the answer begins at that line, where the help it replaces begins, so
+the travel is sideways and nothing drifts down as it widens. The
+pictures are clipped, not stretched, and ride the fold together.
+
+Under the pictures the page's own motion stands down: nothing arrives
+with a fade and nothing leaves with one, since what is caught mid-fade,
+or still leaving, is a picture of the wrong thing. That is why a move
+is one change of shape and never a kind of render.
+
 To refine the motion, change the block or the tokens. To give something
-new an arrival, mark it; to say it is busy, mark it. To add a kind, add
-its rule to the block and, where the client has to mark elements for
-it, a helper beside the three.
+new an arrival, mark it; to say it is busy, mark it. To make a change
+move whole, add the question that recognises it to the client's moves
+and its rules to the block under its name, taking a press from the
+browser where it would act first. To add a kind, add its rule to the
+block and, where the client has to mark elements for it, a helper
+beside the three.
 
 ## Simple search
 

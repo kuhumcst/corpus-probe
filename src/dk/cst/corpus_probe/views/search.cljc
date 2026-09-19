@@ -379,24 +379,37 @@
      (i18n/trx ui "button" "Run as CQP")
      (i18n/trx ui "button" "Search"))])
 
+(defn fold-state
+  "How the search options of `state` stand: `:open` or `:shut` under
+  their disclosure, nil where no answer has made room for one (see
+  `rail-fold`). A change of it is a move (see
+  dk.cst.corpus-probe.client.actions/moves)."
+  [{:keys [rail-open asked result]}]
+  ;; the other view, another page or the other language leave it as it
+  ;; was; a new search folds it, so the answer has the whole width first
+  (when (result/found? result)
+    (if (and rail-open (= rail-open (recent/asked asked))) :open :shut)))
+
 (defn rail-fold
   "The `rail` of the search form of `state`, under a disclosure once its
   `:result` has hits to make room for, and bare until then. Shut, its
   controls still submit with the form. It stands open while the search
   `:asked` is the one the reader opened it over, `:rail-open` (see
   dk.cst.corpus-probe.client.actions/toggle-rail)."
-  [{:keys [ui rail-open asked result]} rail]
-  ;; the other view, another page or the other language leave it as it
-  ;; was; a new search folds it, so the answer has the whole width first
-  (if (result/found? result)
-    (let [open? (and rail-open (= rail-open (recent/asked asked)))]
-      [:details.rail-fold {:open (boolean open?)
+  [{:keys [ui] :as state} rail]
+  (if-let [stands (fold-state state)]
+    (let [open? (= :open stands)]
+      [:details.rail-fold {:open open?
                            :on   {:toggle [:toggle-rail :event.target/open]}}
        ;; open, the summary stands at the foot of the rail (see the
-       ;; sheet), so it says what pressing it does there
-       [:summary (if open?
-                   (i18n/tr ui "Hide")
-                   (i18n/tr ui "Search options"))]
+       ;; sheet), so it says what pressing it does there. The press is
+       ;; the client's own (see
+       ;; dk.cst.corpus-probe.client.actions/fold-rail); the toggle
+       ;; above still answers a fold the browser makes without it
+       [:summary {:on {:click [:fold-rail (not open?)]}}
+        (if open?
+          (i18n/tr ui "Hide")
+          (i18n/tr ui "Search options"))]
        rail])
     rail))
 

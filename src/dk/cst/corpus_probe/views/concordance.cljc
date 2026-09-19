@@ -534,12 +534,13 @@
   attributes follow, its source last among them; the structural
   attributes of the text, the same for every token of the row, stand
   under a disclosure that is `text-open?` (see
-  dk.cst.corpus-probe.client.actions/toggle-text). It leaves with motion
-  while `motion?` (see dk.cst.corpus-probe.views.widgets/departure-attrs)."
+  dk.cst.corpus-probe.client.actions/toggle-text). It leaves with a fade
+  where the stylesheet `fades?` it out (see
+  dk.cst.corpus-probe.views.widgets/departure-attrs)."
   ([ui selected cursor text-open?]
    (inspector ui selected cursor text-open? false))
   ([ui {:keys [token structs corpus cpos matchend] :as selected} cursor
-    text-open? motion?]
+    text-open? fades?]
    (when selected
      (let [attrs (dissoc token :word :open :close)]
        ;; not a popover: that would want focus and the top layer, while
@@ -549,7 +550,7 @@
        ;; A landing, so that a click on its own text keeps focus in it
        [:aside.inspector
         (merge (widgets/landing-attrs inspector-id)
-               (widgets/departure-attrs motion?)
+               (widgets/departure-attrs fades?)
                {:aria-label          (i18n/tr ui "Token details")
                 :on                  {:focusout [:leave-concordance]
                                       :keydown  [:key-in-card cursor
@@ -602,7 +603,11 @@
     :as state}]
   (let [{:keys [counts hits size]} result
         paged?   (boolean (or prev-href next-href))
-        position (when result (result/page-control ui client? result))]
+        position (when result (result/page-control ui client? result))
+        ;; whether the sheet, rather than the browser, animates this
+        ;; render. Its twin for arrivals is a rule in the block; a
+        ;; departure needs this, being the renderer's hold on the element
+        fades?   (and (:motion? state) (not (:move state)))]
     (result/results-region
      state
      (result/result-heading ui result error)
@@ -627,7 +632,7 @@
           ;; the tokens to the card and on to the pager
           (when client?
             (inspector ui (:selected state) (:cursor state) (:text-open state)
-                       (:motion? state)))
+                       fades?))
           (result/pager ui prev-href next-href position)
           ;; what to do next with these hits, so it follows them: reading
           ;; the concordance is the task, taking it elsewhere is the one

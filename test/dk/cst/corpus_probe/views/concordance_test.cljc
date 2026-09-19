@@ -471,7 +471,7 @@
                                          (assoc state :pending? true)))))))
     (testing "its head holds the answer, the heading and how far the
               search reached, and beside it the controls over that answer"
-      (let [[tag [_ h1 reach] controls] (nth html 2)]
+      (let [[tag [_ h1 reach] controls] (nth (nth html 2) 1)]
         (is (= :header.result-head tag))
         (is (= [:h1 {:id "results-heading"}] (subvec h1 0 2)))
         (is (= "6 hits" (text (drop 2 h1))))
@@ -559,7 +559,7 @@
                  :result    (assoc example-result
                                    :pages     nil
                                    :remaining ["X" "Y"])})]
-      (is (= "6 hits" (text (drop 2 (second (second (nth html 2)))))))
+      (is (= "6 hits" (text (drop 2 (second (second (nth (nth html 2) 1)))))))
       (is (some #{[:li "page 1"]} (deep html))))))
 
 (defn disclosure

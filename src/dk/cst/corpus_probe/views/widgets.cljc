@@ -35,13 +35,14 @@
 
 (defn departure-attrs
   "The attributes of what comes and goes with motion: `arrival-attrs`,
-  and while `motion?` the leaving state until its transition ends."
-  [motion?]
-  ;; only with motion on: Replicant keeps a leaving element until its
-  ;; transition ends, and one with no transition for 200 ms on its
-  ;; fail-safe timer, fully visible
+  and where the stylesheet `fades?` it out, the leaving state until that
+  fade ends."
+  [fades?]
+  ;; only where something fades it: Replicant holds a leaving element
+  ;; until its transition ends, and one with no transition for 200 ms on
+  ;; its fail-safe timer, fully visible
   (cond-> arrival-attrs
-    motion? (assoc :replicant/unmounting {:class "leaving"})))
+    fades? (assoc :replicant/unmounting {:class "leaving"})))
 
 (defn lang-attrs
   "The attribute map marking an element's text as being in `lang`, when
@@ -99,8 +100,8 @@
        (assoc-in control [1 :aria-label] label)))))
 
 (defn status
-  "A live region holding `content`, classed by `placement` where a
-  layout gives it a place of its own.
+  "A live region holding `content`, classed by `placement`, a class or a
+  collection of them, where a layout gives it a place of its own.
 
   Render it whether or not there is anything to say: a live region
   announces changes to what it holds, and one created already full
