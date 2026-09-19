@@ -9,6 +9,7 @@
             [dk.cst.corpus-probe.i18n :as i18n]
             [dk.cst.corpus-probe.query :as query]
             [dk.cst.corpus-probe.query.mode :as mode]
+            [dk.cst.corpus-probe.storage.recent :as recent]
             [dk.cst.corpus-probe.url :as url]
             [dk.cst.corpus-probe.views.widgets :as widgets]))
 
@@ -46,15 +47,6 @@
   [ui n]
   (str (i18n/group-digits ui n) " "
        (i18n/trn ui "hit" "hits" n)))
-
-(defn hits-heading
-  "What a search found, as the heading of its result in `ui`: how many
-  hits, `size`, at least that many while `counting?`."
-  ([ui size]
-   (hits-heading ui size false))
-  ([ui size counting?]
-   (str (when counting? (str (i18n/tr ui "at least") " "))
-        (hits-phrase ui size))))
 
 (defn corpora-phrase
   "The names of `corpora` in words in `ui`: the one name, or how many
@@ -482,28 +474,33 @@
   that came instead, so a search that failed everywhere is not announced
   as a count of nothing."
   [ui {:keys [counts size] :as result} error]
+  ;; the hits counted so far while corpora remain: the number updates
+  ;; itself when the count lands, and nothing says one is being made
   (if (searched? result)
-    (hits-heading ui size (counting? result))
+    (hits-phrase ui size)
     (error-heading ui (or error (some :error counts)))))
 
 (defn results-region
   "The outcome of a search in `state` under `heading`, as a region named
-  by that heading and a landing, so a search can land on it: a
-  header of the heading, where the hits are and the `controls` over
-  them; a status line while the result is still being counted; the
-  errors; then `body`, the view's own content. The switch between the
-  views stands on the query line instead (see
-  dk.cst.corpus-probe.views/search-page)."
-  [{:keys [ui result error pending? all-hits-href] :as state}
+  by that heading, a landing, so a search can land on it, and keyed by
+  the question `:asked`: a header of the heading, where the hits are and
+  the `controls` over them; the errors; then `body`, the view's own
+  content. The switch between the views stands on the query line
+  instead (see dk.cst.corpus-probe.views/search-page)."
+  [{:keys [ui result error pending? all-hits-href asked] :as state}
    heading controls body]
   ;; named by the heading alone: a screen reader landing here hears the
   ;; count, not the whole question, which the controls below restate
-  [:section.result (cond-> (assoc (widgets/landing-attrs url/results-id)
-                                  :aria-labelledby "results-heading")
-                     ;; while the next question is in flight these hits
-                     ;; are still the previous one's answer, and nothing
-                     ;; about them says so
-                     pending? (assoc :aria-busy "true"))
+  [:section.result (merge (widgets/landing-attrs url/results-id)
+                          widgets/arrival-attrs
+                          ;; the last answer, faded while the next is on
+                          ;; its way
+                          (widgets/busy-attrs pending?)
+                          {:aria-labelledby "results-heading"
+                           ;; a new question remounts the region, so it
+                           ;; arrives; a page or sort of the same one
+                           ;; changes in place
+                           :replicant/key   (recent/asked asked)})
    [:header.result-head
     ;; the answer, and beside it what can be done to it: two parts for
     ;; the stylesheet to set a rule between
@@ -515,14 +512,6 @@
      [:h1 {:id "results-heading"} heading]
      (reach ui result)]
     controls]
-   ;; always rendered, and before anything whose kind can change (see
-   ;; dk.cst.corpus-probe.views.widgets/status)
-   (widgets/status
-    (when (counting? result)
-      [:p (str (i18n/tr ui "Counting hits in") " "
-               (corpora-phrase ui (:remaining result)) " …")]))
-   ;; after the live region, which must keep its place; the note appears
-   ;; and disappears
    (subset-note ui all-hits-href (:subset result))
    ;; an error that left nothing to show is the answer, and the heading
    ;; already names it: what follows is the rest of that sentence, not a

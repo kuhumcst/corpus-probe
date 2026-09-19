@@ -236,27 +236,24 @@
 (defn empty-fieldset
   "The metadata fieldset with no chooser in it, in `ui`: the box the
   chooser would have stood in, saying why it is empty over the `corpora`
-  chosen for it to read metadata from, or that the first answer is on
-  its way while `pending?`."
+  chosen for it to read metadata from, or busy and silent while the
+  first answer is on its way, `pending?`."
   [ui corpora pending?]
   ;; a box in every state, so the rail neither grows nor shrinks as
   ;; corpora are ticked, and a reader who has chosen none is still told
   ;; where filtering by metadata lives
-  [:fieldset.filters.box (assoc (widgets/landing-attrs box-id)
-                                :data-list "values")
+  [:fieldset.filters.box (merge (widgets/landing-attrs box-id)
+                                (widgets/busy-attrs pending?)
+                                {:data-list "values"})
    [:legend (widgets/term ui :metadata false)]
-   [:p (cond
-         pending?
-         (i18n/tr ui "Loading …")
-
-         (seq corpora)
-         (i18n/trn ui
-                   "The corpus you chose carries no metadata."
-                   "The corpora you chose carry no metadata."
-                   (count corpora))
-
-         :else
-         (i18n/tr ui "Choose corpora first."))]])
+   ;; no words for the wait: the busy look says it (see style.css, Motion)
+   (when-not pending?
+     [:p (if (seq corpora)
+           (i18n/trn ui
+                     "The corpus you chose carries no metadata."
+                     "The corpora you chose carry no metadata."
+                     (count corpora))
+           (i18n/tr ui "Choose corpora first."))])])
 
 (defn filter-chooser
   "The chooser over the tree of `filters` (see

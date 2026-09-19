@@ -643,6 +643,8 @@
     ;; a resize moves the strip the concordance is read in, not the state
     (is (= {:state state :effects [[:recentre]]}
            (actions/act state [:recentre])))
+    ;; the client says whether the stylesheet's motion is on
+    (is (true? (:motion? (:state (actions/act state [:motion true])))))
     (is (false? (:filters-pending? (:state (actions/act state
                                                         [:filters-failed])))))))
 

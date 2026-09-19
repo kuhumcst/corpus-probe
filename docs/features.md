@@ -91,6 +91,70 @@ and its card closes the card. Focus leaving a chooser for a tab stop
 outside it, or a press elsewhere on the page, puts the list at rest,
 and focus entering its find box engages it.
 
+## Motion
+
+Motion says that something arrived, opened or changed, and never
+decorates. Every rule of it stands in one block of the stylesheet,
+headed Motion, under the query for a reader who has not asked their
+system for less; nothing moves for one who has. It has two lengths,
+quick for what changes or goes and longer for what comes, since the eye
+needs longer to read an arrival than a departure; two curves, since
+what comes slows to a stop and what goes speeds away; and one look,
+faded and blurred, which is what busy contents fade to and what
+everything that arrives starts from. All of it is inert until the
+client says its first render has settled: that render makes every
+element the server drew anew, and none of them is an arrival. So motion
+needs a script, as the card does. The client reads from the stylesheet
+whether motion is on and tells the views, which mark a departure only
+then: a leaving element is kept until its transition ends, and with
+none to wait for it would be kept for nothing.
+
+There are four kinds. What the client puts on the page comes into
+focus from the look: a view marks it with `widgets/arrival-attrs`,
+which has it arriving for its first frame, and asks nothing else. A row
+added to the extended form arrives this way, and so does an answer: the
+results region is keyed by the question, so a new question mounts it
+anew and it comes into focus where the old one faded out, while a page,
+a sort or a view of the same question changes in place. So does every
+page: its main content is keyed by its path, so a corpus page or a
+document comes into focus whole under the masthead's tabs, while the
+search page, one path for every search, changes in place; and so do the
+help and the history when the field is emptied. The card also drops
+from its token, or slides up from the foot as a sheet, which its own
+arriving and leaving states add.
+
+What comes and goes outside the flow leaves the same way, on to
+nothing, marked with `widgets/departure-attrs`. In the flow it goes at
+once: a leaving element keeps its place until its fade ends, and what
+arrives would jump when it went. So the card fades out, and a removed
+row does not.
+
+What a disclosure opens arrives as anything does, whichever disclosure
+it is; what it shuts goes at once. A fold's marker turns rather than
+being redrawn.
+
+A state eases: the cursor's fill, a token fading at the edge of the
+window and a control going quiet move over the quick length rather than
+switching. What an answer on its way will replace is busy, marked with
+`widgets/busy-attrs`, and fades out to the look until it lands: the
+results while the next page is fetched, the help and the history while
+a first answer is, the metadata box while its filters are, and the
+whole of any other page while the next one is; the search page keeps
+its form, which outlives a search, and the answer alone keeps its box
+crisp and blurs what is in it, since the tabs stand on its top edge.
+Going out is quick; the answer then comes in over the arrival's length,
+and the pointer says progress meanwhile. The words for the wait are
+spoken and never seen. A step is no arrival, though: with the card up,
+the fill snaps to the next token as the card does. The scrolls are the
+client's, which alone knows a step from an arrival, and glide only
+while motion is on: the concordance glides between two tokens of one
+page and jumps to a new page or a new width.
+
+To refine the motion, change the block or the tokens. To give something
+new an arrival, mark it; to say it is busy, mark it. To add a kind, add
+its rule to the block and, where the client has to mark elements for
+it, a helper beside the three.
+
 ## Simple search
 
 The search field reads its text by its shape (`query.mode/shape`): text that
@@ -284,10 +348,10 @@ corpora the hits are in and the corpora the search left out, which
 colour the sign. Without a script,
 the page waits for every count. With a script, the page arrives as soon
 as it is full, and the count follows. Until it arrives, the heading
-says "at least" and the hits counted so far, and a status line says how
-many corpora are being counted. A count that was made before is not
-made again. Thus a page turn, and a return to a result, wait for
-nothing.
+gives the hits counted so far, and the number updates itself when the
+count lands; nothing says that a count is being made. A count that was
+made before is not made again. Thus a page turn, and a return to a
+result, wait for nothing.
 
 ## Frequencies
 
@@ -375,11 +439,8 @@ cursor's keys still move the cursor from inside the card; Escape there
 closes it and puts focus back in the concordance.
 
 The card fades in with a small drop from the token, whose fill comes in
-with it, or slides up from the foot as a sheet, and goes the same way;
-a step of the cursor snaps, card and fill alike, as a cursor should;
-the rows its fold opens fade in, and a fold's marker turns rather than
-being redrawn. None of it moves for a reader who has asked their system
-for less motion.
+with it, or slides up from the foot as a sheet, and goes the same way
+(see Motion).
 
 ## Reading a text
 
@@ -420,7 +481,8 @@ whenever a control goes from under it (see Focus).
 The client reads the filter over `/api/filters` when the corpus
 selection has settled. It does not wait for the reader to open the box.
 The box keeps the attributes that it has until the answer arrives, and
-marks itself busy. It does not empty itself first. An emptied list loses
+marks itself busy, dimmed until the answer lands (see Motion). It does
+not empty itself first. An emptied list loses
 its own control, and the row then moves sideways while the reader is
 still ticking corpora. No corpus carries no metadata, and the client
 answers that without asking.

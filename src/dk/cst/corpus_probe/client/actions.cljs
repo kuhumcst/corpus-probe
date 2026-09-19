@@ -739,6 +739,9 @@
       :wider-failed         {:state (update state :result dissoc :widening)}
       :page-arrived         (page-arrived state x y z)
       :pending              {:state (assoc state :pending? true)}
+      ;; whether the stylesheet's motion is on, for a view that marks a
+      ;; departure only then (see dk.cst.corpus-probe.client.effects/settle!)
+      :motion               {:state (assoc state :motion? x)}
       :set-fragment         {:state (assoc state :fragment x)}
       :navigate             {:state state :effects [[:navigate x y]]}
       :go-to-page           {:state state :effects [[:go-to-page x]]}

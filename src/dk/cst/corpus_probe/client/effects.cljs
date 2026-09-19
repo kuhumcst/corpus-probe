@@ -270,10 +270,15 @@
     (.setItem js/localStorage recent/store-key (recent/string (:recent state)))
     (catch :default _ nil)))
 
-(defn reduced-motion?
-  "True when the reader has asked their system for less animation."
+(defn motion?
+  "True while the stylesheet gives motion a length: the reader has not
+  asked their system for less, and the first render has settled (see
+  `settle!` and tokens.css)."
   []
-  (.-matches (js/matchMedia "(prefers-reduced-motion: reduce)")))
+  ;; the sheet's own decision, read rather than made again here
+  (let [root (.-documentElement js/document)]
+    (pos? (js/parseFloat (.getPropertyValue (js/getComputedStyle root)
+                                            "--quick")))))
 
 (defn sheet?
   "True when the inspection `panel` is the sheet across the foot of the
@@ -320,9 +325,7 @@
     (when-let [dy (cond (< (.-top box) margin)  (- (.-top box) margin)
                         (> (.-bottom box) foot) (- (.-bottom box) foot))]
       (.scrollBy js/window #js {:top      dy
-                                :behavior (if (reduced-motion?)
-                                            "auto"
-                                            "smooth")}))))
+                                :behavior (if (motion?) "smooth" "auto")}))))
 
 (defn follow-cursor!
   "Move focus to the cursor's token with `id` and bring it onto the
@@ -353,6 +356,33 @@
   language it was served in."
   [lang]
   (set! (.-lang (.-documentElement js/document)) lang))
+
+(defn after-frames!
+  "Call `f` once `n` animation frames have passed."
+  [n f]
+  (js/requestAnimationFrame (if (= 1 n) f #(after-frames! (dec n) f))))
+
+(defn watch-motion!
+  "Tell the state through `dispatch!` whether motion is on, `[:motion
+  on?]` (see `motion?`), now and again whenever the reader's system
+  changes its mind."
+  [dispatch!]
+  (let [tell! #(dispatch! [:motion (motion?)])]
+    (tell!)
+    (.addEventListener (js/matchMedia "(prefers-reduced-motion: reduce)")
+                       "change" tell!)))
+
+(defn settle!
+  "Mark the document `data-settled` once the first render has settled,
+  which turns the stylesheet's motion on (see tokens.css), and from then
+  on keep the state told whether it is (see `watch-motion!`)."
+  [dispatch!]
+  ;; a frame after Replicant takes the arriving state off, on its second;
+  ;; in the same frame the page would fade in
+  (after-frames! 3 (fn []
+                     (.setAttribute (.-documentElement js/document)
+                                    "data-settled" "")
+                     (watch-motion! dispatch!))))
 
 (defn resubmit!
   "Submit the form with `form-id` again, as it now stands, at once: what
@@ -411,16 +441,13 @@
 
   Scroll by the difference between the two centres. The region thus stays
   where it is if it is already centred. `glide?` moves there slowly
-  instead of immediately. A reader who asked for less animation always
-  gets the immediate move."
+  instead of immediately, while motion is on (see `motion?`)."
   [el [start end] cell glide?]
   (let [box (.getBoundingClientRect cell)]
     (.scrollTo el #js {:left     (+ (.-scrollLeft el)
                                     (- (+ (.-left box) (/ (.-width box) 2))
                                        (/ (+ start end) 2)))
-                       :behavior (if (and glide? (not (reduced-motion?)))
-                                   "smooth"
-                                   "auto")})))
+                       :behavior (if (and glide? (motion?)) "smooth" "auto")})))
 
 (defn in-strip?
   "True when `cell` is anywhere in the strip `[start end]` that is read."

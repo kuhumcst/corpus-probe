@@ -233,12 +233,11 @@ a abbr[title] { cursor: inherit; text-decoration: none; }
     grid-template-columns: 16rem minmax(0, 40rem) minmax(auto, 1fr);
     /* the last row takes a tall rail's spare height, so the rail cannot
        push the answer down from the query row */
-    grid-template-rows: auto auto 1fr;
-    /* the switch shares the query's line. The rows under it span both of
+    grid-template-rows: auto 1fr;
+    /* the switch shares the query's line. The row under it spans both of
        that line's columns, so the answer is as wide as it was before the
        switch came here, and the widths set by hand above still hold */
     grid-template-areas: "rail query   views"
-                         "rail status  status"
                          "rail results results";
     column-gap: 2rem;
     align-items: start;  /* the rail keeps its height, so it sticks */
@@ -255,7 +254,6 @@ a abbr[title] { cursor: inherit; text-decoration: none; }
   .search-page:has(.recent) {
     grid-template-columns: 16rem minmax(0, 40rem) 16rem;
     grid-template-areas: "rail query   views"
-                         "rail status  views"
                          "rail results views";
   }
   .search-page > .recent { grid-area: views; }
@@ -287,10 +285,6 @@ a abbr[title] { cursor: inherit; text-decoration: none; }
                          /* the same step that stands under the field:
                             one gap around the query, on both sides */
                          margin-inline-start: calc(var(--box-pad) - 2rem); }
-  .search-page .navigation-status { grid-area: status; }
-  .search-page .navigation-status:not(:empty) {
-    margin-block-end: 1rem;
-  }
 
   /* the rail grows down the page rather than scrolling inside itself,
      which rules out sticking it: that strands the foot of a rail taller
@@ -302,7 +296,6 @@ a abbr[title] { cursor: inherit; text-decoration: none; }
      whole width */
   .search-page:has(.rail-fold:not([open])) {
     grid-template-areas: "rail    query   views"
-                         "status  status  status"
                          "results results results";
   }
   /* shut, the summary stands where the field stands, its words level
@@ -340,6 +333,16 @@ select { appearance: none; padding-inline-end: 1.6rem;
          background-position: right 0.55rem center;
          background-size: 0.6em auto; }
 :where(input, select, textarea, button):disabled { opacity: 0.4; }
+/* busy: what an answer on its way will replace. The answer blurs only
+   its contents, since the tabs stand on its top edge.
+   TODO: the blur is the costliest effect the sheet has, on a whole page
+   or a wide table above all; look at it again with the KU data, and dim
+   those two alone if it stutters */
+[aria-busy="true"]:not(.result), .result[aria-busy="true"] > * {
+  opacity: var(--dim); filter: blur(var(--blur)); }
+/* Loading: a navigation in flight fills the masthead's live region (see
+   dk.cst.corpus-probe.views/navigation-status); the pointer says so */
+body:has(.navigation-status:not(:empty)) { cursor: progress; }
 /* Safari draws a search field its own way until told not to */
 input[type="search"] { appearance: none; }
 
@@ -443,10 +446,11 @@ legend, .inspector-text > summary, .inspector-close, .recent > h2,
    step down and the row shift as it became so. Positioned, not nudged
    by a margin: the line belongs to the section under the strip, which
    comes later in the document and would otherwise paint over the foot
-   that breaks it. The depth is one for every tab, wherever the strip
-   stands, so that a tab on the search page starts level with the field
-   beside it */
-.tabs a { position: relative; inset-block-end: -1px;
+   that breaks it, and raised above it, since a section fading in paints
+   later and showed its line through the foot. The depth is one for
+   every tab, wherever the strip stands, so that a tab on the search
+   page starts level with the field beside it */
+.tabs a { position: relative; inset-block-end: -1px; z-index: 1;
           display: flex; align-items: center;
           block-size: var(--tab-depth); padding-inline: 1.25em;
           border: 1px solid transparent;
@@ -981,7 +985,6 @@ body:has(.inspector) .kwic .token[tabindex="0"] {
    window, which travels with the cursor: a step of it uncovers the word
    ahead and lets the one behind go. The steps are
    dk.cst.corpus-probe.views.concordance/fade-steps */
-.kwic .token.faded { transition: opacity 100ms ease-out; }
 .kwic .token.fade-1 { opacity: 0.25; }
 .kwic .token.fade-2 { opacity: 0.09; }
 /* out of sight takes no clicks: a word the reader cannot see is not one
@@ -1164,35 +1167,77 @@ body:has(.inspector-text[open]) { --sheet-block-size: 45vh; }
   }
 }
 
-/* Motion, all of it, and only for a reader who has not asked their
-   system for less. The card is away for its first frame and again from
-   the moment it is dismissed until the transition ends (see
-   dk.cst.corpus-probe.views.concordance/inspector), and the cursor's
-   fill comes and goes with it: every token wears the outline unseen, so
-   that its colour can turn, though not under forced colours, which
-   would paint it. A step of the cursor is no arrival: with the card up
-   and settled, the fill snaps to the next token as the card does */
+/* Motion. All of it is here, none of it for a reader who has asked
+   their system for less, and its lengths, curves and look are
+   tokens.css's, which the client reads too to know whether motion is on
+   (see dk.cst.corpus-probe.client.effects/motion?).
+
+   What arrives fades in from the busy look. Mark it with
+   dk.cst.corpus-probe.views.widgets/arrival-attrs and nothing more; to
+   move it too, give .arriving and .leaving a translate and add it to
+   its transition, as the card does.
+   What comes and goes outside the flow also fades out, marked with
+   departure-attrs. In the flow it goes at once, or what follows it
+   would jump.
+   What a disclosure opens arrives too; what it shuts goes at once.
+   A state eases over the quick length, and busy contents fade out to
+   the look and back. A cursor step snaps.
+   Scrolls are the client's (see
+   dk.cst.corpus-probe.client.effects/centre-match!).
+
+   What is in transit takes an arrival's length and curve, or a going's
+   where it goes: two custom properties the going rule sets, so that no
+   rule here depends on standing before another */
 @media (prefers-reduced-motion: no-preference) {
-  .inspector { transition: opacity 120ms ease-out, translate 120ms ease-out; }
-  .kwic button.token { transition: background-color 120ms ease-out,
-                                   color 120ms ease-out,
-                                   outline-color 120ms ease-out; }
-  body:has(.inspector:not(.away)) .kwic button.token { transition: none; }
+  :root { --length: var(--arrive); --curve: var(--easing); }
+  /* going is quick and speeds away: leaving, and going busy. The return
+     from busy is an arrival */
+  .leaving, [aria-busy="true"]:not(.result), .result[aria-busy="true"] > * {
+    --length: var(--quick); --curve: var(--easing-away); }
+  /* what arrives, busy contents and what a disclosure opens. With no
+     specificity, so that an element's own rule wins, as the card's does */
+  :where([data-arrival], .result > *, .chooser-group > details) {
+    transition: opacity var(--length) var(--curve),
+                filter var(--length) var(--curve); }
+  ::details-content { transition: opacity var(--length) var(--curve),
+                                  filter var(--length) var(--curve); }
+  /* arriving starts from the busy look; leaving ends at nothing */
+  .arriving { opacity: var(--dim); filter: blur(var(--blur)); }
+  .leaving { opacity: 0; filter: blur(var(--blur)); }
+  @starting-style {
+    [open]::details-content { opacity: var(--dim);
+                              filter: blur(var(--blur)); }
+  }
+  /* the card drops from its token, or slides up from the foot as a
+     sheet, quick both ways */
+  .inspector { transition: opacity var(--quick) var(--curve),
+                           translate var(--quick) var(--curve),
+                           filter var(--quick) var(--curve); }
+  .inspector:is(.arriving, .leaving) { translate: 0 100%; }
+  @supports (anchor-name: --cursor) {
+    @media (min-width: 40rem) {
+      .inspector:is(.arriving, .leaving) { translate: 0 -0.25rem; }
+    }
+  }
+  /* a state eases over the quick length: a control going quiet, a
+     fold's marker turning, the line's faded edge (see .fade-1) */
+  :where(input, select, textarea, button) {
+    transition: opacity var(--quick) var(--easing); }
+  .chooser-summary::before, .rail-fold > summary::before,
+  .inspector summary::before { transition: rotate var(--quick)
+                                           var(--easing); }
+  .kwic .token.faded { transition: opacity var(--quick) var(--easing); }
+  /* the cursor's fill comes and goes with the card: every token wears
+     the outline unseen, so that its colour can turn, though not under
+     forced colours, which would paint it */
+  .kwic button.token { transition: background-color var(--quick) var(--easing),
+                                   color var(--quick) var(--easing),
+                                   outline-color var(--quick) var(--easing); }
+  body:has(.inspector:not(.arriving, .leaving)) .kwic button.token {
+    transition: none; }
   @media (forced-colors: none) {
     .kwic button.token { outline: var(--cursor-reach) solid transparent;
                          outline-offset: 0; }
-  }
-  .inspector.away { opacity: 0; translate: 0 100%; }
-  @supports (anchor-name: --cursor) {
-    @media (min-width: 40rem) {
-      .inspector.away { translate: 0 -0.25rem; }
-    }
-  }
-  .chooser-summary::before, .rail-fold > summary::before,
-  .inspector summary::before { transition: rotate 150ms ease-out; }
-  .inspector-text::details-content { transition: opacity 150ms ease-out; }
-  @starting-style {
-    .inspector-text[open]::details-content { opacity: 0; }
   }
 }
 

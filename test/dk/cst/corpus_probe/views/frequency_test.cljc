@@ -45,9 +45,12 @@
                :view-hrefs [[:kwic "/?view=kwic"]
                             [:frequencies "/?view=frequencies"]]})]
     (testing "it is the shared results region, so a search lands on it"
-      (is (= {:id              url/results-id
-              :tabindex        "-1"
-              :aria-labelledby "results-heading"}
+      (is (= {:id                 url/results-id
+              :tabindex           "-1"
+              :data-arrival       ""
+              :replicant/mounting {:class "arriving"}
+              :replicant/key      {:q "hund"}
+              :aria-labelledby    "results-heading"}
              (second html))))
     (testing "its heading is the answer, and under it where the hits are;
               how the table counted is its own controls' to say"

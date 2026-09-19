@@ -74,18 +74,33 @@
     :glossary        (i18n/tr ui "Glossary")
     (name k)))
 
+(defn navigation-status
+  "The live region saying a navigation is in flight in `ui`, full while
+  `pending?`: spoken, never seen; the stylesheet shows the wait (see
+  style.css, Loading)."
+  [ui pending?]
+  (widgets/status
+   "spoken navigation-status"
+   (when pending? [:p (i18n/tr ui "Loading …")])))
+
 (defn site-header
   "The site masthead shared by every page, in `ui`: the navigation over
   `nav` (each `nav-items` key to its href, the page at `path` marked
-  current) and the language switch returning to `path`."
-  [ui path nav]
-  [:header.masthead
-   ;; the hrefs come from the handler: the search keeps its query across
-   ;; the masthead, and only the handler knows what that query is
-   (widgets/tabs (i18n/tr ui "Site")
-                 (for [[k p] nav-items] [k (get nav k p) (nav-label ui k)])
-                 (some (fn [[k p]] (when (= p path) k)) nav-items))
-   (language-switch ui path)])
+  current), the language switch returning to `path`, and the region
+  saying a page is on its way while `pending?`."
+  ([ui path nav]
+   (site-header ui path nav false))
+  ([ui path nav pending?]
+   [:header.masthead
+    ;; the hrefs come from the handler: the search keeps its query across
+    ;; the masthead, and only the handler knows what that query is
+    (widgets/tabs (i18n/tr ui "Site")
+                  (for [[k p] nav-items] [k (get nav k p) (nav-label ui k)])
+                  (some (fn [[k p]] (when (= p path) k)) nav-items))
+    (language-switch ui path)
+    ;; here so every page has it, and rendered empty first: a live region
+    ;; made already full announces nothing
+    (navigation-status ui pending?)]))
 
 (defn year
   "The current year, as the copyright line states it: the server's clock,
@@ -180,14 +195,14 @@
      ;; the help stands where the answer will, until there is one: the
      ;; reader who has not searched yet is the one with room to read it
      (cond
-       (not answered?)       (search/help ui (:help state))
+       (not answered?)       (search/help ui (:help state) (:pending? state))
        (= :frequencies view) (frequency/frequency-section state)
        :else                 (concordance/concordance-section state))
      ;; the same question the switch above asks, so the two are never in
      ;; the column at once; and only where the client runs, since nothing
      ;; remembers a search without it
      (when (and client? (not (result/found? result)))
-       (search/recent-searches ui (:recent state)))]))
+       (search/recent-searches ui (:recent state) (:pending? state)))]))
 
 (defn document-page
   "The main content of a document page, the frontpage or the glossary:
@@ -198,19 +213,28 @@
 (defn page
   "The main content of the page `state` describes, by its `:route`, the
   `:ui` every view translates through derived from its `:lang`; nil for
-  a route this app does not render."
-  [{:keys [route lang] :as state}]
+  a route this app does not render. Every page arrives as one, keyed by
+  `:path`, and is busy while `:pending?`; the search page marks its own
+  parts instead."
+  [{:keys [route lang path pending?] :as state}]
   ;; derived here rather than carried in the state, which travels to the
   ;; client as transit; the client already holds every table
   (let [ui    (i18n/->ui lang)
-        state (assoc state :ui ui)]
-    (case route
-      :document (document-page (:data state) (:fragment state))
-      :search   (search-page state)
-      :corpora  (corpus-views/index-page ui (:data state))
-      :corpus   (corpus-views/info-page ui (:data state))
-      :text     (corpus-views/reading-page ui (:data state))
-      nil)))
+        state (assoc state :ui ui)
+        main  (case route
+                :document (document-page (:data state) (:fragment state))
+                :search   (search-page state)
+                :corpora  (corpus-views/index-page ui (:data state))
+                :corpus   (corpus-views/info-page ui (:data state))
+                :text     (corpus-views/reading-page ui (:data state))
+                nil)]
+    ;; by path, not address: a search must not remake the form under the
+    ;; reader
+    (some-> main
+            (update 1 merge
+                    widgets/arrival-attrs
+                    {:replicant/key path}
+                    (widgets/busy-attrs (and pending? (not= :search route)))))))
 
 (defn page-title
   "The document title: the page-specific `parts` (most specific first,

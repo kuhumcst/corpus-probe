@@ -266,7 +266,7 @@
   the name of the `error` that came instead."
   [ui {:keys [counts] :as result} error]
   (if (tabled? result)
-    (result/hits-heading ui (reduce + (keep :size (stats/readable-counts counts))))
+    (result/hits-phrase ui (reduce + (keep :size (stats/readable-counts counts))))
     (result/error-heading ui (or error (some :error counts)))))
 
 (defn frequency-controls

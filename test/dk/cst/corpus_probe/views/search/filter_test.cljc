@@ -177,10 +177,11 @@
                                                     :unlisted []
                                                     :selected {}}
                                                 {}))))
-    (testing "and says the answer is on its way while it has none yet"
-      (is (some #{"Loading …"}
-                (filter string? (deep (filter-views/filter-fieldset
-                                       en nil {:pending? true}))))))
+    (testing "and is busy and silent while it has none yet: no words for
+              the wait, the busy look says it"
+      (let [html (filter-views/filter-fieldset en nil {:pending? true})]
+        (is (= "true" (:aria-busy (second html))))
+        (is (not (some #(and (vector? %) (= :p (first %))) (deep html))))))
     (testing "but a filter the reader set holds the chooser, with no corpus
               chosen to offer anything: values, patterns and ranges alike,
               since a field out of the document is a constraint dropped

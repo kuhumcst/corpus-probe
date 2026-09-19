@@ -126,7 +126,7 @@
   first condition matches any word, and `:removable?` when a button may
   take the condition away. The value is `required?` or not."
   [ui {:keys [i removable?] :as token} required? c {:keys [id] :as condition}]
-  [:li.condition (cond-> {:replicant/key id}
+  [:li.condition (cond-> (assoc widgets/arrival-attrs :replicant/key id)
                    removable? (assoc :class "removable"))
    (when-not (= 1 c)
      (list (join-select ui token c condition) " "))
@@ -242,7 +242,7 @@
                      (let [i (inc i)]
                        ;; keyed by id, not place, so taking a token away
                        ;; keeps what was typed in the ones after it
-                       [:li {:replicant/key id}
+                       [:li (assoc widgets/arrival-attrs :replicant/key id)
                         ;; the client drops the blank last token and adds
                         ;; tokens by a button, so with it every token is
                         ;; required; a lone token always is, or a search

@@ -185,9 +185,14 @@
 (deftest document-page-test
   (let [body [[:h1 {:id "corpus-search"} "Corpus search"] [:p "prose"]
               [:dl [:dt {:id "kwic"} "KWIC"] [:dd "key word " [:em "in"] " context"]]]
-        html (views/page {:route :document :lang "en" :data {:body body}})]
-    (testing "the document is the page's content, under its own heading"
-      (is (= [:main.document widgets/main-attrs body] html)))
+        html (views/page {:route :document :lang "en" :path "/"
+                          :data  {:body body}})]
+    (testing "the document is the page's content, under its own heading,
+              arriving as a page keyed by its path"
+      (is (= [:main.document (merge widgets/main-attrs widgets/arrival-attrs
+                                    {:replicant/key "/"})
+              body]
+             html)))
     (testing "the page claims no heading of its own: the document names it"
       (is (= 1 (count (filter #{:h1} (deep html))))))
     (testing "the element the location's fragment names is marked"
@@ -215,6 +220,18 @@
            (first (views/page {:route :text :lang "en"
                                :data  {:corpus "PROBE" :structs {} :blocks []
                                        :from 0}})))))
+  (testing "a page is busy whole while another is on its way; the search
+            page says itself what an answer replaces, since its form
+            outlives a search"
+    (let [attrs (fn [state] (second (views/page state)))
+          doc   {:route :document :lang "en" :path "/glossary"
+                 :data  {:body []} :pending? true}]
+      (is (= "/glossary" (:replicant/key (attrs doc))))
+      (is (= "true" (:aria-busy (attrs doc))))
+      (is (nil? (:aria-busy (attrs (assoc doc :pending? false)))))
+      (is (nil? (:aria-busy (attrs {:route   :search :lang "en"
+                                    :path    "/search" :folders []
+                                    :params  {} :pending? true}))))))
   (testing "a route this app does not render is nothing"
     (is (nil? (views/page {:route :nonesuch :lang "en"})))))
 
@@ -308,6 +325,13 @@
               a tab strip standing on the masthead's own line"
       (is (= :header.masthead (first (views/site-header en "/" nav))))
       (is (some #{:nav.tabs} (deep (views/site-header en "/" nav)))))
+    (testing "and holds the region saying a page is on its way, spoken and
+              never seen, empty until one is"
+      (is (= [:div.status {:class "spoken navigation-status" :role "status"}
+              nil]
+             (last (views/site-header en "/" nav))))
+      (is (some #{"Loading …"} (deep (views/site-header en "/" nav true))))
+      (is (some #{"Henter …"} (deep (views/site-header da "/" nav true)))))
     (testing "the navigation carries the search; the frontpage, which
               stands where the site's name stood, does not"
       (is (= ["/" "/search?q=hund#results" "/corpora" "/glossary"]

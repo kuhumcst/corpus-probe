@@ -186,17 +186,11 @@
     (testing "two status regions in the form, each empty until it has
               something to say: what a change of mode could not keep, and
               what the preferences box says without showing it; the
-              navigation's only with a client to put anything in it"
+              navigation's stands in the masthead (see views-test)"
       (is (= [[:div.status {:role "status"} nil]
               [:div.status {:class "spoken" :role "status"} nil]]
              (filter #(and (vector? %) (= :div.status (first %)))
                      (deep html)))))
-    (testing "with one, the navigation's follows the form, inside the same
-              landmark, placed by its own class"
-      (let [live (form (assoc state :client? true :pending? true))]
-        (is (= :div.status (first (last live))))
-        (is (= "navigation-status" (:class (second (last live)))))
-        (is (some #{"Loading …"} (deep live)))))
     (testing "the query row says when it holds the tokens, for the layout"
       (is (= [:div.query {}]
              (subvec (get-in html [1 3]) 0 2)))
@@ -410,12 +404,21 @@
   (let [blocks [[:dl [:dt "Simple"] [:dd "Finds the words in order."]]]
         html   (search/help en blocks)]
     (testing "a region named by the interface, holding the document"
-      (is (= [:section.help {:aria-label "Help"} blocks] html)))
+      (is (= [:section.help {:data-arrival       ""
+                             :replicant/mounting {:class "arriving"}
+                             :aria-label         "Help"}
+              blocks]
+             html)))
     (testing "named in the reader's language"
       (is (= "Hjælp" (:aria-label (second (search/help da blocks))))))
     (testing "no help, no section"
       (is (nil? (search/help en nil)))
       (is (nil? (search/help en []))))
+    (testing "busy while an answer on its way will take its place, as the
+              history is"
+      (is (= "true" (:aria-busy (second (search/help en blocks true)))))
+      (is (= "true" (:aria-busy (second (search/recent-searches en [] true)))))
+      (is (nil? (:aria-busy (second (search/recent-searches en []))))))
     (testing "it is not in the form: it stands where the results will"
       (is (not (some #{:section.help}
                      (deep (form {:lang "en" :folders [] :params {}}))))))))
@@ -486,15 +489,6 @@
     (is (some #{"3.412 hits"}
               (deep (search/recent-searches da [{:params "q=hund"
                                                  :hits   3412}]))))))
-
-(deftest navigation-status-test
-  (testing "the region is rendered before it has anything to announce,
-            placed by its own class"
-    (is (= [:div.status {:class "navigation-status" :role "status"} nil]
-           (search/navigation-status en false))))
-  (testing "and reports a navigation in flight in either language"
-    (is (some #{"Loading …"} (deep (search/navigation-status en true))))
-    (is (some #{"Henter …"} (deep (search/navigation-status da true))))))
 
 (deftest query-mode-test
   (let [radios (fn [params]

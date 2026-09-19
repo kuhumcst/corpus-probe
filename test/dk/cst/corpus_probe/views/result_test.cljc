@@ -36,12 +36,6 @@
     (is (= "1 hit" (result/hits-phrase da 1)))
     (is (= "1.000 hits" (result/hits-phrase da 1000)))))
 
-(deftest hits-heading-test
-  (testing "the heading is the answer alone, how many: the field above
-            holds the query"
-    (is (= "6 hits" (result/hits-heading en 6)))
-    (is (= "6 hits" (result/hits-heading da 6)))))
-
 (deftest asked?-test
   (testing "a search asks something or it does not run at all, and an
             extended form reads its tokens rather than the field"
@@ -192,16 +186,17 @@
     (is (result/counting? {:remaining ["X"]}))
     (is (not (result/counting? {:remaining []})))
     (is (not (result/counting? {}))))
-  (testing "the heading gives the hits counted so far as a floor"
-    (is (= "at least 6 hits" (result/hits-heading en 6 true)))
-    (is (= "mindst 6 hits" (result/hits-heading da 6 true))))
+  (testing "the heading gives the hits counted so far, and no word says
+            the count is still being made: the number updates itself"
+    (is (= "6 hits" (result/result-heading en {:size 6 :remaining ["X"]} nil)))
+    (is (= "6 hits" (result/result-heading da {:size 6 :remaining ["X"]} nil))))
   (testing "the page is placed without a last page"
     (is (= "page 3" (result/page-phrase en {:page 2})))
     (is (= "side 3" (result/page-phrase da {:page 2}))))
   (testing "corpora still being counted count as searched"
     (is (result/searched? {:counts [] :remaining ["X"]}))
     (testing "but not yet as corpora the hits are in: the line grows as
-              their counts arrive, beside a heading reading at least"
+              their counts arrive, as the heading's count does"
       (is (= "in A" (result/found-in-phrase
                      en {:counts [{:corpus "A" :size 1}] :remaining ["B" "C"]}))))))
 
@@ -471,12 +466,24 @@
                :result     example-result}
         html  (result/results-region state "6 hits" [:div.view-controls]
                                      [:p "body"])]
-    (testing "the region names itself and can be landed on"
+    (testing "the region names itself, can be landed on and arrives with
+              motion, keyed by the question"
       (is (= :section.result (first html)))
-      (is (= {:id              "results"
-              :tabindex        "-1"
-              :aria-labelledby "results-heading"}
+      (is (= {:id                 "results"
+              :tabindex           "-1"
+              :data-arrival       ""
+              :replicant/mounting {:class "arriving"}
+              :replicant/key      {:q "hund"}
+              :aria-labelledby    "results-heading"}
              (second html))))
+    (testing "a page, a sort or a view of the same question keeps the key,
+              so the answer changes in place; a new question mounts it anew"
+      (let [key-of #(:replicant/key (second (result/results-region
+                                            (assoc state :asked %)
+                                            "6 hits" nil nil)))]
+        (is (= {:q "hund"} (key-of {:q "hund" :page "2" :sort "word"
+                                    :view "frequencies"})))
+        (is (= {:q "kat"} (key-of {:q "kat"})))))
     (testing "and is busy while the answer to the next question is coming"
       (is (= "true" (:aria-busy (second (result/results-region
                                          (assoc state :pending? true)
@@ -494,22 +501,18 @@
     (testing "the switch between the views is not one of its parts: it
               stands on the query line (see views-test)"
       (is (not (some #{:nav.tabs} (deep html)))))
-    (testing "the status line is a live region that stands even when
-              silent, before anything whose kind can change"
-      (is (= [:div.status {:role "status"} nil] (nth html 3))))
     (testing "the corpora that failed are folded into that reach, not
               headed as errors of their own"
       (is (not (some #{[:h2 "CQP error"]} (deep html))))
       (is (some #{:details.caveats} (deep html)))
       (is (= [:p "body"] (last html))))
-    (testing "the heading says at least, and a status line says what is
-              still being counted"
+    (testing "a result still being counted is headed by the hits so far,
+              and no live region stands in the region to say so"
       (let [counting (assoc example-result :pages nil :remaining ["X" "Y"])]
-        (is (= "at least 6 hits"
-               (result/result-heading en counting nil)))
-        (is (some #{[:p "Counting hits in 2 corpora …"]}
-                  (deep (result/results-region (assoc state :result counting)
-                                               "x" nil nil))))))
+        (is (= "6 hits" (result/result-heading en counting nil)))
+        (is (not (some #{:div.status}
+                       (deep (result/results-region
+                              (assoc state :result counting) "x" nil nil)))))))
     (testing "a search that failed outright is headed by its error"
       (is (= "No corpus selected"
              (result/result-heading en nil {:type :no-corpus})))

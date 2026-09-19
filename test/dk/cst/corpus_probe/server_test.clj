@@ -108,7 +108,8 @@
              (second (re-find #"<title>([^<]*)" (:body (page "glossary" "da")))))))
     (testing "and is a document page, headed by the document"
       (let [body (:body (page "glossary" "en"))]
-        (is (str/includes? body "<main id=\"main\" tabindex=\"-1\" class=\"document\">"))
+        (is (str/includes? body (str "<main id=\"main\" tabindex=\"-1\" "
+                                     "data-arrival class=\"document\">")))
         (is (str/includes? body "<h1 id=\"glossary\">Glossary</h1>"))
         (is (str/includes? body "<dt id=\"kwic\">KWIC</dt>"))))))
 

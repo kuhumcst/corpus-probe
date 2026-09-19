@@ -273,10 +273,10 @@
       :chosen  chosen
       :total   total
       :said    (count-title ui noun chosen total)
-      :details (cond-> {:open (contains? open :root)
-                        :on   {:toggle [:toggle-open k :root
-                                        :event.target/open]}}
-                 busy? (assoc :aria-busy "true"))
+      :details (merge {:open (contains? open :root)
+                       :on   {:toggle [:toggle-open k :root
+                                       :event.target/open]}}
+                      (widgets/busy-attrs busy?))
       :leave   [:leave k :event/focus-left?]
       :status  (when nothing-found? not-found)}
      (map (partial node-view

@@ -116,10 +116,6 @@ msgid "context"
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/concordance.cljc
-msgid "the first"
-msgstr ""
-
-#: src/dk/cst/corpus_probe/views/concordance.cljc
 msgid "Token details"
 msgstr ""
 
@@ -136,11 +132,15 @@ msgid "see text"
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/concordance.cljc
+msgid "Less"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/concordance.cljc
 msgid "More"
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/concordance.cljc
-msgid "Less"
+msgid "the first"
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/corpus.cljc
@@ -151,16 +151,12 @@ msgstr ""
 msgid "Other"
 msgstr ""
 
-#: src/dk/cst/corpus_probe/views/corpus.cljc
-msgid "All corpora"
-msgstr ""
-
-#: src/dk/cst/corpus_probe/views/corpus.cljc
-msgid "Select at least one corpus"
-msgstr ""
-
 #: src/dk/cst/corpus_probe/views.cljc src/dk/cst/corpus_probe/views/corpus.cljc
 msgid "Corpora"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/corpus.cljc
+msgid "All corpora"
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/corpus.cljc
@@ -229,12 +225,8 @@ msgstr ""
 msgid "Search in"
 msgstr ""
 
-#: src/dk/cst/corpus_probe/views/concordance.cljc src/dk/cst/corpus_probe/views/corpus.cljc
+#: src/dk/cst/corpus_probe/views/corpus.cljc
 msgid "Text"
-msgstr ""
-
-#: src/dk/cst/corpus_probe/views/frequency.cljc
-msgid "Group by"
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/frequency.cljc
@@ -243,6 +235,10 @@ msgstr ""
 
 #: src/dk/cst/corpus_probe/views/frequency.cljc
 msgid "structural attributes"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/frequency.cljc
+msgid "Group by"
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/frequency.cljc
@@ -308,10 +304,6 @@ msgstr[0] ""
 msgstr[1] ""
 
 #: src/dk/cst/corpus_probe/views/result.cljc
-msgid "at least"
-msgstr ""
-
-#: src/dk/cst/corpus_probe/views/result.cljc
 msgid "corpora"
 msgstr ""
 
@@ -375,7 +367,7 @@ msgstr ""
 msgid "show all"
 msgstr ""
 
-#: src/dk/cst/corpus_probe/views.cljc src/dk/cst/corpus_probe/views/frequency.cljc src/dk/cst/corpus_probe/views/result.cljc
+#: src/dk/cst/corpus_probe/views.cljc src/dk/cst/corpus_probe/views/result.cljc
 msgid "Frequencies"
 msgstr ""
 
@@ -499,10 +491,6 @@ msgid_plural "{n} corpora left out of the search"
 msgstr[0] ""
 msgstr[1] ""
 
-#: src/dk/cst/corpus_probe/views/result.cljc
-msgid "Counting hits in"
-msgstr ""
-
 #: src/dk/cst/corpus_probe/views/search.cljc
 msgid "words, a list or CQP"
 msgstr ""
@@ -552,26 +540,6 @@ msgid "word from"
 msgid_plural "words from"
 msgstr[0] ""
 msgstr[1] ""
-
-#: src/dk/cst/corpus_probe/views/search.cljc
-msgid "Help"
-msgstr ""
-
-#: src/dk/cst/corpus_probe/views/search.cljc
-msgid "Recent searches"
-msgstr ""
-
-#: src/dk/cst/corpus_probe/views/search.cljc
-msgid "Your searches appear here."
-msgstr ""
-
-#: src/dk/cst/corpus_probe/views/search.cljc
-msgid "button|Clear"
-msgstr ""
-
-#: src/dk/cst/corpus_probe/views/search.cljc
-msgid "Recent searches cleared"
-msgstr ""
 
 #: src/dk/cst/corpus_probe/views/search.cljc
 msgid "As CQP"
@@ -658,11 +626,7 @@ msgid "legend|Preferences"
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/search.cljc
-msgid "Hide"
-msgstr ""
-
-#: src/dk/cst/corpus_probe/views/search.cljc
-msgid "Search options"
+msgid "Select at least one corpus"
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/search.cljc
@@ -671,6 +635,34 @@ msgstr ""
 
 #: src/dk/cst/corpus_probe/views/search.cljc
 msgid "button|Search"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/search.cljc
+msgid "Hide"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/search.cljc
+msgid "Search options"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/search.cljc
+msgid "Help"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/search.cljc
+msgid "Recent searches"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/search.cljc
+msgid "Your searches appear here."
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/search.cljc
+msgid "button|Clear"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/search.cljc
+msgid "Recent searches cleared"
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/search/filter.cljc
@@ -721,7 +713,7 @@ msgstr ""
 msgid "Clear filter"
 msgstr ""
 
-#: src/dk/cst/corpus_probe/views/search.cljc src/dk/cst/corpus_probe/views/search/filter.cljc
+#: src/dk/cst/corpus_probe/views.cljc src/dk/cst/corpus_probe/views/search/filter.cljc
 msgid "Loading …"
 msgstr ""
 
@@ -751,22 +743,6 @@ msgstr ""
 
 #: src/dk/cst/corpus_probe/views/search/filter.cljc
 msgid "Too many values to list: "
-msgstr ""
-
-#: src/dk/cst/corpus_probe/views/search/tokens.cljc
-msgid "attribute|word"
-msgstr ""
-
-#: src/dk/cst/corpus_probe/views/search/tokens.cljc
-msgid "attribute|lemma"
-msgstr ""
-
-#: src/dk/cst/corpus_probe/views/search/tokens.cljc
-msgid "attribute|POS"
-msgstr ""
-
-#: src/dk/cst/corpus_probe/views/search/tokens.cljc
-msgid "attribute|morphology"
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/search/tokens.cljc
@@ -857,7 +833,7 @@ msgstr ""
 msgid "Remove token"
 msgstr ""
 
-#: src/dk/cst/corpus_probe/views/concordance.cljc src/dk/cst/corpus_probe/views/search/tokens.cljc
+#: src/dk/cst/corpus_probe/views/search/tokens.cljc
 msgid "Token"
 msgstr ""
 
@@ -871,6 +847,22 @@ msgstr ""
 
 #: src/dk/cst/corpus_probe/views/corpus.cljc src/dk/cst/corpus_probe/views/frequency.cljc src/dk/cst/corpus_probe/views/widgets.cljc
 msgid "tokens"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/widgets.cljc
+msgid "attribute|word"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/widgets.cljc
+msgid "attribute|lemma"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/widgets.cljc
+msgid "attribute|POS"
+msgstr ""
+
+#: src/dk/cst/corpus_probe/views/widgets.cljc
+msgid "attribute|morphology"
 msgstr ""
 
 #: src/dk/cst/corpus_probe/views/widgets.cljc

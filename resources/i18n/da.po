@@ -37,9 +37,6 @@ msgstr "ethvert ord"
 msgid "Apply"
 msgstr "Anvend"
 
-msgid "at least"
-msgstr "mindst"
-
 msgid "attribute"
 msgstr "attribut"
 
@@ -81,9 +78,6 @@ msgstr "korpusser"
 # are not all of that field. Decided 2026-09-14.
 msgid "Corpora"
 msgstr "Korpusser"
-
-msgid "Counting hits in"
-msgstr "Tæller hits i"
 
 msgid "CQP error"
 msgstr "CQP-fejl"

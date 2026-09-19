@@ -26,6 +26,23 @@
   that the bypass link moves focus into it rather than only scrolling."
   (landing-attrs main-id))
 
+(def arrival-attrs
+  "The attributes of what arrives with motion (see style.css, Motion)."
+  ;; the class is the first frame's state, which Replicant takes off a
+  ;; frame later; the stylesheet transitions the mark
+  {:data-arrival       ""
+   :replicant/mounting {:class "arriving"}})
+
+(defn departure-attrs
+  "The attributes of what comes and goes with motion: `arrival-attrs`,
+  and while `motion?` the leaving state until its transition ends."
+  [motion?]
+  ;; only with motion on: Replicant keeps a leaving element until its
+  ;; transition ends, and one with no transition for 200 ms on its
+  ;; fail-safe timer, fully visible
+  (cond-> arrival-attrs
+    motion? (assoc :replicant/unmounting {:class "leaving"})))
+
 (defn lang-attrs
   "The attribute map marking an element's text as being in `lang`, when
   the language is known."
@@ -38,6 +55,12 @@
   ;; hidden rather than left out: a hidden control is still submitted,
   ;; where one left out drops a choice from the search without a word
   (cond-> {} hidden? (assoc :hidden true)))
+
+(defn busy-attrs
+  "The attribute map marking an element busy while `busy?`: an answer on
+  its way will replace it (see style.css, Motion)."
+  [busy?]
+  (cond-> {} busy? (assoc :aria-busy "true")))
 
 (def list-attrs
   "The attributes a list carries where the stylesheet takes its markers

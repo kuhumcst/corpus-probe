@@ -93,6 +93,18 @@
   --layer-rule: color-mix(in srgb, var(--layer-tx) 40%, transparent);
   --layer-link: #F1D67E;
 
+  /* Motion (see style.css, Motion). Two lengths: quick for what changes
+     or goes, longer for what arrives. Two curves: what comes slows to a
+     stop, what goes speeds away. One look for what is busy or arriving:
+     faded to --dim and blurred by --blur. All off until the client's
+     first render has settled, or the page it rebuilds would fade in */
+  --quick:       0s;
+  --arrive:      0s;
+  --easing:      ease-out;
+  --easing-away: ease-in;
+  --dim:         1;
+  --blur:        0px;
+
   /* Two faces: the page reads in one, apparatus and prose alike, and
      what a corpus holds, with the code that asks for it, in the other.
      Both are Modern Font Stacks (modernfontstacks.com), the page's being
@@ -115,4 +127,14 @@
           monospace;
 
   color-scheme: light;  /* the browser's own controls follow */
+}
+
+/* set by the client once its first render has settled (see
+   dk.cst.corpus-probe.client.effects/settle!); the lengths only for a
+   reader who has not asked their system for less, and whether --quick
+   has one is how the client knows motion is on (see
+   dk.cst.corpus-probe.client.effects/motion?) */
+:root[data-settled] { --dim: 0.3; --blur: 1.5px; }
+@media (prefers-reduced-motion: no-preference) {
+  :root[data-settled] { --quick: 120ms; --arrive: 180ms; }
 }

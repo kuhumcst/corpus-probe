@@ -168,5 +168,17 @@
   (testing "hidden keeps the element in the document"
     (is (= {:hidden true} (widgets/hidden-attrs true)))
     (is (= {} (widgets/hidden-attrs false))))
+  (testing "busy says an answer on its way will replace the element"
+    (is (= {:aria-busy "true"} (widgets/busy-attrs true)))
+    (is (= {} (widgets/busy-attrs false))))
   (testing "a list says it is one where its markers are gone"
-    (is (= {:role "list"} widgets/list-attrs))))
+    (is (= {:role "list"} widgets/list-attrs)))
+  (testing "what arrives is arriving for its first frame, and what comes
+            and goes is leaving as it goes, while motion is on"
+    (is (= {:class "arriving"} (:replicant/mounting widgets/arrival-attrs)))
+    (is (nil? (:replicant/unmounting widgets/arrival-attrs)))
+    (is (= (assoc widgets/arrival-attrs
+                  :replicant/unmounting {:class "leaving"})
+           (widgets/departure-attrs true)))
+    ;; with motion off a leaving element would be kept for nothing
+    (is (= widgets/arrival-attrs (widgets/departure-attrs false)))))

@@ -70,12 +70,12 @@
   ;; adopting it (replicant.dom/render replaces what it finds, and
   ;; 2026.07.1 has no adoption API), so what a reader typed or opened
   ;; while the script loaded is lost
-  (let [{:keys [lang path nav] :as current} @state
+  (let [{:keys [lang path nav pending?] :as current} @state
         ui (i18n/->ui lang)]
-    ;; the masthead's links carry the current search and the footer's
-    ;; words are in the UI language, so both re-render with the page
+    ;; the masthead carries the current search and the navigation in
+    ;; flight, the footer the UI language, so both re-render with the page
     (r/render (.getElementById js/document "masthead")
-              (views/site-header ui path nav))
+              (views/site-header ui path nav pending?))
     (r/render (.getElementById js/document "app") (views/page current))
     (r/render (.getElementById js/document "footer") (views/site-footer ui))))
 
@@ -130,5 +130,8 @@
     (r/set-dispatch! dispatch!)
     (add-watch state ::render (fn [_ _ _ _] (render!)))
     (render!)
+    ;; motion starts after this render, which rebuilds the page and must
+    ;; not fade it in
+    (effects/settle! dispatch!)
     (effects/perform! dispatch! {:state @state}
                       (into [[:sync-url]] (:effects booted)))))

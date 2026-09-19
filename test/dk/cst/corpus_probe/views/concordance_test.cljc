@@ -457,10 +457,14 @@
       (is (not (some #{:nav.tabs} (deep html)))))
     (testing "a cut export is announced"
       (is (some #{" the first 5 hits"} (deep html))))
-    (testing "the region names itself and can be landed on"
-      (is (= {:id              "results"
-              :tabindex        "-1"
-              :aria-labelledby "results-heading"}
+    (testing "the region names itself, can be landed on and arrives with
+              motion, keyed by the question"
+      (is (= {:id                 "results"
+              :tabindex           "-1"
+              :data-arrival       ""
+              :replicant/mounting {:class "arriving"}
+              :replicant/key      {:q "hund"}
+              :aria-labelledby    "results-heading"}
              (second html))))
     (testing "and is busy while the answer to the next question is coming"
       (is (= "true" (:aria-busy (second (concordance/concordance-section
@@ -544,8 +548,8 @@
                  {:ui     en
                   :result {:size 0 :near {:word "kat"}
                            :counts [{:corpus "PROBE" :size 0}]}})))))
-  (testing "a result still being counted says at least, what is still
-            being counted, and where the reader is without a last page"
+  (testing "a result still being counted gives the hits so far, and where
+            the reader is without a last page"
     (let [html (concordance/concordance-section
                 {:ui        en
                  :view      :kwic
@@ -555,15 +559,8 @@
                  :result    (assoc example-result
                                    :pages     nil
                                    :remaining ["X" "Y"])})]
-      (is (= "at least 6 hits"
-             (text (drop 2 (second (second (nth html 2)))))))
-      (is (some #{[:p "Counting hits in 2 corpora …"]} (deep html)))
-      (is (some #{[:li "page 1"]} (deep html))))
-    (testing "the status line is a live region that stands even when silent"
-      (is (some #{[:div.status {:role "status"} nil]}
-                (deep (concordance/concordance-section
-                       {:ui en :view :kwic :asked {:q "hund"}
-                        :params {:q "hund"} :result example-result})))))))
+      (is (= "6 hits" (text (drop 2 (second (second (nth html 2)))))))
+      (is (some #{[:li "page 1"]} (deep html))))))
 
 (defn disclosure
   "The text's disclosure in the card `html`; nil for none."
@@ -593,9 +590,13 @@
              (get-in (second html) [:on :keydown]))))
     (testing "the client says on render which side of the token it landed"
       (is (= [:mark-side] (:replicant/on-render (second html)))))
-    (testing "it arrives and leaves under one class, for the stylesheet"
-      (is (= {:class "away"} (:replicant/mounting (second html))))
-      (is (= {:class "away"} (:replicant/unmounting (second html)))))
+    (testing "it arrives under one class, for the stylesheet, and leaves
+              under another while motion is on"
+      (is (= {:class "arriving"} (:replicant/mounting (second html))))
+      (is (nil? (:replicant/unmounting (second html))))
+      (is (= {:class "leaving"}
+             (:replicant/unmounting
+              (second (concordance/inspector en selected cursor false true))))))
     (testing "the word heads the card, and its other attributes follow as
               a definition list of their own, named as the form names them"
       (is (some #{[:h2 "hund"]} flat))

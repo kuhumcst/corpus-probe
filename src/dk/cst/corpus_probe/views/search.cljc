@@ -400,18 +400,6 @@
        rail])
     rail))
 
-(defn navigation-status
-  "The live region reporting a routed navigation in flight in `ui`,
-  which says so while `pending?` and holds nothing otherwise."
-  [ui pending?]
-  (widgets/status
-   "navigation-status"
-   ;; TODO: design this: where a reader looks while they wait, whether it
-   ;; wants a minimum time on screen (see effects/pending-delay-ms) and
-   ;; whether it should say more. The filter's busy state and the count
-   ;; still being made want the same answer
-   (when pending? [:p (i18n/tr ui "Loading …")])))
-
 (defn search-form
   "The search form of `state`, submitted as GET to `action` with the
   page's own `extra` hidden inputs and the `chooser` of its corpora: the
@@ -423,7 +411,7 @@
   The query is required while the page has no `:result` and no `:error`
   to clear; with one, an empty field is how the reader starts over."
   [{:keys [ui filter-controls search-attrs params tokens value-lists
-           switch client? pending? lists filters-pending? result error]
+           switch client? lists filters-pending? result error]
     :as state}
    action extra chooser]
   (let [{:keys [q]} params
@@ -474,19 +462,22 @@
                                                        :corpora  (:corpus params)
                                                        :client?  client?))
                   (settings-fieldset ui state)])]
-     (settings-form params)
-     ;; only where the client runs: every other navigation is the
-     ;; browser's own, and the browser reports those itself
-     (when client? (navigation-status ui pending?))]))
+     (settings-form params)]))
 
 (defn help
   "The search help, the hiccup `blocks` of its document, as a region
-  named in `ui`; nil without a help document."
-  [ui blocks]
-  ;; TODO: the page has no h1 until an answer heads it. Does the empty
-  ;; page want one, and of what?
-  (when (seq blocks)
-    [:section.help {:aria-label (i18n/tr ui "Help")} blocks]))
+  named in `ui`, busy while `pending?`, since an answer on its way will
+  take its place; nil without a help document."
+  ([ui blocks]
+   (help ui blocks false))
+  ([ui blocks pending?]
+   ;; TODO: the page has no h1 until an answer heads it. Does the empty
+   ;; page want one, and of what?
+   (when (seq blocks)
+     [:section.help (merge widgets/arrival-attrs
+                           (widgets/busy-attrs pending?)
+                           {:aria-label (i18n/tr ui "Help")})
+      blocks])))
 
 (def recent-id
   "The id of the heading naming the history, which the landmark around it
@@ -536,27 +527,32 @@
 
 (defn recent-searches
   "The searches a reader has made lately, `entries`, newest first, as a
-  navigation landmark in `ui`; what will stand there for a reader who
-  has made none."
-  [ui entries]
-  ;; in the column the result's tabs take, given up as soon as there are
-  ;; hits; kept while empty, so a reader is told the searches are being
-  ;; kept before there are any.
-  ;; TODO: emptying the field is the way back to the history, and is said
-  ;; nowhere; and is one entry worth a control of its own?
-  [:nav.recent.box (assoc (widgets/landing-attrs recent-box-id)
-                          :aria-labelledby recent-id)
-   [:h2 {:id recent-id} (i18n/tr ui "Recent searches")]
-   (if (seq entries)
-     [:ol widgets/list-attrs (for [entry entries] (recent-search ui entry))]
-     [:p.recent-empty (i18n/tr ui "Your searches appear here.")])
-   [:p.recent-clear
-    ;; nothing to forget is a button that says so by going quiet, as the
-    ;; preferences box's do
-    [:button {:type     "button"
-              :disabled (empty? entries)
-              :on       {:click [:forget-searches]}}
-     (i18n/trx ui "button" "Clear")]]])
+  navigation landmark in `ui`, busy while `pending?`, since an answer on
+  its way may take its place; what will stand there for a reader who has
+  made none."
+  ([ui entries]
+   (recent-searches ui entries false))
+  ([ui entries pending?]
+   ;; in the column the result's tabs take, given up as soon as there are
+   ;; hits; kept while empty, so a reader is told the searches are being
+   ;; kept before there are any.
+   ;; TODO: emptying the field is the way back to the history, and is said
+   ;; nowhere; and is one entry worth a control of its own?
+   [:nav.recent.box (merge (widgets/landing-attrs recent-box-id)
+                           widgets/arrival-attrs
+                           (widgets/busy-attrs pending?)
+                           {:aria-labelledby recent-id})
+    [:h2 {:id recent-id} (i18n/tr ui "Recent searches")]
+    (if (seq entries)
+      [:ol widgets/list-attrs (for [entry entries] (recent-search ui entry))]
+      [:p.recent-empty (i18n/tr ui "Your searches appear here.")])
+    [:p.recent-clear
+     ;; nothing to forget is a button that says so by going quiet, as the
+     ;; preferences box's do
+     [:button {:type     "button"
+               :disabled (empty? entries)
+               :on       {:click [:forget-searches]}}
+      (i18n/trx ui "button" "Clear")]]]))
 
 (defn recent-announcement
   "The live region saying the history was cleared, in `ui`, when that is
