@@ -545,7 +545,11 @@
   ;; cited a result no longer on screen, and a form cleared by accident
   ;; has a way back
   (if (or result error)
-    (let [state (apply dissoc state answer-keys)]
+    ;; the masthead cites the result too, so that leaving the search page
+    ;; and returning keeps it (see dk.cst.corpus-probe.url/nav-hrefs);
+    ;; left standing, the Search tab would fetch back what was cleared
+    (let [state (-> (apply dissoc state answer-keys)
+                    (assoc-in [:nav :search] url/search))]
       {:state   state
        ;; the title named the answer too, and this is the one page the
        ;; client arrives at without the server having titled it

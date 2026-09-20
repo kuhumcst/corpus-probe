@@ -359,9 +359,11 @@ Pages are numbered from one, as the page numbers itself.
 The **Search** link in the masthead is the address of the result being
 looked at, its view, its order and its page with it. It keeps that
 address while the reader is on a corpus, the glossary or the frontpage,
-so that coming back lands where they left. The memory is the client's:
-without a script, and on a page loaded afresh, the link is the bare
-search page.
+so that coming back lands where they left. A clear puts the link back
+on the bare page, because the result it cited has gone. Left standing,
+the tab would fetch that answer back from anywhere else in the site.
+The memory is the client's: without a script, and on a page loaded
+afresh, the link is the bare search page.
 
 ## Result controls
 

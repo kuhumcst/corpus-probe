@@ -480,6 +480,7 @@
   "A search page as the server sends one that found something."
   (assoc data
          :route  :search
+         :nav    (url/nav-hrefs (:params data))
          :asked  {:q "hund" :corpus ["PROBE"] :sort "word"}
          :result {:hits   [hit other]
                   :size   2
@@ -573,6 +574,16 @@
               chose are still chosen"
       (is (= ["PROBE"] (get-in (:state (actions/clear-answer answered))
                                [:params :corpus]))))
+    (testing "the masthead cited the result too, and is left on the bare
+              page: a step onto another page carries that citation, so a
+              Search tab still naming the result would fetch it back"
+      (let [cleared (:state (actions/clear-answer answered))
+            away    (:state (actions/page-arrived cleared
+                                                  (assoc data :route :corpora)
+                                                  "http://localhost/corpora"
+                                                  true))]
+        (is (= url/search (get-in cleared [:nav :search])))
+        (is (= url/search (get-in away [:nav :search])))))
     (testing "a page with no answer has nothing to clear"
       (let [{state' :state :keys [effects]}
             (actions/clear-answer (dissoc answered :result :error))]
